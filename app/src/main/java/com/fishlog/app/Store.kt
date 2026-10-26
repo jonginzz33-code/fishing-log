@@ -40,16 +40,16 @@ object Store {
 
     fun addListener(l: () -> Unit) { listeners.add(l) }
     fun removeListener(l: () -> Unit) { listeners.remove(l) }
-    private fun notifyAll() = listeners.toList().forEach { it() }
-    private fun changed() { save(); notifyAll() }
+    private fun fireChanged() = listeners.toList().forEach { it() }
+    private fun changed() { save(); fireChanged() }
 
     // ---- 리모컨 버튼 등록 ----
     var key1: String?
         get() = prefs.getString("key1", null)
-        set(v) { prefs.edit().putString("key1", v).apply(); notifyAll() }
+        set(v) { prefs.edit().putString("key1", v).apply(); fireChanged() }
     var key2: String?
         get() = prefs.getString("key2", null)
-        set(v) { prefs.edit().putString("key2", v).apply(); notifyAll() }
+        set(v) { prefs.edit().putString("key2", v).apply(); fireChanged() }
 
     // ---- 설정 ----
     /** 다음 출조에 쓸 어종 이름 (출조 전에도 바꿀 수 있음) */
@@ -58,12 +58,12 @@ object Store {
     /** 리모컨 없이 카드를 눌러 기록하기 */
     var touchMode: Boolean
         get() = prefs.getBoolean("touch", true)
-        set(v) { prefs.edit().putBoolean("touch", v).apply(); notifyAll() }
+        set(v) { prefs.edit().putBoolean("touch", v).apply(); fireChanged() }
 
     /** 그룹에 올릴 때 이동 경로는 빼기 (조과 위치는 올라감) */
     var hideRoute: Boolean
         get() = prefs.getBoolean("hideRoute", false)
-        set(v) { prefs.edit().putBoolean("hideRoute", v).apply(); notifyAll() }
+        set(v) { prefs.edit().putBoolean("hideRoute", v).apply(); fireChanged() }
 
     /** 지도 기본 모양: true = 위성 */
     var satellite: Boolean

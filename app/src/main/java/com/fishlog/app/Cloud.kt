@@ -45,13 +45,13 @@ object Cloud {
     private val listeners = mutableSetOf<() -> Unit>()
     fun addListener(l: () -> Unit) { listeners.add(l) }
     fun removeListener(l: () -> Unit) { listeners.remove(l) }
-    private fun notifyAll() = listeners.toList().forEach { it() }
+    private fun fireChanged() = listeners.toList().forEach { it() }
 
     fun signOut(ctx: Context) {
         auth.signOut()
         groups = emptyList()
         activeId = null
-        notifyAll()
+        fireChanged()
     }
 
     /** 내 그룹 목록 불러오기 */
@@ -62,7 +62,7 @@ object Cloud {
                 @Suppress("UNCHECKED_CAST")
                 val ids = (doc.get("groups") as? List<String>) ?: emptyList()
                 activeId = doc.getString("active")
-                if (ids.isEmpty()) { groups = emptyList(); notifyAll(); done?.invoke(null); return@addOnSuccessListener }
+                if (ids.isEmpty()) { groups = emptyList(); fireChanged(); done?.invoke(null); return@addOnSuccessListener }
                 val loaded = mutableListOf<Group>()
                 var left = ids.size
                 ids.forEach { gid ->
@@ -74,7 +74,7 @@ object Cloud {
                             left--
                             if (left == 0) {
                                 groups = ids.mapNotNull { i -> loaded.firstOrNull { it.id == i } }
-                                notifyAll()
+                                fireChanged()
                                 done?.invoke(null)
                             }
                         }
@@ -94,7 +94,7 @@ object Cloud {
     fun setActive(gid: String) {
         activeId = gid
         uid?.let { db.collection("users").document(it).set(mapOf("active" to gid), SetOptions.merge()) }
-        notifyAll()
+        fireChanged()
     }
 
     private fun newCode(): String {
