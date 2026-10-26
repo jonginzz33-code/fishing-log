@@ -54,6 +54,7 @@ class AccountUi(private val a: Activity) {
                             .addOnSuccessListener {
                                 Cloud.afterSignIn { err ->
                                     if (err != null) toast(err) else toast("${Cloud.displayName}님 로그인 완료")
+                                    Cloud.backupPending()
                                     done()
                                 }
                             }
@@ -142,12 +143,46 @@ class AccountUi(private val a: Activity) {
             if (list == null) { toast(err ?: "불러오기 실패"); return@recentTrips }
             if (list.isEmpty()) { toast("아직 그룹에 올라온 출조가 없어요"); return@recentTrips }
             val labels = list.map { t ->
-                "${dayFmt.format(Date(t.start))} · ${t.ownerName}\n${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
+                "${dayFmt.format(Date(t.start))} · ${t.ownerName}" + (if (t.place().isNotBlank()) " · ${t.place()}" else "") +
+                    "\n${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
             }
             AlertDialog.Builder(a, theme)
                 .setTitle("${Cloud.active?.name} 최근 출조")
-                .setItems(labels.toTypedArray()) { _, i -> showTogether(list[i]) }
+                .setItems(labels.toTypedArray()) { _, i ->
+                    AlertDialog.Builder(a, theme)
+                        .setTitle(labels[i].substringBefore("\n"))
+                        .setItems(arrayOf("함께한 출조 지도·순위", "사진 보기")) { _, w ->
+                            if (w == 0) showTogether(list[i]) else showPhotos(list[i])
+                        }
+                        .show()
+                }
                 .setNegativeButton("닫기", null)
+                .show()
+        }
+    }
+
+    /** 친구가 올린 사진 (작은 사진) */
+    fun showPhotos(t: Cloud.RemoteTrip) {
+        toast("사진 불러오는 중…")
+        Cloud.loadPhotos(t) { list, err ->
+            if (list == null) { toast(err ?: "불러오기 실패"); return@loadPhotos }
+            if (list.isEmpty()) { toast("이 출조엔 올라온 사진이 없어요"); return@loadPhotos }
+            val tf = SimpleDateFormat("HH:mm", Locale.KOREA)
+            val col = android.widget.LinearLayout(a).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(Ui.dp(a, 16), Ui.dp(a, 8), Ui.dp(a, 16), Ui.dp(a, 8))
+            }
+            list.forEach { p ->
+                col.addView(android.widget.ImageView(a).apply { adjustViewBounds = true; setImageBitmap(p.bitmap) },
+                    Ui.lp(a, Ui.MATCH, Ui.WRAP, top = 8))
+                val c = t.catches.firstOrNull { it.time == p.catchTime }
+                col.addView(Ui.text(a, 12f, Ui.SUB, false,
+                    (if (p.time > 0) "촬영 ${tf.format(Date(p.time))}" else "") + (if (c != null) " · ${t.name(c.slot)}" else "")))
+            }
+            AlertDialog.Builder(a, theme)
+                .setTitle("${t.ownerName}님 사진 ${list.size}장")
+                .setView(android.widget.ScrollView(a).apply { addView(col) })
+                .setPositiveButton("닫기", null)
                 .show()
         }
     }
@@ -160,7 +195,7 @@ class AccountUi(private val a: Activity) {
             if (list == null) { toast(err ?: "불러오기 실패"); return@tripsAround }
             val mine = list.firstOrNull { it.id == "${myId}_${t.id}" }
                 ?: Cloud.RemoteTrip("${myId}_${t.id}", myId, Cloud.displayName, t.start, t.end, t.names.toList(),
-                    t.catches.map { Cloud.RemoteCatch(it.time, it.slot, it.lat, it.lon) }, t.track)
+                    t.catches.map { Cloud.RemoteCatch(it.time, it.slot, it.lat, it.lon) }, t.track, t.boat, t.port)
             showTogether(mine, list + if (list.any { it.id == mine.id }) emptyList() else listOf(mine))
         }
     }

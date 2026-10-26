@@ -23,10 +23,12 @@ object Cloud {
     class RemoteTrip(
         val id: String, val owner: String, val ownerName: String,
         val start: Long, val end: Long, val names: List<String>,
-        val catches: List<RemoteCatch>, val track: List<Store.Pt>
+        val catches: List<RemoteCatch>, val track: List<Store.Pt>,
+        val boat: String = "", val port: String = ""
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
+        fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
     private val auth get() = FirebaseAuth.getInstance()
@@ -153,12 +155,82 @@ object Cloud {
             "owner" to id, "ownerName" to displayName,
             "start" to t.start, "end" to t.end, "names" to t.names.toList(),
             "catches" to catches, "track" to track,
-            "total" to t.catches.size, "updated" to System.currentTimeMillis()
+            "boat" to t.boat, "port" to t.port,
+            "total" to t.catches.size, "photoCount" to t.photos.size,
+            "updated" to System.currentTimeMillis()
         )
-        db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
-            .set(doc)
-            .addOnSuccessListener { Store.markUploaded(t.id); done(null) }
+        val tripRef = db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
+        tripRef.set(doc)
+            .addOnSuccessListener {
+                Store.markUploaded(t.id)
+                uploadPhotos(tripRef, t)
+                done(null)
+            }
             .addOnFailureListener { done(it.message ?: "올리기 실패") }
+    }
+
+    lateinit var appContext: Context
+
+    /** 작게 줄인 사진(약 20~40KB)을 출조 아래에 하나씩 저장 */
+    private fun uploadPhotos(tripRef: com.google.firebase.firestore.DocumentReference, t: Store.Trip) {
+        val id = uid ?: return
+        if (!::appContext.isInitialized) return
+        t.photos.forEach { p ->
+            val f = Photos.file(appContext, Photos.thumbName(p.file))
+            if (!f.exists() || f.length() > 700_000) return@forEach
+            val data = android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
+            val m = hashMapOf<String, Any>("owner" to id, "t" to p.time, "data" to data)
+            p.catchTime?.let { m["catchT"] = it }
+            tripRef.collection("photos").document(p.file.removeSuffix(".jpg")).set(m)
+        }
+    }
+
+    class RemotePhoto(val time: Long, val catchTime: Long?, val bitmap: android.graphics.Bitmap)
+
+    fun loadPhotos(t: RemoteTrip, done: (List<RemotePhoto>?, String?) -> Unit) {
+        val g = active ?: return done(null, "그룹이 없어요")
+        db.collection("groups").document(g.id).collection("trips").document(t.id).collection("photos").get()
+            .addOnSuccessListener { q ->
+                val out = q.documents.mapNotNull { d ->
+                    try {
+                        val bytes = android.util.Base64.decode(d.getString("data") ?: return@mapNotNull null, android.util.Base64.DEFAULT)
+                        val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@mapNotNull null
+                        RemotePhoto(d.getLong("t") ?: 0L, d.getLong("catchT"), bmp)
+                    } catch (_: Exception) { null }
+                }.sortedBy { it.time }
+                done(out, null)
+            }
+            .addOnFailureListener { done(null, it.message ?: "사진 불러오기 실패") }
+    }
+
+    // ---- 내 기록 보관함 (서버 백업 / 복원) ----
+    /** 백업 안 된 기록을 내 계정에 올림 (사진 원본은 폰에만, 기록·경로만) */
+    fun backupPending() {
+        val id = uid ?: return
+        Store.history.filter { !it.backedUp }.forEach { t ->
+            val json = Store.tripToJson(t)
+            json.remove("photos")
+            db.collection("users").document(id).collection("trips").document(t.id.toString())
+                .set(mapOf("json" to json.toString(), "start" to t.start))
+                .addOnSuccessListener { Store.markBackedUp(t.id) }
+        }
+    }
+
+    /** 서버에 백업된 내 기록을 이 폰으로 가져오기 */
+    fun restore(done: (Int?, String?) -> Unit) {
+        val id = uid ?: return done(null, "로그인이 필요해요")
+        db.collection("users").document(id).collection("trips").get()
+            .addOnSuccessListener { q ->
+                val list = q.documents.mapNotNull { d ->
+                    try {
+                        val t = Store.tripFromJson(org.json.JSONObject(d.getString("json") ?: return@mapNotNull null))
+                        t.backedUp = true
+                        t
+                    } catch (_: Exception) { null }
+                }
+                done(Store.mergeRestored(list), null)
+            }
+            .addOnFailureListener { done(null, it.message ?: "복원 실패") }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -173,7 +245,8 @@ object Cloud {
         } ?: emptyList()
         RemoteTrip(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
-            (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track)
+            (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track,
+            d.getString("boat") ?: "", d.getString("port") ?: "")
     } catch (e: Exception) { null }
 
     /** 그룹의 최근 출조 목록 */

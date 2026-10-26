@@ -13,6 +13,9 @@ object Store {
     /** 이동 경로의 점 하나 */
     class Pt(val time: Long, val lat: Double, val lon: Double)
 
+    /** 사진 하나. file = 앱 폴더 안 파일 이름, catchTime = 붙어 있는 조과 시각 (없으면 null) */
+    class Photo(val time: Long, val file: String, var catchTime: Long?)
+
     class Trip(
         val id: Long,
         val start: Long,
@@ -20,10 +23,20 @@ object Store {
         val names: Array<String>,
         val catches: MutableList<Catch>,
         val track: MutableList<Pt> = mutableListOf(),
-        var uploaded: Boolean = false
+        var uploaded: Boolean = false,
+        var boat: String = "",
+        var port: String = "",
+        val photos: MutableList<Photo> = mutableListOf(),
+        var backedUp: Boolean = false
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names[slot - 1]
+        fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
+        fun photoOf(c: Catch): Photo? = photos.firstOrNull { it.catchTime == c.time }
+        /** 위치가 있는 첫 지점 (물때 조회용) */
+        fun anyLocation(): Pair<Double, Double>? =
+            catches.firstOrNull { it.lat != null && it.lon != null }?.let { it.lat!! to it.lon!! }
+                ?: track.firstOrNull()?.let { it.lat to it.lon }
     }
 
     private lateinit var prefs: SharedPreferences
@@ -43,6 +56,8 @@ object Store {
     private fun fireChanged() = listeners.toList().forEach { it() }
     private fun changed() { save(); fireChanged() }
 
+    fun find(id: Long): Trip? = if (current?.id == id) current else history.firstOrNull { it.id == id }
+
     // ---- 리모컨 버튼 등록 ----
     var key1: String?
         get() = prefs.getString("key1", null)
@@ -52,30 +67,51 @@ object Store {
         set(v) { prefs.edit().putString("key2", v).apply(); fireChanged() }
 
     // ---- 설정 ----
-    /** 다음 출조에 쓸 어종 이름 (출조 전에도 바꿀 수 있음) */
     fun defaultName(slot: Int): String = prefs.getString("name$slot", null) ?: "${slot}번"
 
-    /** 리모컨 없이 카드를 눌러 기록하기 */
     var touchMode: Boolean
         get() = prefs.getBoolean("touch", true)
         set(v) { prefs.edit().putBoolean("touch", v).apply(); fireChanged() }
 
-    /** 그룹에 올릴 때 이동 경로는 빼기 (조과 위치는 올라감) */
     var hideRoute: Boolean
         get() = prefs.getBoolean("hideRoute", false)
         set(v) { prefs.edit().putBoolean("hideRoute", v).apply(); fireChanged() }
 
-    /** 지도 기본 모양: true = 위성 */
     var satellite: Boolean
         get() = prefs.getBoolean("satellite", true)
         set(v) { prefs.edit().putBoolean("satellite", v).apply() }
 
+    // ---- 배·항구 목록 (한 번 적은 이름은 저장) ----
+    private fun readList(key: String): MutableList<String> {
+        val out = mutableListOf<String>()
+        try {
+            val a = JSONArray(prefs.getString(key, "[]"))
+            for (i in 0 until a.length()) out.add(a.getString(i))
+        } catch (_: Exception) {}
+        return out
+    }
+
+    private fun remember(key: String, v: String) {
+        if (v.isBlank()) return
+        val l = readList(key)
+        l.remove(v)
+        l.add(0, v)
+        val a = JSONArray()
+        l.take(50).forEach { a.put(it) }
+        prefs.edit().putString(key, a.toString()).apply()
+    }
+
+    fun boats(): List<String> = readList("boats")
+    fun ports(): List<String> = readList("ports")
+
     // ---- 출조 ----
-    fun startTrip() {
+    fun startTrip(boat: String = "", port: String = "") {
         if (current != null) return
         val now = System.currentTimeMillis()
-        current = Trip(now, now, 0L, arrayOf(defaultName(1), defaultName(2)), mutableListOf())
-        Tracker.last?.let { addTrackPointInternal(it.time, it.latitude, it.longitude) }
+        current = Trip(now, now, 0L, arrayOf(defaultName(1), defaultName(2)), mutableListOf(),
+            boat = boat.trim(), port = port.trim())
+        remember("boats", boat.trim()); remember("ports", port.trim())
+        Tracker.last?.let { current?.track?.add(Pt(it.time, it.latitude, it.longitude)) }
         changed()
     }
 
@@ -97,7 +133,6 @@ object Store {
         return t.count(slot)
     }
 
-    /** 마지막 기록 취소. 취소된 기록의 슬롯 번호, 없으면 0 */
     fun undoLast(): Int {
         val t = current ?: return 0
         if (t.catches.isEmpty()) return 0
@@ -107,16 +142,11 @@ object Store {
     }
 
     fun addTrackPoint(time: Long, lat: Double, lon: Double) {
-        if (current == null) return
-        addTrackPointInternal(time, lat, lon)
+        val t = current ?: return
+        t.track.add(Pt(time, lat, lon))
         save()
     }
 
-    private fun addTrackPointInternal(time: Long, lat: Double, lon: Double) {
-        current?.track?.add(Pt(time, lat, lon))
-    }
-
-    /** 지금 출조(있으면)와 다음 출조 기본값을 함께 바꿈 */
     fun rename(slot: Int, name: String) {
         val v = name.ifBlank { "${slot}번" }
         prefs.edit().putString("name$slot", v).apply()
@@ -124,27 +154,68 @@ object Store {
         changed()
     }
 
-    fun renameInHistory(tripId: Long, slot: Int, name: String) {
-        val t = history.firstOrNull { it.id == tripId } ?: return
+    fun renameInTrip(tripId: Long, slot: Int, name: String) {
+        val t = find(tripId) ?: return
+        if (t === current) { rename(slot, name); return }
         t.names[slot - 1] = name.ifBlank { "${slot}번" }
+        t.uploaded = false; t.backedUp = false
+        changed()
+    }
+
+    fun setPlace(tripId: Long, boat: String, port: String) {
+        val t = find(tripId) ?: return
+        t.boat = boat.trim(); t.port = port.trim()
+        remember("boats", t.boat); remember("ports", t.port)
+        t.uploaded = false; t.backedUp = false
+        changed()
+    }
+
+    fun addPhotos(tripId: Long, list: List<Photo>) {
+        val t = find(tripId) ?: return
+        t.photos.addAll(list)
+        t.photos.sortBy { it.time }
         t.uploaded = false
         changed()
     }
 
-    fun markUploaded(tripId: Long) {
-        history.firstOrNull { it.id == tripId }?.uploaded = true
+    /** 사진 연결을 바꾼 뒤 저장 */
+    fun photosChanged(tripId: Long) {
+        val t = find(tripId) ?: return
+        t.photos.sortBy { it.time }
+        t.uploaded = false
         changed()
     }
+
+    fun removePhoto(tripId: Long, p: Photo) {
+        find(tripId)?.photos?.remove(p)
+        changed()
+    }
+
+    fun markUploaded(tripId: Long) { find(tripId)?.uploaded = true; changed() }
+    fun markBackedUp(tripId: Long) { find(tripId)?.backedUp = true; save() }
 
     fun deleteTrip(tripId: Long) {
         history.removeAll { it.id == tripId }
         changed()
     }
 
+    /** 서버에서 받아온 기록 합치기. 새로 추가된 개수 */
+    fun mergeRestored(list: List<Trip>): Int {
+        var added = 0
+        list.forEach { r ->
+            if (find(r.id) == null) { history.add(r); added++ }
+        }
+        history.sortByDescending { it.start }
+        changed()
+        return added
+    }
+
     // ---- 저장/불러오기 (JSON) ----
-    private fun tripToJson(t: Trip): JSONObject {
+    fun tripToJson(t: Trip): JSONObject {
         val o = JSONObject()
-        o.put("id", t.id); o.put("start", t.start); o.put("end", t.end); o.put("up", t.uploaded)
+        o.put("id", t.id); o.put("start", t.start); o.put("end", t.end)
+        o.put("up", t.uploaded); o.put("bk", t.backedUp)
+        o.put("boat", t.boat); o.put("port", t.port)
         o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
         val arr = JSONArray()
         t.catches.forEach {
@@ -156,10 +227,13 @@ object Store {
         val tr = JSONArray()
         t.track.forEach { tr.put(JSONArray().put(it.time).put(it.lat).put(it.lon)) }
         o.put("track", tr)
+        val ph = JSONArray()
+        t.photos.forEach { ph.put(JSONArray().put(it.time).put(it.file).put(it.catchTime ?: -1L)) }
+        o.put("photos", ph)
         return o
     }
 
-    private fun tripFromJson(o: JSONObject): Trip {
+    fun tripFromJson(o: JSONObject): Trip {
         val n = o.getJSONArray("names")
         val arr = o.getJSONArray("catches")
         val list = mutableListOf<Catch>()
@@ -175,8 +249,17 @@ object Store {
                 track.add(Pt(p.getLong(0), p.getDouble(1), p.getDouble(2)))
             }
         }
+        val photos = mutableListOf<Photo>()
+        o.optJSONArray("photos")?.let { ph ->
+            for (i in 0 until ph.length()) {
+                val p = ph.getJSONArray(i)
+                val ct = p.getLong(2)
+                photos.add(Photo(p.getLong(0), p.getString(1), if (ct < 0) null else ct))
+            }
+        }
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
-            arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false))
+            arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
+            o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false))
     }
 
     private fun save() {
@@ -208,6 +291,7 @@ object Store {
         val sb = StringBuilder()
         sb.append("[조과기록] ").append(df.format(java.util.Date(t.start)))
         if (t.end > 0) sb.append(" ~ ").append(df.format(java.util.Date(t.end)).substring(11))
+        if (t.place().isNotBlank()) sb.append("\n").append(t.place())
         sb.append("\n").append(t.name(1)).append(" ").append(t.count(1))
             .append(" / ").append(t.name(2)).append(" ").append(t.count(2)).append("\n\n")
         t.catches.forEach { sb.append(df.format(java.util.Date(it.time)).substring(11)).append("  ").append(t.name(it.slot)).append("\n") }

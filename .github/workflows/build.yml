@@ -27,7 +27,10 @@ jobs:
         run: gradle assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk fishing-log.apk
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk fishing-log.apk
+          grep -m1 versionCode app/build.gradle.kts | grep -o '[0-9]\+' > version.txt
+          cat version.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -41,5 +44,7 @@ jobs:
           tag_name: latest
           name: 조과기록 최신 버전
           body: "커밋 ${{ github.sha }} 에서 자동 빌드"
-          files: fishing-log.apk
+          files: |
+            fishing-log.apk
+            version.txt
           make_latest: true

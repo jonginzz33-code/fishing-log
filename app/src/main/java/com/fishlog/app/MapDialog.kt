@@ -174,6 +174,57 @@ object MapDialog {
         }
     }
 
+    private fun fit(map: MapView, all: List<GeoPoint>) {
+        when {
+            all.isEmpty() -> { map.controller.setZoom(7.0); map.controller.setCenter(GeoPoint(36.3, 127.8)) }
+            all.size == 1 -> { map.controller.setZoom(15.0); map.controller.setCenter(all[0]) }
+            else -> {
+                val box = BoundingBox.fromGeoPoints(all)
+                if (box.latitudeSpan < 0.002 && box.longitudeSpan < 0.002) {
+                    map.controller.setZoom(16.0); map.controller.setCenter(box.centerWithDateLine)
+                } else {
+                    map.zoomToBoundingBox(box.increaseByScale(1.4f), false)
+                }
+            }
+        }
+    }
+
+    /** 출조 기록 화면에 들어가는 작은 지도 (누르면 크게) */
+    fun preview(a: Activity, t: Store.Trip, onTap: () -> Unit): MapView {
+        configure(a)
+        val map = MapView(a).apply {
+            setMultiTouchControls(false)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            isTilesScaledToDpi = true
+        }
+        val layer = layerOf(t)
+        val all = mutableListOf<GeoPoint>()
+        if (layer.track.size >= 2) {
+            val line = Polyline(map)
+            line.setPoints(layer.track)
+            line.outlinePaint.color = layer.color
+            line.outlinePaint.strokeWidth = dp(a, 3).toFloat()
+            map.overlays.add(line)
+        }
+        all.addAll(layer.track)
+        layer.catches.forEach { c ->
+            val m = Marker(map)
+            m.position = c.point
+            m.icon = dot(a, c.color, 12)
+            m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            m.setOnMarkerClickListener { _, _ -> onTap(); true }
+            map.overlays.add(m)
+            all.add(c.point)
+        }
+        map.setOnTouchListener { _, e ->
+            if (e.action == android.view.MotionEvent.ACTION_UP) onTap()
+            true
+        }
+        map.addOnFirstLayoutListener { _, _, _, _, _ -> fit(map, all) }
+        return map
+    }
+
     // ---- 내 출조를 지도 레이어로 ----
     val SLOT_COLORS = intArrayOf(Color.parseColor("#F28C38"), Color.parseColor("#5BC8DF"))
 

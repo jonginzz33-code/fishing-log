@@ -1,26 +1,22 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function signedIn() { return request.auth != null; }
     function isMember(gid) {
       return signedIn() &&
         request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.members;
     }
-
-    // 내 정보: 나만
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+      match /trips/{tid} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
     }
-
-    // 초대 코드: 코드를 아는 사람만 조회
     match /invites/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
     }
-
-    // 그룹: 멤버만 보기, 방장만 관리, 본인은 가입만 가능
     match /groups/{gid} {
       allow read: if signedIn() && request.auth.uid in resource.data.members;
       allow create: if signedIn()
@@ -36,12 +32,15 @@ service cloud.firestore {
         )
       );
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
-
-      // 출조 기록: 멤버는 모두 보기, 자기 기록만 올리기·고치기·지우기
       match /trips/{tripId} {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && request.resource.data.owner == request.auth.uid;
         allow update, delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+        match /photos/{pid} {
+          allow read: if isMember(gid);
+          allow create, update: if isMember(gid) && request.resource.data.owner == request.auth.uid;
+          allow delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+        }
       }
     }
   }
