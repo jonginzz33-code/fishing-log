@@ -35,15 +35,27 @@ class RemoteService : Service() {
         super.onCreate()
         Store.init(this)
         createChannel()
-        val n = buildNotification()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(NOTI_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
-        } else {
-            startForeground(NOTI_ID, n)
-        }
+        goForeground()
         setupSession()
         startSilence()
         Store.addListener(storeListener)
+    }
+
+    /** 위치 권한이 있으면 "위치" 종류도 함께 켜야 화면이 꺼져도 GPS가 기록됨 */
+    private fun goForeground() {
+        val n = buildNotification()
+        if (Build.VERSION.SDK_INT >= 29) {
+            var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            if (Tracker.hasPermission(this)) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            try {
+                startForeground(NOTI_ID, n, type)
+            } catch (_: Exception) {
+                startForeground(NOTI_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            }
+        } else {
+            startForeground(NOTI_ID, n)
+        }
+        Tracker.start(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -51,12 +63,15 @@ class RemoteService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // 권한을 나중에 허용했으면 위치 기록 시작
+        if (!Tracker.running && Tracker.hasPermission(this)) goForeground()
         // 다른 음악 앱이 미디어 버튼을 가져갔을 수 있으니 다시 활성화
         session?.isActive = true
         return START_STICKY
     }
 
     override fun onDestroy() {
+        Tracker.stop()
         Store.removeListener(storeListener)
         session?.isActive = false
         session?.release()
@@ -158,7 +173,8 @@ class RemoteService : Service() {
     private fun buildNotification(): Notification {
         val t = Store.current
         val text = if (t == null) "출조 준비" else
-            "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
+            "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}" +
+                if (Tracker.running) " · 위치 기록 중" else ""
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT

@@ -16,6 +16,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -43,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var remoteInfo: TextView
     private lateinit var message: TextView
     private lateinit var learnBtn: TextView
+    private lateinit var touchBox: CheckBox
     private lateinit var name1: TextView
     private lateinit var name2: TextView
     private lateinit var count1: TextView
@@ -53,6 +55,12 @@ class MainActivity : Activity() {
     private lateinit var undoBtn: TextView
     private lateinit var recent: TextView
     private lateinit var historyBox: LinearLayout
+    private lateinit var accountInfo: TextView
+    private lateinit var accountBtn: TextView
+    private lateinit var hideRouteBox: CheckBox
+    private lateinit var account: AccountUi
+    private val cloudListener: () -> Unit = { refreshAccount() }
+    private var cloudLoaded = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val ticker = object : Runnable {
@@ -62,10 +70,30 @@ class MainActivity : Activity() {
         }
     }
     private val storeListener: () -> Unit = { refresh() }
+    private var crashShown = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 지난번에 앱이 죽었다면 원인을 먼저 보여줌 (캡처해서 보내면 바로 고칠 수 있게)
+        val crashPrefs = getSharedPreferences("crash", MODE_PRIVATE)
+        val trace = crashPrefs.getString("trace", null)
+        if (trace != null) {
+            crashPrefs.edit().remove("trace").commit()
+            crashShown = true
+            setContentView(ScrollView(this).apply {
+                setBackgroundColor(Color.WHITE)
+                addView(TextView(this@MainActivity).apply {
+                    setTextColor(Color.BLACK)
+                    textSize = 12f
+                    setPadding(24, 48, 24, 48)
+                    setTextIsSelectable(true)
+                    text = "앱 오류 내용 (이 화면을 캡처해서 보내주세요)\n버전 ${BuildConfigInfo.VERSION}\n\n$trace"
+                })
+            })
+            return
+        }
         Store.init(this)
+        account = AccountUi(this)
         window.statusBarColor = cBg
         window.navigationBarColor = cBg
         setContentView(buildUi())
@@ -78,15 +106,21 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (crashShown) return
         Store.addListener(storeListener)
+        Cloud.addListener(cloudListener)
         ButtonRouter.onMessage = { showMessage(it) }
         if (Store.current != null) RemoteService.start(this)
+        if (!cloudLoaded && Cloud.user != null) { cloudLoaded = true; Cloud.refresh() }
         refresh()
+        refreshAccount()
         handler.post(ticker)
     }
 
     override fun onPause() {
+        if (crashShown) { super.onPause(); return }
         Store.removeListener(storeListener)
+        Cloud.removeListener(cloudListener)
         ButtonRouter.onMessage = null
         handler.removeCallbacks(ticker)
         super.onPause()
@@ -143,9 +177,50 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(24), dp(20), dp(32))
         }
 
-        col.addView(text(24f, bold = true).apply { text = "조과기록" })
+        // 상단: 왼쪽 지도 버튼 + 제목
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val mapBtn = text(14f, cText, true).apply {
+            text = "지도"
+            gravity = Gravity.CENTER
+            background = bg(cCard, 12, cLine)
+            setOnClickListener { openMap() }
+        }
+        header.addView(mapBtn, LinearLayout.LayoutParams(dp(56), dp(48)))
+        header.addView(text(24f, bold = true).apply { text = "조과기록" },
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(12) })
+        col.addView(header)
         status = text(14f, cSub)
-        col.addView(status, lp(MATCH, WRAP, top = 4))
+        col.addView(status, lp(MATCH, WRAP, top = 6))
+
+        // 친구 공유 카드
+        val acc = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = bg(cCard, 14)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        accountInfo = text(14f)
+        accountBtn = button("구글 로그인", Color.TRANSPARENT, cText, cLine).apply {
+            minHeight = dp(44)
+            textSize = 14f
+            setOnClickListener {
+                if (Cloud.user == null) account.signIn { refreshAccount() } else account.openGroups()
+            }
+        }
+        hideRouteBox = CheckBox(this).apply {
+            text = "그룹에 올릴 때 이동 경로 숨기기"
+            setTextColor(cText)
+            textSize = 14f
+            buttonTintList = android.content.res.ColorStateList.valueOf(cBlue)
+            minHeight = dp(44)
+            setOnCheckedChangeListener { _, checked -> if (checked != Store.hideRoute) Store.hideRoute = checked }
+        }
+        acc.addView(accountInfo)
+        acc.addView(accountBtn, lp(MATCH, WRAP, top = 10))
+        acc.addView(hideRouteBox, lp(MATCH, WRAP, top = 4))
+        col.addView(acc, lp(MATCH, WRAP, top = 16))
 
         // 리모컨 카드
         val remote = LinearLayout(this).apply {
@@ -164,9 +239,18 @@ class MainActivity : Activity() {
                 refresh()
             }
         }
+        touchBox = CheckBox(this).apply {
+            text = "터치로 기록 (리모컨 없을 때 카드를 눌러 +1)"
+            setTextColor(cText)
+            textSize = 15f
+            buttonTintList = android.content.res.ColorStateList.valueOf(cBlue)
+            minHeight = dp(44)
+            setOnCheckedChangeListener { _, checked -> if (checked != Store.touchMode) Store.touchMode = checked }
+        }
         remote.addView(remoteInfo)
         remote.addView(message, lp(MATCH, WRAP, top = 6))
         remote.addView(learnBtn, lp(MATCH, WRAP, top = 10))
+        remote.addView(touchBox, lp(MATCH, WRAP, top = 6))
         col.addView(remote, lp(MATCH, WRAP, top = 16))
 
         // 카운터 2개
@@ -178,7 +262,7 @@ class MainActivity : Activity() {
         row.addView(c2, lp(0, dp(190), 1f))
         col.addView(row, lp(MATCH, WRAP, top = 16))
         col.addView(text(12f, cSub).apply {
-            text = "카드를 눌러도 +1 · 어종 이름을 누르면 이름 변경 · 리모컨 버튼을 길게(1초) 누르면 마지막 기록 취소"
+            text = "어종 이름(흰 칸)을 누르면 언제든 이름 변경 · 리모컨 버튼을 길게(1초) 누르면 마지막 기록 취소"
         }, lp(MATCH, WRAP, top = 8))
 
         // 출조 버튼들
@@ -220,6 +304,7 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             setOnClickListener {
+                if (!Store.touchMode) { showMessage("터치 기록이 꺼져 있어요 (위 체크박스)"); return@setOnClickListener }
                 if (Store.current == null) { showMessage("먼저 '출조 시작'을 눌러주세요"); return@setOnClickListener }
                 Store.addCatch(slot)
                 Haptics.slot(this@MainActivity, slot)
@@ -231,10 +316,11 @@ class MainActivity : Activity() {
             setPadding(dp(10), dp(3), dp(10), dp(3))
         }, LinearLayout.LayoutParams(WRAP, WRAP))
         val name = text(20f, ink, true).apply {
-            setPadding(0, dp(6), 0, dp(6))
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = bg(Color.argb(60, 255, 255, 255), 10)
             setOnClickListener { askRename(slot) }
         }
-        card.addView(name)
+        card.addView(name, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(8) })
         card.addView(View(this), lp(MATCH, 0, 1f))
         val count = text(60f, ink, true).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
         card.addView(count)
@@ -249,6 +335,9 @@ class MainActivity : Activity() {
     private fun onTripButton() {
         val t = Store.current
         if (t == null) {
+            if (!Tracker.hasPermission(this)) {
+                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 2)
+            }
             Store.startTrip()
             RemoteService.start(this)
             showMessage("출조 시작! 화면을 꺼도 리모컨으로 기록돼요")
@@ -257,8 +346,10 @@ class MainActivity : Activity() {
                 .setTitle("출조를 종료할까요?")
                 .setMessage("${t.name(1)} ${t.count(1)}마리 · ${t.name(2)} ${t.count(2)}마리")
                 .setPositiveButton("종료") { _, _ ->
-                    Store.endTrip()
+                    val ended = Store.endTrip()
                     RemoteService.stop(this)
+                    // 로그인 + 그룹이 있으면 자동으로 그룹에 올림 (인터넷 없으면 연결될 때 올라감)
+                    if (ended != null && Cloud.user != null && Cloud.active != null) account.upload(ended)
                 }
                 .setNegativeButton("계속", null)
                 .show()
@@ -266,16 +357,21 @@ class MainActivity : Activity() {
     }
 
     private fun askRename(slot: Int, tripId: Long? = null) {
-        val trip = if (tripId == null) Store.current else Store.history.firstOrNull { it.id == tripId }
-        if (trip == null) { showMessage("출조를 시작한 뒤에 이름을 붙일 수 있어요"); return }
+        val currentName = if (tripId == null) {
+            Store.current?.name(slot) ?: Store.defaultName(slot)
+        } else {
+            Store.history.firstOrNull { it.id == tripId }?.name(slot) ?: return
+        }
         val input = EditText(this).apply {
-            setText(if (trip.name(slot) == "${slot}번") "" else trip.name(slot))
+            setText(if (currentName == "${slot}번") "" else currentName)
+            setSelection(text.length)
             hint = "예: 갑오징어"
             inputType = InputType.TYPE_CLASS_TEXT
         }
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("버튼 $slot 어종 이름")
-            .setMessage("이미 기록된 것까지 모두 이 이름으로 바뀌어요")
+            .setMessage(if (tripId == null && Store.current == null) "다음 출조부터 이 이름으로 기록돼요"
+                else "이미 기록된 것까지 모두 이 이름으로 바뀌어요")
             .setView(input)
             .setPositiveButton("저장") { _, _ ->
                 val v = input.text.toString().trim()
@@ -286,15 +382,24 @@ class MainActivity : Activity() {
     }
 
     private fun openHistory(t: Store.Trip) {
-        val items = arrayOf("기록 공유하기 (카톡 등)", "버튼 1 이름 바꾸기", "버튼 2 이름 바꾸기", "삭제")
+        val items = arrayOf(
+            "지도 보기 (경로·조과 위치)",
+            if (t.uploaded) "그룹에 다시 올리기" else "그룹에 올리기",
+            "함께한 출조 보기",
+            "기록 공유하기 (카톡 등 텍스트)",
+            "버튼 1 이름 바꾸기", "버튼 2 이름 바꾸기", "삭제"
+        )
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(dateFmt.format(Date(t.start)))
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> share(t)
-                    1 -> askRename(1, t.id)
-                    2 -> askRename(2, t.id)
-                    3 -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    0 -> MapDialog.showTrip(this, t)
+                    1 -> account.upload(t)
+                    2 -> account.openTogetherFor(t)
+                    3 -> share(t)
+                    4 -> askRename(1, t.id)
+                    5 -> askRename(2, t.id)
+                    6 -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                         .setTitle("이 출조 기록을 삭제할까요?")
                         .setPositiveButton("삭제") { _, _ -> Store.deleteTrip(t.id) }
                         .setNegativeButton("취소", null)
@@ -302,6 +407,39 @@ class MainActivity : Activity() {
                 }
             }
             .show()
+    }
+
+    /** 좌측 상단 지도 버튼: 출조 중이면 지금 출조, 아니면 가장 최근 출조 */
+    private fun openMap() {
+        val t = Store.current ?: Store.history.firstOrNull()
+        if (t == null) { showMessage("출조를 시작하면 지도에 경로와 조과 위치가 표시돼요"); return }
+        MapDialog.showTrip(this, t)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 2) {
+            if (Tracker.hasPermission(this)) {
+                if (Store.current != null) RemoteService.start(this) // 위치 기록 켜기
+            } else {
+                showMessage("위치 권한이 없으면 지도에 경로가 표시되지 않아요 (조과 기록은 정상)")
+            }
+        }
+    }
+
+    private fun refreshAccount() {
+        if (!::accountInfo.isInitialized) return
+        val u = Cloud.user
+        if (u == null) {
+            accountInfo.text = "친구와 조과 공유 · 로그인하면 그룹에 올리고 함께 볼 수 있어요"
+            accountBtn.text = "구글 로그인"
+        } else {
+            val g = Cloud.active
+            accountInfo.text = if (g == null) "${Cloud.displayName} · 아직 그룹이 없어요"
+            else "${Cloud.displayName} · 그룹 '${g.name}' (초대 코드 ${g.code})"
+            accountBtn.text = if (g == null) "그룹 만들기 / 가입" else "그룹 · 친구 출조 보기"
+        }
+        if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
     }
 
     private fun share(t: Store.Trip) {
@@ -344,8 +482,9 @@ class MainActivity : Activity() {
         updateStatus()
         refreshRemote()
         val t = Store.current
-        name1.text = t?.name(1) ?: "1번"
-        name2.text = t?.name(2) ?: "2번"
+        name1.text = (t?.name(1) ?: Store.defaultName(1)) + "  ✎"
+        name2.text = (t?.name(2) ?: Store.defaultName(2)) + "  ✎"
+        if (touchBox.isChecked != Store.touchMode) touchBox.isChecked = Store.touchMode
         count1.text = (t?.count(1) ?: 0).toString()
         count2.text = (t?.count(2) ?: 0).toString()
         last1.text = t?.catches?.lastOrNull { it.slot == 1 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "
@@ -373,7 +512,8 @@ class MainActivity : Activity() {
         Store.history.take(30).forEach { h ->
             val dur = (h.end - h.start) / 60000
             val v = text(15f).apply {
-                text = "${dateFmt.format(Date(h.start))} · ${dur / 60}시간 ${dur % 60}분\n" +
+                text = "${dateFmt.format(Date(h.start))} · ${dur / 60}시간 ${dur % 60}분" +
+                    (if (h.uploaded) " · 그룹에 올림" else "") + "\n" +
                     "${h.name(1)} ${h.count(1)} · ${h.name(2)} ${h.count(2)} · 총 ${h.catches.size}"
                 background = bg(cCard, 14)
                 setPadding(dp(14), dp(12), dp(14), dp(12))
