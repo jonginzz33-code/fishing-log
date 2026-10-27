@@ -17,14 +17,16 @@ import com.google.firebase.firestore.SetOptions
  */
 object Cloud {
 
-    class Group(val id: String, val name: String, val code: String, val owner: String)
+    class Group(val id: String, val name: String, val code: String, val owner: String, val types: List<String> = emptyList()) {
+        fun typesLabel(): String = types.map { Store.catLabel(it) }.filter { it.isNotBlank() }.joinToString(" · ")
+    }
 
     class RemoteCatch(val time: Long, val slot: Int, val lat: Double?, val lon: Double?)
     class RemoteTrip(
         val id: String, val owner: String, val ownerName: String,
         val start: Long, val end: Long, val names: List<String>,
         val catches: List<RemoteCatch>, val track: List<Store.Pt>,
-        val boat: String = "", val port: String = "", val photoCount: Int = 0
+        val boat: String = "", val port: String = "", val photoCount: Int = 0, val cat: String = ""
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
@@ -70,7 +72,9 @@ object Cloud {
                 ids.forEach { gid ->
                     db.collection("groups").document(gid).get()
                         .addOnSuccessListener { g ->
-                            if (g.exists()) loaded.add(Group(g.id, g.getString("name") ?: "그룹", g.getString("code") ?: "", g.getString("owner") ?: ""))
+                            val types = (g.get("types") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                            if (g.exists()) loaded.add(Group(g.id, g.getString("name") ?: "그룹", g.getString("code") ?: "",
+                                g.getString("owner") ?: "", types))
                         }
                         .addOnCompleteListener {
                             left--
@@ -109,13 +113,13 @@ object Cloud {
         return (1..6).map { chars.random() }.joinToString("")
     }
 
-    fun createGroup(name: String, done: (String?) -> Unit) {
+    fun createGroup(name: String, types: List<String>, done: (String?) -> Unit) {
         val id = uid ?: return done("로그인이 필요해요")
         val code = newCode()
         val ref = db.collection("groups").document()
         val batch = db.batch()
         batch.set(ref, mapOf("name" to name, "owner" to id, "code" to code, "members" to listOf(id),
-            "created" to System.currentTimeMillis()))
+            "types" to types, "created" to System.currentTimeMillis()))
         batch.set(db.collection("invites").document(code), mapOf("gid" to ref.id, "owner" to id))
         batch.set(db.collection("users").document(id),
             mapOf("groups" to FieldValue.arrayUnion(ref.id), "active" to ref.id), SetOptions.merge())
@@ -165,7 +169,7 @@ object Cloud {
             "owner" to id, "ownerName" to displayName,
             "start" to t.start, "end" to t.end, "names" to t.names.toList(),
             "catches" to catches, "track" to track,
-            "boat" to t.boat, "port" to t.port,
+            "boat" to t.boat, "port" to t.port, "cat" to t.cat,
             "total" to t.catches.size, "photoCount" to t.photos.size,
             "updated" to System.currentTimeMillis()
         )
@@ -265,6 +269,14 @@ object Cloud {
         db.collection("groups").document(g.id).update("name", name)
             .addOnSuccessListener { refresh(done) }
             .addOnFailureListener { done(it.message ?: "이름 바꾸기 실패") }
+    }
+
+    /** 그룹 종류 바꾸기 (그룹장만) */
+    fun setGroupTypes(types: List<String>, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        db.collection("groups").document(g.id).update("types", types)
+            .addOnSuccessListener { refresh(done) }
+            .addOnFailureListener { done(it.message ?: "바꾸기 실패") }
     }
 
     /** 초대 코드 새로 만들기 (그룹장만). 예전 코드는 더 이상 안 됨 */
@@ -367,7 +379,7 @@ object Cloud {
         RemoteTrip(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
             (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track,
-            d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt())
+            d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt(), d.getString("cat") ?: "")
     } catch (e: Exception) { null }
 
     /** 그룹의 최근 출조 목록 */

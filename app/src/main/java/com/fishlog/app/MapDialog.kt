@@ -96,6 +96,25 @@ object MapDialog {
         }
     }
 
+    /** 이동 거리(m): 10m 안쪽 흔들림은 빼고 경로를 따라 더함 / 출발지에서 마지막 위치까지 직선거리(m) */
+    fun distances(pts: List<GeoPoint>): Pair<Double, Double> {
+        if (pts.size < 2) return 0.0 to 0.0
+        var total = 0.0
+        var anchor = pts[0]
+        for (i in 1 until pts.size) {
+            val d = anchor.distanceToAsDouble(pts[i])
+            if (d >= 10.0) { total += d; anchor = pts[i] }
+        }
+        return total to pts[0].distanceToAsDouble(pts.last())
+    }
+
+    fun distanceText(pts: List<GeoPoint>): String {
+        if (pts.size < 2) return "이동 거리: 위치 기록이 부족해요"
+        val (total, straight) = distances(pts)
+        return String.format(Locale.KOREA, "이동 %.1fkm (%.1f해리) · 출발지에서 %.1fkm",
+            total / 1000, total / 1852, straight / 1000)
+    }
+
     private fun directionName(deg: Float): String {
         val names = arrayOf("북", "북동", "동", "남동", "남", "남서", "서", "북서")
         return names[(((deg % 360 + 360) % 360 + 22.5f) / 45f).toInt() % 8]
@@ -154,6 +173,9 @@ object MapDialog {
             dotList.addAll(toDots(l.catches))
             all.addAll(l.track); all.addAll(l.catches.map { it.point })
         }
+        // 출발 지점 (초록)
+        val startPt = (live?.let { layerOf(it).track.firstOrNull() }) ?: layers.firstOrNull()?.track?.firstOrNull()
+        if (startPt != null) map.overlays.add(DotsOverlay(a, listOf(MapDot(startPt, Color.parseColor("#5FD39A"), "출발 지점", "출발")), false, null))
         val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }
         map.overlays.add(dots)
         if (live != null) map.overlays.add(boat)
@@ -316,7 +338,7 @@ object MapDialog {
                         val ageSec = (System.currentTimeMillis() - loc.time) / 1000
                         liveInfo.text = String.format(Locale.KOREA, "속도 %.1f노트 · 방향 %s (%d°)%s",
                             speed * 1.94384f, directionName(heading), heading.toInt(),
-                            if (ageSec > 30) " · 위치 ${ageSec}초 전" else "")
+                            if (ageSec > 30) " · 위치 ${ageSec}초 전" else "") + "\n" + distanceText(pts)
                     } else {
                         liveInfo.text = "GPS 위치를 찾는 중… (위치 권한·GPS 켜짐 확인)"
                     }
@@ -422,7 +444,8 @@ object MapDialog {
         val df = SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA)
         val withLoc = t.catches.count { it.lat != null }
         val isLive = Store.current?.id == t.id
-        val legend = "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 흰 선 이동 경로" +
+        val legend = distanceText(t.track.map { GeoPoint(it.lat, it.lon) }) + "\n" +
+            "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 초록 = 출발 · 흰 선 이동 경로" +
             (if (isLive) " · 배 = 지금 내 위치" else "") +
             "\n위치가 있는 조과 $withLoc / ${t.catches.size} · 숫자 = 겹친 마릿수 · 점을 누르면 상세"
         if (isLive) show(a, df.format(Date(t.start)) + " 출조 중 (실시간)", emptyList(), legend, live = t, excludeId = t.id)

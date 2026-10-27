@@ -94,7 +94,8 @@ class TripActivity : Activity() {
             (if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
             setOnClickListener { askPlace(t) }
         }, Ui.lp(this, MATCH, WRAP, top = 2))
-        root.addView(Ui.text(this, 13f, Ui.SUB, false, Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
+        root.addView(Ui.text(this, 13f, Ui.SUB, false,
+            (if (t.cat.isNotBlank()) Store.catLabel(t.cat) + " · " else "") + Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
 
         // 합계
         val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -381,16 +382,21 @@ class TripActivity : Activity() {
     }
 
     private fun askRename(t: Store.Trip, slot: Int) {
-        val input = EditText(this).apply {
-            setText(if (t.name(slot) == "${slot}번") "" else t.name(slot))
-            hint = "예: 주꾸미"; inputType = InputType.TYPE_CLASS_TEXT
+        val cat = t.cat.ifBlank { Store.category }
+        val list = Store.species(cat)
+        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, listOf("+ 새 어종 추가")) { i, label ->
+            if (i < list.size) { Store.renameInTrip(t.id, slot, label); return@show }
+            val input = EditText(this).apply { hint = "어종 이름"; inputType = InputType.TYPE_CLASS_TEXT }
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("${Store.catLabel(cat)} 어종 추가")
+                .setView(input)
+                .setPositiveButton("추가") { _, _ ->
+                    val n = input.text.toString().trim()
+                    if (n.isNotEmpty()) { Store.addSpecies(cat, n); Store.renameInTrip(t.id, slot, n) }
+                }
+                .setNegativeButton("취소", null)
+                .show()
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("버튼 $slot 어종 이름")
-            .setView(input)
-            .setPositiveButton("저장") { _, _ -> Store.renameInTrip(t.id, slot, input.text.toString().trim()) }
-            .setNegativeButton("취소", null)
-            .show()
     }
 
     private fun askUnpublish(t: Store.Trip) {

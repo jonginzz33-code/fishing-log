@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var learnBtn: TextView
     private lateinit var touchBox: CheckBox
     private lateinit var saverBox: CheckBox
+    private lateinit var catRow: LinearLayout
     private lateinit var name1: TextView
     private lateinit var name2: TextView
     private lateinit var count1: TextView
@@ -168,6 +169,11 @@ class MainActivity : Activity() {
         header.addView(Ui.text(this, 24f, Ui.TEXT, true, "조과기록"),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         col.addView(header)
+
+        // 낚시 종류: 선상 · 해루질 · 워킹 (선택된 걸 한 번 더 누르면 어종 관리)
+        catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        col.addView(catRow, Ui.lp(this, MATCH, WRAP, top = 12))
+        col.addView(Ui.text(this, 11f, Ui.SUB, false, "선택된 종류를 한 번 더 누르면 어종 추가·삭제"), Ui.lp(this, MATCH, WRAP, top = 4))
 
         placeText = Ui.text(this, 17f, Ui.TEXT, true).apply {
             setOnClickListener { Store.current?.let { askPlace(it.id) } }
@@ -370,21 +376,69 @@ class MainActivity : Activity() {
         b.show()
     }
 
+    /** 버튼 어종: 지금 낚시 종류의 어종 목록에서 고르기 */
     private fun askRename(slot: Int) {
-        val currentName = Store.current?.name(slot) ?: Store.defaultName(slot)
-        val input = EditText(this).apply {
-            setText(if (currentName == "${slot}번") "" else currentName)
-            setSelection(text.length)
-            hint = "예: 갑오징어"
-            inputType = InputType.TYPE_CLASS_TEXT
+        val cat = Store.current?.cat?.ifBlank { null } ?: Store.category
+        val list = Store.species(cat)
+        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, listOf("+ 새 어종 추가")) { i, label ->
+            if (i < list.size) Store.rename(slot, label)
+            else askNewSpecies(cat) { name -> Store.rename(slot, name) }
         }
+    }
+
+    private fun askNewSpecies(cat: String, then: ((String) -> Unit)? = null) {
+        val input = EditText(this).apply { hint = "어종 이름"; inputType = InputType.TYPE_CLASS_TEXT }
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("버튼 $slot 어종 이름")
-            .setMessage(if (Store.current == null) "다음 출조부터 이 이름으로 기록돼요" else "이미 기록된 것까지 모두 이 이름으로 바뀌어요")
+            .setTitle("${Store.catLabel(cat)} 어종 추가")
             .setView(input)
-            .setPositiveButton("저장") { _, _ -> Store.rename(slot, input.text.toString().trim()) }
+            .setPositiveButton("추가") { _, _ ->
+                val n = input.text.toString().trim()
+                if (n.isNotEmpty()) { Store.addSpecies(cat, n); then?.invoke(n) }
+            }
             .setNegativeButton("취소", null)
             .show()
+    }
+
+    /** 종류별 어종 관리: 추가, 순서, 삭제 */
+    private fun manageSpecies(cat: String) {
+        val list = Store.species(cat)
+        BigList.show(this, "${Store.catLabel(cat)} 어종 (눌러서 순서·삭제)", list, listOf("+ 새 어종 추가")) { i, label ->
+            if (i >= list.size) { askNewSpecies(cat) { manageSpecies(cat) }; return@show }
+            val opts = arrayOf("위로 올리기", "아래로 내리기", "삭제")
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(label)
+                .setItems(opts) { _, w ->
+                    val l = Store.species(cat).toMutableList()
+                    val k = l.indexOf(label)
+                    if (k >= 0) when (w) {
+                        0 -> if (k > 0) { l.removeAt(k); l.add(k - 1, label) }
+                        1 -> if (k < l.size - 1) { l.removeAt(k); l.add(k + 1, label) }
+                        2 -> l.removeAt(k)
+                    }
+                    Store.setSpecies(cat, l)
+                    manageSpecies(cat)
+                }
+                .show()
+        }
+    }
+
+    private fun renderCats() {
+        catRow.removeAllViews()
+        val tripCat = Store.current?.cat?.ifBlank { null }
+        val sel = tripCat ?: Store.category
+        Store.CATS.forEachIndexed { i, c ->
+            val on = c == sel
+            catRow.addView(Ui.text(this, 15f, if (on) Ui.BG else Ui.TEXT, true, Store.catLabel(c)).apply {
+                gravity = Gravity.CENTER
+                minHeight = dp(44)
+                background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 22) else Ui.bg(this@MainActivity, Ui.CARD, 22, Ui.LINE)
+                setOnClickListener {
+                    if (on) manageSpecies(c)
+                    else if (Store.current != null) showMessage("출조 중에는 종류를 바꿀 수 없어요 (종료 후 변경)")
+                    else Store.category = c
+                }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
+        }
     }
 
     private fun openMap() {
@@ -476,6 +530,7 @@ class MainActivity : Activity() {
     private fun refresh() {
         updateStatus()
         refreshRemote()
+        renderCats()
         val t = Store.current
         placeText.text = when {
             t == null -> Tide.mulName(System.currentTimeMillis())

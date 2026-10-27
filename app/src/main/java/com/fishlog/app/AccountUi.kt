@@ -91,7 +91,9 @@ class AccountUi(private val a: Activity) {
                 when {
                     which < base -> { Cloud.setActive(gs[which].id); toast("'${gs[which].name}' 선택") }
                     items[which].startsWith("＋ 새") -> askText("새 그룹 이름", "예: 낚시 모임") { name ->
-                        Cloud.createGroup(name) { err -> toast(err ?: "그룹을 만들었어요. 초대 코드: ${Cloud.active?.code}") }
+                        askTypes("어떤 낚시 그룹인가요? (여러 개 선택 가능)", emptyList()) { types ->
+                            Cloud.createGroup(name, types) { err -> toast(err ?: "그룹을 만들었어요. 초대 코드: ${Cloud.active?.code}") }
+                        }
                     }
                     items[which].startsWith("＋ 초대") -> askText("초대 코드 6자리", "예: K7P2QX") { code ->
                         Cloud.joinGroup(code) { err -> toast(err ?: "'${Cloud.active?.name}' 그룹에 가입했어요") }
@@ -102,6 +104,21 @@ class AccountUi(private val a: Activity) {
                 }
             }
             .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    /** 선상 · 해루질 · 워킹 여러 개 고르기 */
+    fun askTypes(title: String, current: List<String>, ok: (List<String>) -> Unit) {
+        val cats = Store.CATS
+        val checked = BooleanArray(cats.size) { cats[it] in current }
+        AlertDialog.Builder(a, theme)
+            .setTitle(title)
+            .setMultiChoiceItems(cats.map { Store.catLabel(it) }.toTypedArray(), checked) { _, i, v -> checked[i] = v }
+            .setPositiveButton("확인") { _, _ ->
+                val picked = cats.filterIndexed { i, _ -> checked[i] }
+                if (picked.isEmpty()) toast("하나 이상 골라 주세요") else ok(picked)
+            }
+            .setNegativeButton("취소", null)
             .show()
     }
 

@@ -268,3 +268,31 @@ class CrownView(c: Context) : View(c) {
         canvas.drawCircle(w * 0.50f, h * 0.62f, h * 0.09f, gem)
     }
 }
+
+/** 장갑 끼고도 누르기 쉬운 큰 목록 창 */
+object BigList {
+    fun show(a: android.app.Activity, title: String, items: List<String>, tail: List<String> = emptyList(),
+             onPick: (index: Int, label: String) -> Unit): android.app.AlertDialog {
+        val col = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Ui.dp(a, 16), Ui.dp(a, 4), Ui.dp(a, 16), Ui.dp(a, 4))
+        }
+        val dlg = android.app.AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(title)
+            .setView(android.widget.ScrollView(a).apply { addView(col) })
+            .setNegativeButton("닫기", null)
+            .create()
+        (items + tail).forEachIndexed { i, label ->
+            val isTail = i >= items.size
+            col.addView(Ui.text(a, if (isTail) 16f else 19f, if (isTail) Ui.BLUE else Ui.TEXT, !isTail, label).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minHeight = Ui.dp(a, 54)
+                setPadding(Ui.dp(a, 16), 0, Ui.dp(a, 16), 0)
+                background = Ui.bg(a, Ui.CARD, 12, Ui.LINE)
+                setOnClickListener { dlg.dismiss(); onPick(i, label) }
+            }, Ui.lp(a, Ui.MATCH, Ui.WRAP, top = 8))
+        }
+        dlg.show()
+        return dlg
+    }
+}

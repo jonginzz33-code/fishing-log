@@ -27,7 +27,8 @@ object Store {
         var boat: String = "",
         var port: String = "",
         val photos: MutableList<Photo> = mutableListOf(),
-        var backedUp: Boolean = false
+        var backedUp: Boolean = false,
+        var cat: String = ""
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names[slot - 1]
@@ -68,7 +69,47 @@ object Store {
         set(v) { prefs.edit().putString("key2", v).apply(); fireChanged() }
 
     // ---- 설정 ----
-    fun defaultName(slot: Int): String = prefs.getString("name$slot", null) ?: "${slot}번"
+    // ---- 낚시 종류 (선상 · 해루질 · 워킹) ----
+    val CATS = listOf("boat", "night", "walk")
+    fun catLabel(c: String): String = when (c) { "boat" -> "선상낚시"; "night" -> "해루질"; "walk" -> "워킹낚시"; else -> "" }
+    fun catShort(c: String): String = when (c) { "boat" -> "선상"; "night" -> "해루질"; "walk" -> "워킹"; else -> "" }
+    private val DEFAULT_SPECIES = mapOf(
+        "boat" to listOf("주꾸미", "갑오징어", "우럭", "광어", "참돔", "쭈갑"),
+        "night" to listOf("낙지", "문어", "해삼", "소라", "꽃게", "키조개"),
+        "walk" to listOf("우럭", "노래미", "감성돔", "농어", "볼락", "학꽁치")
+    )
+
+    var category: String
+        get() = prefs.getString("cat", "boat") ?: "boat"
+        set(v) {
+            prefs.edit().putString("cat", v).apply()
+            current?.let { it.cat = v }
+            fireChanged()
+        }
+
+    fun species(cat: String = category): List<String> {
+        val saved = prefs.getString("species_$cat", null) ?: return DEFAULT_SPECIES[cat] ?: emptyList()
+        return try { val a = JSONArray(saved); (0 until a.length()).map { a.getString(it) } } catch (_: Exception) { DEFAULT_SPECIES[cat] ?: emptyList() }
+    }
+
+    fun setSpecies(cat: String, list: List<String>) {
+        val a = JSONArray(); list.forEach { a.put(it) }
+        prefs.edit().putString("species_$cat", a.toString()).apply()
+        fireChanged()
+    }
+
+    fun addSpecies(cat: String, name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) return
+        val l = species(cat).toMutableList()
+        if (n !in l) { l.add(n); setSpecies(cat, l) }
+    }
+
+    /** 다음 출조에 쓸 버튼 이름 (종류마다 따로 기억) */
+    fun defaultName(slot: Int, cat: String = category): String =
+        prefs.getString("name${slot}_$cat", null)
+            ?: (if (cat == "boat") prefs.getString("name$slot", null) else null)
+            ?: species(cat).getOrNull(slot - 1) ?: "${slot}번"
 
     var touchMode: Boolean
         get() = prefs.getBoolean("touch", true)
@@ -115,7 +156,7 @@ object Store {
         if (current != null) return
         val now = System.currentTimeMillis()
         current = Trip(now, now, 0L, arrayOf(defaultName(1), defaultName(2)), mutableListOf(),
-            boat = boat.trim(), port = port.trim())
+            boat = boat.trim(), port = port.trim(), cat = category)
         remember("boats", boat.trim()); remember("ports", port.trim())
         Tracker.last?.let { current?.track?.add(Pt(it.time, it.latitude, it.longitude)) }
         changed()
@@ -155,7 +196,7 @@ object Store {
 
     fun rename(slot: Int, name: String) {
         val v = name.ifBlank { "${slot}번" }
-        prefs.edit().putString("name$slot", v).apply()
+        prefs.edit().putString("name${slot}_$category", v).apply()
         current?.names?.set(slot - 1, v)
         changed(false)
     }
@@ -223,7 +264,7 @@ object Store {
         val o = JSONObject()
         o.put("id", t.id); o.put("start", t.start); o.put("end", t.end)
         o.put("up", t.uploaded); o.put("bk", t.backedUp)
-        o.put("boat", t.boat); o.put("port", t.port)
+        o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat)
         o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
         val arr = JSONArray()
         t.catches.forEach {
@@ -267,7 +308,7 @@ object Store {
         }
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
             arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
-            o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false))
+            o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""))
     }
 
     private fun saveCurrent() {

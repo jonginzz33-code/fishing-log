@@ -134,6 +134,16 @@ class GroupActivity : Activity() {
                 LinearLayout.LayoutParams(WRAP, WRAP))
         }
         card.addView(nameRow)
+        val typeRow = Ui.row(this)
+        typeRow.addView(Ui.text(this, 14f, Ui.BLUE, true, g.typesLabel().ifBlank { "낚시 종류 미정" }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (Cloud.isOwner) {
+            typeRow.addView(Ui.button(this, "✎ 종류") {
+                account.askTypes("그룹 낚시 종류 (여러 개 선택 가능)", g.types) { types ->
+                    Cloud.setGroupTypes(types) { err -> toast(err ?: "그룹 종류를 바꿨어요"); load() }
+                }
+            }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(WRAP, WRAP))
+        }
+        card.addView(typeRow, Ui.lp(this, MATCH, WRAP, top = 4))
         card.addView(Ui.text(this, 15f, Ui.SUB, false, "초대 코드  ").apply {
             append(g.code)
         }, Ui.lp(this, MATCH, WRAP, top = 4))
@@ -342,7 +352,8 @@ class GroupActivity : Activity() {
                 LinearLayout.LayoutParams(dp(10), dp(10)))
             val endText = if (t.end > 0) hm.format(Date(t.end)) else "출조 중"
             r.addView(Ui.text(this, 15f, Ui.TEXT, true,
-                t.ownerName + (if (t.place().isNotBlank()) " · ${t.place()}" else "") + " · ${hm.format(Date(t.start))}~$endText"),
+                t.ownerName + (if (t.cat.isNotBlank()) " · ${Store.catShort(t.cat)}" else "") +
+                    (if (t.place().isNotBlank()) " · ${t.place()}" else "") + " · ${hm.format(Date(t.start))}~$endText"),
                 LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
             card.addView(r)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
