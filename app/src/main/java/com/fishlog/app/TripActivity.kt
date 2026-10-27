@@ -142,7 +142,7 @@ class TripActivity : Activity() {
         if (d != null) {
             val tv = TideView(this)
             tv.set(d, t)
-            tideCard.addView(tv, Ui.lp(this, MATCH, dp(200)))
+            tideCard.addView(tv, Ui.lp(this, MATCH, dp(240)))
             tideCard.addView(Ui.text(this, 13f, Ui.TEXT, false, TideDialog.describe(d, t)), Ui.lp(this, MATCH, WRAP, top = 6))
             tideCard.addView(Ui.text(this, 11f, Ui.SUB, false, d.source), Ui.lp(this, MATCH, WRAP, top = 4))
         } else {

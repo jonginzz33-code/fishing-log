@@ -127,7 +127,13 @@ class GroupActivity : Activity() {
             head.addView(card)
             return
         }
-        card.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name))
+        val nameRow = Ui.row(this)
+        nameRow.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name), LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (Cloud.isOwner) {
+            nameRow.addView(Ui.button(this, "✎ 이름") { askRename(g.name) }.apply { minHeight = dp(40); textSize = 13f },
+                LinearLayout.LayoutParams(WRAP, WRAP))
+        }
+        card.addView(nameRow)
         card.addView(Ui.text(this, 15f, Ui.SUB, false, "초대 코드  ").apply {
             append(g.code)
         }, Ui.lp(this, MATCH, WRAP, top = 4))
@@ -144,6 +150,10 @@ class GroupActivity : Activity() {
             renderHead(); renderMembers()
         }.apply { minHeight = dp(44); textSize = 14f }
         card.addView(memberBtn, Ui.lp(this, MATCH, WRAP, top = 8))
+        if (Cloud.isOwner) {
+            card.addView(Ui.button(this, "초대 코드 새로 만들기") { askNewCode() }.apply { minHeight = dp(44); textSize = 14f },
+                Ui.lp(this, MATCH, WRAP, top = 8))
+        }
         card.addView(Ui.button(this, "그룹 바꾸기 · 만들기 · 가입") { account.openGroups() }.apply { minHeight = dp(44); textSize = 14f },
             Ui.lp(this, MATCH, WRAP, top = 8))
         head.addView(card)
@@ -161,17 +171,86 @@ class GroupActivity : Activity() {
             r.addView(View(this).apply { background = Ui.bg(this@GroupActivity, colorOf[m.uid] ?: Ui.SUB, 99) },
                 LinearLayout.LayoutParams(dp(12), dp(12)))
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            val name = m.name + (if (m.uid == owner) " · 방장" else "") + (if (m.uid == Cloud.uid) " · 나" else "")
-            col.addView(Ui.text(this, 15f, Ui.TEXT, true, name))
+            val nameLine = Ui.row(this)
+            nameLine.addView(Ui.text(this, 15f, Ui.TEXT, true, m.name + if (m.uid == Cloud.uid) " (나)" else ""))
+            if (m.uid == owner) {
+                nameLine.addView(CrownView(this), LinearLayout.LayoutParams(dp(16), dp(13)).apply { leftMargin = dp(6) })
+            }
+            col.addView(nameLine)
             val parts = mutableListOf<String>()
             if (m.joined > 0) parts.add("가입 ${md.format(Date(m.joined))}")
             parts.add(if (mine.isEmpty()) "출조 기록 없음" else "마지막 출조 ${md.format(Date(mine.maxOf { it.start }))}")
             parts.add("출조 ${mine.size}회 · 총 ${mine.sumOf { it.catches.size }}마리")
             col.addView(Ui.text(this, 12f, Ui.SUB, false, parts.joinToString(" · ")))
             r.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
+            if (Cloud.isOwner && m.uid != Cloud.uid) {
+                r.isLongClickable = true
+                r.setOnLongClickListener { askKick(m); true }
+            }
             card.addView(r)
         }
+        if (Cloud.isOwner && members.size > 1) {
+            card.addView(Ui.text(this, 12f, Ui.SUB, false, "멤버 이름을 길게 누르면 내보낼 수 있어요"), Ui.lp(this, MATCH, WRAP, top = 6))
+        }
         membersBox.addView(card)
+    }
+
+    // ---------------- 그룹장 기능 ----------------
+    private fun askRename(cur: String) {
+        val input = android.widget.EditText(this).apply {
+            setText(cur); setSelection(cur.length)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("그룹 이름 바꾸기")
+            .setView(input)
+            .setPositiveButton("저장") { _, _ ->
+                val v = input.text.toString().trim()
+                if (v.isNotEmpty()) Cloud.renameGroup(v) { err -> toast(err ?: "그룹 이름을 '$v'(으)로 바꿨어요"); load() }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun askNewCode() {
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("초대 코드를 새로 만들까요?")
+            .setMessage("예전 코드로는 더 이상 가입할 수 없어요. 이미 가입한 멤버는 그대로예요.")
+            .setPositiveButton("새로 만들기") { _, _ ->
+                Cloud.newInviteCode { err -> toast(err ?: "새 초대 코드: ${Cloud.active?.code}"); load() }
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun askKick(m: Cloud.Member) {
+        val count = trips.count { it.owner == m.uid }
+        val box = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+        }
+        val delTrips = android.widget.CheckBox(this).apply {
+            text = "이 사람이 올린 출조 ${count}개도 지우기"
+            isChecked = false
+        }
+        val newCode = android.widget.CheckBox(this).apply {
+            text = "초대 코드도 새로 만들기 (다시 못 들어오게)"
+            isChecked = true
+        }
+        box.addView(delTrips); box.addView(newCode)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("'${m.name}'님을 내보낼까요?")
+            .setView(box)
+            .setPositiveButton("내보내기") { _, _ ->
+                Cloud.kickMember(m.uid, delTrips.isChecked) { err ->
+                    if (err != null) { toast(err); load(); return@kickMember }
+                    if (newCode.isChecked) {
+                        Cloud.newInviteCode { e2 -> toast(e2 ?: "내보냈어요 · 새 초대 코드 ${Cloud.active?.code}"); load() }
+                    } else { toast("내보냈어요"); load() }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     // ---------------- 달력 ----------------

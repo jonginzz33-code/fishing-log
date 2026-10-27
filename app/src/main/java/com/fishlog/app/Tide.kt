@@ -68,6 +68,9 @@ object Tide {
     private val keyFmt = SimpleDateFormat("yyyyMMdd", Locale.US).apply { timeZone = KST }
     private val khoaTimeFmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { timeZone = KST }
 
+    /** 국립해양조사원 정보를 못 받은 이유 (화면에 표시) */
+    @Volatile var lastError: String = ""
+
     private class Station(val code: String, val name: String, val lat: Double, val lon: Double)
     private var stations: List<Station>? = null
 
@@ -108,13 +111,32 @@ object Tide {
             } catch (_: Exception) {}
         }
         val key = BuildConfig.KHOA_KEY
-        if (key.isBlank()) return null
+        if (key.isBlank()) { lastError = "인증키가 앱에 없음 (GitHub 비밀값 KHOA_KEY 확인)"; return null }
+        val q = "/1192136/tideFcstHghLw/GetTideFcstHghLwApiService" +
+            "?serviceKey=${URLEncoder.encode(key, "UTF-8")}&obsCode=$code&reqDate=$ymd&type=json&pageNo=1&numOfRows=20"
+        // 보안 연결(https)이 안 되는 폰이 있어서 실패하면 일반 연결(http)로 한 번 더
+        var body: String? = null
+        var netErr = ""
+        for (scheme in listOf("https", "http")) {
+            try { body = get("$scheme://apis.data.go.kr$q"); break }
+            catch (e: Exception) { netErr = (e.javaClass.simpleName + " " + (e.message ?: "")).take(80) }
+        }
+        if (body == null) { lastError = "서버 연결 실패: $netErr"; return null }
         return try {
-            val body = get("https://apis.data.go.kr/1192136/tideFcstHghLw/GetTideFcstHghLwApiService" +
-                "?serviceKey=${URLEncoder.encode(key, "UTF-8")}&obsCode=$code&reqDate=$ymd&type=json&pageNo=1&numOfRows=20")
-            val root = JSONObject(body).let { if (it.has("response")) it.getJSONObject("response") else it }
-            val code0 = root.optJSONObject("header")?.optString("resultCode") ?: ""
-            if (code0 != "00") return null
+            val trimmed = body.trim()
+            if (trimmed.startsWith("<")) {
+                val msg = Regex("<returnAuthMsg>(.*?)</returnAuthMsg>|<resultMsg>(.*?)</resultMsg>").find(trimmed)
+                    ?.groupValues?.drop(1)?.firstOrNull { it.isNotBlank() } ?: "알 수 없는 응답"
+                lastError = "공공데이터포털 응답: $msg"
+                return null
+            }
+            val root = JSONObject(trimmed).let { if (it.has("response")) it.getJSONObject("response") else it }
+            val header = root.optJSONObject("header")
+            val code0 = header?.optString("resultCode") ?: ""
+            if (code0 != "00") {
+                lastError = "공공데이터포털 오류 $code0: ${header?.optString("resultMsg") ?: ""}"
+                return null
+            }
             val items = root.optJSONObject("body")?.opt("items")
             val itemAny = (items as? JSONObject)?.opt("item")
             val arr = when (itemAny) {
@@ -132,9 +154,14 @@ object Tide {
                 val a = JSONArray()
                 list.forEach { a.put(JSONArray().put(it.time).put(it.high).put(it.value)) }
                 prefs.edit().putString(cacheKey, a.toString()).apply()
+            } else {
+                lastError = "이 관측소($code)는 예보가 비어 있음"
             }
             list
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            lastError = "응답 읽기 실패: ${e.message?.take(60)}"
+            null
+        }
     }
 
     /** 만조·간조 사이를 코사인 곡선으로 이어서 10분 간격 조위 만들기 */
@@ -182,7 +209,7 @@ object Tide {
                 val vals = (0 until arr.length()).map { if (arr.isNull(it)) null else arr.getDouble(it) }
                 if (vals.count { it != null } >= 12) {
                     return Day(dayFmt.parse(date)!!.time, vals.take(24), 60, null,
-                        "Open-Meteo 예측 (국립해양조사원 정보를 못 받아서 대신 표시, 시각이 어긋날 수 있어요)")
+                        "Open-Meteo 예측으로 대신 표시 (시각이 어긋날 수 있어요)\n국립해양조사원 실패 이유: " + lastError.ifBlank { "알 수 없음" })
                 }
             } catch (_: Exception) {}
         }

@@ -257,6 +257,52 @@ object Cloud {
         }
     }
 
+    val isOwner: Boolean get() = active?.owner != null && active?.owner == uid
+
+    /** 그룹 이름 바꾸기 (그룹장만) */
+    fun renameGroup(name: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        db.collection("groups").document(g.id).update("name", name)
+            .addOnSuccessListener { refresh(done) }
+            .addOnFailureListener { done(it.message ?: "이름 바꾸기 실패") }
+    }
+
+    /** 초대 코드 새로 만들기 (그룹장만). 예전 코드는 더 이상 안 됨 */
+    fun newInviteCode(done: (String?) -> Unit) {
+        val id = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        val code = newCode()
+        val batch = db.batch()
+        if (g.code.isNotBlank()) batch.delete(db.collection("invites").document(g.code))
+        batch.set(db.collection("invites").document(code), mapOf("gid" to g.id, "owner" to id))
+        batch.update(db.collection("groups").document(g.id), "code", code)
+        batch.commit()
+            .addOnSuccessListener { refresh(done) }
+            .addOnFailureListener { done(it.message ?: "코드 만들기 실패") }
+    }
+
+    /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */
+    fun kickMember(memberUid: String, removeTrips: Boolean, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        if (memberUid == uid) return done("자기 자신은 내보낼 수 없어요")
+        val gref = db.collection("groups").document(g.id)
+        gref.update("members", FieldValue.arrayRemove(memberUid))
+            .addOnSuccessListener {
+                gref.collection("members").document(memberUid).delete()
+                if (!removeTrips) { done(null); return@addOnSuccessListener }
+                gref.collection("trips").whereEqualTo("owner", memberUid).get()
+                    .addOnSuccessListener { q ->
+                        if (q.isEmpty) { done(null); return@addOnSuccessListener }
+                        var left = q.size()
+                        q.documents.forEach { d ->
+                            deleteGroupTrip(d.id) { _ -> left--; if (left == 0) done(null) }
+                        }
+                    }
+                    .addOnFailureListener { done("내보냈지만 출조 지우기 실패: ${it.message}") }
+            }
+            .addOnFailureListener { done(it.message ?: "내보내기 실패") }
+    }
+
     class Member(val uid: String, val name: String, val joined: Long)
 
     /** 그룹 멤버 (예전 버전 앱 멤버는 이름 없이 나옴) */

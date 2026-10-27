@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 공공데이터포털은 일부 폰에서 https 연결이 실패해서 이 주소만 http 허용 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">apis.data.go.kr</domain>
+    </domain-config>
+</network-security-config>

@@ -125,65 +125,146 @@ class BarView(c: Context) : View(c) {
     }
 }
 
-/** 조위 곡선 + 낚시한 시간 + 조과 점 */
+/** 조위 곡선 + 1시간 세로선 + 낚시한 시간 + 조과 점 + 지금 */
 class TideView(c: Context) : View(c) {
     private var day: Tide.Day? = null
     private var trip: Store.Trip? = null
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.BLUE; style = Paint.Style.STROKE; strokeWidth = Ui.dp(c, 2).toFloat() }
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(70, 30, 106, 134) }
+    private val d = c.resources.displayMetrics.density
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.BLUE; style = Paint.Style.STROKE; strokeWidth = 2.5f * d
+        strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
+    }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(90, 30, 106, 134) }
     private val win = Paint().apply { color = Color.parseColor("#1C3A4F") }
+    private val gridThin = Paint().apply { color = Color.parseColor("#2A4A60"); strokeWidth = 0.6f * d }
+    private val gridThick = Paint().apply { color = Color.parseColor("#3E6580"); strokeWidth = 1.1f * d }
+    private val nowLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.GREEN; strokeWidth = 1.3f * d; style = Paint.Style.STROKE
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(4 * d, 3 * d), 0f)
+    }
+    private val nowPill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.GREEN }
+    private val nowTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.BG; textSize = 10 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
     private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val txt = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.TEXT; textSize = Ui.dp(c, 11).toFloat(); textAlign = Paint.Align.CENTER }
-    private val sub = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = Ui.dp(c, 10).toFloat(); textAlign = Paint.Align.CENTER }
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.2f * d; color = Ui.BG }
+    private val ext = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.TEXT; textSize = 11 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val major = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#CFE0EA"); textSize = 11 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val minor = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#6F8797"); textSize = 8 * d; textAlign = Paint.Align.CENTER }
+    private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = 10 * d; textAlign = Paint.Align.CENTER }
 
-    fun set(d: Tide.Day, t: Store.Trip?) { day = d; trip = t; invalidate() }
+    fun set(dd: Tide.Day, t: Store.Trip?) { day = dd; trip = t; invalidate() }
 
     override fun onDraw(canvas: Canvas) {
-        val d = day ?: return
-        val vals = d.values
-        val hr = d.stepMin / 60.0
+        val dy = day ?: return
+        val vals = dy.values
+        val stepH = dy.stepMin / 60.0
         val known = vals.filterNotNull()
         if (known.isEmpty()) return
-        val lo = known.min(); val hi = known.max()
+        val exts = Tide.extremes(dy)
+        val lo = minOf(known.min(), exts.minOfOrNull { it.value } ?: known.min())
+        val hi = maxOf(known.max(), exts.maxOfOrNull { it.value } ?: known.max())
         val range = (hi - lo).coerceAtLeast(0.1)
-        val padTop = Ui.dp(context, 30).toFloat(); val padBot = Ui.dp(context, 30).toFloat()
         val w = width.toFloat(); val h = height.toFloat()
-        val n = (vals.size - 1) * hr
-        fun x(hour: Double) = (hour / n * w).toFloat()
-        fun y(v: Double) = (padTop + (1 - (v - lo) / range) * (h - padTop - padBot)).toFloat()
+        val left = 12 * d; val right = w - 14 * d
+        val top = 34 * d; val bottom = h - 26 * d
+        fun x(hour: Double) = (left + (right - left) * hour / 24.0).toFloat()
+        fun y(v: Double) = (top + (1 - (v - lo) / range) * (bottom - top)).toFloat()
+        fun hourOf(t: Long) = (t - dy.dateMillis) / 3600_000.0
 
+        // 낚시한 시간
         val t = trip
         if (t != null) {
-            val s = (t.start - d.dateMillis) / 3600_000.0
-            val e = ((if (t.end > 0) t.end else System.currentTimeMillis()) - d.dateMillis) / 3600_000.0
-            canvas.drawRect(x(s.coerceIn(0.0, n)), 0f, x(e.coerceIn(0.0, n)), h - padBot + 4, win)
+            val s = hourOf(t.start).coerceIn(0.0, 24.0)
+            val e = hourOf(if (t.end > 0) t.end else System.currentTimeMillis()).coerceIn(0.0, 24.0)
+            if (e > s) canvas.drawRect(x(s), top - 6 * d, x(e), bottom, win)
         }
-        val path = Path()
-        var started = false
-        vals.forEachIndexed { i, v ->
-            if (v == null) return@forEachIndexed
-            if (!started) { path.moveTo(x(i * hr), y(v)); started = true } else path.lineTo(x(i * hr), y(v))
-        }
-        val area = Path(path)
-        area.lineTo(w, h - padBot); area.lineTo(0f, h - padBot); area.close()
-        canvas.drawPath(area, fill)
-        canvas.drawPath(path, line)
+        // 1시간 세로선 (6시간마다 진하게)
+        for (hh in 0..24) canvas.drawLine(x(hh.toDouble()), top - 6 * d, x(hh.toDouble()), bottom, if (hh % 6 == 0) gridThick else gridThin)
 
-        val tf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
-        Tide.extremes(d).forEach { e ->
-            val hx = x((e.time - d.dateMillis) / 3600_000.0)
-            val hy = y(e.value)
-            dot.color = Ui.TEXT
-            canvas.drawCircle(hx, hy, Ui.dp(context, 3).toFloat(), dot)
-            val ly = if (e.high) hy - Ui.dp(context, 14) else hy + Ui.dp(context, 16)
-            canvas.drawText(tf.format(java.util.Date(e.time)), hx.coerceIn(30f, w - 30f), ly, txt)
-            canvas.drawText(if (e.high) "만조" else "간조", hx.coerceIn(30f, w - 30f), ly + (if (e.high) -Ui.dp(context, 12) else Ui.dp(context, 12)), sub)
+        // 부드러운 곡선 (점 사이를 2차 곡선으로 이음)
+        val pts = vals.mapIndexedNotNull { i, v -> v?.let { x(i * stepH) to y(it) } }
+        if (pts.size >= 2) {
+            val path = Path()
+            path.moveTo(pts[0].first, pts[0].second)
+            for (i in 1 until pts.size - 1) {
+                val mx = (pts[i].first + pts[i + 1].first) / 2
+                val my = (pts[i].second + pts[i + 1].second) / 2
+                path.quadTo(pts[i].first, pts[i].second, mx, my)
+            }
+            path.lineTo(pts.last().first, pts.last().second)
+            val area = Path(path)
+            area.lineTo(pts.last().first, bottom); area.lineTo(pts[0].first, bottom); area.close()
+            canvas.drawPath(area, fill)
+            canvas.drawPath(path, line)
         }
+
+        // 지금
+        val nowH = hourOf(System.currentTimeMillis())
+        if (nowH in 0.0..24.0) {
+            val nx = x(nowH)
+            canvas.drawLine(nx, top - 6 * d, nx, bottom, nowLine)
+            val pw = 30 * d
+            val px = nx.coerceIn(left + pw / 2, right - pw / 2)
+            canvas.drawRoundRect(px - pw / 2, 2 * d, px + pw / 2, 16 * d, 7 * d, 7 * d, nowPill)
+            canvas.drawText("지금", px, 13 * d, nowTxt)
+        }
+
+        // 조과 점
         t?.catches?.forEach { c ->
-            val v = Tide.valueAt(d, c.time) ?: return@forEach
+            val v = Tide.valueAt(dy, c.time) ?: return@forEach
+            val cx = x(hourOf(c.time)); val cy = y(v)
             dot.color = Ui.SLOT[c.slot - 1]
-            canvas.drawCircle(x((c.time - d.dateMillis) / 3600_000.0), y(v), Ui.dp(context, 4).toFloat(), dot)
+            canvas.drawCircle(cx, cy, 4 * d, dot)
+            canvas.drawCircle(cx, cy, 4 * d, ring)
         }
-        for (hr in listOf(0, 6, 12, 18)) canvas.drawText("${hr}시", x(hr.toDouble()).coerceAtLeast(14f), h - 4, sub)
+
+        // 만조·간조 (글씨는 그래프 안쪽, 화면 밖으로 안 나가게)
+        val tf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
+        exts.forEach { e ->
+            val hx = x(hourOf(e.time)); val hy = y(e.value)
+            if (hourOf(e.time) < 0 || hourOf(e.time) > 24) return@forEach
+            dot.color = Ui.TEXT
+            canvas.drawCircle(hx, hy, 3.5f * d, dot)
+            val label = (if (e.high) "만조 " else "간조 ") + tf.format(java.util.Date(e.time))
+            val half = ext.measureText(label) / 2
+            val lx = hx.coerceIn(left + half, right - half)
+            val ly = if (e.high) (hy - 9 * d).coerceAtLeast(30 * d) else (hy - 12 * d)
+            canvas.drawText(label, lx, ly, ext)
+        }
+
+        // 시간 숫자: 3시간마다 크게, 사이 매시간 작게
+        val ty = bottom + 14 * d
+        for (hh in 0..24) {
+            if (hh % 3 == 0) canvas.drawText(hh.toString(), x(hh.toDouble()), ty, major)
+            else canvas.drawText(hh.toString(), x(hh.toDouble()), ty - 1 * d, minor)
+        }
+        canvas.drawText("시", (right + w) / 2 + 2 * d, ty + 11 * d, small)
+    }
+}
+
+/** 그룹장 표시용 작은 왕관 */
+class CrownView(c: Context) : View(c) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F2C14E") }
+    private val gem = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F07AA0") }
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val path = Path().apply {
+            moveTo(w * 0.08f, h * 0.82f)
+            lineTo(w * 0.04f, h * 0.30f)
+            lineTo(w * 0.30f, h * 0.55f)
+            lineTo(w * 0.50f, h * 0.12f)
+            lineTo(w * 0.70f, h * 0.55f)
+            lineTo(w * 0.96f, h * 0.30f)
+            lineTo(w * 0.92f, h * 0.82f)
+            close()
+        }
+        canvas.drawPath(path, p)
+        canvas.drawRect(w * 0.08f, h * 0.84f, w * 0.92f, h * 0.96f, p)
+        canvas.drawCircle(w * 0.50f, h * 0.62f, h * 0.09f, gem)
     }
 }

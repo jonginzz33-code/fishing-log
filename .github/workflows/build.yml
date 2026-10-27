@@ -26,7 +26,9 @@ jobs:
       - name: Build
         env:
           KHOA_KEY: ${{ secrets.KHOA_KEY }}
-        run: gradle assembleDebug --no-daemon
+        run: |
+          if [ -z "$KHOA_KEY" ]; then echo "::warning::KHOA_KEY 비밀값이 비어 있어요 (물때가 Open-Meteo로 나와요)"; else echo "KHOA_KEY 길이: ${#KHOA_KEY}"; fi
+          gradle assembleDebug --no-daemon
 
       - name: Rename APK
         run: |

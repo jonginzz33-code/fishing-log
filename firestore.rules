@@ -2,6 +2,10 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function isGroupOwner(gid) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/groups/$(gid)).data.owner == request.auth.uid;
+    }
     function isMember(gid) {
       return signedIn() &&
         request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.members;
@@ -35,20 +39,22 @@ service cloud.firestore {
       match /members/{mid} {
         allow read: if isMember(gid);
         allow create, update: if isMember(gid) && request.auth.uid == mid;
+        allow delete: if isGroupOwner(gid) || request.auth.uid == mid;
       }
       match /trips/{tripId} {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && request.resource.data.owner == request.auth.uid;
-        allow update, delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+        allow update: if isMember(gid) && resource.data.owner == request.auth.uid;
+        allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
         match /photos/{pid} {
           allow read: if isMember(gid);
           allow create, update: if isMember(gid) && request.resource.data.owner == request.auth.uid;
-          allow delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+          allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
         }
         match /photosBig/{pid} {
           allow read: if isMember(gid);
           allow create, update: if isMember(gid) && request.resource.data.owner == request.auth.uid;
-          allow delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+          allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
         }
       }
     }

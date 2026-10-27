@@ -22,7 +22,7 @@ object TideDialog {
         val info = Ui.text(a, 13f, Ui.SUB, false, "물때 그래프 불러오는 중…")
         val graph = TideView(a)
         col.addView(head)
-        col.addView(graph, Ui.lp(a, MATCH, Ui.dp(a, 220), top = 10))
+        col.addView(graph, Ui.lp(a, MATCH, Ui.dp(a, 250), top = 10))
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
         val src = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(src, Ui.lp(a, MATCH, WRAP, top = 10))
