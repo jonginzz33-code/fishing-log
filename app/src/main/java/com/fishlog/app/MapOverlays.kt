@@ -25,10 +25,11 @@ class DotsOverlay(
     ctx: Context,
     var dots: List<MapDot>,
     private val faded: Boolean,
-    private val onTap: ((List<MapDot>) -> Unit)?,
-    /** 화면에서 이 거리(dp) 안의 점은 하나로 묶음 */
-    private val mergeDp: Float = 18f
+    private val onTap: ((List<MapDot>) -> Unit)?
 ) : Overlay() {
+
+    /** 화면에서 이 거리(dp) 안의 점은 하나로 묶음 */
+    var mergeDp = 18f
 
     private val d = ctx.resources.displayMetrics.density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)

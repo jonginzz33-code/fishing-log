@@ -546,7 +546,7 @@ object MapDialog {
                 setOnClickListener { _, _, _ -> showCluster(a, list); true }
             })
         }
-        map.overlays.add(DotsOverlay(a, dots, false, { showCluster(a, it) }, 34f))
+        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { mergeDp = 34f })
         val me = MyLocOverlay(a)
         map.overlays.add(me)
 
