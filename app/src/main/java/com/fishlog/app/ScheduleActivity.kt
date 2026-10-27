@@ -158,7 +158,8 @@ class ScheduleActivity : Activity() {
         }
         refreshBtns()
         dateBtn.setOnClickListener {
-            val c = Calendar.getInstance().apply { time = keyFmt.parse(date)!! }
+            val c = Calendar.getInstance()
+            c.time = keyFmt.parse(date)!!
             DatePickerDialog(this, { _, y, m, d ->
                 c.set(y, m, d); date = keyFmt.format(c.time); refreshBtns()
             }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
