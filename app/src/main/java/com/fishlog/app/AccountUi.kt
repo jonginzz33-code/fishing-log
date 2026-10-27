@@ -152,6 +152,22 @@ class AccountUi(private val a: Activity) {
         Cloud.uploadTrip(t) { err -> if (err != null) toast("올리기 실패: $err") else if (!quiet) toast("그룹에 올렸어요") }
     }
 
+    /** 가입한 그룹 전체에 올리기 */
+    fun uploadAll(t: Store.Trip) {
+        val gs = Cloud.groups
+        if (Cloud.user == null || gs.isEmpty()) { toast("로그인하고 그룹에 가입하면 올릴 수 있어요"); return }
+        toast("가입한 그룹 ${gs.size}곳에 올리는 중…")
+        var left = gs.size
+        val fails = mutableListOf<String>()
+        gs.forEach { g ->
+            Cloud.uploadTrip(t, g) { err ->
+                if (err != null) fails.add(g.name)
+                left--
+                if (left == 0) toast(if (fails.isEmpty()) "그룹 ${gs.size}곳에 올렸어요" else "올리기 실패: ${fails.joinToString(", ")}")
+            }
+        }
+    }
+
     // ---------------- 그룹 출조 목록 ----------------
     private val dayFmt = SimpleDateFormat("M/d (E) HH:mm", Locale.KOREA)
 

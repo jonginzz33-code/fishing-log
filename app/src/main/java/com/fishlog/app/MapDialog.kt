@@ -272,6 +272,8 @@ object MapDialog {
         val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }
         map.overlays.add(dots)
         if (live != null) map.overlays.add(boat)
+        val me = MyLocOverlay(a)
+        if (live == null) map.overlays.add(me)
 
         // ---- 화면 구성 ----
         val bg = Color.parseColor("#0B1A26")
@@ -330,6 +332,12 @@ object MapDialog {
                 if (follow) boat.position?.let { map.controller.animateTo(it) }
             }
             addPill(followBtn)
+        }
+
+        if (live == null) {
+            val meBtn = pill("내 위치")
+            meBtn.setOnClickListener { locate(a, map, me, meBtn) }
+            addPill(meBtn)
         }
 
         val pastBtn = pill("지난 기록 겹치기")
@@ -495,6 +503,24 @@ object MapDialog {
         }
     }
 
+    /** "내 위치" 버튼 동작: 누를 때마다 새로 잡아서 파란 점으로 */
+    private fun locate(a: Activity, map: MapView, me: MyLocOverlay, btn: TextView) {
+        val label = btn.text
+        btn.text = "위치 찾는 중…"
+        LocOnce.get(a) { l, err ->
+            btn.text = label
+            if (l == null) { android.widget.Toast.makeText(a, err ?: "위치를 찾지 못했어요", android.widget.Toast.LENGTH_LONG).show(); return@get }
+            val p = GeoPoint(l.latitude, l.longitude)
+            me.position = p
+            me.accuracy = if (l.hasAccuracy()) l.accuracy else 0f
+            if (map.zoomLevelDouble < 14.0) map.controller.setZoom(15.0)
+            map.controller.animateTo(p)
+            map.invalidate()
+            val age = (System.currentTimeMillis() - l.time) / 60_000L
+            if (age >= 3) android.widget.Toast.makeText(a, "${age}분 전에 잡힌 위치예요", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     /**
      * 전체 게시판: 한 어종이 잡힌 자리를 150m 원 + 마릿수로 보여주는 큰 지도
      * dots = 조과 하나당 점 하나 (위치는 칸 가운데). 원을 누르면 날짜별 요약
@@ -514,13 +540,15 @@ object MapDialog {
             val strength = 0.25 + 0.75 * list.size / max   // 많이 잡힌 곳일수록 진하게
             map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
                 points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(list[0].point, radiusM)
-                fillPaint.color = Color.argb((40 + 120 * strength).toInt(), 242, 140, 56)
-                outlinePaint.color = Color.parseColor("#F28C38")
-                outlinePaint.strokeWidth = dp(a, 1).toFloat()
+                fillPaint.color = Color.argb((70 + 130 * strength).toInt(), 242, 140, 56)
+                outlinePaint.color = Color.parseColor("#FFB070")
+                outlinePaint.strokeWidth = dp(a, 3).toFloat()
                 setOnClickListener { _, _, _ -> showCluster(a, list); true }
             })
         }
-        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) })
+        map.overlays.add(DotsOverlay(a, dots, false, { showCluster(a, it) }, 34f))
+        val me = MyLocOverlay(a)
+        map.overlays.add(me)
 
         val bg = Color.parseColor("#0B1A26")
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
@@ -536,11 +564,7 @@ object MapDialog {
             setOnClickListener { onClick(this) }
         }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
         pill("전체 보기") { fit(map, dots.map { it.point }) }
-        pill("내 위치") {
-            val l = Tracker.last
-            val p = if (l != null) GeoPoint(l.latitude, l.longitude) else Store.history.firstNotNullOfOrNull { it.anyLocation() }?.let { GeoPoint(it.first, it.second) }
-            if (p != null) { map.controller.setZoom(14.0); map.controller.animateTo(p) }
-        }
+        pill("내 위치") { v -> locate(a, map, me, v) }
         pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
             Store.satellite = !Store.satellite
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)

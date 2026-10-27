@@ -54,6 +54,11 @@ class MainActivity : Activity() {
     private lateinit var touchBox: CheckBox
     private lateinit var saverBox: CheckBox
     private lateinit var watchBox: CheckBox
+    private lateinit var menuBtn: TextView
+    private lateinit var menuBox: LinearLayout
+    private lateinit var recentBox: LinearLayout
+    private lateinit var outerRecent: LinearLayout
+    private lateinit var innerRecent: LinearLayout
     private lateinit var catRow: LinearLayout
     private lateinit var name1: TextView
     private lateinit var name2: TextView
@@ -250,7 +255,7 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked ->
                 if (checked != Store.watchMode) {
                     Store.watchMode = checked
-                    if (checked) showMessage("출조 중에 워치에서 '미디어 컨트롤러'(음악) 화면을 열고 ⏭ ⏮를 누르세요")
+                    if (checked) showWatchGuide()
                 }
             }
         }
@@ -275,25 +280,40 @@ class MainActivity : Activity() {
         col.addView(tripBtn, Ui.lp(this, MATCH, WRAP, top = 16))
         col.addView(undoBtn, Ui.lp(this, MATCH, WRAP, top = 10))
 
-        col.addView(Ui.text(this, 16f, Ui.TEXT, true, "최근 기록"), Ui.lp(this, MATCH, WRAP, top = 24))
+        // 최근 기록: 출조 중엔 메뉴 밖, 대기 중엔 메뉴 안
+        recentBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        recentBox.addView(Ui.text(this, 16f, Ui.TEXT, true, "최근 기록"), Ui.lp(this, MATCH, WRAP, top = 16))
         recent = Ui.text(this, 15f, Color.parseColor("#CFE0EA")).apply {
             background = Ui.bg(this@MainActivity, Ui.CARD, 14)
             setPadding(dp(14), dp(12), dp(14), dp(12))
             typeface = Typeface.MONOSPACE
             setLineSpacing(0f, 1.3f)
         }
-        col.addView(recent, Ui.lp(this, MATCH, WRAP, top = 8))
+        recentBox.addView(recent, Ui.lp(this, MATCH, WRAP, top = 8))
+        outerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(outerRecent, Ui.lp(this, MATCH, WRAP))
+
+        // 메뉴 ▼ : 아래 항목들을 접고 펼치기
+        menuBtn = Ui.button(this, "메뉴 ▼") {
+            Store.menuOpen = !Store.menuOpen
+            paintMenu()
+        }
+        col.addView(menuBtn, Ui.lp(this, MATCH, WRAP, top = 12))
+        menuBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(menuBox, Ui.lp(this, MATCH, WRAP))
+        innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
         historyBtn = Ui.button(this, "지난 출조 · 내 기록 보관함") {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
-        col.addView(historyBtn, Ui.lp(this, MATCH, WRAP, top = 20))
+        menuBox.addView(historyBtn, Ui.lp(this, MATCH, WRAP, top = 12))
         scheduleBtn = Ui.button(this, "그룹 일정 확인") {
             if (Cloud.active == null) showMessage("그룹에 가입하면 일정을 볼 수 있어요")
             else startActivity(Intent(this, ScheduleActivity::class.java))
         }
-        col.addView(scheduleBtn, Ui.lp(this, MATCH, WRAP, top = 10))
-        col.addView(Ui.button(this, "전체 조황 · 포인트 도감") {
+        menuBox.addView(scheduleBtn, Ui.lp(this, MATCH, WRAP, top = 10))
+        menuBox.addView(Ui.button(this, "전체 조황 · 포인트 도감") {
             if (Cloud.user == null) showMessage("구글 로그인을 하면 볼 수 있어요")
             else startActivity(Intent(this, BoardActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -319,12 +339,14 @@ class MainActivity : Activity() {
         acc.addView(accountInfo)
         acc.addView(accountBtn, Ui.lp(this, MATCH, WRAP, top = 10))
         acc.addView(hideRouteBox, Ui.lp(this, MATCH, WRAP, top = 4))
-        col.addView(acc, Ui.lp(this, MATCH, WRAP, top = 16))
+        menuBox.addView(acc, Ui.lp(this, MATCH, WRAP, top = 16))
         adminBtn = Ui.button(this, "관리자 · 사용자 목록") {
             startActivity(Intent(this, AdminActivity::class.java))
         }.apply { minHeight = dp(44); textSize = 14f; visibility = View.GONE }
-        col.addView(adminBtn, Ui.lp(this, MATCH, WRAP, top = 12))
-        col.addView(Ui.text(this, 11f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}"), Ui.lp(this, MATCH, WRAP, top = 12))
+        menuBox.addView(adminBtn, Ui.lp(this, MATCH, WRAP, top = 12))
+        menuBox.addView(Ui.text(this, 11f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}"), Ui.lp(this, MATCH, WRAP, top = 12))
+        col.addView(View(this), Ui.lp(this, MATCH, dp(24)))
+        paintMenu()
 
         return ScrollView(this).apply {
             setBackgroundColor(Ui.BG)
@@ -374,29 +396,56 @@ class MainActivity : Activity() {
         } else {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), 0) }
             box.addView(Ui.text(this, 15f, Ui.TEXT, false, "${t.name(1)} ${t.count(1)}마리 · ${t.name(2)} ${t.count(2)}마리"))
+            val canShare = Cloud.user != null && t.catches.isNotEmpty()
+            val groups = if (Cloud.user != null) Cloud.groups else emptyList()
+            val catName = Store.catLabel(t.cat.ifBlank { Store.category })
+            fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+            val allBox = CheckBox(this).apply {
+                text = "가입한 그룹 전체에 올리기 (" + groups.joinToString(", ") { groupLabel(it) } + ")"
+                setTextColor(Ui.TEXT); textSize = 14f
+                buttonTintList = ColorStateList.valueOf(Ui.BLUE)
+                isChecked = false
+                visibility = if (canShare && groups.size > 1) View.VISIBLE else View.GONE
+            }
+            box.addView(allBox, Ui.lp(this, MATCH, WRAP, top = 10))
             val pubBox = CheckBox(this).apply {
                 text = "전체 게시판에도 공개 (위치는 150m 범위로만, 경로·배 이름은 안 올라감)"
                 setTextColor(Ui.TEXT); textSize = 14f
                 buttonTintList = ColorStateList.valueOf(Ui.BLUE)
-                isChecked = false
-                visibility = if (Cloud.user != null && t.catches.isNotEmpty()) View.VISIBLE else View.GONE
+                isChecked = canShare
+                visibility = if (canShare) View.VISIBLE else View.GONE
             }
-            box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 10))
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("출조를 종료할까요?")
+            box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 4))
+            fun titleText(): String {
+                val where = when {
+                    Cloud.user == null || Cloud.active == null -> "그룹 없음 · $catName · 내 폰에만 저장"
+                    allBox.isChecked -> "가입한 그룹 전체 · $catName"
+                    else -> "${groupLabel(Cloud.active!!)} · $catName"
+                }
+                return "출조를 종료할까요? ($where)"
+            }
+            // 제목이 길어도 잘리지 않게 직접 만든 제목
+            val titleView = Ui.text(this, 19f, Ui.TEXT, true, titleText()).apply { setPadding(dp(22), dp(20), dp(22), dp(4)) }
+            val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setCustomTitle(titleView)
                 .setView(box)
                 .setPositiveButton("종료") { _, _ ->
                     val ended = Store.endTrip()
                     RemoteService.stop(this)
                     if (ended != null && Cloud.user != null) {
-                        if (Cloud.active != null && ended.catches.isNotEmpty()) account.upload(ended)
+                        if (ended.catches.isNotEmpty()) {
+                            if (allBox.isChecked && groups.size > 1) account.uploadAll(ended)
+                            else if (Cloud.active != null) account.upload(ended)
+                        }
                         Cloud.backupPending()
                     }
                     if (ended != null) startActivity(Intent(this, TripActivity::class.java)
-                        .putExtra("id", ended.id).putExtra("publish", pubBox.isChecked))
+                        .putExtra("id", ended.id).putExtra("publish", pubBox.isChecked && pubBox.visibility == View.VISIBLE))
                 }
                 .setNegativeButton("계속", null)
-                .show()
+                .create()
+            allBox.setOnCheckedChangeListener { _, _ -> titleView.text = titleText() }
+            dlg.show()
         }
     }
 
@@ -637,7 +686,49 @@ class MainActivity : Activity() {
         paintSchedule()
     }
 
+    private fun placeRecent() {
+        val want = if (Store.current != null) outerRecent else innerRecent
+        if (recentBox.parent !== want) {
+            (recentBox.parent as? LinearLayout)?.removeView(recentBox)
+            want.addView(recentBox)
+        }
+    }
+
+    private fun paintMenu() {
+        if (!::menuBtn.isInitialized) return
+        menuBox.visibility = if (Store.menuOpen) View.VISIBLE else View.GONE
+        val badge = when {
+            Cloud.active == null -> ""
+            todayEvents > 0 -> " · 오늘 출조!"
+            upcoming > 0 -> " · 일정 $upcoming"
+            else -> ""
+        }
+        menuBtn.text = if (Store.menuOpen) "메뉴 접기 ▲" else "메뉴 ▼$badge"
+        when {
+            !Store.menuOpen && todayEvents > 0 -> { menuBtn.setTextColor(Ui.BG); menuBtn.background = Ui.bg(this, Ui.GREEN, 14) }
+            !Store.menuOpen && upcoming > 0 -> { menuBtn.setTextColor(Ui.GREEN); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN) }
+            else -> { menuBtn.setTextColor(Ui.TEXT); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE) }
+        }
+    }
+
+    /** 워치 기록을 켰을 때: 워치 음악 화면 자동 실행 설정 안내 */
+    private fun showWatchGuide() {
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("갤럭시 워치로 기록")
+            .setMessage("출조 중에 워치의 음악(미디어 컨트롤러) 화면에서\n⏭ = 1번 어종 +1, ⏮ = 2번 어종 +1\n\n" +
+                "출조를 시작하면 워치에 음악 화면이 자동으로 뜨게 하려면:\n" +
+                "Galaxy Wearable 앱 → 워치 설정 → 앱 → 미디어 컨트롤러 → '미디어 컨트롤러 자동 실행' 켜기\n" +
+                "(메뉴 이름은 버전마다 조금 다를 수 있어요)")
+            .setPositiveButton("Galaxy Wearable 열기") { _, _ ->
+                val i = packageManager.getLaunchIntentForPackage("com.samsung.android.app.watchmanager")
+                if (i != null) startActivity(i) else showMessage("Galaxy Wearable 앱을 찾지 못했어요")
+            }
+            .setNegativeButton("확인", null)
+            .show()
+    }
+
     private fun paintSchedule() {
+        paintMenu()
         when {
             todayEvents > 0 -> {
                 scheduleBtn.text = "그룹 일정 확인 ($upcoming) · 오늘 출조!"
@@ -763,6 +854,7 @@ class MainActivity : Activity() {
         last2.text = t?.catches?.lastOrNull { it.slot == 2 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "
         tripBtn.text = if (t == null) "출조 시작" else "출조 종료"
         undoBtn.visibility = if (t == null) View.GONE else View.VISIBLE
+        placeRecent()
 
         recent.text = if (t == null || t.catches.isEmpty()) {
             "아직 기록이 없어요"

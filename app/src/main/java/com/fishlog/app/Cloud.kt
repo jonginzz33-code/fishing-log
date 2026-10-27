@@ -159,9 +159,9 @@ object Cloud {
     }
 
     /** 내 출조를 선택한 그룹에 올리기 (인터넷이 없으면 연결될 때 자동으로 올라감) */
-    fun uploadTrip(t: Store.Trip, done: (String?) -> Unit) {
+    fun uploadTrip(t: Store.Trip, group: Group? = null, done: (String?) -> Unit) {
         val id = uid ?: return done("로그인이 필요해요")
-        val g = active ?: return done("먼저 그룹을 만들거나 가입해 주세요")
+        val g = group ?: active ?: return done("먼저 그룹을 만들거나 가입해 주세요")
         val catches = t.catches.map {
             val m = hashMapOf<String, Any>("t" to it.time, "s" to it.slot)
             if (it.lat != null && it.lon != null) { m["la"] = it.lat; m["lo"] = it.lon }

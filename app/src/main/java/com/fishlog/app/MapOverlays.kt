@@ -25,7 +25,9 @@ class DotsOverlay(
     ctx: Context,
     var dots: List<MapDot>,
     private val faded: Boolean,
-    private val onTap: ((List<MapDot>) -> Unit)?
+    private val onTap: ((List<MapDot>) -> Unit)?,
+    /** 화면에서 이 거리(dp) 안의 점은 하나로 묶음 */
+    private val mergeDp: Float = 18f
 ) : Overlay() {
 
     private val d = ctx.resources.displayMetrics.density
@@ -45,7 +47,7 @@ class DotsOverlay(
     override fun draw(c: Canvas, map: MapView, shadow: Boolean) {
         if (shadow) return
         val proj = map.projection
-        val r = 18 * d
+        val r = mergeDp * d
         val list = ArrayList<Cluster>()
         for (dot in dots) {
             proj.toPixels(dot.point, pt)
@@ -87,6 +89,31 @@ class DotsOverlay(
         val b = best ?: return false
         cb(b.items)
         return true
+    }
+}
+
+/** "내 위치" 버튼으로 잡은 위치: 파란 점 + 정확도 범위 */
+class MyLocOverlay(ctx: Context) : Overlay() {
+    var position: GeoPoint? = null
+    var accuracy = 0f
+    private val d = ctx.resources.displayMetrics.density
+    private val acc = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(55, 66, 133, 244) }
+    private val accEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1 * d; color = Color.argb(140, 66, 133, 244) }
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#4285F4") }
+    private val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val pt = Point()
+
+    override fun draw(c: Canvas, map: MapView, shadow: Boolean) {
+        if (shadow) return
+        val p = position ?: return
+        map.projection.toPixels(p, pt)
+        val x = pt.x.toFloat(); val y = pt.y.toFloat()
+        if (accuracy > 0) {
+            val ar = map.projection.metersToPixels(accuracy)
+            if (ar > 10 * d) { c.drawCircle(x, y, ar, acc); c.drawCircle(x, y, ar, accEdge) }
+        }
+        c.drawCircle(x, y, 10 * d, white)
+        c.drawCircle(x, y, 7 * d, dot)
     }
 }
 

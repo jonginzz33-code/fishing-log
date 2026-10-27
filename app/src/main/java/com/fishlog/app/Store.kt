@@ -140,6 +140,11 @@ object Store {
         get() = prefs.getBoolean("watch", false)
         set(v) { prefs.edit().putBoolean("watch", v).apply(); fireChanged() }
 
+    /** 메인 화면 아래 메뉴 펼침 */
+    var menuOpen: Boolean
+        get() = prefs.getBoolean("menuOpen", false)
+        set(v) { prefs.edit().putBoolean("menuOpen", v).apply() }
+
     var touchMode: Boolean
         get() = prefs.getBoolean("touch", true)
         set(v) { prefs.edit().putBoolean("touch", v).apply(); fireChanged() }
