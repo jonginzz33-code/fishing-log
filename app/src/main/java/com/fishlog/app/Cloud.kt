@@ -40,6 +40,10 @@ object Cloud {
     val uid: String? get() = auth.currentUser?.uid
     val displayName: String get() = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "나"
 
+    /** 앱 관리자 (어종 목록 관리, 사용자 확인) */
+    const val ADMIN_EMAIL = "jonginzz33@gmail.com"
+    val isAdmin: Boolean get() = auth.currentUser?.email.equals(ADMIN_EMAIL, ignoreCase = true)
+
     var groups: List<Group> = emptyList()
         private set
     var activeId: String? = null
@@ -61,6 +65,7 @@ object Cloud {
     /** 내 그룹 목록 불러오기 */
     fun refresh(done: ((String?) -> Unit)? = null) {
         val id = uid ?: run { done?.invoke("로그인이 필요해요"); return }
+        touchUser()
         db.collection("users").document(id).get()
             .addOnSuccessListener { doc ->
                 @Suppress("UNCHECKED_CAST")
@@ -313,6 +318,90 @@ object Cloud {
                     .addOnFailureListener { done("내보냈지만 출조 지우기 실패: ${it.message}") }
             }
             .addOnFailureListener { done(it.message ?: "내보내기 실패") }
+    }
+
+    // ---------------- 사용자 마지막 접속 (관리자 확인용) ----------------
+    private var lastTouch = 0L
+    fun touchUser() {
+        val id = uid ?: return
+        val now = System.currentTimeMillis()
+        if (now - lastTouch < 5 * 60_000L) return
+        lastTouch = now
+        db.collection("users").document(id).set(mapOf(
+            "name" to displayName, "email" to (auth.currentUser?.email ?: ""),
+            "lastSeen" to now, "app" to BuildConfigInfo.VERSION), SetOptions.merge())
+    }
+
+    class AppUser(val uid: String, val name: String, val email: String, val lastSeen: Long, val groups: Int, val version: String)
+
+    fun adminUsers(done: (List<AppUser>?, String?) -> Unit) {
+        db.collection("users").get()
+            .addOnSuccessListener { q ->
+                done(q.documents.map { d ->
+                    AppUser(d.id, d.getString("name") ?: "?", d.getString("email") ?: "",
+                        d.getLong("lastSeen") ?: 0L, (d.get("groups") as? List<*>)?.size ?: 0, d.getString("app") ?: "")
+                }.sortedByDescending { it.lastSeen }, null)
+            }
+            .addOnFailureListener { done(null, it.message ?: "불러오기 실패 (보안 규칙 확인)") }
+    }
+
+    // ---------------- 어종 목록 (관리자가 정하고 모두가 받음) ----------------
+    fun loadSpecies() {
+        db.collection("config").document("species").get()
+            .addOnSuccessListener { d ->
+                if (!d.exists()) return@addOnSuccessListener
+                val map = Store.CATS.associateWith { c -> (d.get(c) as? List<*>)?.mapNotNull { it as? String } }
+                Store.applyServerSpecies(map)
+            }
+    }
+
+    fun saveSpecies(done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 바꿀 수 있어요")
+        db.collection("config").document("species").set(Store.CATS.associateWith { Store.species(it) })
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "저장 실패") }
+    }
+
+    // ---------------- 그룹 일정 ----------------
+    class Event(
+        val id: String, val owner: String, val ownerName: String,
+        val date: String, val time: String, val place: String, val boat: String,
+        val cat: String, val memo: String, val created: Long
+    )
+
+    fun loadEvents(done: (List<Event>?, String?) -> Unit) {
+        val g = active ?: return done(null, "그룹이 없어요")
+        db.collection("groups").document(g.id).collection("events").get()
+            .addOnSuccessListener { q ->
+                done(q.documents.map { d ->
+                    Event(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
+                        d.getString("date") ?: "", d.getString("time") ?: "", d.getString("place") ?: "",
+                        d.getString("boat") ?: "", d.getString("cat") ?: "", d.getString("memo") ?: "",
+                        d.getLong("created") ?: 0L)
+                }.sortedWith(compareBy({ it.date }, { it.time })), null)
+            }
+            .addOnFailureListener { done(null, it.message ?: "일정 불러오기 실패 (보안 규칙 확인)") }
+    }
+
+    fun saveEvent(id: String?, date: String, time: String, place: String, boat: String, cat: String, memo: String,
+                  ownerOf: Event? = null, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        val col = db.collection("groups").document(g.id).collection("events")
+        val ref = if (id == null) col.document() else col.document(id)
+        ref.set(mapOf(
+            "owner" to (ownerOf?.owner ?: me), "ownerName" to (ownerOf?.ownerName ?: displayName),
+            "date" to date, "time" to time, "place" to place, "boat" to boat, "cat" to cat, "memo" to memo,
+            "created" to (ownerOf?.created ?: System.currentTimeMillis())))
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "일정 저장 실패") }
+    }
+
+    fun deleteEvent(id: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        db.collection("groups").document(g.id).collection("events").document(id).delete()
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "삭제 실패") }
     }
 
     class Member(val uid: String, val name: String, val joined: Long)

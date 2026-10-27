@@ -26,6 +26,7 @@ class GroupActivity : Activity() {
     private lateinit var account: AccountUi
     private lateinit var root: LinearLayout
     private lateinit var head: LinearLayout
+    private lateinit var groupsBox: LinearLayout
     private lateinit var membersBox: LinearLayout
     private lateinit var calBox: LinearLayout
     private lateinit var dayBox: LinearLayout
@@ -59,8 +60,13 @@ class GroupActivity : Activity() {
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         root.addView(top)
 
+        // 가입한 그룹 한눈에 보기 (눌러서 바로 바꾸기)
+        groupsBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(groupsBox) },
+            Ui.lp(this, MATCH, WRAP, top = 16))
+
         head = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(head, Ui.lp(this, MATCH, WRAP, top = 16))
+        root.addView(head, Ui.lp(this, MATCH, WRAP, top = 12))
         membersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(membersBox, Ui.lp(this, MATCH, WRAP, top = 8))
 
@@ -115,7 +121,30 @@ class GroupActivity : Activity() {
     }
 
     // ---------------- 그룹 정보 + 멤버 ----------------
+    private fun renderGroups() {
+        groupsBox.removeAllViews()
+        val gs = Cloud.groups
+        if (gs.size <= 1) return
+        gs.forEach { g ->
+            val on = g.id == Cloud.active?.id
+            val chip = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                background = if (on) Ui.bg(this@GroupActivity, Ui.TEXT, 14) else Ui.bg(this@GroupActivity, Ui.CARD, 14, Ui.LINE)
+                isClickable = true
+                setOnClickListener {
+                    if (!on) { selected = null; trips = emptyList(); members = emptyList(); Cloud.setActive(g.id) }
+                }
+            }
+            chip.addView(Ui.text(this, 15f, if (on) Ui.BG else Ui.TEXT, true, g.name))
+            chip.addView(Ui.text(this, 11f, if (on) Color.parseColor("#2B4A5E") else Ui.SUB, false,
+                g.typesLabel().ifBlank { "종류 미정" }))
+            groupsBox.addView(chip, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+        }
+    }
+
     private fun renderHead() {
+        renderGroups()
         head.removeAllViews()
         val g = Cloud.active
         val card = Ui.card(this)

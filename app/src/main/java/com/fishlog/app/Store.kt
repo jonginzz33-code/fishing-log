@@ -98,6 +98,29 @@ object Store {
         fireChanged()
     }
 
+    /** 서버(관리자)가 정한 어종 목록 받기 */
+    fun applyServerSpecies(map: Map<String, List<String>?>) {
+        val e = prefs.edit()
+        map.forEach { (c, l) ->
+            if (l != null && l.isNotEmpty()) {
+                val a = JSONArray(); l.forEach { a.put(it) }
+                e.putString("species_$c", a.toString())
+            }
+        }
+        e.apply()
+        fireChanged()
+    }
+
+    // ---- 물때 지역 (null = 내 위치에서 가장 가까운 관측소) ----
+    var tideStation: String?
+        get() = prefs.getString("tideStation", null)
+        set(v) { prefs.edit().putString("tideStation", v).apply(); fireChanged() }
+
+    /** 만조·간조 몇 분 전 알람 (0 = 끔) */
+    var tideAlarmMin: Int
+        get() = prefs.getInt("tideAlarm", 0)
+        set(v) { prefs.edit().putInt("tideAlarm", v).apply(); fireChanged() }
+
     fun addSpecies(cat: String, name: String) {
         val n = name.trim()
         if (n.isEmpty()) return

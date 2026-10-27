@@ -22,6 +22,12 @@ class HistoryActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var restoreBtn: android.widget.TextView
     private var filter: String? = null
+    private var byDate = false
+    private lateinit var modeRow: LinearLayout
+    private lateinit var calCard: LinearLayout
+    private lateinit var cal: MiniCalendar
+    private val keyFmt = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
+    private val ymFmt = SimpleDateFormat("yyyyMM", Locale.KOREA)
     private val listener: () -> Unit = { render() }
 
     private val monthFmt = SimpleDateFormat("yyyy년 M월", Locale.KOREA)
@@ -42,6 +48,18 @@ class HistoryActivity : Activity() {
 
         summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(summary, Ui.lp(this, MATCH, WRAP, top = 16))
+
+        // 전체 보기 / 날짜별 보기
+        modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        col.addView(modeRow, Ui.lp(this, MATCH, WRAP, top = 16))
+        calCard = Ui.card(this)
+        col.addView(calCard, Ui.lp(this, MATCH, WRAP, top = 10))
+        cal = MiniCalendar(this, calCard)
+        cal.onChange = { render() }
+        Store.history.minOfOrNull { it.start }?.let {
+            cal.minYear = java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.YEAR)
+        }
+        Store.history.firstOrNull()?.let { cal.month.timeInMillis = it.start }
 
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
@@ -87,6 +105,24 @@ class HistoryActivity : Activity() {
             })
         }
 
+        // 보기 방식
+        modeRow.removeAllViews()
+        listOf(false to "전체 보기", true to "날짜별 보기").forEachIndexed { i, (m, label) ->
+            val on = byDate == m
+            modeRow.addView(Ui.text(this, 15f, if (on) Ui.BG else Ui.TEXT, true, label).apply {
+                gravity = android.view.Gravity.CENTER
+                minHeight = Ui.dp(this@HistoryActivity, 44)
+                background = if (on) Ui.bg(this@HistoryActivity, Ui.TEXT, 22) else Ui.bg(this@HistoryActivity, Ui.CARD, 22, Ui.LINE)
+                setOnClickListener { byDate = m; render() }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = Ui.dp(this@HistoryActivity, 8) })
+        }
+        calCard.visibility = if (byDate) View.VISIBLE else View.GONE
+        if (byDate) {
+            cal.marks = trips.groupBy { keyFmt.format(Date(it.start)) }
+                .mapValues { (_, l) -> l.map { if (it.cat == "night") Ui.BLUE else if (it.cat == "walk") Ui.GREEN else Ui.ORANGE } }
+            cal.render()
+        }
+
         // 어종 필터
         chips.removeAllViews()
         val names = listOf<String?>(null) + totals.keys.toList()
@@ -102,8 +138,17 @@ class HistoryActivity : Activity() {
         // 목록 (월별)
         list.removeAllViews()
         val shown = trips.filter { t -> filter == null || (t.name(1) == filter && t.count(1) > 0) || (t.name(2) == filter && t.count(2) > 0) }
+            .filter { t ->
+                if (!byDate) true
+                else if (cal.wholeMonth || cal.selectedDay == null) ymFmt.format(Date(t.start)) == cal.monthKey()
+                else keyFmt.format(Date(t.start)) == cal.selectedDay
+            }
         if (shown.isEmpty()) {
-            list.addView(Ui.text(this, 14f, Ui.SUB, false, if (trips.isEmpty()) "종료한 출조가 여기에 쌓여요" else "이 어종을 잡은 출조가 없어요"),
+            list.addView(Ui.text(this, 14f, Ui.SUB, false, when {
+                trips.isEmpty() -> "종료한 출조가 여기에 쌓여요"
+                byDate -> "이 날짜에는 출조 기록이 없어요"
+                else -> "이 어종을 잡은 출조가 없어요"
+            }),
                 Ui.lp(this, MATCH, WRAP, top = 10))
         }
         var lastMonth = ""

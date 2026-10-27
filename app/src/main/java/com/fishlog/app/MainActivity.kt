@@ -38,6 +38,10 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var placeText: TextView
+    private lateinit var stationText: TextView
+    private lateinit var alarmBtn: TextView
+    private lateinit var adminBtn: TextView
+    private lateinit var scheduleBtn: TextView
     private lateinit var updateBar: TextView
     private lateinit var remoteInfo: TextView
     private lateinit var message: TextView
@@ -112,6 +116,7 @@ class MainActivity : Activity() {
             Cloud.refresh()
             Cloud.backupPending()
         }
+        Cloud.loadSpecies()
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
             Updater.check(this) { v -> if (v != null) updateBar.visibility = View.VISIBLE }
@@ -167,18 +172,33 @@ class MainActivity : Activity() {
         header.addView(smallBtn("지도") { openMap() }, LinearLayout.LayoutParams(dp(56), dp(48)))
         header.addView(smallBtn("물때") { openTodayTide() }, LinearLayout.LayoutParams(dp(56), dp(48)).apply { leftMargin = dp(8) })
         header.addView(Ui.text(this, 24f, Ui.TEXT, true, "조과기록"),
-            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
+            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
+        header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, HelpActivity::class.java)) }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)))
         col.addView(header)
 
         // 낚시 종류: 선상 · 해루질 · 워킹 (선택된 걸 한 번 더 누르면 어종 관리)
         catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(catRow, Ui.lp(this, MATCH, WRAP, top = 12))
-        col.addView(Ui.text(this, 11f, Ui.SUB, false, "선택된 종류를 한 번 더 누르면 어종 추가·삭제"), Ui.lp(this, MATCH, WRAP, top = 4))
+        if (Cloud.isAdmin) col.addView(Ui.text(this, 11f, Ui.SUB, false, "관리자: 선택된 종류를 한 번 더 누르면 어종 추가·삭제"), Ui.lp(this, MATCH, WRAP, top = 4))
 
         placeText = Ui.text(this, 17f, Ui.TEXT, true).apply {
             setOnClickListener { Store.current?.let { askPlace(it.id) } }
         }
         col.addView(placeText, Ui.lp(this, MATCH, WRAP, top = 12))
+        // 물때 지역 + 만조·간조 알람
+        val tideRow = Ui.row(this)
+        stationText = Ui.text(this, 13f, Ui.BLUE, true).apply {
+            minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener { pickStation() }
+        }
+        tideRow.addView(stationText, LinearLayout.LayoutParams(0, WRAP, 1f))
+        alarmBtn = smallBtn("") { pickAlarm() }.apply { textSize = 12f; setPadding(dp(10), 0, dp(10), 0) }
+        tideRow.addView(alarmBtn, LinearLayout.LayoutParams(WRAP, dp(36)).apply { leftMargin = dp(8) })
+        col.addView(tideRow, Ui.lp(this, MATCH, WRAP, top = 2))
         status = Ui.text(this, 14f, Ui.SUB)
         col.addView(status, Ui.lp(this, MATCH, WRAP, top = 2))
 
@@ -241,6 +261,11 @@ class MainActivity : Activity() {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
         col.addView(historyBtn, Ui.lp(this, MATCH, WRAP, top = 20))
+        scheduleBtn = Ui.button(this, "그룹 일정 확인") {
+            if (Cloud.active == null) showMessage("그룹에 가입하면 일정을 볼 수 있어요")
+            else startActivity(Intent(this, ScheduleActivity::class.java))
+        }
+        col.addView(scheduleBtn, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 친구 공유 카드
         val acc = Ui.card(this)
@@ -264,6 +289,10 @@ class MainActivity : Activity() {
         acc.addView(accountBtn, Ui.lp(this, MATCH, WRAP, top = 10))
         acc.addView(hideRouteBox, Ui.lp(this, MATCH, WRAP, top = 4))
         col.addView(acc, Ui.lp(this, MATCH, WRAP, top = 16))
+        adminBtn = Ui.button(this, "관리자 · 사용자 목록") {
+            startActivity(Intent(this, AdminActivity::class.java))
+        }.apply { minHeight = dp(44); textSize = 14f; visibility = View.GONE }
+        col.addView(adminBtn, Ui.lp(this, MATCH, WRAP, top = 12))
         col.addView(Ui.text(this, 11f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}"), Ui.lp(this, MATCH, WRAP, top = 12))
 
         return ScrollView(this).apply {
@@ -380,9 +409,11 @@ class MainActivity : Activity() {
     private fun askRename(slot: Int) {
         val cat = Store.current?.cat?.ifBlank { null } ?: Store.category
         val list = Store.species(cat)
-        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, listOf("+ 새 어종 추가")) { i, label ->
+        val tail = if (Cloud.isAdmin) listOf("+ 새 어종 추가") else listOf("목록에 없는 어종은 관리자에게 요청")
+        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, tail) { i, label ->
             if (i < list.size) Store.rename(slot, label)
-            else askNewSpecies(cat) { name -> Store.rename(slot, name) }
+            else if (Cloud.isAdmin) askNewSpecies(cat) { name -> Store.rename(slot, name) }
+            else showMessage("어종 추가는 관리자만 할 수 있어요")
         }
     }
 
@@ -393,7 +424,7 @@ class MainActivity : Activity() {
             .setView(input)
             .setPositiveButton("추가") { _, _ ->
                 val n = input.text.toString().trim()
-                if (n.isNotEmpty()) { Store.addSpecies(cat, n); then?.invoke(n) }
+                if (n.isNotEmpty()) { Store.addSpecies(cat, n); saveSpeciesToServer(); then?.invoke(n) }
             }
             .setNegativeButton("취소", null)
             .show()
@@ -416,28 +447,79 @@ class MainActivity : Activity() {
                         2 -> l.removeAt(k)
                     }
                     Store.setSpecies(cat, l)
+                    saveSpeciesToServer()
                     manageSpecies(cat)
                 }
                 .show()
         }
     }
 
+    private fun saveSpeciesToServer() {
+        Cloud.saveSpecies { err -> showMessage(err ?: "어종 목록을 모두에게 저장했어요") }
+    }
+
+    /** 그룹에 정해진 낚시 종류만 보여줌 (그룹·로그인 없으면 전부) */
+    private fun visibleCats(): List<String> {
+        val types = Cloud.active?.types.orEmpty().filter { it in Store.CATS }
+        return if (Cloud.user == null || types.isEmpty()) Store.CATS else Store.CATS.filter { it in types }
+    }
+
     private fun renderCats() {
-        catRow.removeAllViews()
         val tripCat = Store.current?.cat?.ifBlank { null }
+        val cats = visibleCats()
+        if (tripCat == null && Store.category !in cats) { Store.category = cats.first(); return } // 바꾸면 화면이 다시 그려짐
+        catRow.removeAllViews()
         val sel = tripCat ?: Store.category
-        Store.CATS.forEachIndexed { i, c ->
+        val shown = if (tripCat != null && tripCat !in cats) cats + tripCat else cats
+        shown.forEachIndexed { i, c ->
             val on = c == sel
             catRow.addView(Ui.text(this, 15f, if (on) Ui.BG else Ui.TEXT, true, Store.catLabel(c)).apply {
                 gravity = Gravity.CENTER
                 minHeight = dp(44)
                 background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 22) else Ui.bg(this@MainActivity, Ui.CARD, 22, Ui.LINE)
                 setOnClickListener {
-                    if (on) manageSpecies(c)
+                    if (on) { if (Cloud.isAdmin) manageSpecies(c) else showMessage("어종 추가·삭제는 관리자만 할 수 있어요") }
                     else if (Store.current != null) showMessage("출조 중에는 종류를 바꿀 수 없어요 (종료 후 변경)")
                     else Store.category = c
                 }
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
+        }
+    }
+
+    private fun refreshTideRow() {
+        val loc = bestLocation()
+        val st = Tide.stationFor(this, loc?.first, loc?.second)
+        stationText.text = when {
+            st == null -> "물때 지역: 위치 확인 중 · 눌러서 고르기 ▾"
+            Store.tideStation != null -> "물때 지역: ${st.name} (직접 고름) ▾"
+            else -> "물때 지역: ${st.name} (가장 가까운 곳) ▾"
+        }
+        val m = Store.tideAlarmMin
+        alarmBtn.text = if (m <= 0) "설정 (만조·간조 알람)" else "알람 ${m}분 전 ⏰"
+    }
+
+    private fun pickStation() {
+        val loc = bestLocation()
+        val list = Tide.stationsNear(this, loc?.first, loc?.second)
+        val labels = list.map { s ->
+            val km = Tide.stationKm(s, loc?.first, loc?.second)
+            (if (s.code == Store.tideStation) "✓ " else "") + s.name + (km?.let { String.format(Locale.KOREA, "  %.0fkm", it) } ?: "")
+        }
+        val auto = (if (Store.tideStation == null) "✓ " else "") + "가장 가까운 곳 자동 (추천)"
+        BigList.show(this, "물때 지역 (조위관측소)", listOf(auto) + labels, emptyList()) { i, _ ->
+            Store.tideStation = if (i == 0) null else list[i - 1].code
+            refreshTideRow()
+            showMessage(if (i == 0) "가장 가까운 관측소로 물때를 봐요" else "${list[i - 1].name} 관측소로 물때를 봐요")
+        }
+    }
+
+    private fun pickAlarm() {
+        val mins = listOf(0, 10, 20, 30, 40, 50, 60)
+        val labels = mins.map { (if (it == Store.tideAlarmMin) "✓ " else "") + if (it == 0) "끄기" else "만조·간조 ${it}분 전" }
+        BigList.show(this, "만조·간조 알람 (출조 중에만 울려요)", labels, emptyList()) { i, _ ->
+            Store.tideAlarmMin = mins[i]
+            refreshTideRow()
+            showMessage(if (mins[i] == 0) "알람을 껐어요" else "출조 중 만조·간조 ${mins[i]}분 전에 알려드려요")
         }
     }
 
@@ -496,6 +578,9 @@ class MainActivity : Activity() {
             accountBtn.text = if (g == null) "그룹 만들기 / 가입" else "그룹 · 친구 출조 달력"
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
+        adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        scheduleBtn.visibility = if (Cloud.active != null) View.VISIBLE else View.GONE
+        renderCats()
     }
 
     private fun showMessage(msg: String) {
@@ -531,6 +616,7 @@ class MainActivity : Activity() {
         updateStatus()
         refreshRemote()
         renderCats()
+        refreshTideRow()
         val t = Store.current
         placeText.text = when {
             t == null -> Tide.mulName(System.currentTimeMillis())

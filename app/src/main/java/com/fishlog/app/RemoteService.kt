@@ -38,6 +38,56 @@ class RemoteService : Service() {
         override fun run() { checkLongTrip(); handler.postDelayed(this, 30 * 60_000L) }
     }
 
+    // ---------------- 만조·간조 알람 ----------------
+    @Volatile private var tideExt: List<Tide.Extreme> = emptyList()
+    private var tideLoadedAt = 0L
+    private var tideLoading = false
+    private val alarmed = HashSet<Long>()
+    private val tideChecker = object : Runnable {
+        override fun run() { checkTideAlarm(); handler.postDelayed(this, 60_000L) }
+    }
+
+    private fun loadTide() {
+        if (tideLoading) return
+        val loc = Tracker.last?.let { it.latitude to it.longitude } ?: Store.current?.anyLocation() ?: return
+        tideLoading = true
+        tideLoadedAt = System.currentTimeMillis()
+        val app = applicationContext
+        Thread {
+            val now = System.currentTimeMillis()
+            val list = listOfNotNull(Tide.fetchNow(app, loc.first, loc.second, now),
+                Tide.fetchNow(app, loc.first, loc.second, now + 24 * 3600_000L))
+                .flatMap { Tide.extremes(it) }.distinctBy { it.time / 60_000L }.sortedBy { it.time }
+            handler.post { if (list.isNotEmpty()) tideExt = list; tideLoading = false }
+        }.start()
+    }
+
+    private fun checkTideAlarm() {
+        val min = Store.tideAlarmMin
+        if (Store.current == null || min <= 0) return
+        val now = System.currentTimeMillis()
+        if ((tideExt.isEmpty() && now - tideLoadedAt > 5 * 60_000L) || now - tideLoadedAt > 3 * 3600_000L) loadTide()
+        val lead = min * 60_000L
+        val e = tideExt.firstOrNull { it.time > now && it.time - now <= lead && it.time !in alarmed } ?: return
+        alarmed.add(e.time)
+        val left = ((e.time - now) / 60_000L).coerceAtLeast(1)
+        val at = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(e.time))
+        val kind = if (e.high) "만조" else "간조"
+        val open = PendingIntent.getActivity(this, 5, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(this, CHANNEL_TIDE)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("${kind} ${left}분 전 ($at)")
+            .setContentText(String.format(java.util.Locale.KOREA, "곧 %s이에요 · 물높이 %.0fcm", kind, e.value * 100))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(TIDE_ID, n)
+        Haptics.undo(this)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -49,6 +99,7 @@ class RemoteService : Service() {
         updateSilence()
         Store.addListener(storeListener)
         handler.postDelayed(checker, 60_000L)
+        handler.postDelayed(tideChecker, 20_000L)
     }
 
     private fun goForeground() {
@@ -206,6 +257,13 @@ class RemoteService : Service() {
         if (nm.getNotificationChannel(CHANNEL_REMIND) == null) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL_REMIND, "출조 종료 깜빡임 알림", NotificationManager.IMPORTANCE_DEFAULT))
         }
+        if (nm.getNotificationChannel(CHANNEL_TIDE) == null) {
+            val ch = NotificationChannel(CHANNEL_TIDE, "만조·간조 알람", NotificationManager.IMPORTANCE_HIGH)
+            ch.enableVibration(true)
+            ch.vibrationPattern = longArrayOf(0, 400, 200, 400, 200, 400)
+            ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            nm.createNotificationChannel(ch)
+        }
     }
 
     private fun servicePi(action: String, code: Int): PendingIntent =
@@ -268,6 +326,8 @@ class RemoteService : Service() {
     companion object {
         private const val CHANNEL = "trip"
         private const val CHANNEL_REMIND = "remind"
+        private const val CHANNEL_TIDE = "tide"
+        private const val TIDE_ID = 9
         private const val NOTI_ID = 7
         private const val REMIND_ID = 8
         private const val ACT_ADD1 = "com.fishlog.app.ADD1"

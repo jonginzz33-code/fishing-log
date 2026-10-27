@@ -71,10 +71,26 @@ object Tide {
     /** 국립해양조사원 정보를 못 받은 이유 (화면에 표시) */
     @Volatile var lastError: String = ""
 
-    private class Station(val code: String, val name: String, val lat: Double, val lon: Double)
+    class Station(val code: String, val name: String, val lat: Double, val lon: Double)
     private var stations: List<Station>? = null
 
-    private fun stations(ctx: Context): List<Station> {
+    /** 가까운 순서로 관측소 목록 (위치 없으면 이름순) */
+    fun stationsNear(ctx: Context, lat: Double?, lon: Double?): List<Station> {
+        val all = stations(ctx)
+        return if (lat == null || lon == null) all.sortedBy { it.name } else all.sortedBy { dist(lat, lon, it.lat, it.lon) }
+    }
+
+    /** 지금 물때에 쓰는 관측소: 사용자가 고른 곳, 아니면 가장 가까운 곳 */
+    fun stationFor(ctx: Context, lat: Double?, lon: Double?): Station? {
+        Store.tideStation?.let { code -> stations(ctx).firstOrNull { it.code == code }?.let { return it } }
+        if (lat == null || lon == null) return null
+        return stations(ctx).minByOrNull { dist(lat, lon, it.lat, it.lon) }
+    }
+
+    fun stationKm(s: Station, lat: Double?, lon: Double?): Float? =
+        if (lat == null || lon == null) null else dist(lat, lon, s.lat, s.lon) / 1000f
+
+    fun stations(ctx: Context): List<Station> {
         stations?.let { return it }
         val list = try {
             val arr = JSONArray(ctx.assets.open("stations.json").bufferedReader().use { it.readText() })
@@ -184,7 +200,8 @@ object Tide {
         val ymd = keyFmt.format(Date(time))
         val prev = keyFmt.format(Date(dayStart - 12 * 3600_000L))
         val next = keyFmt.format(Date(dayStart + 36 * 3600_000L))
-        val near = stations(ctx).sortedBy { dist(lat, lon, it.lat, it.lon) }.take(3)
+        val chosen = Store.tideStation?.let { code -> stations(ctx).firstOrNull { it.code == code } }
+        val near = if (chosen != null) listOf(chosen) else stations(ctx).sortedBy { dist(lat, lon, it.lat, it.lon) }.take(3)
         for (s in near) {
             val today = khoaDay(ctx, s.code, ymd) ?: continue
             if (today.isEmpty()) continue
@@ -192,7 +209,7 @@ object Tide {
                 .distinctBy { it.time }.sortedBy { it.time }
             val km = dist(lat, lon, s.lat, s.lon) / 1000f
             return Day(dayStart, curve(dayStart, all), 10, today,
-                String.format(Locale.KOREA, "국립해양조사원 %s 관측소 기준 (%.0fkm)", s.name, km))
+                String.format(Locale.KOREA, "국립해양조사원 %s 관측소 기준 (%.0fkm%s)", s.name, km, if (chosen != null) " · 직접 고름" else ""))
         }
         return null
     }
@@ -215,6 +232,10 @@ object Tide {
         }
         return null
     }
+
+    /** 화면 안 띄우고 바로 받아오기 (알람 확인용, 백그라운드 스레드에서 호출) */
+    fun fetchNow(ctx: Context, lat: Double, lon: Double, time: Long): Day? =
+        tryKhoa(ctx.applicationContext, lat, lon, time) ?: tryOpenMeteo(lat, lon, time)
 
     fun fetch(ctx: Context, lat: Double, lon: Double, time: Long, done: (Day?, String?) -> Unit) {
         val app = ctx.applicationContext
