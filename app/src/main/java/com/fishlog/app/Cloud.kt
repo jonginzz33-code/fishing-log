@@ -17,7 +17,8 @@ import com.google.firebase.firestore.SetOptions
  */
 object Cloud {
 
-    class Group(val id: String, val name: String, val code: String, val owner: String, val types: List<String> = emptyList()) {
+    class Group(val id: String, val name: String, val code: String, val owner: String, val types: List<String> = emptyList(),
+                val notice: String = "") {
         fun typesLabel(): String = types.map { Store.catLabel(it) }.filter { it.isNotBlank() }.joinToString(" · ")
     }
 
@@ -79,7 +80,7 @@ object Cloud {
                         .addOnSuccessListener { g ->
                             val types = (g.get("types") as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                             if (g.exists()) loaded.add(Group(g.id, g.getString("name") ?: "그룹", g.getString("code") ?: "",
-                                g.getString("owner") ?: "", types))
+                                g.getString("owner") ?: "", types, g.getString("notice") ?: ""))
                         }
                         .addOnCompleteListener {
                             left--
@@ -245,10 +246,14 @@ object Cloud {
             .addOnFailureListener { done(null) }
     }
 
-    /** 그룹에 올린 내 출조 내리기 (사진까지) */
+    /** 그룹에 올린 출조 내리기 (사진까지). 내 것 또는 그룹장 */
     fun deleteGroupTrip(docId: String, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
-        val ref = db.collection("groups").document(g.id).collection("trips").document(docId)
+        deleteTripIn(g.id, docId, done)
+    }
+
+    private fun deleteTripIn(gid: String, docId: String, done: (String?) -> Unit) {
+        val ref = db.collection("groups").document(gid).collection("trips").document(docId)
         ref.collection("photos").get().addOnCompleteListener { a ->
             a.result?.documents?.forEach { it.reference.delete() }
             ref.collection("photosBig").get().addOnCompleteListener { b ->
@@ -296,6 +301,64 @@ object Cloud {
         batch.commit()
             .addOnSuccessListener { refresh(done) }
             .addOnFailureListener { done(it.message ?: "코드 만들기 실패") }
+    }
+
+    /** 그룹 공지 한 줄 (그룹장만). 빈 글이면 공지 없음 */
+    fun setNotice(text: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        db.collection("groups").document(g.id).update("notice", text)
+            .addOnSuccessListener { refresh(done) }
+            .addOnFailureListener { done(it.message ?: "공지 저장 실패") }
+    }
+
+    /** 그룹장 넘겨주기 (그룹장만). 초대 코드 관리 권한도 같이 넘어감 */
+    fun transferOwner(newOwner: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        if (newOwner == uid) return done("이미 그룹장이에요")
+        val batch = db.batch()
+        batch.update(db.collection("groups").document(g.id), "owner", newOwner)
+        if (g.code.isNotBlank()) batch.update(db.collection("invites").document(g.code), "owner", newOwner)
+        batch.commit()
+            .addOnSuccessListener { refresh(done) }
+            .addOnFailureListener { done(it.message ?: "넘겨주기 실패 (보안 규칙 확인)") }
+    }
+
+    /** 그룹 삭제 (그룹장만): 출조·사진·일정·멤버 기록을 모두 지우고 그룹을 없앰 */
+    fun deleteGroup(done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        if (g.owner != me) return done("그룹장만 지울 수 있어요")
+        val gref = db.collection("groups").document(g.id)
+        fun finish() {
+            if (g.code.isNotBlank()) db.collection("invites").document(g.code).delete()
+            gref.delete()
+                .addOnSuccessListener {
+                    val rest = groups.filter { it.id != g.id }
+                    db.collection("users").document(me).set(mapOf(
+                        "groups" to FieldValue.arrayRemove(g.id),
+                        "active" to (rest.firstOrNull()?.id ?: "")), SetOptions.merge())
+                        .addOnCompleteListener { refresh(done) }
+                }
+                .addOnFailureListener { done(it.message ?: "그룹 삭제 실패") }
+        }
+        fun clearSmall() {
+            gref.collection("events").get().addOnCompleteListener { e ->
+                gref.collection("members").get().addOnCompleteListener { m ->
+                    val docs = (e.result?.documents.orEmpty() + m.result?.documents.orEmpty())
+                    if (docs.isEmpty()) { finish(); return@addOnCompleteListener }
+                    val batch = db.batch()
+                    docs.forEach { batch.delete(it.reference) }
+                    batch.commit().addOnCompleteListener { finish() }
+                }
+            }
+        }
+        gref.collection("trips").get()
+            .addOnSuccessListener { q ->
+                if (q.isEmpty) { clearSmall(); return@addOnSuccessListener }
+                var left = q.size()
+                q.documents.forEach { d -> deleteTripIn(g.id, d.id) { _ -> left--; if (left == 0) clearSmall() } }
+            }
+            .addOnFailureListener { done(it.message ?: "그룹 삭제 실패") }
     }
 
     /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */

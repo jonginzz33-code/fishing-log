@@ -25,6 +25,8 @@ service cloud.firestore {
     match /invites/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.gid == resource.data.gid;
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
     }
     match /groups/{gid} {

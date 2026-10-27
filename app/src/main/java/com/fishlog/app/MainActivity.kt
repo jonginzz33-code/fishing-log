@@ -39,6 +39,8 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var placeText: TextView
     private lateinit var stationText: TextView
+    private lateinit var groupBar: LinearLayout
+    private lateinit var groupScroll: android.widget.HorizontalScrollView
     private lateinit var alarmBtn: TextView
     private lateinit var adminBtn: TextView
     private lateinit var scheduleBtn: TextView
@@ -171,8 +173,15 @@ class MainActivity : Activity() {
         val header = Ui.row(this)
         header.addView(smallBtn("지도") { openMap() }, LinearLayout.LayoutParams(dp(56), dp(48)))
         header.addView(smallBtn("물때") { openTodayTide() }, LinearLayout.LayoutParams(dp(56), dp(48)).apply { leftMargin = dp(8) })
-        header.addView(Ui.text(this, 24f, Ui.TEXT, true, "조과기록"),
-            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
+        header.addView(Ui.text(this, 20f, Ui.TEXT, true, "조과기록"),
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
+        // 가입한 그룹: 옆으로 밀어서 보고 눌러서 바꾸기
+        groupBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        groupScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(groupBar)
+        }
+        header.addView(groupScroll, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8); rightMargin = dp(6) })
         header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
@@ -563,8 +572,41 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun renderHeaderGroups() {
+        groupBar.removeAllViews()
+        val gs = if (Cloud.user == null) emptyList() else Cloud.groups
+        if (gs.isEmpty()) { groupScroll.visibility = View.INVISIBLE; return }
+        groupScroll.visibility = View.VISIBLE
+        val activeId = Cloud.active?.id
+        var activeView: View? = null
+        gs.forEach { g ->
+            val on = g.id == activeId
+            val chip = Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, g.name).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+                setPadding(dp(12), 0, dp(12), 0)
+                background = if (on) Ui.bg(this@MainActivity, Ui.GREEN, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
+                setOnClickListener {
+                    if (on) startActivity(Intent(this@MainActivity, GroupActivity::class.java))
+                    else if (Store.current != null && Store.current?.catches?.isNotEmpty() == true)
+                        AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("'${g.name}' 그룹으로 바꿀까요?")
+                            .setMessage("지금 출조는 종료할 때 바뀐 그룹에 올라가요")
+                            .setPositiveButton("바꾸기") { _, _ -> Cloud.setActive(g.id); showMessage("'${g.name}' 그룹으로 바꿨어요") }
+                            .setNegativeButton("취소", null)
+                            .show()
+                    else { Cloud.setActive(g.id); showMessage("'${g.name}' 그룹으로 바꿨어요") }
+                }
+            }
+            if (on) activeView = chip
+            groupBar.addView(chip, LinearLayout.LayoutParams(WRAP, dp(36)).apply { rightMargin = dp(6) })
+        }
+        activeView?.let { v -> groupScroll.post { groupScroll.smoothScrollTo((v.left - dp(8)).coerceAtLeast(0), 0) } }
+    }
+
     private fun refreshAccount() {
         if (!::accountInfo.isInitialized) return
+        renderHeaderGroups()
         val u = Cloud.user
         if (u == null) {
             accountInfo.text = "친구와 조과 공유 · 로그인하면 그룹에 올리고, 내 기록도 서버에 백업돼요"

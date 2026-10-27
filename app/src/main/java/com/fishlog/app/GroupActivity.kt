@@ -163,6 +163,21 @@ class GroupActivity : Activity() {
                 LinearLayout.LayoutParams(WRAP, WRAP))
         }
         card.addView(nameRow)
+        // 공지 한 줄 (그룹장만 쓰기)
+        if (g.notice.isNotBlank() || Cloud.isOwner) {
+            val nb = Ui.row(this).apply {
+                background = Ui.bg(this@GroupActivity, Color.parseColor("#2A2310"), 12, if (g.notice.isNotBlank()) Ui.ORANGE else Ui.LINE)
+                setPadding(dp(12), dp(8), dp(8), dp(8))
+            }
+            nb.addView(Ui.text(this, 14f, if (g.notice.isNotBlank()) Color.parseColor("#FFE2C2") else Ui.SUB, g.notice.isNotBlank(),
+                if (g.notice.isNotBlank()) "공지  ${g.notice}" else "공지 없음 · 그룹원 모두에게 보일 한 줄을 적어 보세요"),
+                LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (Cloud.isOwner) {
+                nb.addView(Ui.button(this, "✎ 공지") { askNotice(g.notice) }.apply { minHeight = dp(36); textSize = 12f },
+                    LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+            }
+            card.addView(nb, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
         val typeRow = Ui.row(this)
         typeRow.addView(Ui.text(this, 14f, Ui.BLUE, true, g.typesLabel().ifBlank { "낚시 종류 미정" }), LinearLayout.LayoutParams(0, WRAP, 1f))
         if (Cloud.isOwner) {
@@ -195,6 +210,15 @@ class GroupActivity : Activity() {
         }
         card.addView(Ui.button(this, "그룹 바꾸기 · 만들기 · 가입") { account.openGroups() }.apply { minHeight = dp(44); textSize = 14f },
             Ui.lp(this, MATCH, WRAP, top = 8))
+        if (Cloud.isOwner) {
+            val orow = Ui.row(this)
+            orow.addView(Ui.button(this, "그룹장 넘겨주기") { askTransfer() }.apply { minHeight = dp(44); textSize = 13f },
+                LinearLayout.LayoutParams(0, WRAP, 1f))
+            orow.addView(Ui.button(this, "그룹 삭제") { askDeleteGroup(g) }.apply {
+                minHeight = dp(44); textSize = 13f; setTextColor(Color.parseColor("#FF8A8A"))
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            card.addView(orow, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
         head.addView(card)
     }
 
@@ -235,6 +259,63 @@ class GroupActivity : Activity() {
     }
 
     // ---------------- 그룹장 기능 ----------------
+    private fun askNotice(cur: String) {
+        val input = android.widget.EditText(this).apply {
+            setText(cur); setSelection(cur.length); hint = "예: 11/2(토) 새벽 5시 ○○항 집합"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("그룹 공지 (그룹 화면 맨 위에 고정)")
+            .setView(input)
+            .setPositiveButton("저장") { _, _ ->
+                val v = input.text.toString().trim().take(100)
+                Cloud.setNotice(v) { err -> toast(err ?: if (v.isEmpty()) "공지를 지웠어요" else "공지를 올렸어요"); load() }
+            }
+            .setNeutralButton("공지 지우기") { _, _ -> Cloud.setNotice("") { err -> toast(err ?: "공지를 지웠어요"); load() } }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun askTransfer() {
+        val others = members.filter { it.uid != Cloud.uid }
+        if (others.isEmpty()) { toast(if (members.isEmpty()) "멤버를 불러오는 중이에요. 잠시 후 다시 눌러주세요" else "넘겨줄 다른 멤버가 없어요"); return }
+        BigList.show(this, "누구에게 그룹장을 넘길까요?", others.map { it.name }) { i, _ ->
+            val m = others[i]
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("${m.name}님에게 그룹장을 넘길까요?")
+                .setMessage("왕관과 그룹장 권한(이름·종류·공지·초대 코드·내보내기·삭제)이 넘어가요. 되돌리려면 새 그룹장이 다시 넘겨줘야 해요.")
+                .setPositiveButton("넘겨주기") { _, _ ->
+                    Cloud.transferOwner(m.uid) { err -> toast(err ?: "${m.name}님이 이제 그룹장이에요"); load() }
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+    }
+
+    private fun askDeleteGroup(g: Cloud.Group) {
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("'${g.name}' 그룹을 삭제할까요?")
+            .setMessage("그룹에 올라간 모든 출조·사진·일정이 지워지고, 멤버 모두 이 그룹을 볼 수 없게 돼요.\n각자 폰에 있는 기록은 그대로예요.")
+            .setPositiveButton("다음") { _, _ ->
+                val input = android.widget.EditText(this).apply { hint = g.name; inputType = android.text.InputType.TYPE_CLASS_TEXT }
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("정말 삭제하려면 그룹 이름을 똑같이 적어주세요")
+                    .setView(input)
+                    .setPositiveButton("삭제") { _, _ ->
+                        if (input.text.toString().trim() != g.name.trim()) { toast("이름이 달라서 삭제하지 않았어요"); return@setPositiveButton }
+                        toast("그룹을 지우는 중…")
+                        Cloud.deleteGroup { err ->
+                            toast(err ?: "'${g.name}' 그룹을 삭제했어요")
+                            selected = null; trips = emptyList(); members = emptyList(); load()
+                        }
+                    }
+                    .setNegativeButton("취소", null)
+                    .show()
+            }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
     private fun askRename(cur: String) {
         val input = android.widget.EditText(this).apply {
             setText(cur); setSelection(cur.length)
@@ -397,6 +478,7 @@ class GroupActivity : Activity() {
         if (t.photoCount > 0) items.add("사진 보기 (${t.photoCount}장)")
         val mine = t.owner == Cloud.uid
         if (mine) items.add("그룹에서 내리기")
+        else if (Cloud.isOwner) items.add("그룹에서 내리기 (그룹장)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${t.ownerName} · ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->
@@ -404,8 +486,9 @@ class GroupActivity : Activity() {
                     items[i].startsWith("함께한") -> account.showTogether(t)
                     items[i].startsWith("사진") -> account.showPhotos(t)
                     items[i].startsWith("그룹에서") -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setTitle("이 출조를 그룹에서 내릴까요?")
-                        .setMessage("친구들 화면에서 사라지고, 내 폰 기록은 그대로예요")
+                        .setTitle(if (mine) "이 출조를 그룹에서 내릴까요?" else "${t.ownerName}님의 이 출조를 그룹에서 내릴까요?")
+                        .setMessage(if (mine) "친구들 화면에서 사라지고, 내 폰 기록은 그대로예요"
+                            else "그룹 화면에서만 사라지고, ${t.ownerName}님 폰의 기록은 그대로예요")
                         .setPositiveButton("내리기") { _, _ ->
                             Cloud.deleteGroupTrip(t.id) { err -> toast(err ?: "그룹에서 내렸어요"); load() }
                         }
