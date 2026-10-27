@@ -156,14 +156,61 @@ class BoardActivity : Activity() {
         return Tide.stationsNear(this, c.lat, c.lon).firstOrNull()?.name?.let { "$it 부근" } ?: ""
     }
 
+    private var listOpen = false
+
+    /** 어종을 누르면 그 어종이 잡힌 자리를 지도로 */
+    private fun openSpeciesMap(sp: String, list: List<PublicBoard.PTrip>) {
+        val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
+        val owners = list.map { it.owner }.distinct()
+        val dots = list.flatMap { t ->
+            val color = MapDialog.FRIEND_COLORS[owners.indexOf(t.owner).coerceAtLeast(0) % MapDialog.FRIEND_COLORS.size]
+            t.catches.filter { it.cell != null && t.name(it.slot) == sp }.map { c ->
+                MapDot(org.osmdroid.util.GeoPoint(c.cell!!.lat, c.cell.lon), color,
+                    "${t.nick} · ${df.format(Date(c.time))} · $sp", "${t.nick} $sp", c.time, t.nick, sp)
+            }
+        }
+        if (dots.isEmpty()) { toast("$sp 은(는) 위치가 있는 기록이 없어요"); return }
+        val periodText = listOf("최근 1개월", "최근 3개월", "전체 기간")[period]
+        val catText = if (cat == "") "전체 종류" else Store.catLabel(cat)
+        MapDialog.showSpots(this, "$sp · $catText · $periodText", dots, PublicBoard.CELL_M / 2,
+            "$sp ${dots.size}마리 · 주황 원 = 약 150m 범위 (진할수록 많이 잡힌 곳)\n숫자 = 마릿수 · 원이나 숫자를 누르면 날짜별 요약")
+    }
+
     private fun renderRecent() {
         val list = filtered()
-        listBox.addView(Ui.text(this, 13f, Ui.SUB, false, "공개된 출조 ${list.size}개 · 최신순"), Ui.lp(this, MATCH, WRAP, top = 12))
         if (list.isEmpty()) {
             listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "아직 공개된 출조가 없어요. 출조를 종료할 때 '전체 게시판에도 공개'를 체크해 보세요."),
-                Ui.lp(this, MATCH, WRAP, top = 10))
+                Ui.lp(this, MATCH, WRAP, top = 12))
             return
         }
+        // 어종 칩: 누르면 지도
+        val counts = list.flatMap { t -> t.catches.map { t.name(it.slot) } }.groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }
+        listBox.addView(Ui.text(this, 14f, Ui.TEXT, true, "어종을 누르면 잡힌 자리를 지도로 봐요"), Ui.lp(this, MATCH, WRAP, top = 14))
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        counts.chunked(3).forEach { rowItems ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            rowItems.forEachIndexed { i, e ->
+                row.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dp(6), dp(10), dp(6), dp(10))
+                    background = Ui.bg(this@BoardActivity, Ui.CARD, 14, Ui.ORANGE)
+                    isClickable = true
+                    setOnClickListener { openSpeciesMap(e.key, list) }
+                    addView(Ui.text(this@BoardActivity, 16f, Ui.TEXT, true, e.key).apply { gravity = Gravity.CENTER; maxLines = 1 })
+                    addView(Ui.text(this@BoardActivity, 13f, Ui.ORANGE, true, "${e.value}마리 ›").apply { gravity = Gravity.CENTER })
+                }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
+            }
+            repeat(3 - rowItems.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
+            grid.addView(row, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
+        listBox.addView(grid)
+
+        listBox.addView(Ui.button(this, if (listOpen) "최근 공개 출조 접기 ▲" else "최근 공개 출조 ${list.size}개 보기 ▼") {
+            listOpen = !listOpen; render()
+        }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 18))
+        if (!listOpen) return
         list.forEach { t ->
             val c = Ui.card(this).apply {
                 isClickable = true

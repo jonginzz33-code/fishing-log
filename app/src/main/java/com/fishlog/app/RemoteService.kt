@@ -163,6 +163,12 @@ class RemoteService : Service() {
         s.setCallback(object : MediaSession.Callback() {
             private val downAt = HashMap<Int, Long>()
 
+            // 갤럭시 워치 음악 컨트롤러는 버튼 신호 대신 이쪽으로 들어옴
+            override fun onSkipToNext() { ButtonRouter.watch(this@RemoteService, 1) }
+            override fun onSkipToPrevious() { ButtonRouter.watch(this@RemoteService, 2) }
+            override fun onPlay() { keepPlaying() }
+            override fun onPause() { keepPlaying() }
+
             override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
                 val ev: KeyEvent = if (Build.VERSION.SDK_INT >= 33) {
                     mediaButtonIntent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
@@ -201,9 +207,27 @@ class RemoteService : Service() {
         session = s
     }
 
-    /** 리모컨을 등록한 경우에만 무음 재생 (화면 꺼짐 상태에서 버튼 우선권 유지용) */
+    private fun keepPlaying() {
+        session?.setPlaybackState(PlaybackState.Builder()
+            .setActions(PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE or
+                PlaybackState.ACTION_SKIP_TO_NEXT or PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_STOP)
+            .setState(PlaybackState.STATE_PLAYING, 0L, 1f).build())
+    }
+
+    /** 워치 음악 화면에 지금 마릿수 보이기 (제목 = 1번, 가수 = 2번) */
+    private fun updateMetadata() {
+        val t = Store.current ?: return
+        session?.setMetadata(android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "⏭ ${t.name(1)} ${t.count(1)}  ·  ⏮ ${t.name(2)} ${t.count(2)}")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과기록 · 총 ${t.catches.size}마리")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "조과기록")
+            .build())
+    }
+
+    /** 리모컨을 등록했거나 워치 기록을 켰을 때만 무음 재생 (버튼 우선권 유지 + 워치 음악 화면에 보이기) */
     private fun updateSilence() {
-        val want = Store.current != null && (Store.key1 != null || Store.key2 != null)
+        updateMetadata()
+        val want = Store.current != null && (Store.key1 != null || Store.key2 != null || Store.watchMode)
         if (want && silence == null) startSilence()
         if (!want && silence != null) stopSilence()
     }

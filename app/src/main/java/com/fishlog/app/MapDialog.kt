@@ -495,6 +495,72 @@ object MapDialog {
         }
     }
 
+    /**
+     * 전체 게시판: 한 어종이 잡힌 자리를 150m 원 + 마릿수로 보여주는 큰 지도
+     * dots = 조과 하나당 점 하나 (위치는 칸 가운데). 원을 누르면 날짜별 요약
+     */
+    fun showSpots(a: Activity, title: String, dots: List<MapDot>, radiusM: Double, legend: String) {
+        configure(a)
+        val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val map = MapView(a).apply {
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            isTilesScaledToDpi = true
+        }
+        val byCell = dots.groupBy { "${it.point.latitude},${it.point.longitude}" }
+        val max = (byCell.values.maxOfOrNull { it.size } ?: 1).coerceAtLeast(1)
+        byCell.values.forEach { list ->
+            val strength = 0.25 + 0.75 * list.size / max   // 많이 잡힌 곳일수록 진하게
+            map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
+                points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(list[0].point, radiusM)
+                fillPaint.color = Color.argb((40 + 120 * strength).toInt(), 242, 140, 56)
+                outlinePaint.color = Color.parseColor("#F28C38")
+                outlinePaint.strokeWidth = dp(a, 1).toFloat()
+                setOnClickListener { _, _, _ -> showCluster(a, list); true }
+            })
+        }
+        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) })
+
+        val bg = Color.parseColor("#0B1A26")
+        val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        root.addView(TextView(a).apply {
+            text = title; textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(a, 16), dp(a, 10), dp(a, 16), dp(a, 4))
+        })
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
+        fun pill(label: String, onClick: (TextView) -> Unit) = TextView(a).apply {
+            text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            minHeight = dp(a, 40); setPadding(dp(a, 14), 0, dp(a, 14), 0)
+            background = GradientDrawable().apply { cornerRadius = dp(a, 20).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+            setOnClickListener { onClick(this) }
+        }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
+        pill("전체 보기") { fit(map, dots.map { it.point }) }
+        pill("내 위치") {
+            val l = Tracker.last
+            val p = if (l != null) GeoPoint(l.latitude, l.longitude) else Store.history.firstNotNullOfOrNull { it.anyLocation() }?.let { GeoPoint(it.first, it.second) }
+            if (p != null) { map.controller.setZoom(14.0); map.controller.animateTo(p) }
+        }
+        pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
+            Store.satellite = !Store.satellite
+            map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
+        }
+        pill("닫기") { dialog.dismiss() }
+        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(map, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(TextView(a).apply {
+            text = legend + "\n지도 © OpenStreetMap · 위성 © Esri"
+            textSize = 12f; setTextColor(Color.parseColor("#9FB4C2"))
+            setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
+        })
+        dialog.setContentView(root)
+        dialog.setOnDismissListener { map.onPause(); map.onDetach() }
+        dialog.show()
+        map.onResume()
+        map.post { fit(map, dots.map { it.point }) }
+    }
+
     /** 포인트 범위(원)만 보여주는 작은 지도 */
     fun circleMap(a: Activity, lat: Double, lon: Double, radiusM: Double): MapView {
         configure(a)

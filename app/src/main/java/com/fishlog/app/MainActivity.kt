@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private lateinit var learnBtn: TextView
     private lateinit var touchBox: CheckBox
     private lateinit var saverBox: CheckBox
+    private lateinit var watchBox: CheckBox
     private lateinit var catRow: LinearLayout
     private lateinit var name1: TextView
     private lateinit var name2: TextView
@@ -241,6 +242,19 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked -> if (checked != Store.saver) Store.saver = checked }
         }
         remote.addView(touchBox, Ui.lp(this, MATCH, WRAP, top = 6))
+        watchBox = CheckBox(this).apply {
+            text = "갤럭시 워치로 기록 (워치 음악 화면 ⏭ = 1번, ⏮ = 2번)"
+            setTextColor(Ui.TEXT); textSize = 15f
+            buttonTintList = ColorStateList.valueOf(Ui.BLUE)
+            minHeight = dp(44)
+            setOnCheckedChangeListener { _, checked ->
+                if (checked != Store.watchMode) {
+                    Store.watchMode = checked
+                    if (checked) showMessage("출조 중에 워치에서 '미디어 컨트롤러'(음악) 화면을 열고 ⏭ ⏮를 누르세요")
+                }
+            }
+        }
+        remote.addView(watchBox, Ui.lp(this, MATCH, WRAP))
         remote.addView(saverBox, Ui.lp(this, MATCH, WRAP))
         col.addView(remote, Ui.lp(this, MATCH, WRAP, top = 14))
 
@@ -517,10 +531,13 @@ class MainActivity : Activity() {
     private fun refreshTideRow() {
         val loc = bestLocation()
         val st = Tide.stationFor(this, loc?.first, loc?.second)
+        val km = st?.let { Tide.stationKm(it, loc?.first, loc?.second) }
+        val dist = km?.let { String.format(Locale.KOREA, " · 내 위치에서 %.0fkm", it) } ?: ""
+        val stale = if (loc != null && !freshLocation()) " (마지막 위치 기준)" else ""
         stationText.text = when {
-            st == null -> "물때 지역: 위치 확인 중 · 눌러서 고르기 ▾"
-            Store.tideStation != null -> "물때 지역: ${st.name} (직접 고름) ▾"
-            else -> "물때 지역: ${st.name} (가장 가까운 곳) ▾"
+            st == null -> "물때 기준: 위치 확인 중 · 눌러서 고르기 ▾"
+            Store.tideStation != null -> "물때 기준: ${st.name} 관측소 (직접 고름)$dist ▾"
+            else -> "물때 기준: ${st.name} 관측소$dist$stale ▾"
         }
         val m = Store.tideAlarmMin
         alarmBtn.text = if (m <= 0) "설정 (만조·간조 알람)" else "알람 ${m}분 전 ⏰"
@@ -555,6 +572,17 @@ class MainActivity : Activity() {
         val t = Store.current ?: Store.history.firstOrNull()
         if (t == null) { showMessage("출조를 시작하면 지도에 경로와 조과 위치가 표시돼요"); return }
         MapDialog.showTrip(this, t)
+    }
+
+    /** 지금 위치(30분 안)를 알고 있는지 */
+    @SuppressLint("MissingPermission")
+    private fun freshLocation(): Boolean {
+        if (Tracker.last != null) return true
+        if (!Tracker.hasPermission(this)) return false
+        val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER).any { p ->
+            try { lm.getLastKnownLocation(p)?.let { System.currentTimeMillis() - it.time < 30 * 60_000L } ?: false } catch (_: Exception) { false }
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -728,6 +756,7 @@ class MainActivity : Activity() {
         name2.text = (t?.name(2) ?: Store.defaultName(2)) + "  ✎"
         if (touchBox.isChecked != Store.touchMode) touchBox.isChecked = Store.touchMode
         if (saverBox.isChecked != Store.saver) saverBox.isChecked = Store.saver
+        if (watchBox.isChecked != Store.watchMode) watchBox.isChecked = Store.watchMode
         count1.text = (t?.count(1) ?: 0).toString()
         count2.text = (t?.count(2) ?: 0).toString()
         last1.text = t?.catches?.lastOrNull { it.slot == 1 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "

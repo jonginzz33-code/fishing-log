@@ -135,6 +135,11 @@ object Store {
             ?: (if (cat == "boat") prefs.getString("name$slot", null) else null)
             ?: species(cat).getOrNull(slot - 1) ?: "${slot}번"
 
+    /** 갤럭시 워치 음악 컨트롤러로 기록 */
+    var watchMode: Boolean
+        get() = prefs.getBoolean("watch", false)
+        set(v) { prefs.edit().putBoolean("watch", v).apply(); fireChanged() }
+
     var touchMode: Boolean
         get() = prefs.getBoolean("touch", true)
         set(v) { prefs.edit().putBoolean("touch", v).apply(); fireChanged() }
