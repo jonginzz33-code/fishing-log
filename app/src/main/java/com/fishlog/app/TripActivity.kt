@@ -54,6 +54,16 @@ class TripActivity : Activity() {
         root = Ui.column(this)
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(root) })
         loadTide()
+        if (savedInstanceState == null && intent.getBooleanExtra("publish", false)) {
+            trip?.let { t -> root.post { doPublish(t) } }
+        }
+    }
+
+    private fun doPublish(t: Store.Trip) {
+        Toast.makeText(this, "전체 게시판에 올리는 중…", Toast.LENGTH_SHORT).show()
+        PublicBoard.publishFlow(this, t) { err ->
+            Toast.makeText(this, err ?: "전체 게시판에 공개했어요", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onResume() { super.onResume(); Store.addListener(listener); render(); map?.onResume() }
@@ -212,6 +222,15 @@ class TripActivity : Activity() {
         section("메뉴")
         root.addView(Ui.button(this, if (t.uploaded) "그룹에 다시 올리기" else "그룹에 올리기", true) { account.upload(t) }, Ui.lp(this, MATCH, WRAP, top = 10))
         if (t.uploaded) root.addView(Ui.button(this, "그룹에서 내리기 (내 폰 기록은 그대로)") { askUnpublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        if (t.end > 0 && t.catches.isNotEmpty()) {
+            if (!t.pub) root.addView(Ui.button(this, "전체 게시판에 공개 (위치는 150m 범위로만)") { doPublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+            else {
+                root.addView(Ui.button(this, "전체 게시판에 다시 올리기 (고친 내용 반영)") { doPublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+                root.addView(Ui.button(this, "전체 공개 내리기") {
+                    PublicBoard.unpublishMine(t) { err -> Toast.makeText(this, err ?: "전체 공개를 내렸어요", Toast.LENGTH_LONG).show() }
+                }, Ui.lp(this, MATCH, WRAP, top = 8))
+            }
+        }
         root.addView(Ui.button(this, "함께한 출조 보기") { account.openTogetherFor(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         root.addView(Ui.button(this, "카톡 등으로 텍스트 공유") { share(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         val names = Ui.row(this)

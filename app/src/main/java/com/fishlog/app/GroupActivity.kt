@@ -465,10 +465,11 @@ class GroupActivity : Activity() {
                 t.ownerName + (if (t.cat.isNotBlank()) " · ${Store.catShort(t.cat)}" else "") +
                     (if (t.place().isNotBlank()) " · ${t.place()}" else "") + " · ${hm.format(Date(t.start))}~$endText"),
                 LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"),
+                LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             card.addView(r)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
-                "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}" +
-                    (if (t.photoCount > 0) " · 사진 ${t.photoCount}" else "")), Ui.lp(this, MATCH, WRAP, top = 4))
+                "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
             dayBox.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
     }

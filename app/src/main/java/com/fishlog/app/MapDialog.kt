@@ -36,7 +36,8 @@ import java.util.Locale
 
 /** 지도에 그릴 한 사람(또는 한 출조)의 경로와 조과 */
 class MapLayer(val color: Int, val track: List<GeoPoint>, val catches: List<MapCatch>)
-class MapCatch(val point: GeoPoint, val color: Int, val title: String, val kind: String = "")
+class MapCatch(val point: GeoPoint, val color: Int, val title: String, val kind: String = "",
+               val time: Long = 0L, val who: String = "", val species: String = "")
 
 object MapDialog {
 
@@ -69,10 +70,102 @@ object MapDialog {
 
     private fun dp(a: Context, v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
-    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }) }
+    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }, it.time, it.who, it.species) }
 
-    /** 묶음 점을 눌렀을 때 */
+    private val dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
+    private val dayLabel = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
+    private val hmFmt = SimpleDateFormat("HH:mm", Locale.KOREA)
+
+    private fun speciesLine(items: List<MapDot>): String =
+        items.groupingBy { it.species }.eachCount().entries.sortedByDescending { it.value }.joinToString(" · ") { "${it.key} ${it.value}" }
+
+    /** 묶음 점을 눌렀을 때: 날짜별(사람별)로 한 줄씩 요약 */
     private fun showCluster(a: Activity, items: List<MapDot>) {
+        if (items.isEmpty()) return
+        if (items.any { it.time <= 0L || it.species.isBlank() }) { showClusterOld(a, items); return }
+        val groups = items.groupBy { dayKey.format(Date(it.time)) + "|" + it.who }.values
+            .sortedByDescending { g -> g.maxOf { it.time } }
+        val days = groups.map { dayKey.format(Date(it[0].time)) }.distinct().size
+        val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 4)) }
+        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("${items.size}마리 · ${days}일 · " + speciesLine(items))
+            .setView(android.widget.ScrollView(a).apply { addView(col) })
+            .setPositiveButton("닫기", null)
+            .create()
+        groups.forEach { g ->
+            val first = g.minByOrNull { it.time }!!
+            val card = LinearLayout(a).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(a, 14), dp(a, 10), dp(a, 14), dp(a, 10))
+                background = Ui.bg(a, Ui.CARD, 12, Ui.LINE)
+                isClickable = true
+                setOnClickListener { showDay(a, g) }
+            }
+            val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            top.addView(android.view.View(a).apply { background = Ui.bg(a, first.color, 99) },
+                LinearLayout.LayoutParams(dp(a, 10), dp(a, 10)).apply { rightMargin = dp(a, 8) })
+            top.addView(Ui.text(a, 15f, Ui.TEXT, true, dayLabel.format(Date(first.time)) + " · " +
+                Tide.mulName(first.time).substringBefore(" (")), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            top.addView(Ui.text(a, 16f, Ui.SUB, true, "›"))
+            card.addView(top)
+            card.addView(Ui.text(a, 14f, Ui.TEXT, false, (if (first.who.isNotBlank()) first.who + "  " else "") + speciesLine(g)),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 4) })
+            col.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 8) })
+        }
+        dlg.show()
+    }
+
+    /** 하루 상세: 어종별 마릿수, 시간대, 물때·들물/날물·만조·간조 전후 */
+    private fun showDay(a: Activity, g: List<MapDot>) {
+        val list = g.sortedBy { it.time }
+        val first = list.first()
+        val title = (if (first.who.isNotBlank()) first.who + " · " else "") + dayLabel.format(Date(first.time))
+        val tv = Ui.text(a, 14f, Ui.TEXT, false, "물때 계산 중…").apply {
+            setPadding(dp(a, 20), dp(a, 8), dp(a, 20), dp(a, 8)); setLineSpacing(0f, 1.35f); setTextIsSelectable(true)
+        }
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(title)
+            .setView(android.widget.ScrollView(a).apply { addView(tv) })
+            .setPositiveButton("닫기", null)
+            .show()
+        fun render(day: Tide.Day?) {
+            val sb = StringBuilder()
+            sb.append("물때: ").append(Tide.mulName(first.time)).append("\n")
+            sb.append("잡은 시간: ").append(hmFmt.format(Date(first.time))).append(" ~ ").append(hmFmt.format(Date(list.last().time))).append("\n\n")
+            sb.append("어종별\n")
+            list.groupingBy { it.species }.eachCount().entries.sortedByDescending { it.value }
+                .forEach { sb.append("  ").append(it.key).append(" ").append(it.value).append("마리\n") }
+            val phases = list.map { if (day != null) Tide.phaseAt(day, it.time) else null }
+            if (day != null) {
+                val up = phases.count { it?.first == true }; val down = phases.count { it?.first == false }
+                sb.append("\n물 흐름\n  들물 ").append(up).append("마리 · 날물 ").append(down).append("마리\n")
+                val near = phases.mapNotNull { it?.second?.takeIf { s -> s.isNotBlank() } }.groupingBy { it }.eachCount()
+                    .entries.sortedByDescending { it.value }.take(6)
+                if (near.isNotEmpty()) {
+                    sb.append("\n만조·간조 기준\n")
+                    near.forEach { sb.append("  ").append(it.key).append(" ").append(it.value).append("마리\n") }
+                }
+                val ex = Tide.extremes(day)
+                if (ex.isNotEmpty()) sb.append("\n그날 ").append(ex.joinToString(" · ") {
+                    (if (it.high) "만조 " else "간조 ") + hmFmt.format(Date(it.time)) }).append("\n")
+            } else {
+                sb.append("\n(물때 정보를 못 받아서 들물·날물은 계산하지 못했어요)\n")
+            }
+            sb.append("\n시각별\n")
+            list.forEachIndexed { i, d ->
+                sb.append("  ").append(hmFmt.format(Date(d.time))).append("  ").append(d.species)
+                phases[i]?.let { p ->
+                    p.first?.let { sb.append(" · ").append(if (it) "들물" else "날물") }
+                    if (p.second.isNotBlank()) sb.append(" · ").append(p.second)
+                }
+                sb.append("\n")
+            }
+            tv.text = sb.toString().trimEnd()
+        }
+        Tide.fetch(a, first.point.latitude, first.point.longitude, first.time) { d, _ -> render(d) }
+    }
+
+    private fun showClusterOld(a: Activity, items: List<MapDot>) {
         val counts = items.groupingBy { it.kind }.eachCount().entries.sortedByDescending { it.value }
         val title = if (items.size == 1) items[0].title
         else "${items.size}마리 · " + counts.joinToString(" · ") { "${it.key} ${it.value}" }
@@ -380,7 +473,8 @@ object MapDialog {
             val mul = Tide.mulName(t.start).substringBefore(" (")
             t.catches.filter { it.lat != null && it.lon != null }.map {
                 MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
-                    "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}")
+                    "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
+                    it.time, "나", t.name(it.slot))
             }
         }
         val myId = Cloud.uid
@@ -393,11 +487,35 @@ object MapDialog {
                 val mul = Tide.mulName(t.start).substringBefore(" (")
                 t.catches.filter { it.lat != null && it.lon != null }.map {
                     MapDot(GeoPoint(it.lat!!, it.lon!!), color,
-                        "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}")
+                        "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
+                        it.time, t.ownerName, t.name(it.slot))
                 }
             }
             done(mine + friends, mine.size, friends.size)
         }
+    }
+
+    /** 포인트 범위(원)만 보여주는 작은 지도 */
+    fun circleMap(a: Activity, lat: Double, lon: Double, radiusM: Double): MapView {
+        configure(a)
+        val map = MapView(a).apply {
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            isTilesScaledToDpi = true
+        }
+        val center = GeoPoint(lat, lon)
+        val circle = org.osmdroid.views.overlay.Polygon(map).apply {
+            points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(center, radiusM)
+            fillPaint.color = Color.argb(70, 242, 140, 56)
+            outlinePaint.color = Color.parseColor("#F28C38")
+            outlinePaint.strokeWidth = dp(a, 2).toFloat()
+            setOnClickListener { _, _, _ -> true }
+        }
+        map.overlays.add(circle)
+        map.addOnFirstLayoutListener { _, _, _, _, _ -> map.controller.setZoom(16.0); map.controller.setCenter(center) }
+        map.onResume()
+        return map
     }
 
     /** 출조 기록 화면에 들어가는 작은 지도 (누르면 크게) */
@@ -435,7 +553,7 @@ object MapDialog {
         val track = t.track.map { GeoPoint(it.lat, it.lon) }
         val catches = t.catches.filter { it.lat != null && it.lon != null }.map {
             MapCatch(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
-                df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot))
+                df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot), it.time, "", t.name(it.slot))
         }
         return MapLayer(trackColor, track, catches)
     }

@@ -163,14 +163,18 @@ class HistoryActivity : Activity() {
                 isClickable = true
                 setOnClickListener { startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id)) }
             }
-            card.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
-                (if (t.place().isNotBlank()) " · " + t.place() else "")))
+            val head = Ui.row(this)
+            head.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
+                (if (t.place().isNotBlank()) " · " + t.place() else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (t.photos.isNotEmpty()) head.addView(Ui.chip(this, "사진 ${t.photos.size}"),
+                LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 6) })
+            card.addView(head)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
                 "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
             val tags = mutableListOf("${dur / 60}시간 ${dur % 60}분")
             if (t.cat.isNotBlank()) tags.add(0, Store.catShort(t.cat))
-            if (t.photos.isNotEmpty()) tags.add("사진 ${t.photos.size}")
             if (t.uploaded) tags.add("그룹에 올림")
+            if (t.pub) tags.add("전체 공개")
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))
             list.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))

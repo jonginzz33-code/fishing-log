@@ -282,6 +282,21 @@ object Tide {
         return a + (b - a) * (h - i)
     }
 
+    /** 그 시각의 물 흐름(true=들물, false=날물)과 가까운 만조·간조 기준 이름 (예: "간조 1시간 전") */
+    fun phaseAt(d: Day, time: Long): Pair<Boolean?, String> {
+        val r = rising(d, time)
+        val e = extremes(d).minByOrNull { kotlin.math.abs(it.time - time) } ?: return r to ""
+        val h = Math.round((time - e.time) / 3_600_000.0).toInt()
+        val k = if (e.high) "만조" else "간조"
+        val label = when {
+            kotlin.math.abs(h) > 3 -> ""
+            h == 0 -> "$k 무렵"
+            h < 0 -> "$k ${-h}시간 전"
+            else -> "$k ${h}시간 후"
+        }
+        return r to label
+    }
+
     fun rising(d: Day, time: Long): Boolean? {
         val a = valueAt(d, time - 600_000L) ?: return null
         val b = valueAt(d, time + 600_000L) ?: return null

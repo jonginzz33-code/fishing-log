@@ -28,7 +28,8 @@ object Store {
         var port: String = "",
         val photos: MutableList<Photo> = mutableListOf(),
         var backedUp: Boolean = false,
-        var cat: String = ""
+        var cat: String = "",
+        var pub: Boolean = false
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names[slot - 1]
@@ -261,6 +262,14 @@ object Store {
         changed()
     }
 
+    /** 전체 게시판 공개 여부 표시 */
+    fun setPublic(tripId: Long, v: Boolean) { find(tripId)?.pub = v; changed() }
+
+    /** 전체 게시판에 보일 이름 (null = 아직 안 정함, "" = 익명) */
+    var nick: String?
+        get() = prefs.getString("nick", null)
+        set(v) { prefs.edit().putString("nick", v).apply() }
+
     fun markNotUploaded(tripId: Long) { find(tripId)?.uploaded = false; changed() }
 
     fun markUploaded(tripId: Long) { find(tripId)?.uploaded = true; changed() }
@@ -287,7 +296,7 @@ object Store {
         val o = JSONObject()
         o.put("id", t.id); o.put("start", t.start); o.put("end", t.end)
         o.put("up", t.uploaded); o.put("bk", t.backedUp)
-        o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat)
+        o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat); o.put("pub", t.pub)
         o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
         val arr = JSONArray()
         t.catches.forEach {
@@ -331,7 +340,8 @@ object Store {
         }
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
             arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
-            o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""))
+            o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""),
+            o.optBoolean("pub", false))
     }
 
     private fun saveCurrent() {

@@ -44,6 +44,9 @@ class MainActivity : Activity() {
     private lateinit var alarmBtn: TextView
     private lateinit var adminBtn: TextView
     private lateinit var scheduleBtn: TextView
+    private var eventsFor: String? = null
+    private var upcoming = 0
+    private var todayEvents = 0
     private lateinit var updateBar: TextView
     private lateinit var remoteInfo: TextView
     private lateinit var message: TextView
@@ -119,6 +122,7 @@ class MainActivity : Activity() {
             Cloud.backupPending()
         }
         Cloud.loadSpecies()
+        eventsFor = null
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
             Updater.check(this) { v -> if (v != null) updateBar.visibility = View.VISIBLE }
@@ -275,6 +279,10 @@ class MainActivity : Activity() {
             else startActivity(Intent(this, ScheduleActivity::class.java))
         }
         col.addView(scheduleBtn, Ui.lp(this, MATCH, WRAP, top = 10))
+        col.addView(Ui.button(this, "전체 조황 · 포인트 도감") {
+            if (Cloud.user == null) showMessage("구글 로그인을 하면 볼 수 있어요")
+            else startActivity(Intent(this, BoardActivity::class.java))
+        }, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 친구 공유 카드
         val acc = Ui.card(this)
@@ -350,9 +358,19 @@ class MainActivity : Activity() {
         if (t == null) {
             askPlace(null)
         } else {
+            val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), 0) }
+            box.addView(Ui.text(this, 15f, Ui.TEXT, false, "${t.name(1)} ${t.count(1)}마리 · ${t.name(2)} ${t.count(2)}마리"))
+            val pubBox = CheckBox(this).apply {
+                text = "전체 게시판에도 공개 (위치는 150m 범위로만, 경로·배 이름은 안 올라감)"
+                setTextColor(Ui.TEXT); textSize = 14f
+                buttonTintList = ColorStateList.valueOf(Ui.BLUE)
+                isChecked = false
+                visibility = if (Cloud.user != null && t.catches.isNotEmpty()) View.VISIBLE else View.GONE
+            }
+            box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 10))
             AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle("출조를 종료할까요?")
-                .setMessage("${t.name(1)} ${t.count(1)}마리 · ${t.name(2)} ${t.count(2)}마리")
+                .setView(box)
                 .setPositiveButton("종료") { _, _ ->
                     val ended = Store.endTrip()
                     RemoteService.stop(this)
@@ -360,7 +378,8 @@ class MainActivity : Activity() {
                         if (Cloud.active != null && ended.catches.isNotEmpty()) account.upload(ended)
                         Cloud.backupPending()
                     }
-                    if (ended != null) startActivity(Intent(this, TripActivity::class.java).putExtra("id", ended.id))
+                    if (ended != null) startActivity(Intent(this, TripActivity::class.java)
+                        .putExtra("id", ended.id).putExtra("publish", pubBox.isChecked))
                 }
                 .setNegativeButton("계속", null)
                 .show()
@@ -572,6 +591,44 @@ class MainActivity : Activity() {
         }
     }
 
+    /** 그룹 일정 버튼: 다가오는 일정 개수 + 강조 */
+    private fun refreshSchedule() {
+        val gid = Cloud.active?.id
+        if (gid == null) { eventsFor = null; return }
+        if (eventsFor != gid) {
+            eventsFor = gid
+            upcoming = 0; todayEvents = 0
+            Cloud.loadEvents { list, _ ->
+                if (Cloud.active?.id != gid || list == null) return@loadEvents
+                val today = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())
+                upcoming = list.count { it.date >= today }
+                todayEvents = list.count { it.date == today }
+                paintSchedule()
+            }
+        }
+        paintSchedule()
+    }
+
+    private fun paintSchedule() {
+        when {
+            todayEvents > 0 -> {
+                scheduleBtn.text = "그룹 일정 확인 ($upcoming) · 오늘 출조!"
+                scheduleBtn.setTextColor(Ui.BG)
+                scheduleBtn.background = Ui.bg(this, Ui.GREEN, 14)
+            }
+            upcoming > 0 -> {
+                scheduleBtn.text = "그룹 일정 확인 ($upcoming)"
+                scheduleBtn.setTextColor(Ui.GREEN)
+                scheduleBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN)
+            }
+            else -> {
+                scheduleBtn.text = "그룹 일정 확인"
+                scheduleBtn.setTextColor(Ui.TEXT)
+                scheduleBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE)
+            }
+        }
+    }
+
     private fun renderHeaderGroups() {
         groupBar.removeAllViews()
         val gs = if (Cloud.user == null) emptyList() else Cloud.groups
@@ -581,7 +638,8 @@ class MainActivity : Activity() {
         var activeView: View? = null
         gs.forEach { g ->
             val on = g.id == activeId
-            val chip = Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, g.name).apply {
+            val label = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+            val chip = Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, label).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setPadding(dp(12), 0, dp(12), 0)
@@ -622,6 +680,7 @@ class MainActivity : Activity() {
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         scheduleBtn.visibility = if (Cloud.active != null) View.VISIBLE else View.GONE
+        refreshSchedule()
         renderCats()
     }
 

@@ -54,6 +54,14 @@ object Ui {
             if (onClick != null) setOnClickListener { onClick() }
         }
 
+    /** 카드 오른쪽 위 작은 칩 (예: 사진 3) */
+    fun chip(c: Context, label: String, color: Int = BLUE): TextView =
+        text(c, 12f, BG, true, label).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(c, 9), dp(c, 3), dp(c, 9), dp(c, 3))
+            background = bg(c, color, 99)
+        }
+
     fun lp(c: Context, w: Int, h: Int, weight: Float = 0f, top: Int = 0) =
         LinearLayout.LayoutParams(w, h, weight).apply { topMargin = dp(c, top) }
 

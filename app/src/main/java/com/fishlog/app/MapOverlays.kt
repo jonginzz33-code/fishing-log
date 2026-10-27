@@ -14,7 +14,8 @@ import org.osmdroid.views.overlay.Overlay
 import kotlin.math.min
 
 /** 지도 위 점 하나. kind = 묶음 요약에 쓰는 이름 (예: "주꾸미", "철수 주꾸미") */
-class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: String)
+class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: String,
+             val time: Long = 0L, val who: String = "", val species: String = "")
 
 /**
  * 조과 점 그리기. 화면에서 가까이 겹치는 점은 하나로 묶어서
