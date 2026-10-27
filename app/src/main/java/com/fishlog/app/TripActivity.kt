@@ -63,7 +63,7 @@ class TripActivity : Activity() {
         val t = trip ?: return
         val loc = t.anyLocation()
         if (loc == null) { tideMsg = "위치 기록이 없어서 조위 그래프는 못 불러와요"; return }
-        Tide.fetch(loc.first, loc.second, t.start) { day, err ->
+        Tide.fetch(this, loc.first, loc.second, t.start) { day, err ->
             tideDay = day
             tideMsg = err ?: ""
             render()
@@ -144,6 +144,7 @@ class TripActivity : Activity() {
             tv.set(d, t)
             tideCard.addView(tv, Ui.lp(this, MATCH, dp(200)))
             tideCard.addView(Ui.text(this, 13f, Ui.TEXT, false, TideDialog.describe(d, t)), Ui.lp(this, MATCH, WRAP, top = 6))
+            tideCard.addView(Ui.text(this, 11f, Ui.SUB, false, d.source), Ui.lp(this, MATCH, WRAP, top = 4))
         } else {
             tideCard.addView(Ui.text(this, 13f, Ui.SUB, false, tideMsg))
         }
@@ -209,6 +210,7 @@ class TripActivity : Activity() {
         // 동작
         section("메뉴")
         root.addView(Ui.button(this, if (t.uploaded) "그룹에 다시 올리기" else "그룹에 올리기", true) { account.upload(t) }, Ui.lp(this, MATCH, WRAP, top = 10))
+        if (t.uploaded) root.addView(Ui.button(this, "그룹에서 내리기 (내 폰 기록은 그대로)") { askUnpublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         root.addView(Ui.button(this, "함께한 출조 보기") { account.openTogetherFor(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         root.addView(Ui.button(this, "카톡 등으로 텍스트 공유") { share(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         val names = Ui.row(this)
@@ -315,27 +317,29 @@ class TripActivity : Activity() {
             .setMessage(sb.toString().trim() + if (picked > list.size) "\n\n(${picked - list.size}장은 읽지 못했어요)" else "")
             .setPositiveButton("확정") { _, _ -> Store.addPhotos(tripId, list) }
             .setNegativeButton("취소") { _, _ ->
-                list.forEach { Photos.file(this, it.file).delete(); Photos.file(this, Photos.thumbName(it.file)).delete() }
+                list.forEach { Photos.file(this, it.file).delete(); Photos.file(this, Photos.thumbName(it.file)).delete(); Photos.file(this, Photos.shareName(it.file)).delete() }
             }
             .setCancelable(false)
             .show()
     }
 
     private fun openPhoto(t: Store.Trip, p: Store.Photo) {
-        val iv = ImageView(this).apply {
-            adjustViewBounds = true
-            setImageBitmap(BitmapFactory.decodeFile(Photos.file(this@TripActivity, p.file).absolutePath))
-        }
+        val bmp = BitmapFactory.decodeFile(Photos.file(this@TripActivity, p.file).absolutePath)
         val c = t.catches.firstOrNull { it.time == p.catchTime }
         val title = (if (p.time > 0) "촬영 ${tf.format(Date(p.time))}" else "촬영 시각 없음") +
             (if (c != null) " · ${t.name(c.slot)} ${tf.format(Date(c.time))}" else " · 조과 미지정")
+        val iv = ImageView(this).apply {
+            adjustViewBounds = true
+            setImageBitmap(bmp)
+            setOnClickListener { ZoomImageView.show(this@TripActivity, bmp, title) }
+        }
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(title)
             .setView(iv)
             .setPositiveButton("닫기", null)
             .setNeutralButton("조과 지정") { _, _ -> chooseCatch(t, p) }
             .setNegativeButton("사진 삭제") { _, _ ->
-                Photos.file(this, p.file).delete(); Photos.file(this, Photos.thumbName(p.file)).delete()
+                Photos.file(this, p.file).delete(); Photos.file(this, Photos.thumbName(p.file)).delete(); Photos.file(this, Photos.shareName(p.file)).delete()
                 Store.removePhoto(tripId, p)
             }
             .show()
@@ -385,6 +389,21 @@ class TripActivity : Activity() {
             .setTitle("버튼 $slot 어종 이름")
             .setView(input)
             .setPositiveButton("저장") { _, _ -> Store.renameInTrip(t.id, slot, input.text.toString().trim()) }
+            .setNegativeButton("취소", null)
+            .show()
+    }
+
+    private fun askUnpublish(t: Store.Trip) {
+        val myId = Cloud.uid
+        if (myId == null || Cloud.active == null) { Toast.makeText(this, "로그인하고 그룹을 선택해 주세요", Toast.LENGTH_LONG).show(); return }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("'${Cloud.active?.name}' 그룹에서 이 출조를 내릴까요?")
+            .setMessage("친구들 화면에서 사라지고, 내 폰 기록과 백업은 그대로예요")
+            .setPositiveButton("내리기") { _, _ ->
+                Cloud.deleteGroupTrip("${myId}_${t.id}") { err ->
+                    Toast.makeText(this, err ?: "그룹에서 내렸어요", Toast.LENGTH_LONG).show()
+                }
+            }
             .setNegativeButton("취소", null)
             .show()
     }

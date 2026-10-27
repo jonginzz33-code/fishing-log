@@ -24,9 +24,8 @@ object TideDialog {
         col.addView(head)
         col.addView(graph, Ui.lp(a, MATCH, Ui.dp(a, 220), top = 10))
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
-        col.addView(Ui.text(a, 11f, Ui.SUB, false,
-            "조위: Open-Meteo 해양 예측 (약 8km 격자, 해안 근처는 시각이 어긋날 수 있어요)\n물때 단계: 달 나이로 계산 (7물때식, 하루 정도 차이 가능)"),
-            Ui.lp(a, MATCH, WRAP, top = 10))
+        val src = Ui.text(a, 11f, Ui.SUB, false, "")
+        col.addView(src, Ui.lp(a, MATCH, WRAP, top = 10))
 
         val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(SimpleDateFormat("M월 d일 (E) 물때", Locale.KOREA).format(Date(time)))
@@ -34,11 +33,12 @@ object TideDialog {
             .setPositiveButton("닫기", null)
             .show()
 
-        Tide.fetch(lat, lon, time) { day, err ->
+        Tide.fetch(a, lat, lon, time) { day, err ->
             if (!dlg.isShowing) return@fetch
             if (day == null) { info.text = err ?: "불러오기 실패"; return@fetch }
             graph.set(day, trip)
             info.text = describe(day, trip)
+            src.text = day.source + "\n물때 단계: 달 나이로 계산 (7물때식, 하루 정도 차이 가능)"
         }
     }
 
@@ -47,7 +47,7 @@ object TideDialog {
         val sb = StringBuilder()
         Tide.extremes(day).forEach { e ->
             sb.append(if (e.high) "만조 " else "간조 ").append(tf.format(Date(e.time)))
-                .append(String.format(Locale.KOREA, " (%.1fm)", e.value)).append("   ")
+                .append(String.format(Locale.KOREA, " (%.0fcm)", e.value * 100)).append("   ")
         }
         if (trip != null && trip.catches.isNotEmpty()) {
             var up1 = 0; var up2 = 0; var dn1 = 0; var dn2 = 0

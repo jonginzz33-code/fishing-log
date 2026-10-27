@@ -24,6 +24,8 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build
+        env:
+          KHOA_KEY: ${{ secrets.KHOA_KEY }}
         run: gradle assembleDebug --no-daemon
 
       - name: Rename APK

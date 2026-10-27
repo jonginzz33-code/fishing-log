@@ -239,8 +239,13 @@ class MainActivity : Activity() {
         // 친구 공유 카드
         val acc = Ui.card(this)
         accountInfo = Ui.text(this, 14f)
+        accountInfo.setOnClickListener { if (Cloud.active != null) startActivity(Intent(this, GroupActivity::class.java)) }
         accountBtn = Ui.button(this, "구글 로그인") {
-            if (Cloud.user == null) account.signIn { refreshAccount() } else account.openGroups()
+            when {
+                Cloud.user == null -> account.signIn { refreshAccount() }
+                Cloud.active == null -> account.openGroups()
+                else -> startActivity(Intent(this, GroupActivity::class.java))
+            }
         }.apply { minHeight = dp(44); textSize = 14f }
         hideRouteBox = CheckBox(this).apply {
             text = "그룹에 올릴 때 이동 경로 숨기기"
@@ -308,7 +313,7 @@ class MainActivity : Activity() {
                     val ended = Store.endTrip()
                     RemoteService.stop(this)
                     if (ended != null && Cloud.user != null) {
-                        if (Cloud.active != null) account.upload(ended)
+                        if (Cloud.active != null && ended.catches.isNotEmpty()) account.upload(ended)
                         Cloud.backupPending()
                     }
                     if (ended != null) startActivity(Intent(this, TripActivity::class.java).putExtra("id", ended.id))
@@ -324,6 +329,7 @@ class MainActivity : Activity() {
         }
         Store.startTrip(boat, port)
         RemoteService.start(this)
+        bestLocation()?.let { Tide.prefetch(this, it.first, it.second) }
         showMessage("출조 시작! 화면을 꺼도 리모컨으로 기록돼요")
     }
 
@@ -430,8 +436,10 @@ class MainActivity : Activity() {
         } else {
             val g = Cloud.active
             accountInfo.text = if (g == null) "${Cloud.displayName} · 아직 그룹이 없어요"
-            else "${Cloud.displayName} · 그룹 '${g.name}' (초대 코드 ${g.code})"
-            accountBtn.text = if (g == null) "그룹 만들기 / 가입" else "그룹 · 친구 출조 보기"
+            else "그룹 '${g.name}' · 초대 코드 ${g.code}  ›\n눌러서 멤버 · 출조 달력 보기"
+            accountInfo.background = if (g == null) null else Ui.bg(this, Color.parseColor("#1C3A4F"), 10, Ui.LINE)
+            accountInfo.setPadding(dp(12), dp(10), dp(12), dp(10))
+            accountBtn.text = if (g == null) "그룹 만들기 / 가입" else "그룹 · 친구 출조 달력"
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
     }

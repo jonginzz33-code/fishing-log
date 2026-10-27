@@ -32,11 +32,20 @@ service cloud.firestore {
         )
       );
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+      match /members/{mid} {
+        allow read: if isMember(gid);
+        allow create, update: if isMember(gid) && request.auth.uid == mid;
+      }
       match /trips/{tripId} {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && request.resource.data.owner == request.auth.uid;
         allow update, delete: if isMember(gid) && resource.data.owner == request.auth.uid;
         match /photos/{pid} {
+          allow read: if isMember(gid);
+          allow create, update: if isMember(gid) && request.resource.data.owner == request.auth.uid;
+          allow delete: if isMember(gid) && resource.data.owner == request.auth.uid;
+        }
+        match /photosBig/{pid} {
           allow read: if isMember(gid);
           allow create, update: if isMember(gid) && request.resource.data.owner == request.auth.uid;
           allow delete: if isMember(gid) && resource.data.owner == request.auth.uid;

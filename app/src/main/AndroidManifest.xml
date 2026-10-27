@@ -38,6 +38,11 @@
             android:screenOrientation="portrait" />
 
         <activity
+            android:name=".GroupActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".TripActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

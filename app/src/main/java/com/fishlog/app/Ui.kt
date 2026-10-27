@@ -140,14 +140,15 @@ class TideView(c: Context) : View(c) {
 
     override fun onDraw(canvas: Canvas) {
         val d = day ?: return
-        val vals = d.hourly
+        val vals = d.values
+        val hr = d.stepMin / 60.0
         val known = vals.filterNotNull()
         if (known.isEmpty()) return
         val lo = known.min(); val hi = known.max()
         val range = (hi - lo).coerceAtLeast(0.1)
         val padTop = Ui.dp(context, 30).toFloat(); val padBot = Ui.dp(context, 30).toFloat()
         val w = width.toFloat(); val h = height.toFloat()
-        val n = vals.size - 1
+        val n = (vals.size - 1) * hr
         fun x(hour: Double) = (hour / n * w).toFloat()
         fun y(v: Double) = (padTop + (1 - (v - lo) / range) * (h - padTop - padBot)).toFloat()
 
@@ -155,13 +156,13 @@ class TideView(c: Context) : View(c) {
         if (t != null) {
             val s = (t.start - d.dateMillis) / 3600_000.0
             val e = ((if (t.end > 0) t.end else System.currentTimeMillis()) - d.dateMillis) / 3600_000.0
-            canvas.drawRect(x(s.coerceIn(0.0, n.toDouble())), 0f, x(e.coerceIn(0.0, n.toDouble())), h - padBot + 4, win)
+            canvas.drawRect(x(s.coerceIn(0.0, n)), 0f, x(e.coerceIn(0.0, n)), h - padBot + 4, win)
         }
         val path = Path()
         var started = false
         vals.forEachIndexed { i, v ->
             if (v == null) return@forEachIndexed
-            if (!started) { path.moveTo(x(i.toDouble()), y(v)); started = true } else path.lineTo(x(i.toDouble()), y(v))
+            if (!started) { path.moveTo(x(i * hr), y(v)); started = true } else path.lineTo(x(i * hr), y(v))
         }
         val area = Path(path)
         area.lineTo(w, h - padBot); area.lineTo(0f, h - padBot); area.close()

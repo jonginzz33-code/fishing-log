@@ -22,6 +22,22 @@ object Photos {
     fun dir(ctx: Context): File = File(ctx.filesDir, "photos").apply { mkdirs() }
     fun file(ctx: Context, name: String): File = File(dir(ctx), name)
     fun thumbName(name: String): String = name.removeSuffix(".jpg") + "_t.jpg"
+    fun shareName(name: String): String = name.removeSuffix(".jpg") + "_s.jpg"
+
+    /** 그룹 공유용 1080px 사진. 없으면 큰 사진에서 만들어 둠 */
+    fun shareFile(ctx: Context, p: Store.Photo): File? {
+        val f = file(ctx, shareName(p.file))
+        if (f.exists()) return f
+        val src = file(ctx, p.file)
+        if (!src.exists()) return null
+        return try {
+            val b = BitmapFactory.decodeFile(src.absolutePath) ?: return null
+            val out = scaleRotate(b, 1080, ExifInterface.ORIENTATION_NORMAL)
+            saveJpeg(out, f, 80)
+            if (f.length() > 700_000) saveJpeg(out, f, 65)
+            f
+        } catch (_: Exception) { null }
+    }
 
     /** 사진 촬영 시각 (EXIF). 없으면 0 */
     private fun takenTime(ctx: Context, uri: Uri): Pair<Long, Int> {
@@ -76,8 +92,11 @@ object Photos {
             val name = "${tripId}_${System.currentTimeMillis()}_$index.jpg"
             val big = scaleRotate(src, 1600, orientation)
             saveJpeg(big, file(ctx, name), 85)
-            val thumb = scaleRotate(src, 360, orientation)
-            saveJpeg(thumb, file(ctx, thumbName(name)), 60)
+            val share = scaleRotate(src, 1080, orientation)
+            saveJpeg(share, file(ctx, shareName(name)), 80)
+            if (file(ctx, shareName(name)).length() > 700_000) saveJpeg(share, file(ctx, shareName(name)), 65)
+            val thumb = scaleRotate(src, 480, orientation)
+            saveJpeg(thumb, file(ctx, thumbName(name)), 70)
             Store.Photo(taken, name, null)
         } catch (_: Exception) {
             null

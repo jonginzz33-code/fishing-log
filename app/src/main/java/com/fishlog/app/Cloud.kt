@@ -24,7 +24,7 @@ object Cloud {
         val id: String, val owner: String, val ownerName: String,
         val start: Long, val end: Long, val names: List<String>,
         val catches: List<RemoteCatch>, val track: List<Store.Pt>,
-        val boat: String = "", val port: String = ""
+        val boat: String = "", val port: String = "", val photoCount: Int = 0
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
@@ -76,6 +76,11 @@ object Cloud {
                             left--
                             if (left == 0) {
                                 groups = ids.mapNotNull { i -> loaded.firstOrNull { it.id == i } }
+                                // 멤버 목록에 내 이름 남기기 (예전에 가입한 경우 대비)
+                                groups.forEach { gr ->
+                                    db.collection("groups").document(gr.id).collection("members").document(id)
+                                        .set(mapOf("name" to displayName), SetOptions.merge())
+                                }
                                 fireChanged()
                                 done?.invoke(null)
                             }
@@ -115,7 +120,10 @@ object Cloud {
         batch.set(db.collection("users").document(id),
             mapOf("groups" to FieldValue.arrayUnion(ref.id), "active" to ref.id), SetOptions.merge())
         batch.commit()
-            .addOnSuccessListener { activeId = ref.id; refresh(done) }
+            .addOnSuccessListener {
+                ref.collection("members").document(id).set(mapOf("name" to displayName, "joined" to System.currentTimeMillis()))
+                activeId = ref.id; refresh(done)
+            }
             .addOnFailureListener { done(it.message ?: "그룹 만들기 실패") }
     }
 
@@ -129,6 +137,8 @@ object Cloud {
                 if (groups.any { it.id == gid }) { setActive(gid); done(null); return@addOnSuccessListener }
                 db.collection("groups").document(gid).update("members", FieldValue.arrayUnion(id))
                     .addOnSuccessListener {
+                        db.collection("groups").document(gid).collection("members").document(id)
+                            .set(mapOf("name" to displayName, "joined" to System.currentTimeMillis()), SetOptions.merge())
                         db.collection("users").document(id)
                             .set(mapOf("groups" to FieldValue.arrayUnion(gid), "active" to gid), SetOptions.merge())
                             .addOnCompleteListener { activeId = gid; refresh(done) }
@@ -171,21 +181,31 @@ object Cloud {
 
     lateinit var appContext: Context
 
-    /** 작게 줄인 사진(약 20~40KB)을 출조 아래에 하나씩 저장 */
+    /** 사진 업로드: 목록용 작은 사진(photos) + 크게 볼 1080px 사진(photosBig) */
     private fun uploadPhotos(tripRef: com.google.firebase.firestore.DocumentReference, t: Store.Trip) {
         val id = uid ?: return
         if (!::appContext.isInitialized) return
-        t.photos.forEach { p ->
-            val f = Photos.file(appContext, Photos.thumbName(p.file))
-            if (!f.exists() || f.length() > 700_000) return@forEach
-            val data = android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP)
-            val m = hashMapOf<String, Any>("owner" to id, "t" to p.time, "data" to data)
-            p.catchTime?.let { m["catchT"] = it }
-            tripRef.collection("photos").document(p.file.removeSuffix(".jpg")).set(m)
-        }
+        val list = t.photos.toList()
+        Thread {
+            list.forEach { p ->
+                val docId = p.file.removeSuffix(".jpg")
+                val thumb = Photos.file(appContext, Photos.thumbName(p.file))
+                if (thumb.exists() && thumb.length() < 700_000) {
+                    val m = hashMapOf<String, Any>("owner" to id, "t" to p.time,
+                        "data" to android.util.Base64.encodeToString(thumb.readBytes(), android.util.Base64.NO_WRAP))
+                    p.catchTime?.let { m["catchT"] = it }
+                    tripRef.collection("photos").document(docId).set(m)
+                }
+                val big = Photos.shareFile(appContext, p)
+                if (big != null && big.length() < 720_000) {
+                    tripRef.collection("photosBig").document(docId).set(mapOf("owner" to id,
+                        "data" to android.util.Base64.encodeToString(big.readBytes(), android.util.Base64.NO_WRAP)))
+                }
+            }
+        }.start()
     }
 
-    class RemotePhoto(val time: Long, val catchTime: Long?, val bitmap: android.graphics.Bitmap)
+    class RemotePhoto(val id: String, val time: Long, val catchTime: Long?, val bitmap: android.graphics.Bitmap)
 
     fun loadPhotos(t: RemoteTrip, done: (List<RemotePhoto>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
@@ -195,12 +215,67 @@ object Cloud {
                     try {
                         val bytes = android.util.Base64.decode(d.getString("data") ?: return@mapNotNull null, android.util.Base64.DEFAULT)
                         val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@mapNotNull null
-                        RemotePhoto(d.getLong("t") ?: 0L, d.getLong("catchT"), bmp)
+                        RemotePhoto(d.id, d.getLong("t") ?: 0L, d.getLong("catchT"), bmp)
                     } catch (_: Exception) { null }
                 }.sortedBy { it.time }
                 done(out, null)
             }
             .addOnFailureListener { done(null, it.message ?: "사진 불러오기 실패") }
+    }
+
+    /** 누르면 받는 큰 사진. 없으면(예전 업로드) null */
+    fun loadBigPhoto(tripId: String, photoId: String, done: (android.graphics.Bitmap?) -> Unit) {
+        val g = active ?: return done(null)
+        db.collection("groups").document(g.id).collection("trips").document(tripId).collection("photosBig").document(photoId).get()
+            .addOnSuccessListener { d ->
+                val s64 = d.getString("data")
+                if (s64 == null) { done(null); return@addOnSuccessListener }
+                val bytes = android.util.Base64.decode(s64, android.util.Base64.DEFAULT)
+                done(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+            }
+            .addOnFailureListener { done(null) }
+    }
+
+    /** 그룹에 올린 내 출조 내리기 (사진까지) */
+    fun deleteGroupTrip(docId: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        val ref = db.collection("groups").document(g.id).collection("trips").document(docId)
+        ref.collection("photos").get().addOnCompleteListener { a ->
+            a.result?.documents?.forEach { it.reference.delete() }
+            ref.collection("photosBig").get().addOnCompleteListener { b ->
+                b.result?.documents?.forEach { it.reference.delete() }
+                ref.delete()
+                    .addOnSuccessListener {
+                        val myId = uid
+                        if (myId != null && docId.startsWith(myId + "_")) {
+                            docId.removePrefix(myId + "_").toLongOrNull()?.let { Store.markNotUploaded(it) }
+                        }
+                        done(null)
+                    }
+                    .addOnFailureListener { done(it.message ?: "지우기 실패") }
+            }
+        }
+    }
+
+    class Member(val uid: String, val name: String, val joined: Long)
+
+    /** 그룹 멤버 (예전 버전 앱 멤버는 이름 없이 나옴) */
+    fun loadMembers(done: (List<Member>?, String?) -> Unit) {
+        val g = active ?: return done(null, "그룹이 없어요")
+        val gref = db.collection("groups").document(g.id)
+        gref.get().addOnSuccessListener { gd ->
+            @Suppress("UNCHECKED_CAST")
+            val uids = (gd.get("members") as? List<String>) ?: emptyList()
+            gref.collection("members").get()
+                .addOnSuccessListener { q ->
+                    val named = q.documents.associate { it.id to (it.getString("name") to (it.getLong("joined") ?: 0L)) }
+                    done(uids.map { u ->
+                        val n = named[u]
+                        Member(u, n?.first ?: "이름 없음 (앱 업데이트 전)", n?.second ?: 0L)
+                    }, null)
+                }
+                .addOnFailureListener { done(uids.map { Member(it, "?", 0L) }, null) }
+        }.addOnFailureListener { done(null, it.message ?: "불러오기 실패") }
     }
 
     // ---- 내 기록 보관함 (서버 백업 / 복원) ----
@@ -246,14 +321,14 @@ object Cloud {
         RemoteTrip(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
             (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track,
-            d.getString("boat") ?: "", d.getString("port") ?: "")
+            d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt())
     } catch (e: Exception) { null }
 
     /** 그룹의 최근 출조 목록 */
     fun recentTrips(done: (List<RemoteTrip>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
         db.collection("groups").document(g.id).collection("trips")
-            .orderBy("start", Query.Direction.DESCENDING).limit(60).get()
+            .orderBy("start", Query.Direction.DESCENDING).limit(300).get()
             .addOnSuccessListener { q -> done(q.documents.mapNotNull { parse(it) }, null) }
             .addOnFailureListener { done(null, it.message ?: "불러오기 실패") }
     }

@@ -115,7 +115,7 @@ class AccountUi(private val a: Activity) {
             .show()
     }
 
-    private fun shareCode() {
+    fun shareCode() {
         val g = Cloud.active ?: return
         val text = "조과기록 앱 '${g.name}' 그룹 초대 코드: ${g.code}\n앱 → 그룹 → 초대 코드로 가입에 입력하세요"
         (a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
@@ -139,26 +139,7 @@ class AccountUi(private val a: Activity) {
     private val dayFmt = SimpleDateFormat("M/d (E) HH:mm", Locale.KOREA)
 
     fun openRecent() {
-        Cloud.recentTrips { list, err ->
-            if (list == null) { toast(err ?: "불러오기 실패"); return@recentTrips }
-            if (list.isEmpty()) { toast("아직 그룹에 올라온 출조가 없어요"); return@recentTrips }
-            val labels = list.map { t ->
-                "${dayFmt.format(Date(t.start))} · ${t.ownerName}" + (if (t.place().isNotBlank()) " · ${t.place()}" else "") +
-                    "\n${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
-            }
-            AlertDialog.Builder(a, theme)
-                .setTitle("${Cloud.active?.name} 최근 출조")
-                .setItems(labels.toTypedArray()) { _, i ->
-                    AlertDialog.Builder(a, theme)
-                        .setTitle(labels[i].substringBefore("\n"))
-                        .setItems(arrayOf("함께한 출조 지도·순위", "사진 보기")) { _, w ->
-                            if (w == 0) showTogether(list[i]) else showPhotos(list[i])
-                        }
-                        .show()
-                }
-                .setNegativeButton("닫기", null)
-                .show()
-        }
+        a.startActivity(Intent(a, GroupActivity::class.java))
     }
 
     /** 친구가 올린 사진 (작은 사진) */
@@ -173,11 +154,19 @@ class AccountUi(private val a: Activity) {
                 setPadding(Ui.dp(a, 16), Ui.dp(a, 8), Ui.dp(a, 16), Ui.dp(a, 8))
             }
             list.forEach { p ->
-                col.addView(android.widget.ImageView(a).apply { adjustViewBounds = true; setImageBitmap(p.bitmap) },
-                    Ui.lp(a, Ui.MATCH, Ui.WRAP, top = 8))
                 val c = t.catches.firstOrNull { it.time == p.catchTime }
-                col.addView(Ui.text(a, 12f, Ui.SUB, false,
-                    (if (p.time > 0) "촬영 ${tf.format(Date(p.time))}" else "") + (if (c != null) " · ${t.name(c.slot)}" else "")))
+                val caption = "${t.ownerName} · " + (if (p.time > 0) "촬영 ${tf.format(Date(p.time))}" else "") +
+                    (if (c != null) " · ${t.name(c.slot)}" else "")
+                col.addView(android.widget.ImageView(a).apply {
+                    adjustViewBounds = true
+                    setImageBitmap(p.bitmap)
+                    setOnClickListener {
+                        // 작은 사진을 먼저 보여주고, 큰 사진이 오면 바꿔 끼움
+                        val swap = ZoomImageView.show(a, p.bitmap, "$caption · 큰 사진 받는 중…")
+                        Cloud.loadBigPhoto(t.id, p.id) { big -> if (big != null) swap(big) }
+                    }
+                }, Ui.lp(a, Ui.MATCH, Ui.WRAP, top = 8))
+                col.addView(Ui.text(a, 12f, Ui.SUB, false, caption.removePrefix("${t.ownerName} · ") + " · 눌러서 크게"))
             }
             AlertDialog.Builder(a, theme)
                 .setTitle("${t.ownerName}님 사진 ${list.size}장")
@@ -205,7 +194,7 @@ class AccountUi(private val a: Activity) {
         Color.parseColor("#B9A6FF"), Color.parseColor("#5FD39A"), Color.parseColor("#F28C38")
     )
 
-    private fun showTogether(base: Cloud.RemoteTrip, pool: List<Cloud.RemoteTrip>? = null) {
+    fun showTogether(base: Cloud.RemoteTrip, pool: List<Cloud.RemoteTrip>? = null) {
         if (pool == null) {
             Cloud.tripsAround(base.start) { list, err ->
                 if (list == null) toast(err ?: "불러오기 실패") else showTogether(base, list)

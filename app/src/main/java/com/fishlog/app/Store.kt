@@ -197,6 +197,8 @@ object Store {
         changed()
     }
 
+    fun markNotUploaded(tripId: Long) { find(tripId)?.uploaded = false; changed() }
+
     fun markUploaded(tripId: Long) { find(tripId)?.uploaded = true; changed() }
     fun markBackedUp(tripId: Long) { find(tripId)?.backedUp = true; save() }
 

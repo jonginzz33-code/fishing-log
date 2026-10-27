@@ -100,7 +100,7 @@ class RemoteService : Service() {
     private fun endFromNotification() {
         val ended = Store.endTrip()
         if (ended != null && Cloud.user != null) {
-            if (Cloud.active != null) Cloud.uploadTrip(ended) { }
+            if (Cloud.active != null && ended.catches.isNotEmpty()) Cloud.uploadTrip(ended) { }
             Cloud.backupPending()
         }
         stopSelf()
