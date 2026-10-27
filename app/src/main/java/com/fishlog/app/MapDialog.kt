@@ -272,8 +272,8 @@ object MapDialog {
         val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }
         map.overlays.add(dots)
         if (live != null) map.overlays.add(boat)
-        val me = MyLocOverlay(a)
-        if (live == null) map.overlays.add(me)
+        // 출조 중이 아니면: 지도를 여는 순간부터 내 위치를 계속 보여줌
+        val liveMe = if (live == null) LiveMe.attach(a, map, emptyList(), fitWith = all.toList()) else null
 
         // ---- 화면 구성 ----
         val bg = Color.parseColor("#0B1A26")
@@ -334,9 +334,9 @@ object MapDialog {
             addPill(followBtn)
         }
 
-        if (live == null) {
-            val meBtn = pill("내 위치")
-            meBtn.setOnClickListener { locate(a, map, me, meBtn) }
+        if (liveMe != null) {
+            val meBtn = pill("내 위치로")
+            meBtn.setOnClickListener { liveMe.goToMe(meBtn) }
             addPill(meBtn)
         }
 
@@ -387,6 +387,7 @@ object MapDialog {
                 background = GradientDrawable().apply { setColor(Color.argb(200, 11, 26, 38)); cornerRadius = dp(a, 12).toFloat() }
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
+        if (liveMe != null) addStatus(a, frame, liveMe)
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         if (live != null) root.addView(liveInfo)
         root.addView(legendView)
@@ -503,29 +504,44 @@ object MapDialog {
         }
     }
 
-    /** "내 위치" 버튼 동작: 누를 때마다 새로 잡아서 파란 점으로 */
-    private fun locate(a: Activity, map: MapView, me: MyLocOverlay, btn: TextView) {
-        val label = btn.text
-        btn.text = "위치 찾는 중…"
+    /** 지도 아래쪽에 "위치가 꺼져 있어요" 같은 안내 (누르면 켜기) */
+    private fun addStatus(a: Activity, frame: FrameLayout, liveMe: LiveMe) {
+        val tv = TextView(a).apply {
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8))
+            background = GradientDrawable().apply { setColor(Color.argb(225, 11, 26, 38)); cornerRadius = dp(a, 18).toFloat(); setStroke(dp(a, 1), Color.parseColor("#4285F4")) }
+            visibility = android.view.View.GONE
+            setOnClickListener { askLocation(a, liveMe) }
+        }
+        frame.addView(tv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(a, 14) })
+        liveMe.onStatus = { msg ->
+            if (msg == null) tv.visibility = android.view.View.GONE
+            else {
+                tv.text = if (msg.endsWith("…")) msg else "$msg  ›"
+                tv.visibility = android.view.View.VISIBLE
+            }
+        }
+    }
+
+    /** 위치 권한 요청 / GPS 켜기 화면 → 잡히면 계속 따라가기 */
+    private fun askLocation(a: Activity, live: LiveMe) {
         LocOnce.get(a) { l, err ->
-            btn.text = label
-            if (l == null) { android.widget.Toast.makeText(a, err ?: "위치를 찾지 못했어요", android.widget.Toast.LENGTH_LONG).show(); return@get }
-            val p = GeoPoint(l.latitude, l.longitude)
-            me.position = p
-            me.accuracy = if (l.hasAccuracy()) l.accuracy else 0f
-            if (map.zoomLevelDouble < 14.0) map.controller.setZoom(15.0)
-            map.controller.animateTo(p)
-            map.invalidate()
-            val age = (System.currentTimeMillis() - l.time) / 60_000L
-            if (age >= 3) android.widget.Toast.makeText(a, "${age}분 전에 잡힌 위치예요", android.widget.Toast.LENGTH_SHORT).show()
+            if (l != null) live.accept(l)
+            else if (err != null) android.widget.Toast.makeText(a, err, android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
     /**
-     * 전체 게시판: 한 어종이 잡힌 자리를 150m 원 + 마릿수로 보여주는 큰 지도
-     * dots = 조과 하나당 점 하나 (위치는 칸 가운데). 원을 누르면 날짜별 요약
+     * 조과 자리를 원 + 마릿수로 보여주는 큰 지도 (내 위치 + 가장 가까운 자리까지 길 안내)
+     * dots = 조과 하나당 점 하나. radiusOf = 그 점에 그릴 원 반지름(m), 0 이하면 원 없이 점만
+     * 원이나 숫자를 누르면 날짜별 요약
      */
-    fun showSpots(a: Activity, title: String, dots: List<MapDot>, radiusM: Double, legend: String) {
+    fun showSpots(a: Activity, title: String, dots: List<MapDot>, radiusOf: (MapDot) -> Double, legend: String,
+                  targetName: String = "가장 가까운 자리") {
         configure(a)
         val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
         val map = MapView(a).apply {
@@ -534,21 +550,10 @@ object MapDialog {
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
-        val byCell = dots.groupBy { "${it.point.latitude},${it.point.longitude}" }
-        val max = (byCell.values.maxOfOrNull { it.size } ?: 1).coerceAtLeast(1)
-        byCell.values.forEach { list ->
-            val strength = 0.25 + 0.75 * list.size / max   // 많이 잡힌 곳일수록 진하게
-            map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
-                points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(list[0].point, radiusM)
-                fillPaint.color = Color.argb((70 + 130 * strength).toInt(), 242, 140, 56)
-                outlinePaint.color = Color.parseColor("#FFB070")
-                outlinePaint.strokeWidth = dp(a, 3).toFloat()
-                setOnClickListener { _, _, _ -> showCluster(a, list); true }
-            })
-        }
+        addCircles(a, map, dots, radiusOf)
         map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { mergeDp = 34f })
-        val me = MyLocOverlay(a)
-        map.overlays.add(me)
+        val targets = dots.map { it.point }.distinctBy { "${it.latitude},${it.longitude}" }
+        val liveMe = LiveMe.attach(a, map, targets, targetName)
 
         val bg = Color.parseColor("#0B1A26")
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
@@ -563,8 +568,13 @@ object MapDialog {
             background = GradientDrawable().apply { cornerRadius = dp(a, 20).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
             setOnClickListener { onClick(this) }
         }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
-        pill("전체 보기") { fit(map, dots.map { it.point }) }
-        pill("내 위치") { v -> locate(a, map, me, v) }
+        pill("내 위치로") { v -> liveMe.goToMe(v) }
+        pill("나와 포인트 같이") { _ ->
+            val p = liveMe.position
+            if (p == null) android.widget.Toast.makeText(a, "아직 내 위치를 못 잡았어요", android.widget.Toast.LENGTH_SHORT).show()
+            else LiveMe.fitMeAnd(map, p, targets)
+        }
+        pill("포인트 전체") { fit(map, dots.map { it.point }) }
         pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
             Store.satellite = !Store.satellite
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
@@ -572,21 +582,47 @@ object MapDialog {
         }
         pill("닫기") { dialog.dismiss() }
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
-        root.addView(map, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        val frame = FrameLayout(a)
+        frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        addStatus(a, frame, liveMe)
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(TextView(a).apply {
-            text = legend + "\n지도 © OpenStreetMap · 위성 © Esri"
+            text = legend + "\n파란 점 = 지금 내 위치 (뾰족한 쪽 = 폰이 향한 방향) · 점선 = $targetName 까지\n지도 © OpenStreetMap · 위성 © Esri"
             textSize = 12f; setTextColor(Color.parseColor("#9FB4C2"))
             setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
         })
         dialog.setContentView(root)
-        dialog.setOnDismissListener { map.onPause(); map.onDetach() }
+        dialog.setOnDismissListener { liveMe.stop(); map.onPause(); map.onDetach() }
         dialog.show()
         map.onResume()
         map.post { fit(map, dots.map { it.point }) }
     }
 
-    /** 포인트 범위(원)만 보여주는 작은 지도 */
-    fun circleMap(a: Activity, lat: Double, lon: Double, radiusM: Double): MapView {
+    /** 칸마다 주황 원 (많이 잡힌 곳일수록 진하게) */
+    private fun addCircles(a: Activity, map: MapView, dots: List<MapDot>, radiusOf: (MapDot) -> Double) {
+        val byCell = dots.filter { radiusOf(it) > 0 }.groupBy { "${it.point.latitude},${it.point.longitude}" }
+        val max = (byCell.values.maxOfOrNull { it.size } ?: 1).coerceAtLeast(1)
+        byCell.values.forEach { list ->
+            val strength = 0.25 + 0.75 * list.size / max
+            map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
+                points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(list[0].point, radiusOf(list[0]))
+                fillPaint.color = Color.argb((70 + 130 * strength).toInt(), 242, 140, 56)
+                outlinePaint.color = Color.parseColor("#FFB070")
+                outlinePaint.strokeWidth = dp(a, 3).toFloat()
+                setOnClickListener { _, _, _ -> showCluster(a, list); true }
+            })
+        }
+    }
+
+    /** 팝업 안에 넣는 작은 지도 + 내 위치 + 길 안내 */
+    class Embedded(val view: android.view.View, val map: MapView, val live: LiveMe)
+
+    /**
+     * dots = 점 (정확한 자리), radiusOf 로 원, targetName = 안내 글씨에 쓸 이름
+     * onBig = "크게 · 길찾기" 버튼을 누르면
+     */
+    fun embedded(a: Activity, dots: List<MapDot>, radiusOf: (MapDot) -> Double, targetName: String,
+                 onBig: (() -> Unit)?): Embedded {
         configure(a)
         val map = MapView(a).apply {
             setMultiTouchControls(true)
@@ -594,18 +630,55 @@ object MapDialog {
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
-        val center = GeoPoint(lat, lon)
-        val circle = org.osmdroid.views.overlay.Polygon(map).apply {
-            points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(center, radiusM)
-            fillPaint.color = Color.argb(70, 242, 140, 56)
-            outlinePaint.color = Color.parseColor("#F28C38")
-            outlinePaint.strokeWidth = dp(a, 2).toFloat()
-            setOnClickListener { _, _, _ -> true }
+        // 팝업을 스크롤하지 않고 지도를 움직이게
+        map.setOnTouchListener { v, _ -> v.parent?.requestDisallowInterceptTouchEvent(true); false }
+        addCircles(a, map, dots, radiusOf)
+        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) })
+        val targets = dots.map { it.point }.distinctBy { "${it.latitude},${it.longitude}" }
+        val live = LiveMe.attach(a, map, targets, targetName)
+        val frame = FrameLayout(a)
+        frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        fun small(label: String, gravity: Int, onClick: (TextView) -> Unit) = TextView(a).apply {
+            text = label; textSize = 13f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+            this.gravity = Gravity.CENTER
+            setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+            background = GradientDrawable().apply { setColor(Color.argb(225, 11, 26, 38)); cornerRadius = dp(a, 16).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+            setOnClickListener { onClick(this) }
+        }.also { frame.addView(it, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, gravity).apply { setMargins(dp(a, 8), dp(a, 8), dp(a, 8), dp(a, 8)) }) }
+        small("내 위치로", Gravity.BOTTOM or Gravity.END) { v -> live.goToMe(v) }
+        if (onBig != null) small("크게 · 길찾기", Gravity.BOTTOM or Gravity.START) { _ -> onBig() }
+        addStatusSmall(a, frame, live)
+        map.addOnFirstLayoutListener { _, _, _, _, _ ->
+            val pts = dots.map { it.point }
+            val maxR = dots.maxOfOrNull { radiusOf(it) } ?: 0.0
+            if (pts.size == 1 || (pts.isNotEmpty() && BoundingBox.fromGeoPoints(pts).latitudeSpan < 0.0005)) {
+                map.controller.setZoom(if (maxR > 300) 14.5 else 16.0); map.controller.setCenter(pts[0])
+            } else fit(map, pts)
         }
-        map.overlays.add(circle)
-        map.addOnFirstLayoutListener { _, _, _, _, _ -> map.controller.setZoom(16.0); map.controller.setCenter(center) }
         map.onResume()
-        return map
+        return Embedded(frame, map, live)
+    }
+
+    private fun addStatusSmall(a: Activity, frame: FrameLayout, live: LiveMe) {
+        val tv = TextView(a).apply {
+            textSize = 12f; setTextColor(Color.WHITE)
+            setPadding(dp(a, 10), dp(a, 5), dp(a, 10), dp(a, 5))
+            background = GradientDrawable().apply { setColor(Color.argb(225, 11, 26, 38)); cornerRadius = dp(a, 12).toFloat() }
+            visibility = android.view.View.GONE
+            setOnClickListener { askLocation(a, live) }
+        }
+        frame.addView(tv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(a, 8) })
+        live.onStatus = { msg ->
+            if (msg == null) tv.visibility = android.view.View.GONE
+            else { tv.text = if (msg.endsWith("…")) msg else "$msg ›"; tv.visibility = android.view.View.VISIBLE }
+        }
+    }
+
+    /** 포인트 범위(원) 하나를 보여주는 작은 지도 (내 위치 + 길 안내 포함) */
+    fun circleMap(a: Activity, lat: Double, lon: Double, radiusM: Double, onBig: (() -> Unit)? = null): Embedded {
+        val dot = MapDot(GeoPoint(lat, lon), Color.parseColor("#F28C38"), "포인트", "포인트")
+        return embedded(a, listOf(dot), { radiusM }, "포인트", onBig)
     }
 
     /** 출조 기록 화면에 들어가는 작은 지도 (누르면 크게) */

@@ -183,6 +183,7 @@ object Cloud {
         tripRef.set(doc)
             .addOnSuccessListener {
                 Store.markUploaded(t.id)
+                Store.addShared(t.id, g.id)
                 uploadPhotos(tripRef, t)
                 done(null)
             }
@@ -262,7 +263,10 @@ object Cloud {
                     .addOnSuccessListener {
                         val myId = uid
                         if (myId != null && docId.startsWith(myId + "_")) {
-                            docId.removePrefix(myId + "_").toLongOrNull()?.let { Store.markNotUploaded(it) }
+                            docId.removePrefix(myId + "_").toLongOrNull()?.let {
+                                Store.removeShared(it, gid)
+                                if (Store.sharedGroups(it).isEmpty()) Store.markNotUploaded(it)
+                            }
                         }
                         done(null)
                     }
@@ -272,6 +276,77 @@ object Cloud {
     }
 
     val isOwner: Boolean get() = active?.owner != null && active?.owner == uid
+
+    // ---------------- 내 출조를 올린 그룹 ----------------
+    /** 가입한 그룹마다 내가 올린 출조를 확인해서 폰에 기록 (지난 출조 화면의 "그룹 (N)") */
+    fun syncShared(done: (() -> Unit)? = null) {
+        val me = uid ?: run { done?.invoke(); return }
+        val gs = groups
+        if (gs.isEmpty()) { done?.invoke(); return }
+        val found = HashMap<Long, MutableSet<String>>()
+        val checked = mutableSetOf<String>()
+        var left = gs.size
+        gs.forEach { g ->
+            db.collection("groups").document(g.id).collection("trips").whereEqualTo("owner", me).get()
+                .addOnSuccessListener { q ->
+                    checked.add(g.id)
+                    q.documents.forEach { d ->
+                        d.id.removePrefix(me + "_").toLongOrNull()?.let { found.getOrPut(it) { mutableSetOf() }.add(g.id) }
+                    }
+                }
+                .addOnCompleteListener {
+                    left--
+                    if (left == 0) { Store.applySharedFromServer(checked, found); done?.invoke() }
+                }
+        }
+    }
+
+    class SharedIn(val group: Group, val updated: Long)
+
+    /** 이 출조가 올라가 있는 그룹 (올린 시각 포함) */
+    fun sharedIn(t: Store.Trip, done: (List<SharedIn>?, String?) -> Unit) {
+        val me = uid ?: return done(null, "로그인이 필요해요")
+        val gs = groups
+        if (gs.isEmpty()) return done(emptyList(), null)
+        val out = mutableListOf<SharedIn>()
+        val checked = mutableSetOf<String>()
+        var left = gs.size
+        gs.forEach { g ->
+            db.collection("groups").document(g.id).collection("trips").document("${me}_${t.id}").get()
+                .addOnSuccessListener { d ->
+                    checked.add(g.id)
+                    if (d.exists()) out.add(SharedIn(g, d.getLong("updated") ?: 0L))
+                }
+                .addOnCompleteListener {
+                    left--
+                    if (left == 0) {
+                        Store.applySharedFromServer(checked, mapOf(t.id to out.map { it.group.id }.toSet()))
+                        done(gs.mapNotNull { g -> out.firstOrNull { it.group.id == g.id } }, null)
+                    }
+                }
+        }
+    }
+
+    /** 공유 그룹 바꾸기: want 에 있는 그룹엔 올리고, 없는 그룹에선 내림 */
+    fun setSharedGroups(t: Store.Trip, want: Set<String>, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val now = Store.sharedGroups(t.id)
+        val add = groups.filter { it.id in want && it.id !in now }
+        val remove = now.filter { it !in want }
+        if (add.isEmpty() && remove.isEmpty()) return done(null)
+        var left = add.size + remove.size
+        val fails = mutableListOf<String>()
+        fun step(name: String, err: String?) {
+            if (err != null) fails.add(name)
+            left--
+            if (left == 0) done(if (fails.isEmpty()) null else "실패: " + fails.joinToString(", "))
+        }
+        add.forEach { g -> uploadTrip(t, g) { e -> step(g.name, e) } }
+        remove.forEach { gid ->
+            val name = groups.firstOrNull { it.id == gid }?.name ?: "나간 그룹"
+            deleteTripIn(gid, "${me}_${t.id}") { e -> step(name, e) }
+        }
+    }
 
     /** 그룹 이름 바꾸기 (그룹장만) */
     fun renameGroup(name: String, done: (String?) -> Unit) {
@@ -392,17 +467,20 @@ object Cloud {
         lastTouch = now
         db.collection("users").document(id).set(mapOf(
             "name" to displayName, "email" to (auth.currentUser?.email ?: ""),
-            "lastSeen" to now, "app" to BuildConfigInfo.VERSION), SetOptions.merge())
+            "lastSeen" to now, "app" to BuildConfigInfo.VERSION,
+            "device" to (if (::appContext.isInitialized) Moderation.deviceId(appContext) else "")), SetOptions.merge())
     }
 
-    class AppUser(val uid: String, val name: String, val email: String, val lastSeen: Long, val groups: Int, val version: String)
+    class AppUser(val uid: String, val name: String, val email: String, val lastSeen: Long, val groups: Int, val version: String,
+                  val device: String = "")
 
     fun adminUsers(done: (List<AppUser>?, String?) -> Unit) {
         db.collection("users").get()
             .addOnSuccessListener { q ->
                 done(q.documents.map { d ->
                     AppUser(d.id, d.getString("name") ?: "?", d.getString("email") ?: "",
-                        d.getLong("lastSeen") ?: 0L, (d.get("groups") as? List<*>)?.size ?: 0, d.getString("app") ?: "")
+                        d.getLong("lastSeen") ?: 0L, (d.get("groups") as? List<*>)?.size ?: 0, d.getString("app") ?: "",
+                        d.getString("device") ?: "")
                 }.sortedByDescending { it.lastSeen }, null)
             }
             .addOnFailureListener { done(null, it.message ?: "불러오기 실패 (보안 규칙 확인)") }

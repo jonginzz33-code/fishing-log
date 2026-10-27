@@ -39,6 +39,9 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var placeText: TextView
     private lateinit var stationText: TextView
+    private lateinit var strengthText: TextView
+    private var strengthAt = 0L
+    private var strengthKey = ""
     private lateinit var groupBar: LinearLayout
     private lateinit var groupScroll: android.widget.HorizontalScrollView
     private lateinit var alarmBtn: TextView
@@ -118,6 +121,16 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (crashShown) return
+        // 관리자가 이용 정지한 계정·폰이면 막는 화면만
+        if (Moderation.bannedCached) { crashShown = true; Moderation.showBlockedScreen(this); return }
+        Moderation.checkBan(this) { banned ->
+            if (banned && !crashShown && !isFinishing) {
+                crashShown = true
+                Store.removeListener(storeListener); Cloud.removeListener(cloudListener)
+                handler.removeCallbacks(ticker)
+                Moderation.showBlockedScreen(this)
+            }
+        }
         Store.addListener(storeListener)
         Cloud.addListener(cloudListener)
         ButtonRouter.onMessage = { showMessage(it) }
@@ -218,6 +231,12 @@ class MainActivity : Activity() {
         alarmBtn = smallBtn("") { pickAlarm() }.apply { textSize = 12f; setPadding(dp(10), 0, dp(10), 0) }
         tideRow.addView(alarmBtn, LinearLayout.LayoutParams(WRAP, dp(36)).apply { leftMargin = dp(8) })
         col.addView(tideRow, Ui.lp(this, MATCH, WRAP, top = 2))
+        // 물세기 (누르면 물때 그래프 + 시간별 물흐름)
+        strengthText = Ui.text(this, 14f, Ui.TEXT, true, "").apply {
+            visibility = View.GONE
+            setOnClickListener { openTodayTide() }
+        }
+        col.addView(strengthText, Ui.lp(this, MATCH, WRAP, top = 2))
         status = Ui.text(this, 14f, Ui.SUB)
         col.addView(status, Ui.lp(this, MATCH, WRAP, top = 2))
 
@@ -409,7 +428,7 @@ class MainActivity : Activity() {
             }
             box.addView(allBox, Ui.lp(this, MATCH, WRAP, top = 10))
             val pubBox = CheckBox(this).apply {
-                text = "전체 게시판에도 공개 (위치는 150m 범위로만, 경로·배 이름은 안 올라감)"
+                text = "전체 게시판에도 공개 (위치는 다음 창에서 정확/대략 선택, 경로·배 이름은 안 올라감)"
                 setTextColor(Ui.TEXT); textSize = 14f
                 buttonTintList = ColorStateList.valueOf(Ui.BLUE)
                 isChecked = canShare
@@ -590,6 +609,22 @@ class MainActivity : Activity() {
         }
         val m = Store.tideAlarmMin
         alarmBtn.text = if (m <= 0) "설정 (만조·간조 알람)" else "알람 ${m}분 전 ⏰"
+        refreshStrength(loc, st?.code ?: "")
+    }
+
+    /** 물세기: 10분마다 또는 물때 지역이 바뀌면 다시 계산 */
+    private fun refreshStrength(loc: Pair<Double, Double>?, code: String) {
+        if (loc == null) return
+        val now = System.currentTimeMillis()
+        val key = code + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now))
+        if (key == strengthKey && now - strengthAt < 10 * 60_000L) return
+        strengthKey = key; strengthAt = now
+        Tide.strengthAt(this, loc.first, loc.second, now) { day, st ->
+            if (isFinishing || day == null || st == null) return@strengthAt
+            strengthText.text = TideDialog.strengthLine(day, st) + "  ›"
+            strengthText.setTextColor(if (st.pct >= 80) Ui.ORANGE else Ui.TEXT)
+            strengthText.visibility = View.VISIBLE
+        }
     }
 
     private fun pickStation() {

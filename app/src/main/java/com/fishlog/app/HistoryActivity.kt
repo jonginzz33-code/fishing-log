@@ -77,7 +77,13 @@ class HistoryActivity : Activity() {
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
     }
 
-    override fun onResume() { super.onResume(); Store.addListener(listener); render() }
+    private var synced = false
+
+    override fun onResume() {
+        super.onResume(); Store.addListener(listener); render()
+        // 각 출조가 어느 그룹에 올라가 있는지 서버와 맞추기 (화면 열 때 한 번)
+        if (!synced && Cloud.user != null) { synced = true; Cloud.syncShared() }
+    }
     override fun onPause() { Store.removeListener(listener); super.onPause() }
 
     private fun restore() {
@@ -163,9 +169,19 @@ class HistoryActivity : Activity() {
                 isClickable = true
                 setOnClickListener { startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id)) }
             }
-            val head = Ui.row(this)
+            val head = Ui.row(this).apply { gravity = android.view.Gravity.TOP }
             head.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
                 (if (t.place().isNotBlank()) " · " + t.place() else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            // 공개 범위 배지 (사진 왼쪽에 세로로): 그룹 (N) / 전체 / 나만
+            val badges = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val nGroups = if (Store.sharedSynced) Store.sharedGroups(t.id).size
+                else maxOf(Store.sharedGroups(t.id).size, if (t.uploaded) 1 else 0)
+            if (nGroups > 0) badges.addView(badge("그룹 ($nGroups)", BADGE_GROUP) { showShared(t) }, badgeLp(badges))
+            if (t.pub) badges.addView(badge("전체", BADGE_ALL) {
+                startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id))
+            }, badgeLp(badges))
+            if (nGroups == 0 && !t.pub) badges.addView(badge("나만", BADGE_ME) { changeShared(t) }, badgeLp(badges))
+            head.addView(badges, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 6) })
             if (t.photos.isNotEmpty()) head.addView(Ui.chip(this, "사진 ${t.photos.size}"),
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 6) })
             card.addView(head)
@@ -173,12 +189,96 @@ class HistoryActivity : Activity() {
                 "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
             val tags = mutableListOf("${dur / 60}시간 ${dur % 60}분")
             if (t.cat.isNotBlank()) tags.add(0, Store.catShort(t.cat))
-            if (t.uploaded) tags.add("그룹에 올림")
-            if (t.pub) tags.add("전체 공개")
+            if (t.pub && t.pubPrec.isNotBlank()) tags.add(if (t.pubPrec == "exact") "위치 정확 공개" else "위치 대략 공개")
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))
             list.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         restoreBtn.visibility = View.VISIBLE
+    }
+
+    // ---------------- 공개 범위 배지 ----------------
+    private class BadgeStyle(val bg: Int, val text: Int, val line: Int)
+    private val BADGE_GROUP = BadgeStyle(android.graphics.Color.parseColor("#1F4D3A"), android.graphics.Color.parseColor("#8FE3B8"), android.graphics.Color.parseColor("#3FA77A"))
+    private val BADGE_ALL = BadgeStyle(android.graphics.Color.parseColor("#5A3410"), android.graphics.Color.parseColor("#FFC48A"), Ui.ORANGE)
+    private val BADGE_ME = BadgeStyle(android.graphics.Color.parseColor("#2A3A4A"), android.graphics.Color.parseColor("#B9C6D2"), android.graphics.Color.parseColor("#4A5B6B"))
+
+    private fun badge(label: String, st: BadgeStyle, onClick: () -> Unit): android.widget.TextView =
+        Ui.text(this, 12f, st.text, true, label).apply {
+            gravity = android.view.Gravity.CENTER
+            minWidth = Ui.dp(this@HistoryActivity, 70)
+            setPadding(Ui.dp(this@HistoryActivity, 8), Ui.dp(this@HistoryActivity, 3), Ui.dp(this@HistoryActivity, 8), Ui.dp(this@HistoryActivity, 3))
+            background = Ui.bg(this@HistoryActivity, st.bg, 99, st.line)
+            isClickable = true
+            setOnClickListener { onClick() }
+        }
+
+    private fun badgeLp(box: LinearLayout) = LinearLayout.LayoutParams(Ui.dp(this, 76), WRAP).apply {
+        if (box.childCount > 0) topMargin = Ui.dp(this@HistoryActivity, 4)
+    }
+
+    private val shareFmt = SimpleDateFormat("M/d HH:mm", Locale.KOREA)
+
+    /** "그룹 (N)"을 누르면: 어느 그룹에 공유했는지 */
+    private fun showShared(t: Store.Trip) {
+        if (Cloud.user == null) { Toast.makeText(this, "로그인하면 공유한 그룹을 볼 수 있어요", Toast.LENGTH_LONG).show(); return }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 4), Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 4)) }
+        val sub = Ui.text(this, 13f, Ui.SUB, false, dayFmt.format(Date(t.start)) + " 출조 · 확인하는 중…")
+        col.addView(sub)
+        val titleView = Ui.text(this, 19f, Ui.TEXT, true, "공유한 그룹").apply {
+            setPadding(Ui.dp(this@HistoryActivity, 22), Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 22), Ui.dp(this@HistoryActivity, 4))
+        }
+        val dlg = android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setCustomTitle(titleView)
+            .setView(android.widget.ScrollView(this).apply { addView(col) })
+            .setNeutralButton("공유 그룹 바꾸기") { _, _ -> changeShared(t) }
+            .setPositiveButton("닫기", null)
+            .show()
+        Cloud.sharedIn(t) { list, err ->
+            if (!dlg.isShowing) return@sharedIn
+            if (list == null) { sub.text = err ?: "확인 실패"; return@sharedIn }
+            titleView.text = "공유한 그룹 ${list.size}곳"
+            sub.text = dayFmt.format(Date(t.start)) + " 출조"
+            if (list.isEmpty()) col.addView(Ui.text(this, 14f, Ui.TEXT, false, "지금 공유된 그룹이 없어요 (나만 보기)"),
+                Ui.lp(this, MATCH, WRAP, top = 10))
+            list.forEach { si ->
+                val r = Ui.row(this).apply { minimumHeight = Ui.dp(this@HistoryActivity, 44) }
+                r.addView(Ui.text(this, 15f, android.graphics.Color.parseColor("#8FE3B8"), true, "●"), LinearLayout.LayoutParams(WRAP, WRAP))
+                r.addView(Ui.text(this, 15f, Ui.TEXT, false, si.group.name), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 10) })
+                if (si.updated > 0) r.addView(Ui.text(this, 12f, Ui.SUB, false, shareFmt.format(Date(si.updated)) + " 공유"))
+                col.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
+            }
+        }
+    }
+
+    /** 공유 그룹 바꾸기: 가입한 그룹을 체크해서 올리기/내리기 */
+    private fun changeShared(t: Store.Trip) {
+        val gs = Cloud.groups
+        if (Cloud.user == null || gs.isEmpty()) { Toast.makeText(this, "로그인하고 그룹에 가입하면 공유할 수 있어요", Toast.LENGTH_LONG).show(); return }
+        val now = Store.sharedGroups(t.id)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 4), Ui.dp(this@HistoryActivity, 20), 0) }
+        box.addView(Ui.text(this, 13f, Ui.SUB, false, "체크한 그룹에 올라가고, 체크를 뺀 그룹에서는 내 출조가 지워져요 (내 폰 기록은 그대로)"))
+        val checks = gs.map { g ->
+            android.widget.CheckBox(this).apply {
+                text = g.name
+                setTextColor(Ui.TEXT); textSize = 16f
+                buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
+                minHeight = Ui.dp(this@HistoryActivity, 48)
+                isChecked = g.id in now
+            }.also { box.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+        }
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("공유 그룹 바꾸기")
+            .setView(android.widget.ScrollView(this).apply { addView(box) })
+            .setPositiveButton("저장") { _, _ ->
+                val want = gs.filterIndexed { i, _ -> checks[i].isChecked }.map { it.id }.toSet()
+                Toast.makeText(this, "바꾸는 중…", Toast.LENGTH_SHORT).show()
+                Cloud.setSharedGroups(t, want) { err ->
+                    Toast.makeText(this, err ?: if (want.isEmpty()) "그룹 공유를 모두 내렸어요" else "그룹 ${want.size}곳에 공유했어요", Toast.LENGTH_LONG).show()
+                    render()
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 }

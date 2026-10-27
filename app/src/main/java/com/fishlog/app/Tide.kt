@@ -37,6 +37,9 @@ object Tide {
         return floor(age).toInt() + 1
     }
 
+    /** 물때 번호: 0 = 무시, 1~13 = 1물~13물, 14 = 조금 */
+    fun mulIndex(time: Long): Int { val d = lunarDay(time); return (((d - 9) % 15) + 15) % 15 }
+
     fun mulName(time: Long): String {
         val d = lunarDay(time)
         val idx = (((d - 9) % 15) + 15) % 15
@@ -61,7 +64,7 @@ object Tide {
      * exact = 국립해양조사원 만조·간조 (있으면 그대로 표시)
      */
     class Day(val dateMillis: Long, val values: List<Double?>, val stepMin: Int,
-              val exact: List<Extreme>?, val source: String)
+              val exact: List<Extreme>?, val source: String, val stationCode: String? = null)
 
     private val main = Handler(Looper.getMainLooper())
     private val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = KST }
@@ -209,7 +212,8 @@ object Tide {
                 .distinctBy { it.time }.sortedBy { it.time }
             val km = dist(lat, lon, s.lat, s.lon) / 1000f
             return Day(dayStart, curve(dayStart, all), 10, today,
-                String.format(Locale.KOREA, "국립해양조사원 %s 관측소 기준 (%.0fkm%s)", s.name, km, if (chosen != null) " · 직접 고름" else ""))
+                String.format(Locale.KOREA, "국립해양조사원 %s 관측소 기준 (%.0fkm%s)", s.name, km, if (chosen != null) " · 직접 고름" else ""),
+                s.code)
         }
         return null
     }
@@ -295,6 +299,93 @@ object Tide {
             else -> "$k ${h}시간 후"
         }
         return r to label
+    }
+
+    // ---------------- 물세기 ----------------
+    /**
+     * pct      : 그날 물세기 (%) = 그날 조차(만조-간조 높이 차) ÷ 그 관측소 사리(7물) 때 조차
+     * estimated: 사리 때 자료를 못 받아서 물때(달 나이)로 짐작한 값
+     * hourly   : 0~23시 각 시간 동안 물높이가 바뀌는 양(m) = 물이 들고 나는 세기
+     */
+    class Strength(val pct: Int, val estimated: Boolean, val range: Double?, val hourly: List<Double?>) {
+        val maxRate: Double get() = hourly.filterNotNull().maxOrNull() ?: 0.0
+        /** 그 시각 물흐름: 0 약함, 1 보통, 2 셈 (모르면 -1) */
+        fun levelAt(d: Day, time: Long): Int {
+            val h = ((time - d.dateMillis) / 3_600_000L).toInt()
+            val r = hourly.getOrNull(h) ?: return -1
+            val m = maxRate
+            if (m <= 0) return -1
+            return when { r < m * 0.35 -> 0; r < m * 0.7 -> 1; else -> 2 }
+        }
+    }
+
+    fun levelName(l: Int) = when (l) { 0 -> "약함"; 1 -> "보통"; 2 -> "셈"; else -> "" }
+
+    /** 그날(0~24시) 만조·간조 높이 차 (m) */
+    private fun rangeOf(ext: List<Extreme>, dayStart: Long): Double? {
+        val today = ext.filter { it.time >= dayStart - 3 * 3600_000L && it.time < dayStart + 27 * 3600_000L }
+        val hi = today.filter { it.high }.maxOfOrNull { it.value } ?: return null
+        val lo = today.filter { !it.high }.minOfOrNull { it.value } ?: return null
+        return (hi - lo).takeIf { it > 0 }
+    }
+
+    /** 물때로 짐작: 7물(사리) 100%, 조금 무렵 약 40% */
+    private fun estimatePct(time: Long): Int {
+        val idx = mulIndex(time)
+        return (70 + 30 * cos(2 * PI * (idx - 7) / 15.0)).toInt().coerceIn(30, 100)
+    }
+
+    /** 백그라운드 스레드에서 호출 (사리 날 자료를 받아 옴, 폰에 저장되면 다음부턴 바로) */
+    fun strengthOf(ctx: Context, d: Day): Strength {
+        val hourly = (0 until 24).map { h ->
+            val a = valueAt(d, d.dateMillis + h * 3_600_000L)
+            val b = valueAt(d, d.dateMillis + (h + 1) * 3_600_000L)
+            if (a == null || b == null) null else kotlin.math.abs(b - a)
+        }
+        val today = rangeOf(extremes(d), d.dateMillis)
+        val code = d.stationCode
+        if (today != null && code != null) {
+            // 가까운 사리(7물) 날과 그다음 날의 조차 = 기준(100%)
+            val noon = d.dateMillis + 12 * 3_600_000L
+            val spring = (-8..8).map { noon + it * 86_400_000L }.filter { mulIndex(it) == 7 }
+                .minByOrNull { kotlin.math.abs(it - noon) }
+            if (spring != null) {
+                val refs = listOf(spring, spring + 86_400_000L).mapNotNull { t ->
+                    val ds = dayFmt.parse(dayFmt.format(Date(t)))!!.time
+                    khoaDay(ctx.applicationContext, code, keyFmt.format(Date(t)))?.let { rangeOf(it, ds) }
+                }
+                val ref = refs.maxOrNull()
+                if (ref != null && ref > 0) {
+                    val pct = (today / maxOf(ref, today) * 100).toInt().coerceIn(5, 100)
+                    return Strength(pct, false, today, hourly)
+                }
+            }
+        }
+        return Strength(estimatePct(d.dateMillis + 12 * 3_600_000L), true, today, hourly)
+    }
+
+    fun strength(ctx: Context, d: Day, done: (Strength) -> Unit) {
+        val app = ctx.applicationContext
+        Thread {
+            val st = try { strengthOf(app, d) } catch (_: Exception) { Strength(estimatePct(d.dateMillis + 12 * 3_600_000L), true, null, emptyList()) }
+            main.post { done(st) }
+        }.start()
+    }
+
+    /** 위치로 오늘 물때 + 물세기 한 번에 */
+    fun strengthAt(ctx: Context, lat: Double, lon: Double, time: Long, done: (Day?, Strength?) -> Unit) {
+        val app = ctx.applicationContext
+        Thread {
+            val d = try { fetchNow(app, lat, lon, time) } catch (_: Exception) { null }
+            val st = if (d != null) try { strengthOf(app, d) } catch (_: Exception) { null } else null
+            main.post { done(d, st) }
+        }.start()
+    }
+
+    /** "물세기 85% ▰▰▰▰▰▰▰▰▱▱" */
+    fun strengthBar(pct: Int): String {
+        val n = ((pct + 5) / 10).coerceIn(0, 10)
+        return "▰".repeat(n) + "▱".repeat(10 - n)
     }
 
     fun rising(d: Day, time: Long): Boolean? {

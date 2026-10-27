@@ -29,7 +29,9 @@ object Store {
         val photos: MutableList<Photo> = mutableListOf(),
         var backedUp: Boolean = false,
         var cat: String = "",
-        var pub: Boolean = false
+        var pub: Boolean = false,
+        /** 전체 공개 위치 방법: "exact" 정확 / "approx" 대략 / "" 예전 공개 */
+        var pubPrec: String = ""
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names[slot - 1]
@@ -272,8 +274,53 @@ object Store {
         changed()
     }
 
-    /** 전체 게시판 공개 여부 표시 */
-    fun setPublic(tripId: Long, v: Boolean) { find(tripId)?.pub = v; changed() }
+    /** 전체 게시판 공개 여부 표시 (exact = 위치 공개 방법, null 이면 그대로) */
+    fun setPublic(tripId: Long, v: Boolean, exact: Boolean? = null) {
+        find(tripId)?.let { t ->
+            t.pub = v
+            if (!v) t.pubPrec = "" else if (exact != null) t.pubPrec = if (exact) "exact" else "approx"
+        }
+        changed()
+    }
+
+    /** 공개할 때 마지막으로 고른 위치 공개 방법 (true = 정확) */
+    var pubExact: Boolean
+        get() = prefs.getBoolean("pubExact", true)
+        set(v) { prefs.edit().putBoolean("pubExact", v).apply() }
+
+    // ---- 출조를 올린 그룹 (출조 id → 그룹 id 목록) ----
+    private fun sharedMap(): JSONObject = try { JSONObject(prefs.getString("shared", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+
+    fun sharedGroups(tripId: Long): Set<String> {
+        val a = sharedMap().optJSONArray(tripId.toString()) ?: return emptySet()
+        return (0 until a.length()).map { a.getString(it) }.toSet()
+    }
+
+    private fun setShared(tripId: Long, gids: Set<String>) {
+        val o = sharedMap()
+        if (gids.isEmpty()) o.remove(tripId.toString())
+        else o.put(tripId.toString(), JSONArray().apply { gids.forEach { put(it) } })
+        prefs.edit().putString("shared", o.toString()).apply()
+    }
+
+    fun addShared(tripId: Long, gid: String) { setShared(tripId, sharedGroups(tripId) + gid); fireChanged() }
+    fun removeShared(tripId: Long, gid: String) { setShared(tripId, sharedGroups(tripId) - gid); fireChanged() }
+
+    /** 서버에서 확인한 결과로 바꾸기. checked = 확인한 그룹들, found = 그중 올라가 있는 (출조 id → 그룹들) */
+    /** 서버와 한 번이라도 맞춰 봤는지 (안 맞춰 봤으면 예전 '그룹에 올림' 표시로 대신) */
+    val sharedSynced: Boolean get() = prefs.getBoolean("sharedSynced", false)
+
+    fun applySharedFromServer(checked: Set<String>, found: Map<Long, Set<String>>) {
+        if (checked.isNotEmpty()) prefs.edit().putBoolean("sharedSynced", true).apply()
+        val o = sharedMap()
+        val ids = (o.keys().asSequence().mapNotNull { it.toLongOrNull() }.toSet() + found.keys)
+        ids.forEach { id ->
+            val now = sharedGroups(id)
+            val next = (now - checked) + (found[id] ?: emptySet())
+            if (next != now) setShared(id, next)
+        }
+        fireChanged()
+    }
 
     /** 전체 게시판에 보일 이름 (null = 아직 안 정함, "" = 익명) */
     var nick: String?
@@ -306,7 +353,7 @@ object Store {
         val o = JSONObject()
         o.put("id", t.id); o.put("start", t.start); o.put("end", t.end)
         o.put("up", t.uploaded); o.put("bk", t.backedUp)
-        o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat); o.put("pub", t.pub)
+        o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat); o.put("pub", t.pub); o.put("pp", t.pubPrec)
         o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
         val arr = JSONArray()
         t.catches.forEach {
@@ -351,7 +398,7 @@ object Store {
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
             arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
             o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""),
-            o.optBoolean("pub", false))
+            o.optBoolean("pub", false), o.optString("pp", ""))
     }
 
     private fun saveCurrent() {

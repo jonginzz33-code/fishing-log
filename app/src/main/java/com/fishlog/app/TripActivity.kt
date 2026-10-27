@@ -35,6 +35,7 @@ class TripActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private val listener: () -> Unit = { render() }
     private var tideDay: Tide.Day? = null
+    private var tideStrength: Tide.Strength? = null
     private var tideMsg = "물때 불러오는 중…"
 
     private val tf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
@@ -77,6 +78,7 @@ class TripActivity : Activity() {
             tideDay = day
             tideMsg = err ?: ""
             render()
+            if (day != null) Tide.strength(this, day) { st -> tideStrength = st; if (!isFinishing) render() }
         }
     }
 
@@ -154,6 +156,13 @@ class TripActivity : Activity() {
             val tv = TideView(this)
             tv.set(d, t)
             tideCard.addView(tv, Ui.lp(this, MATCH, dp(240)))
+            tideStrength?.let { st ->
+                tideCard.addView(Ui.text(this, 14f, Ui.TEXT, true, TideDialog.strengthLine(d, st)), Ui.lp(this, MATCH, WRAP, top = 8))
+                val flow = FlowBarView(this)
+                flow.set(d, st)
+                tideCard.addView(flow, Ui.lp(this, MATCH, dp(64), top = 2))
+                tideCard.addView(Ui.text(this, 11f, Ui.SUB, false, "막대 = 시간별 물흐름 세기 (높고 주황일수록 물살이 셈)"), Ui.lp(this, MATCH, WRAP, top = 2))
+            }
             tideCard.addView(Ui.text(this, 13f, Ui.TEXT, false, TideDialog.describe(d, t)), Ui.lp(this, MATCH, WRAP, top = 6))
             tideCard.addView(Ui.text(this, 11f, Ui.SUB, false, d.source), Ui.lp(this, MATCH, WRAP, top = 4))
         } else {
@@ -223,9 +232,20 @@ class TripActivity : Activity() {
         root.addView(Ui.button(this, if (t.uploaded) "그룹에 다시 올리기" else "그룹에 올리기", true) { account.upload(t) }, Ui.lp(this, MATCH, WRAP, top = 10))
         if (t.uploaded) root.addView(Ui.button(this, "그룹에서 내리기 (내 폰 기록은 그대로)") { askUnpublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         if (t.end > 0 && t.catches.isNotEmpty()) {
-            if (!t.pub) root.addView(Ui.button(this, "전체 게시판에 공개 (위치는 150m 범위로만)") { doPublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+            if (!t.pub) root.addView(Ui.button(this, "전체 게시판에 공개 (위치 정확/대략 선택)") { doPublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
             else {
                 root.addView(Ui.button(this, "전체 게시판에 다시 올리기 (고친 내용 반영)") { doPublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+                val exactNow = t.pubPrec == "exact"
+                root.addView(Ui.button(this, when (t.pubPrec) {
+                    "exact" -> "공개 위치: 정확 → 대략으로 바꾸기"
+                    "approx" -> "공개 위치: 대략 → 정확으로 바꾸기"
+                    else -> "공개 위치를 정확하게 바꾸기"
+                }) {
+                    Toast.makeText(this, "바꾸는 중…", Toast.LENGTH_SHORT).show()
+                    PublicBoard.changeMinePrecision(this, t, !exactNow) { err ->
+                        Toast.makeText(this, err ?: if (!exactNow) "정확한 위치로 공개해요" else "대략적인 위치로만 공개해요", Toast.LENGTH_LONG).show()
+                    }
+                }, Ui.lp(this, MATCH, WRAP, top = 8))
                 root.addView(Ui.button(this, "전체 공개 내리기") {
                     PublicBoard.unpublishMine(t) { err -> Toast.makeText(this, err ?: "전체 공개를 내렸어요", Toast.LENGTH_LONG).show() }
                 }, Ui.lp(this, MATCH, WRAP, top = 8))

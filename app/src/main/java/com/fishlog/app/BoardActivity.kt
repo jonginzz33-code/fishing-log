@@ -30,6 +30,7 @@ class BoardActivity : Activity() {
     private lateinit var periodRow: LinearLayout
     private lateinit var listBox: LinearLayout
     private lateinit var nickText: TextView
+    private lateinit var blockBtn: TextView
 
     private var all: List<PublicBoard.PTrip> = emptyList()
     private var tab = 0            // 0 = 최근 조황, 1 = 포인트 도감
@@ -38,6 +39,10 @@ class BoardActivity : Activity() {
     private var species: String? = null
     private var nearFirst = false
     private var loadedPeriod = -1
+
+    // 차단·신고·정지 (불러온 값)
+    private var reports: Map<String, Int> = emptyMap()
+    private var banned: Set<String> = emptySet()
 
     private val dayFmt = SimpleDateFormat("M/d (E)", Locale.KOREA)
     private val dateFmt = SimpleDateFormat("yy.M.d (E)", Locale.KOREA)
@@ -56,8 +61,17 @@ class BoardActivity : Activity() {
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "전체 조황 · 포인트"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         col.addView(top)
+        val nickRow = Ui.row(this)
         nickText = Ui.text(this, 12f, Ui.SUB, false).apply { setOnClickListener { askNick() } }
-        col.addView(nickText, Ui.lp(this, MATCH, WRAP, top = 8))
+        nickRow.addView(nickText, LinearLayout.LayoutParams(0, WRAP, 1f))
+        blockBtn = Ui.text(this, 12f, Ui.TEXT, true, "차단 목록").apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = Ui.bg(this@BoardActivity, Ui.CARD, 99, Ui.LINE)
+            setOnClickListener { Moderation.showBlockedList(this@BoardActivity) { refreshNick(); render() } }
+        }
+        nickRow.addView(blockBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
+        col.addView(nickRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
         tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -74,6 +88,8 @@ class BoardActivity : Activity() {
 
     private fun refreshNick() {
         nickText.text = "내 게시판 이름: ${PublicBoard.nickShown()} ✎  ·  내 출조 공개는 출조 종료 때 또는 출조 기록 화면에서"
+        val n = Moderation.blocked().size
+        blockBtn.text = if (n > 0) "차단 목록 ($n)" else "차단 목록"
     }
 
     private fun askNick() {
@@ -130,19 +146,41 @@ class BoardActivity : Activity() {
         val day = 86_400_000L
         val since = when (period) { 0 -> System.currentTimeMillis() - 31 * day; 1 -> System.currentTimeMillis() - 92 * day; else -> 0L }
         val want = period
-        PublicBoard.load(since) { list, err ->
-            if (want != period) return@load
+        var left = 5
+        var got: List<PublicBoard.PTrip>? = null
+        var err: String? = null
+        fun step() {
+            left--
+            if (left > 0 || want != period) return
+            val list = got
             if (list == null) {
                 listBox.removeAllViews()
                 listBox.addView(Ui.text(this, 14f, Ui.ORANGE, false, err ?: "실패"), Ui.lp(this, MATCH, WRAP, top = 14))
-                return@load
+                return
             }
             all = list; loadedPeriod = want
+            refreshNick()
             render()
         }
+        PublicBoard.load(since) { list, e -> got = list; err = e; step() }
+        Moderation.syncBlocked { step() }
+        Moderation.reportCounts { m -> reports = m; step() }
+        Moderation.loadLimit { step() }
+        Moderation.bannedUids { b -> banned = b; step() }
     }
 
-    private fun filtered() = all.filter { cat == "" || it.cat == cat }
+    /**
+     * 보여줄 글: 낚시 종류 + 내가 차단한 사람, 신고 누적 기준 이상, 관리자가 정지한 사람은 빼기
+     * (내 글은 항상 보임)
+     */
+    private fun visible(t: PublicBoard.PTrip): Boolean {
+        if (t.owner == Cloud.uid) return true
+        if (Moderation.isBlocked(t.owner)) return false
+        if (t.owner in banned) return false
+        return (reports[t.owner] ?: 0) < Moderation.reportLimit
+    }
+
+    private fun filtered() = all.filter { (cat == "" || it.cat == cat) && visible(it) }
 
     private fun render() {
         if (Cloud.user == null || loadedPeriod != period) return
@@ -158,22 +196,57 @@ class BoardActivity : Activity() {
 
     private var listOpen = false
 
-    /** 어종을 누르면 그 어종이 잡힌 자리를 지도로 */
-    private fun openSpeciesMap(sp: String, list: List<PublicBoard.PTrip>) {
+    /** 조과 하나 → 지도 점. 정확 공개면 그 자리, 아니면 칸 가운데 (radius = 원 크기, 0 = 원 없음) */
+    private class SpotDot(val dot: MapDot, val radius: Double)
+
+    private fun spotDots(list: List<Pair<PublicBoard.PTrip, PublicBoard.PCatch>>, color: (PublicBoard.PTrip, PublicBoard.PCatch) -> Int): List<SpotDot> {
         val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
-        val owners = list.map { it.owner }.distinct()
-        val dots = list.flatMap { t ->
-            val color = MapDialog.FRIEND_COLORS[owners.indexOf(t.owner).coerceAtLeast(0) % MapDialog.FRIEND_COLORS.size]
-            t.catches.filter { it.cell != null && t.name(it.slot) == sp }.map { c ->
-                MapDot(org.osmdroid.util.GeoPoint(c.cell!!.lat, c.cell.lon), color,
-                    "${t.nick} · ${df.format(Date(c.time))} · $sp", "${t.nick} $sp", c.time, t.nick, sp)
+        return list.mapNotNull { (t, c) ->
+            val sp = t.name(c.slot)
+            val (pt, r) = when {
+                c.hasExact -> org.osmdroid.util.GeoPoint(c.exactLat!!, c.exactLon!!) to 0.0
+                c.cell != null -> org.osmdroid.util.GeoPoint(c.cell.lat, c.cell.lon) to c.cell.r
+                else -> return@mapNotNull null
             }
+            SpotDot(MapDot(pt, color(t, c), "${t.nick} · ${df.format(Date(c.time))} · $sp", "${t.nick} $sp", c.time, t.nick, sp), r)
         }
-        if (dots.isEmpty()) { toast("$sp 은(는) 위치가 있는 기록이 없어요"); return }
+    }
+
+    private fun spotLegend(spots: List<SpotDot>): String {
+        val exact = spots.count { it.radius <= 0 }
+        val parts = mutableListOf<String>()
+        if (exact > 0) parts.add("점 = 정확히 잡은 자리")
+        if (spots.any { it.radius in 1.0..100.0 }) parts.add("작은 원 = 약 150m 범위")
+        if (spots.any { it.radius > 100 }) parts.add("큰 원 = 대략 공개 (반경 약 500m)")
+        return parts.joinToString(" · ")
+    }
+
+    /** 어종을 누르면 그 어종이 잡힌 자리를 지도로 (key = 어종|종류) */
+    private fun openSpeciesMap(key: String, list: List<PublicBoard.PTrip>) {
+        val owners = list.map { it.owner }.distinct()
+        val hits = list.flatMap { t -> t.catches.filter { t.key(it.slot) == key }.map { t to it } }
+        val spots = spotDots(hits) { t, _ -> MapDialog.FRIEND_COLORS[owners.indexOf(t.owner).coerceAtLeast(0) % MapDialog.FRIEND_COLORS.size] }
+        val label = PublicBoard.keyLabel(key)
+        if (spots.isEmpty()) { toast("$label 은(는) 위치가 있는 기록이 없어요"); return }
         val periodText = listOf("최근 1개월", "최근 3개월", "전체 기간")[period]
-        val catText = if (cat == "") "전체 종류" else Store.catLabel(cat)
-        MapDialog.showSpots(this, "$sp · $catText · $periodText", dots, PublicBoard.CELL_M / 2,
-            "$sp ${dots.size}마리 · 주황 원 = 약 150m 범위 (진할수록 많이 잡힌 곳)\n숫자 = 마릿수 · 원이나 숫자를 누르면 날짜별 요약")
+        val radii = HashMap<MapDot, Double>().apply { spots.forEach { put(it.dot, it.radius) } }
+        MapDialog.showSpots(this, "$label · $periodText", spots.map { it.dot }, { d -> radii[d] ?: 0.0 },
+            "$label ${spots.size}마리 · ${spotLegend(spots)}\n진할수록 많이 잡힌 곳 · 숫자 = 마릿수 · 누르면 날짜별 요약")
+    }
+
+    /** "낙지 (해루질)" — 종류는 작게, 선상낚시·워킹낚시처럼 긴 건 더 작고 흐리게 */
+    private fun speciesTitle(key: String): CharSequence {
+        val name = PublicBoard.keyName(key)
+        val catLabel = Store.catLabel(PublicBoard.keyCat(key))
+        if (catLabel.isBlank()) return name
+        val sb = android.text.SpannableStringBuilder(name).append(" ")
+        val start = sb.length
+        sb.append("($catLabel)")
+        val long = catLabel.length >= 4
+        sb.setSpan(android.text.style.AbsoluteSizeSpan(if (long) 11 else 12, true), start, sb.length, 0)
+        sb.setSpan(android.text.style.ForegroundColorSpan(if (long) android.graphics.Color.parseColor("#7A8D9E") else Ui.SUB), start, sb.length, 0)
+        sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.NORMAL), start, sb.length, 0)
+        return sb
     }
 
     private fun renderRecent() {
@@ -183,12 +256,12 @@ class BoardActivity : Activity() {
                 Ui.lp(this, MATCH, WRAP, top = 12))
             return
         }
-        // 어종 칩: 누르면 지도
-        val counts = list.flatMap { t -> t.catches.map { t.name(it.slot) } }.groupingBy { it }.eachCount()
+        // 어종 칩: 누르면 지도 (같은 어종도 낚시 종류가 다르면 따로)
+        val counts = list.flatMap { t -> t.catches.map { t.key(it.slot) } }.groupingBy { it }.eachCount()
             .entries.sortedByDescending { it.value }
         listBox.addView(Ui.text(this, 14f, Ui.TEXT, true, "어종을 누르면 잡힌 자리를 지도로 봐요"), Ui.lp(this, MATCH, WRAP, top = 14))
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        counts.chunked(3).forEach { rowItems ->
+        counts.chunked(2).forEach { rowItems ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             rowItems.forEachIndexed { i, e ->
                 row.addView(LinearLayout(this).apply {
@@ -198,11 +271,11 @@ class BoardActivity : Activity() {
                     background = Ui.bg(this@BoardActivity, Ui.CARD, 14, Ui.ORANGE)
                     isClickable = true
                     setOnClickListener { openSpeciesMap(e.key, list) }
-                    addView(Ui.text(this@BoardActivity, 16f, Ui.TEXT, true, e.key).apply { gravity = Gravity.CENTER; maxLines = 1 })
-                    addView(Ui.text(this@BoardActivity, 13f, Ui.ORANGE, true, "${e.value}마리 ›").apply { gravity = Gravity.CENTER })
+                    addView(Ui.text(this@BoardActivity, 17f, Ui.TEXT, true).apply { text = speciesTitle(e.key); gravity = Gravity.CENTER; maxLines = 1 })
+                    addView(Ui.text(this@BoardActivity, 14f, Ui.ORANGE, true, "${e.value}마리 ›").apply { gravity = Gravity.CENTER })
                 }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
             }
-            repeat(3 - rowItems.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
+            repeat(2 - rowItems.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
             grid.addView(row, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         listBox.addView(grid)
@@ -224,10 +297,16 @@ class BoardActivity : Activity() {
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
                 (if (t.cat.isNotBlank()) " · " + Store.catShort(t.cat) else "") + " · " +
                 Tide.mulName(t.start).substringBefore(" ·")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            val nRep = reports[t.owner] ?: 0
+            if (nRep > 0) r.addView(Ui.chip(this, "⚠ 신고 $nRep", Ui.ORANGE), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             c.addView(r)
-            c.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick} · ${t.speciesLine()} · 총 ${t.catches.size}"),
-                Ui.lp(this, MATCH, WRAP, top = 4))
+            val pr = Ui.row(this)
+            pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick} · ${t.speciesLine()} · 총 ${t.catches.size}"),
+                LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (t.anyCell() != null) pr.addView(Ui.text(this, 12f, if (t.exact) Ui.GREEN else Ui.SUB, true,
+                if (t.exact) "📍정확" else "◯대략"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+            c.addView(pr, Ui.lp(this, MATCH, WRAP, top = 4))
             val reg = regionOf(t)
             if (reg.isNotBlank()) c.addView(Ui.text(this, 12f, Ui.SUB, false, reg), Ui.lp(this, MATCH, WRAP, top = 2))
             listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -246,6 +325,23 @@ class BoardActivity : Activity() {
     private fun tripDetail(t: PublicBoard.PTrip) {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(6)) }
         val cs = t.catches.sortedBy { it.time }
+        // 지도: 잡은 자리 (정확 = 어종 색 점, 대략 = 원) + 지금 내 위치 + 길 안내
+        val spots = spotDots(cs.map { t to it }) { _, c -> MapDialog.SLOT_COLORS[(c.slot - 1).coerceIn(0, 1)] }
+        var embedded: MapDialog.Embedded? = null
+        if (spots.isNotEmpty()) {
+            val radii = HashMap<MapDot, Double>().apply { spots.forEach { put(it.dot, it.radius) } }
+            val target = if (t.exact) "잡은 자리" else "포인트"
+            val e = MapDialog.embedded(this, spots.map { it.dot }, { d -> radii[d] ?: 0.0 }, target) {
+                MapDialog.showSpots(this, "${t.nick} · ${dateFmt.format(Date(t.start))}", spots.map { it.dot }, { d -> radii[d] ?: 0.0 },
+                    "${t.speciesLine()} · ${spotLegend(spots)}\n● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)}", target)
+            }
+            embedded = e
+            box.addView(e.view, LinearLayout.LayoutParams(MATCH, dp(240)))
+            box.addView(Ui.text(this, 12f, Ui.SUB, false,
+                (if (t.exact) "📍 정확한 위치 공개 · ● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)}" else "◯ 대략 공개 · 원 안 어딘가에서 잡았어요") +
+                    "\n파란 점 = 지금 내 위치 · 점선과 위 글씨 = 가장 가까운 자리까지 방향·거리"),
+                Ui.lp(this, MATCH, WRAP, top = 6))
+        }
         val sb = StringBuilder()
         sb.append(Tide.mulName(t.start)).append("\n")
         if (cs.isNotEmpty()) sb.append("잡은 시간 ").append(hm.format(Date(cs.first().time))).append(" ~ ").append(hm.format(Date(cs.last().time))).append("\n")
@@ -259,7 +355,8 @@ class BoardActivity : Activity() {
             if (c.near.isNotBlank()) sb.append(" · ").append(c.near)
             sb.append("\n")
         }
-        box.addView(Ui.text(this, 14f, Ui.TEXT, false, sb.toString().trimEnd()).apply { setLineSpacing(0f, 1.3f) })
+        box.addView(Ui.text(this, 14f, Ui.TEXT, false, sb.toString().trimEnd()).apply { setLineSpacing(0f, 1.3f) },
+            Ui.lp(this, MATCH, WRAP, top = 10))
         val photoRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         if (t.photoCount > 0) {
             box.addView(HorizontalScrollView(this).apply { addView(photoRow) }, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -272,12 +369,42 @@ class BoardActivity : Activity() {
                 }
             }
         }
+        val mine = t.owner == Cloud.uid
         val b = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${t.nick} · ${dateFmt.format(Date(t.start))}")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("닫기", null)
-        if (t.owner == Cloud.uid || Cloud.isAdmin) b.setNegativeButton("공개 내리기") { _, _ -> askRemove(t) }
-        b.show()
+        if (mine || Cloud.isAdmin) b.setNegativeButton("공개 내리기") { _, _ -> askRemove(t) }
+        if (mine) b.setNeutralButton(if (t.exact) "위치 대략으로" else "위치 정확하게") { _, _ ->
+            toast("바꾸는 중…")
+            PublicBoard.changePrecision(this, t.id, !t.exact) { err ->
+                toast(err ?: if (!t.exact) "정확한 위치로 공개해요" else "대략적인 위치로만 공개해요")
+                if (err == null) { loadedPeriod = -1; load() }
+            }
+        }
+        else b.setNeutralButton("이 사람 차단") { _, _ -> askBlock(t) }
+        val dlg = b.create()
+        dlg.setOnDismissListener { embedded?.let { it.live.stop(); it.map.onPause(); it.map.onDetach() } }
+        dlg.show()
+    }
+
+    /** 장난 기록 막기: 이 사람 글을 내 조황·포인트 계산에서 빼기 */
+    private fun askBlock(t: PublicBoard.PTrip) {
+        if (Cloud.user == null) { toast("로그인이 필요해요"); return }
+        val label = "${t.nick} · ${dayFmt.format(Date(t.start))}" + regionOf(t).takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty() + " 글에서 차단"
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("이 사람을 차단할까요?")
+            .setMessage("이 사람이 올린 출조가 내 조황 목록, 어종 마릿수, 지도, 포인트 계산에서 모두 빠져요.\n" +
+                "익명이어도 같은 사람이 올린 글은 모두 빠지고, 앞으로 올리는 글도 빠져요.\n" +
+                "상대에게는 알림이 가지 않아요. '차단 목록'에서 언제든 해제할 수 있어요.")
+            .setPositiveButton("차단") { _, _ ->
+                Moderation.block(t.owner, label) { err ->
+                    toast(err ?: "차단했어요")
+                    Moderation.reportCounts { m -> reports = m; refreshNick(); render() }
+                }
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     private fun askRemove(t: PublicBoard.PTrip) {
@@ -318,7 +445,7 @@ class BoardActivity : Activity() {
     private fun renderPoints() {
         val list = filtered()
         // 어종 칩 (많이 잡힌 순)
-        val counts = list.flatMap { t -> t.catches.filter { it.cell != null }.map { t.name(it.slot) } }
+        val counts = list.flatMap { t -> t.catches.filter { it.cell != null }.map { t.key(it.slot) } }
             .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
         if (counts.isEmpty()) {
             listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "위치가 있는 공개 조과가 아직 없어요. 데이터가 모이면 어종별 포인트 순위가 보여요."),
@@ -328,7 +455,7 @@ class BoardActivity : Activity() {
         if (species == null || counts.none { it.key == species }) species = counts[0].key
         val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         counts.forEach { e ->
-            chips.addView(pill("${e.key} ${e.value}", e.key == species, 13f) { species = e.key; render() },
+            chips.addView(pill("${PublicBoard.keyLabel(e.key)} ${e.value}", e.key == species, 13f) { species = e.key; render() },
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         }
         listBox.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, Ui.lp(this, MATCH, WRAP, top = 12))
@@ -344,7 +471,7 @@ class BoardActivity : Activity() {
         var pts = PublicBoard.points(list, species!!)
         if (nearFirst && me != null) pts = pts.sortedBy { distKm(me, it.cell.lat, it.cell.lon) }
         listBox.addView(Ui.text(this, 13f, Ui.SUB, false,
-            "$species 포인트 ${pts.size}곳 · 약 150m 범위로 묶음 · 순위는 1시간당 마릿수 (출조 2번 이상인 곳 먼저)"),
+            "${PublicBoard.keyLabel(species!!)} 포인트 ${pts.size}곳 · 약 150m 범위로 묶음 (대략 공개는 1km) · 순위는 1시간당 마릿수 (출조 2번 이상인 곳 먼저)"),
             Ui.lp(this, MATCH, WRAP, top = 10))
         val names = HashMap<String, Int>()
         pts.take(60).forEachIndexed { i, p ->
@@ -378,10 +505,17 @@ class BoardActivity : Activity() {
 
     private fun pointDetail(p: PublicBoard.Point, title: String) {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6)) }
-        val map = MapDialog.circleMap(this, p.cell.lat, p.cell.lon, PublicBoard.CELL_M / 2 * 1.2)
-        box.addView(map, LinearLayout.LayoutParams(MATCH, dp(200)))
+        val spLabel = PublicBoard.keyLabel(species!!)
+        val em = MapDialog.circleMap(this, p.cell.lat, p.cell.lon, p.cell.r * 1.2) {
+            val dot = MapDot(org.osmdroid.util.GeoPoint(p.cell.lat, p.cell.lon), Ui.ORANGE, title, title)
+            MapDialog.showSpots(this, "$title · $spLabel", listOf(dot), { p.cell.r * 1.2 },
+                String.format(Locale.KOREA, "%s %d마리 · 주황 원 = 포인트 범위", spLabel, p.total), "포인트")
+        }
+        box.addView(em.view, LinearLayout.LayoutParams(MATCH, dp(240)))
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "파란 점 = 지금 내 위치 · 점선과 위 글씨 = 포인트까지 방향·거리"),
+            Ui.lp(this, MATCH, WRAP, top = 6))
         val sb = StringBuilder()
-        sb.append(String.format(Locale.KOREA, "%s %d마리 · 출조 %d번 · 1시간에 평균 %.1f마리\n\n", species, p.total, p.trips.size, p.rate))
+        sb.append(String.format(Locale.KOREA, "%s %d마리 · 출조 %d번 · 1시간에 평균 %.1f마리\n\n", spLabel, p.total, p.trips.size, p.rate))
         sb.append("날짜별\n")
         p.catches.groupBy { dateFmt.format(Date(it.first.start)) + "|" + it.first.nick }
             .entries.sortedByDescending { e -> e.value[0].first.start }
@@ -403,11 +537,11 @@ class BoardActivity : Activity() {
             typeface = android.graphics.Typeface.MONOSPACE; setLineSpacing(0f, 1.25f)
         }, Ui.lp(this, MATCH, WRAP, top = 10))
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("$title · $species")
+            .setTitle("$title · $spLabel")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("닫기", null)
             .create()
-        dlg.setOnDismissListener { map.onPause(); map.onDetach() }
+        dlg.setOnDismissListener { em.live.stop(); em.map.onPause(); em.map.onDetach() }
         dlg.show()
     }
 

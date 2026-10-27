@@ -255,6 +255,42 @@ class TideView(c: Context) : View(c) {
     }
 }
 
+/** 시간별 물흐름 세기 막대 (0~23시). 약함 = 어두운 파랑, 보통 = 하늘, 셈 = 주황, 지금 = 초록 테두리 */
+class FlowBarView(c: Context) : View(c) {
+    private var day: Tide.Day? = null
+    private var st: Tide.Strength? = null
+    private val d = c.resources.displayMetrics.density
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val nowP = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2 * d; color = Ui.GREEN }
+    private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = 10 * d; textAlign = Paint.Align.CENTER }
+    private val WEAK = Color.parseColor("#3E6580")
+
+    fun set(dd: Tide.Day, s: Tide.Strength) { day = dd; st = s; invalidate() }
+
+    override fun onDraw(canvas: Canvas) {
+        val dy = day ?: return
+        val s = st ?: return
+        val max = s.maxRate
+        if (max <= 0) return
+        val w = width.toFloat(); val h = height.toFloat()
+        val left = 12 * d; val right = w - 14 * d
+        val bottom = h - 14 * d
+        val slot = (right - left) / 24
+        val nowH = ((System.currentTimeMillis() - dy.dateMillis) / 3_600_000L).toInt()
+        for (i in 0 until 24) {
+            val r = s.hourly.getOrNull(i) ?: continue
+            val f = (r / max).toFloat()
+            p.color = when { f < 0.35f -> WEAK; f < 0.7f -> Ui.BLUE; else -> Ui.ORANGE }
+            val x0 = left + i * slot + slot * 0.15f
+            val x1 = left + (i + 1) * slot - slot * 0.15f
+            val top = bottom - (bottom - 4 * d) * f.coerceAtLeast(0.05f)
+            canvas.drawRoundRect(x0, top, x1, bottom, 2 * d, 2 * d, p)
+            if (i == nowH) canvas.drawRoundRect(x0 - 1.5f * d, top - 1.5f * d, x1 + 1.5f * d, bottom + 1.5f * d, 3 * d, 3 * d, nowP)
+        }
+        for (hh in 0..24 step 3) canvas.drawText(hh.toString(), left + hh * slot, h - 2 * d, tp)
+    }
+}
+
 /** 그룹장 표시용 작은 왕관 */
 class CrownView(c: Context) : View(c) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F2C14E") }

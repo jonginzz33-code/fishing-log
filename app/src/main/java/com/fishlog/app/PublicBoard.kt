@@ -17,7 +17,11 @@ import kotlin.math.floor
 /**
  * 전체 게시판 (앱 쓰는 모든 사람이 보는 조황)
  *  - 출조마다 올리는 사람이 직접 "전체 공개"를 골랐을 때만 올라감
- *  - 경로·배 이름은 안 올림. 위치는 약 150m 칸의 가운데로만 (정확한 자리는 저장 안 함)
+ *  - 경로·배 이름은 안 올림
+ *  - 위치 공개 방법을 올리는 사람이 고름
+ *      정확(exact) : 잡은 자리 그대로 (xa, xo) + 150m 칸 (포인트 도감 계산용)
+ *      대략(approx): 약 1km 칸의 가운데만 (지도엔 반경 500m 원) (정확한 자리는 저장 안 함)
+ *      예전 글(prec 없음): 150m 칸의 가운데만
  *  - 사진은 따로 골랐을 때만 작은 사진으로
  */
 object PublicBoard {
@@ -27,30 +31,52 @@ object PublicBoard {
 
     /** 위치 칸 크기 (m) */
     const val CELL_M = 150.0
-    private const val LAT_STEP = CELL_M / 111_320.0
+    /** 대략 공개 칸 크기 (m) — 지도엔 반경 500m 원 */
+    const val APPROX_M = 1000.0
 
-    class Cell(val key: String, val lat: Double, val lon: Double)
+    /** r = 지도에 그릴 원 반지름(m) */
+    class Cell(val key: String, val lat: Double, val lon: Double, val r: Double = CELL_M / 2)
 
-    /** 정확한 위치 → 150m 칸 (가운데 좌표) */
-    fun cellOf(lat: Double, lon: Double): Cell {
-        val i = floor(lat / LAT_STEP).toLong()
-        val centerLat = (i + 0.5) * LAT_STEP
-        val lonStep = CELL_M / (111_320.0 * cos(Math.toRadians(centerLat)))
+    private fun grid(lat: Double, lon: Double, size: Double, prefix: String): Cell {
+        val latStep = size / 111_320.0
+        val i = floor(lat / latStep).toLong()
+        val centerLat = (i + 0.5) * latStep
+        val lonStep = size / (111_320.0 * cos(Math.toRadians(centerLat)))
         val j = floor(lon / lonStep).toLong()
-        return Cell("${i}_$j", centerLat, (j + 0.5) * lonStep)
+        return Cell("$prefix${i}_$j", centerLat, (j + 0.5) * lonStep, size / 2)
     }
 
-    class PCatch(val time: Long, val slot: Int, val cell: Cell?, val rising: Boolean?, val near: String)
+    /** 정확한 위치 → 150m 칸 (가운데 좌표) */
+    fun cellOf(lat: Double, lon: Double): Cell = grid(lat, lon, CELL_M, "")
+
+    /** 정확한 위치 → 약 1km 칸 (대략 공개) */
+    fun approxCellOf(lat: Double, lon: Double): Cell = grid(lat, lon, APPROX_M, "a")
+
+    /** exactLat/exactLon = 정확 공개일 때만 */
+    class PCatch(val time: Long, val slot: Int, val cell: Cell?, val rising: Boolean?, val near: String,
+                 val exactLat: Double? = null, val exactLon: Double? = null) {
+        val hasExact: Boolean get() = exactLat != null && exactLon != null
+    }
 
     class PTrip(
         val id: String, val owner: String, val nick: String, val start: Long, val end: Long,
-        val cat: String, val names: List<String>, val catches: List<PCatch>, val photoCount: Int
+        val cat: String, val names: List<String>, val catches: List<PCatch>, val photoCount: Int,
+        val prec: String = ""
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun speciesLine(): String = (1..2).filter { count(it) > 0 }.joinToString(" · ") { "${name(it)} ${count(it)}" }
         fun anyCell(): Cell? = catches.firstNotNullOfOrNull { it.cell }
+        val exact: Boolean get() = prec == "exact"
+        /** 어종 + 낚시 종류 (같은 어종도 종류가 다르면 따로 집계) */
+        fun key(slot: Int): String = speciesKey(name(slot), cat)
     }
+
+    fun speciesKey(name: String, cat: String) = "$name|$cat"
+    fun keyName(key: String) = key.substringBefore("|")
+    fun keyCat(key: String) = key.substringAfter("|", "")
+    /** "낙지 (해루질)" */
+    fun keyLabel(key: String): String = keyName(key) + (Store.catLabel(keyCat(key)).takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
 
     private fun docId(t: Store.Trip) = "${Cloud.uid}_${t.id}"
 
@@ -60,15 +86,52 @@ object PublicBoard {
         if (Cloud.user == null) return done("전체 공개는 구글 로그인 후에 할 수 있어요")
         if (t.catches.isEmpty()) return done("조과가 없는 출조는 공개할 수 없어요")
         ensureNick(a) {
-            if (t.photos.isEmpty()) publish(a, t, false, done)
-            else AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("사진도 같이 공개할까요?")
-                .setMessage("작은 사진 ${minOf(t.photos.size, 8)}장이 전체 게시판에 보여요. 사진 속 위치 정보는 올라가지 않아요.")
-                .setPositiveButton("사진도 공개") { _, _ -> publish(a, t, true, done) }
-                .setNegativeButton("사진은 빼고") { _, _ -> publish(a, t, false, done) }
-                .setCancelable(false)
-                .show()
+            askPrecision(a, t) { exact ->
+                if (t.photos.isEmpty()) publish(a, t, false, exact, done)
+                else AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("사진도 같이 공개할까요?")
+                    .setMessage("작은 사진 ${minOf(t.photos.size, 8)}장이 전체 게시판에 보여요. 사진 속 위치 정보는 올라가지 않아요.")
+                    .setPositiveButton("사진도 공개") { _, _ -> publish(a, t, true, exact, done) }
+                    .setNegativeButton("사진은 빼고") { _, _ -> publish(a, t, false, exact, done) }
+                    .setCancelable(false)
+                    .show()
+            }
         }
+    }
+
+    /** 위치 공개 방법 고르기 (마지막에 고른 게 기본) */
+    private fun askPrecision(a: Activity, t: Store.Trip, then: (Boolean) -> Unit) {
+        if (t.catches.none { it.lat != null && it.lon != null }) { then(Store.pubExact); return }
+        val box = android.widget.LinearLayout(a).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(Ui.dp(a, 20), Ui.dp(a, 4), Ui.dp(a, 20), 0)
+        }
+        val group = android.widget.RadioGroup(a)
+        val exactBtn = android.widget.RadioButton(a).apply {
+            id = android.view.View.generateViewId()
+            text = "정확한 위치 공개\n잡은 자리마다 지도에 점이 정확히 찍혀요"
+            setTextColor(Ui.TEXT); textSize = 15f
+            buttonTintList = android.content.res.ColorStateList.valueOf(Ui.BLUE)
+        }
+        val approxBtn = android.widget.RadioButton(a).apply {
+            id = android.view.View.generateViewId()
+            text = "대략적으로만 공개\n반경 약 500m 원으로만 보여요 (정확한 자리는 서버에도 안 올라가요)"
+            setTextColor(Ui.TEXT); textSize = 15f
+            buttonTintList = android.content.res.ColorStateList.valueOf(Ui.BLUE)
+        }
+        group.addView(exactBtn); group.addView(approxBtn, android.widget.RadioGroup.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(a, 10) })
+        group.check(if (Store.pubExact) exactBtn.id else approxBtn.id)
+        box.addView(group)
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("위치를 어떻게 공개할까요?")
+            .setView(box)
+            .setPositiveButton("다음") { _, _ ->
+                val exact = group.checkedRadioButtonId == exactBtn.id
+                Store.pubExact = exact
+                then(exact)
+            }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     private fun ensureNick(a: Activity, then: () -> Unit) {
@@ -88,38 +151,45 @@ object PublicBoard {
 
     fun nickShown(): String = Store.nick?.ifBlank { "익명" } ?: "익명"
 
-    private fun publish(a: Activity, t: Store.Trip, withPhotos: Boolean, done: (String?) -> Unit) {
+    /** 서버에 올릴 조과 목록 (백그라운드 스레드에서) */
+    private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {
+        // 물 흐름 계산 (그날 물때를 받을 수 있을 때만)
+        val loc = t.anyLocation()
+        val day = if (loc != null) try { Tide.fetchNow(app, loc.first, loc.second, t.start) } catch (_: Exception) { null } else null
+        return t.catches.map { c ->
+            val m = hashMapOf<String, Any>("t" to c.time, "s" to c.slot)
+            if (c.lat != null && c.lon != null) {
+                val cell = if (exact) cellOf(c.lat, c.lon) else approxCellOf(c.lat, c.lon)
+                m["k"] = cell.key; m["la"] = cell.lat; m["lo"] = cell.lon
+                if (exact) { m["xa"] = c.lat; m["xo"] = c.lon }
+            }
+            if (day != null) {
+                val (r, near) = Tide.phaseAt(day, c.time)
+                if (r != null) m["r"] = r
+                if (near.isNotBlank()) m["n"] = near
+            }
+            m
+        }
+    }
+
+    private fun publish(a: Activity, t: Store.Trip, withPhotos: Boolean, exact: Boolean, done: (String?) -> Unit) {
         val me = Cloud.uid ?: return done("로그인이 필요해요")
         val app = a.applicationContext
         Thread {
-            // 물 흐름 계산 (그날 물때를 받을 수 있을 때만)
-            val loc = t.anyLocation()
-            val day = if (loc != null) try { Tide.fetchNow(app, loc.first, loc.second, t.start) } catch (_: Exception) { null } else null
-            val catches = t.catches.map { c ->
-                val m = hashMapOf<String, Any>("t" to c.time, "s" to c.slot)
-                if (c.lat != null && c.lon != null) {
-                    val cell = cellOf(c.lat, c.lon)
-                    m["k"] = cell.key; m["la"] = cell.lat; m["lo"] = cell.lon
-                }
-                if (day != null) {
-                    val (r, near) = Tide.phaseAt(day, c.time)
-                    if (r != null) m["r"] = r
-                    if (near.isNotBlank()) m["n"] = near
-                }
-                m
-            }
+            val catches = buildCatches(app, t, exact)
             val photos = if (withPhotos) t.photos.take(8) else emptyList()
             val doc = hashMapOf<String, Any>(
                 "owner" to me, "nick" to nickShown(),
                 "start" to t.start, "end" to t.end, "cat" to t.cat,
                 "names" to t.names.toList(), "catches" to catches,
                 "total" to t.catches.size, "photoCount" to photos.size,
+                "prec" to (if (exact) "exact" else "approx"),
                 "created" to System.currentTimeMillis()
             )
             val ref = db.collection("public").document(docId(t))
             ref.set(doc)
                 .addOnSuccessListener {
-                    Store.setPublic(t.id, true)
+                    Store.setPublic(t.id, true, exact)
                     if (photos.isNotEmpty()) Thread {
                         photos.forEach { p ->
                             val f = Photos.file(app, Photos.thumbName(p.file))
@@ -148,6 +218,30 @@ object PublicBoard {
         }
     }
 
+    /**
+     * 이미 공개한 출조의 위치 공개 방법 바꾸기 (정확 ↔ 대략)
+     *  정확으로 바꾸려면 이 폰에 그 출조 기록(정확한 위치)이 있어야 함
+     */
+    fun changePrecision(a: Activity, docIdStr: String, exact: Boolean, done: (String?) -> Unit) {
+        val me = Cloud.uid ?: return done("로그인이 필요해요")
+        if (!docIdStr.startsWith(me + "_")) return done("내 글만 바꿀 수 있어요")
+        val t = docIdStr.removePrefix(me + "_").toLongOrNull()?.let { Store.find(it) }
+            ?: return done("이 폰에 이 출조 기록이 없어서 바꿀 수 없어요 (기록 복원 후 다시)")
+        val app = a.applicationContext
+        Thread {
+            val catches = buildCatches(app, t, exact)
+            db.collection("public").document(docIdStr)
+                .update(mapOf("catches" to catches, "prec" to (if (exact) "exact" else "approx")))
+                .addOnSuccessListener { Store.setPublic(t.id, true, exact); done(null) }
+                .addOnFailureListener { main.post { done(it.message ?: "바꾸기 실패") } }
+        }.start()
+    }
+
+    fun changeMinePrecision(a: Activity, t: Store.Trip, exact: Boolean, done: (String?) -> Unit) {
+        if (Cloud.uid == null) return done("로그인이 필요해요")
+        changePrecision(a, docId(t), exact, done)
+    }
+
     fun unpublishMine(t: Store.Trip, done: (String?) -> Unit) {
         if (Cloud.uid == null) return done("로그인이 필요해요")
         unpublish(docId(t), t.id, done)
@@ -162,17 +256,21 @@ object PublicBoard {
                 done(r.documents.mapNotNull { d ->
                     try {
                         @Suppress("UNCHECKED_CAST")
+                        val prec = d.getString("prec") ?: ""
                         val cs = (d.get("catches") as? List<Map<String, Any?>>).orEmpty().map { m ->
                             val la = (m["la"] as? Number)?.toDouble(); val lo = (m["lo"] as? Number)?.toDouble()
                             val k = m["k"] as? String
+                            val r = if (k != null && k.startsWith("a")) APPROX_M / 2 else CELL_M / 2
                             PCatch((m["t"] as Number).toLong(), (m["s"] as Number).toInt(),
-                                if (k != null && la != null && lo != null) Cell(k, la, lo) else null,
-                                m["r"] as? Boolean, (m["n"] as? String) ?: "")
+                                if (k != null && la != null && lo != null) Cell(k, la, lo, r) else null,
+                                m["r"] as? Boolean, (m["n"] as? String) ?: "",
+                                if (prec == "exact") (m["xa"] as? Number)?.toDouble() else null,
+                                if (prec == "exact") (m["xo"] as? Number)?.toDouble() else null)
                         }
                         PTrip(d.id, d.getString("owner") ?: "", d.getString("nick") ?: "익명",
                             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L, d.getString("cat") ?: "",
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
-                            (d.getLong("photoCount") ?: 0L).toInt())
+                            (d.getLong("photoCount") ?: 0L).toInt(), prec)
                     } catch (_: Exception) { null }
                 }, null)
             }
@@ -199,10 +297,10 @@ object PublicBoard {
         val rate: Double get() = if (hours > 0) total / hours else total.toDouble()
     }
 
-    /** 어종 하나(species)에 대해 150m 칸별로 묶기. 1시간당 마릿수 순 */
-    fun points(trips: List<PTrip>, species: String): List<Point> {
+    /** 어종 하나(key = 어종|종류)에 대해 칸별로 묶기. 1시간당 마릿수 순 */
+    fun points(trips: List<PTrip>, key: String): List<Point> {
         val hits = trips.flatMap { t ->
-            t.catches.filter { it.cell != null && t.name(it.slot) == species }.map { t to it }
+            t.catches.filter { it.cell != null && t.key(it.slot) == key }.map { t to it }
         }
         return hits.groupBy { it.second.cell!!.key }.map { (_, list) ->
             val byTrip = list.groupBy { it.first.id }
