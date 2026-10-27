@@ -100,6 +100,26 @@ object Store {
             fireChanged()
         }
 
+    /** 종류가 비어 있는 출조: 어종 이름으로 낚시 종류 짐작 (주꾸미·갑오징어 → 선상, 낙지·골뱅이 → 해루질). 모르면 "" */
+    fun guessCat(names: List<String>): String {
+        val ns = names.map { it.trim() }.filter { it.isNotBlank() && !it.endsWith("번") }
+        if (ns.isEmpty()) return ""
+        val scored = CATS.map { c ->
+            val list = (species(c) + (DEFAULT_SPECIES[c] ?: emptyList())).toSet()
+            c to ns.count { it in list }
+        }
+        val best = scored.maxByOrNull { it.second } ?: return ""
+        return if (best.second > 0) best.first else ""
+    }
+
+    /** 지난 출조의 낚시 종류 바꾸기 (그룹·백업엔 다시 올려야 반영) */
+    fun setTripCat(tripId: Long, cat: String) {
+        val t = find(tripId) ?: return
+        t.cat = cat
+        t.uploaded = false; t.backedUp = false
+        changed()
+    }
+
     fun species(cat: String = category): List<String> {
         val saved = prefs.getString("species_$cat", null) ?: return DEFAULT_SPECIES[cat] ?: emptyList()
         return try { val a = JSONArray(saved); (0 until a.length()).map { a.getString(it) } } catch (_: Exception) { DEFAULT_SPECIES[cat] ?: emptyList() }
@@ -128,6 +148,15 @@ object Store {
     var tideStation: String?
         get() = prefs.getString("tideStation", null)
         set(v) { prefs.edit().putString("tideStation", v).apply(); fireChanged() }
+
+    /** 최근에 고른 관측소 (최대 3곳) */
+    fun recentStations(): List<String> =
+        prefs.getString("recentStations", "")!!.split(",").filter { it.isNotBlank() }
+
+    fun rememberStation(code: String) {
+        val l = (listOf(code) + recentStations().filter { it != code }).take(3)
+        prefs.edit().putString("recentStations", l.joinToString(",")).apply()
+    }
 
     /** 만조·간조 몇 분 전 알람 (0 = 끔) */
     var tideAlarmMin: Int
@@ -508,6 +537,11 @@ object Store {
             }
         }
         history.sortByDescending { it.start }
+        // 종류가 비어 있는 예전 출조: 어종으로 한 번 자동으로 채움
+        history.filter { it.cat.isBlank() }.forEach { t ->
+            val g = guessCat(t.names.toList())
+            if (g.isNotBlank()) { t.cat = g; t.backedUp = false; try { writeTrip(t) } catch (_: Exception) {} }
+        }
     }
 
     // ---- 이용료 · 준비물 ----

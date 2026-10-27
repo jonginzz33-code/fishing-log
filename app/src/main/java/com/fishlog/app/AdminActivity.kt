@@ -247,6 +247,14 @@ class AdminActivity : Activity() {
                 if (n > 0) append(" · 신고 ").append(n)
             }
             if (info.isNotBlank()) c.addView(Ui.text(this, 12f, Ui.SUB, false, info), Ui.lp(this, MATCH, WRAP, top = 4))
+            // 접속 기기: "기기: Galaxy S24 Ultra (SM-S928N) · 안드로이드 15"
+            val dev = buildString {
+                if (u.model.isNotBlank()) append(u.model)
+                if (u.modelCode.isNotBlank() && !u.model.contains(u.modelCode)) append(" (").append(u.modelCode).append(")")
+                if (u.os.isNotBlank()) append(" · 안드로이드 ").append(u.os)
+            }
+            c.addView(Ui.text(this, 12f, if (dev.isBlank()) Ui.SUB else Ui.BLUE, false,
+                if (dev.isBlank()) "기기: 아직 모름 (v1.6 이상으로 접속하면 표시)" else "기기: $dev"), Ui.lp(this, MATCH, WRAP, top = 2))
             if (u.uid != Cloud.uid) {
                 if (bans.any { it.uid == u.uid }) c.addView(Ui.text(this, 13f, Ui.ORANGE, true, "정지됨 · 위 '정지 관리'에서 해제"), Ui.lp(this, MATCH, WRAP, top = 6))
                 else c.addView(Ui.button(this, "이용 정지") { askBan(u.uid) }.apply { minHeight = dp(40); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))

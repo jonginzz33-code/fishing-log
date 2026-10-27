@@ -238,8 +238,7 @@ class BoardActivity : Activity() {
     /** "낙지 (해루질)" — 종류는 작게, 선상낚시·워킹낚시처럼 긴 건 더 작고 흐리게 */
     private fun speciesTitle(key: String): CharSequence {
         val name = PublicBoard.keyName(key)
-        val catLabel = Store.catLabel(PublicBoard.keyCat(key))
-        if (catLabel.isBlank()) return name
+        val catLabel = Store.catLabel(PublicBoard.keyCat(key)).ifBlank { "종류 없음" }
         val sb = android.text.SpannableStringBuilder(name).append(" ")
         val start = sb.length
         sb.append("($catLabel)")

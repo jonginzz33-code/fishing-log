@@ -100,7 +100,12 @@ class AccountUi(private val a: Activity) {
                     }
                     items[which].startsWith("그룹 초대") -> shareCode()
                     items[which].startsWith("그룹 최근") -> openRecent()
-                    items[which].startsWith("로그아웃") -> Cloud.signOut(a)
+                    items[which].startsWith("로그아웃") -> {
+                        Cloud.signOut(a)
+                        // 로그아웃하면 로그인 화면으로
+                        a.startActivity(Intent(a, MainActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                    }
                 }
             }
             .setNegativeButton("닫기", null)

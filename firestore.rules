@@ -109,6 +109,11 @@ service cloud.firestore {
         allow create, update: if isMember(gid) && request.auth.uid == mid;
         allow delete: if isGroupOwner(gid) || request.auth.uid == mid;
       }
+      match /live/{mid} {
+        allow read: if isMember(gid);
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
+        allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid));
+      }
       match /events/{eid} {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;

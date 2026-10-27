@@ -24,7 +24,27 @@ object TideDialog {
         timeInMillis = time; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
-    fun show(a: Activity, lat: Double, lon: Double, time: Long, trip: Store.Trip?) {
+    /** 만조·간조 알람 고르기 (출조 중에만 울림) */
+    fun pickAlarm(a: Activity, done: () -> Unit) {
+        val mins = listOf(0, 10, 20, 30, 40, 50, 60)
+        val labels = mins.map { (if (it == Store.tideAlarmMin) "✓ " else "") + if (it == 0) "끄기" else "만조·간조 ${it}분 전" }
+        BigList.show(a, "만조·간조 알람 (출조 중에만 울려요)", labels, emptyList()) { i, _ ->
+            Store.tideAlarmMin = mins[i]
+            android.widget.Toast.makeText(a, if (mins[i] == 0) "알람을 껐어요" else "출조 중 만조·간조 ${mins[i]}분 전에 알려드려요",
+                android.widget.Toast.LENGTH_SHORT).show()
+            done()
+        }
+    }
+
+    fun alarmLabel(): String = Store.tideAlarmMin.let { if (it <= 0) "만조·간조 알람: 끔" else "알람: 만조·간조 ${it}분 전 ⏰" }
+
+    fun stationLabel(a: Activity, lat: Double?, lon: Double?): String {
+        val st = Tide.stationFor(a, lat, lon) ?: return "물때 기준: 위치 확인 중 · 눌러서 고르기 ▾"
+        val km = Tide.stationKm(st, lat, lon)?.let { String.format(Locale.KOREA, " · 내 위치에서 %.0fkm", it) } ?: ""
+        return "물때 기준: ${st.name} 관측소" + (if (Store.tideStation != null) " (직접 고름)" else "") + km + " ▾"
+    }
+
+    fun show(a: Activity, lat: Double, lon: Double, time: Long, trip: Store.Trip?, onChanged: (() -> Unit)? = null) {
         fun dp(v: Int) = Ui.dp(a, v)
         var cur = dayStart(time)
         val today = dayStart(System.currentTimeMillis())
@@ -73,11 +93,27 @@ object TideDialog {
         val src = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(src, Ui.lp(a, MATCH, WRAP, top = 12))
 
+        // ---- 설정: 물때 기준 관측소 · 만조·간조 알람 (메인에서 옮겨 옴) ----
+        col.addView(android.view.View(a).apply { setBackgroundColor(Ui.LINE) }, Ui.lp(a, MATCH, 1, top = 16))
+        val stationBtn = Ui.text(a, 14f, Ui.BLUE, true, stationLabel(a, lat, lon)).apply {
+            minHeight = dp(44); gravity = Gravity.CENTER_VERTICAL
+        }
+        col.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 8))
+        val setRow = Ui.row(a)
+        val alarmBtn = Ui.button(a, alarmLabel()).apply { minHeight = dp(44); textSize = 13f }
+        val changeBtn = Ui.button(a, "관측소 바꾸기 · 검색").apply { minHeight = dp(44); textSize = 13f }
+        setRow.addView(alarmBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
+        setRow.addView(changeBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 6))
+
         val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("물때 · 바람 · 수온")
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .show()
+        // 상세 페이지처럼 화면을 거의 꽉 채우게
+        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            (a.resources.displayMetrics.heightPixels * 0.92).toInt())
 
         fun renderWeather(w: Weather.Day) {
             wxGrid.removeAllViews()
@@ -132,7 +168,7 @@ object TideDialog {
         fun load() {
             val id = ++loadId
             val noon = cur + 12 * 3_600_000L
-            dateText.text = titleFmt.format(Date(cur)) + if (cur == today) " · 오늘" else ""
+            dateText.text = titleFmt.format(Date(cur)) + (if (cur == today) " · 오늘" else "") + " ▾"
             head.text = Tide.mulName(noon)
             info.text = "물때 불러오는 중…"
             strength.text = "물세기 계산 중…"
@@ -157,6 +193,17 @@ object TideDialog {
             }
             Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }
         }
+
+        val pickStation = {
+            StationPicker.show(a, lat, lon) {
+                stationBtn.text = stationLabel(a, lat, lon)
+                onChanged?.invoke()
+                load()
+            }
+        }
+        stationBtn.setOnClickListener { pickStation() }
+        changeBtn.setOnClickListener { pickStation() }
+        alarmBtn.setOnClickListener { pickAlarm(a) { alarmBtn.text = alarmLabel(); onChanged?.invoke() } }
 
         prev.setOnClickListener { cur = dayStart(cur - 12 * 3_600_000L); load() }
         next.setOnClickListener { cur = dayStart(cur + 36 * 3_600_000L); load() }

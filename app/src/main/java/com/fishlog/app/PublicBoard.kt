@@ -78,7 +78,15 @@ object PublicBoard {
     fun keyName(key: String) = key.substringBefore("|")
     fun keyCat(key: String) = key.substringAfter("|", "")
     /** "낙지 (해루질)" */
-    fun keyLabel(key: String): String = keyName(key) + (Store.catLabel(keyCat(key)).takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "")
+    fun keyLabel(key: String): String = keyName(key) + " (" + Store.catLabel(keyCat(key)).ifBlank { "종류 없음" } + ")"
+
+    /** 공개한 내 출조의 낚시 종류만 고치기 */
+    fun updateCat(t: Store.Trip, done: (String?) -> Unit) {
+        if (Cloud.uid == null || !t.pub) return done(null)
+        db.collection("public").document(docId(t)).update("cat", t.cat)
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "게시판 반영 실패") }
+    }
 
     private fun docId(t: Store.Trip) = "${Cloud.uid}_${t.id}"
 
@@ -282,7 +290,11 @@ object PublicBoard {
                                 if (prec == "exact") (m["xo"] as? Number)?.toDouble() else null)
                         }
                         PTrip(d.id, d.getString("owner") ?: "", d.getString("nick") ?: "익명",
-                            d.getLong("start") ?: 0L, d.getLong("end") ?: 0L, d.getString("cat") ?: "",
+                            d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
+                            // 종류가 비어 있으면 어종으로 짐작 (선상/해루질/워킹)
+                            (d.getString("cat") ?: "").ifBlank {
+                                Store.guessCat((d.get("names") as? List<*>)?.map { it.toString() } ?: emptyList())
+                            },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true)
                     } catch (_: Exception) { null }

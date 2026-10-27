@@ -37,6 +37,13 @@ class RemoteService : Service() {
     private val checker = object : Runnable {
         override fun run() { checkLongTrip(); handler.postDelayed(this, 30 * 60_000L) }
     }
+    /** 같이 낚시하는 그룹원: 5분마다 올리고 받아오기 */
+    private val liveTicker = object : Runnable {
+        override fun run() {
+            if (Store.current != null) try { Live.sync() } catch (_: Exception) {}
+            handler.postDelayed(this, Live.EVERY_MS)
+        }
+    }
 
     // ---------------- 만조·간조 알람 ----------------
     @Volatile private var tideExt: List<Tide.Extreme> = emptyList()
@@ -100,6 +107,7 @@ class RemoteService : Service() {
         Store.addListener(storeListener)
         handler.postDelayed(checker, 60_000L)
         handler.postDelayed(tideChecker, 20_000L)
+        handler.postDelayed(liveTicker, 30_000L)
     }
 
     private fun goForeground() {
@@ -138,6 +146,7 @@ class RemoteService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        if (Store.current == null) try { Live.clear() } catch (_: Exception) {}
         Tracker.stop()
         Store.removeListener(storeListener)
         session?.isActive = false

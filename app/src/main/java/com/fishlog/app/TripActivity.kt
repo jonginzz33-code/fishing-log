@@ -237,6 +237,8 @@ class TripActivity : Activity() {
 
         // 동작
         section("메뉴")
+        root.addView(Ui.button(this, "낚시 종류: " + Store.catLabel(t.cat).ifBlank { "없음" } + "  (바꾸기)") { askCat(t) },
+            Ui.lp(this, MATCH, WRAP, top = 10))
         root.addView(Ui.button(this, if (t.uploaded) "그룹에 다시 올리기" else "그룹에 올리기", true) { account.upload(t) }, Ui.lp(this, MATCH, WRAP, top = 10))
         if (t.uploaded) root.addView(Ui.button(this, "그룹에서 내리기 (내 폰 기록은 그대로)") { askUnpublish(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
         if (t.end > 0 && t.catches.isNotEmpty()) {
@@ -474,5 +476,19 @@ class TripActivity : Activity() {
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, Store.exportText(t))
         }, "조과 공유"))
+    }
+
+    /** 낚시 종류 바꾸기: 저장 → 공개한 출조면 게시판에도, 그룹에 올린 출조면 그룹에도 다시 반영 */
+    private fun askCat(t: Store.Trip) {
+        val cats = Store.CATS
+        val labels = cats.map { (if (it == t.cat) "✓ " else "") + Store.catLabel(it) }
+        BigList.show(this, "이 출조의 낚시 종류", labels, emptyList()) { i, _ ->
+            val wasUploaded = t.uploaded
+            Store.setTripCat(t.id, cats[i])
+            Toast.makeText(this, "${Store.catLabel(cats[i])}(으)로 바꿨어요", Toast.LENGTH_SHORT).show()
+            if (t.pub) PublicBoard.updateCat(t) { err -> if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show() }
+            if (wasUploaded && Cloud.active != null) account.upload(t, quiet = true)
+            Cloud.backupPending()
+        }
     }
 }
