@@ -75,7 +75,7 @@ object ButtonRouter {
         handle(ctx, codeOf(keyCode), heldMs >= LONG_PRESS_MS)
     }
 
-    /** 갤럭시 워치 음악 컨트롤러: ⏭ = 1번, ⏮ = 2번 */
+    /** 갤럭시 워치 음악 컨트롤러: ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번 */
     fun watch(ctx: Context, slot: Int) {
         if (!Store.watchMode || Store.current == null || learningStep != 0) return
         val now = SystemClock.elapsedRealtime()
@@ -83,7 +83,7 @@ object ButtonRouter {
         lastAt = now
         val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
-        onMessage?.invoke("워치 ${if (slot == 1) "⏭" else "⏮"} → ${Store.current?.name(slot) ?: "${slot}번"} ${n}마리")
+        onMessage?.invoke("워치 ${if (slot == 1) "⏮" else "⏭"} → ${Store.current?.name(slot) ?: "${slot}번"} ${n}마리")
     }
 
     /** 누름/뗌 구분이 없는 입력 (볼륨 조절 신호) */

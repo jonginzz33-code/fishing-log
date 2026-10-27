@@ -15,7 +15,9 @@ import kotlin.math.min
 
 /** 지도 위 점 하나. kind = 묶음 요약에 쓰는 이름 (예: "주꾸미", "철수 주꾸미") */
 class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: String,
-             val time: Long = 0L, val who: String = "", val species: String = "")
+             val time: Long = 0L, val who: String = "", val species: String = "",
+             /** 해루질 유료 자리 → 점 옆에 작게 "유료" */
+             val paid: Boolean = false)
 
 /**
  * 조과 점 그리기. 화면에서 가까이 겹치는 점은 하나로 묶어서
@@ -39,6 +41,11 @@ class DotsOverlay(
     private val num = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; textSize = 13 * d
         setShadowLayer(2 * d, 0f, 0f, Color.parseColor("#0B1A26"))
+    }
+
+    private val paidBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F2C14E") }
+    private val paidTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#0B1A26"); textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; textSize = 9 * d
     }
 
     private class Cluster(val x: Float, val y: Float, val items: MutableList<MapDot>)
@@ -73,6 +80,14 @@ class DotsOverlay(
             if (n > 1) {
                 num.alpha = if (faded) 190 else 255
                 c.drawText(n.toString(), cl.x, cl.y - (num.descent() + num.ascent()) / 2, num)
+            }
+            // 해루질 유료 자리: 오른쪽 위에 작은 "유료"
+            if (cl.items.any { it.paid }) {
+                val w = paidTxt.measureText("유료") + 6 * d
+                val left = cl.x + rad * 0.5f; val top = cl.y - rad - 9 * d
+                paidBg.alpha = alpha; paidTxt.alpha = alpha
+                c.drawRoundRect(left, top, left + w, top + 13 * d, 6 * d, 6 * d, paidBg)
+                c.drawText("유료", left + w / 2, top + 10 * d, paidTxt)
             }
         }
     }

@@ -234,14 +234,18 @@ class AccountUi(private val a: Activity) {
             }
             return
         }
-        val group = Cloud.together(base, pool)
+        // 경로는 지도를 열 때만 받음
+        Cloud.loadTracks(Cloud.together(base, pool)) { group -> showTogetherMap(base, group) }
+    }
+
+    private fun showTogetherMap(base: Cloud.RemoteTrip, group: List<Cloud.RemoteTrip>) {
         val tf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
         val layers = group.mapIndexed { i, t ->
             val c = personColors[i % personColors.size]
             MapLayer(c, t.track.map { GeoPoint(it.lat, it.lon) },
                 t.catches.filter { it.lat != null && it.lon != null }.map {
                     MapCatch(GeoPoint(it.lat!!, it.lon!!), c, "${t.ownerName} ${tf.format(Date(it.time))} ${t.name(it.slot)}", "${t.ownerName} ${t.name(it.slot)}",
-                        it.time, t.ownerName, t.name(it.slot))
+                        it.time, t.ownerName, t.name(it.slot), MapDialog.paidMark(t.cat, t.paid))
                 })
         }
         val total = group.sumOf { it.catches.size }

@@ -61,7 +61,9 @@ object PublicBoard {
     class PTrip(
         val id: String, val owner: String, val nick: String, val start: Long, val end: Long,
         val cat: String, val names: List<String>, val catches: List<PCatch>, val photoCount: Int,
-        val prec: String = ""
+        val prec: String = "",
+        /** 해루질 유료 자리 (금액·준비물은 안 올라감) */
+        val paid: Boolean = false
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -186,21 +188,15 @@ object PublicBoard {
                 "prec" to (if (exact) "exact" else "approx"),
                 "created" to System.currentTimeMillis()
             )
+            // 전체 조황엔 유료 여부만 (금액·준비물은 안 올림)
+            if (t.paid == true) doc["paid"] = true
             val ref = db.collection("public").document(docId(t))
             ref.set(doc)
                 .addOnSuccessListener {
                     Store.setPublic(t.id, true, exact)
-                    if (photos.isNotEmpty()) Thread {
-                        photos.forEach { p ->
-                            val f = Photos.file(app, Photos.thumbName(p.file))
-                            if (f.exists() && f.length() < 700_000) {
-                                val m = hashMapOf<String, Any>("owner" to me, "t" to p.time,
-                                    "data" to android.util.Base64.encodeToString(f.readBytes(), android.util.Base64.NO_WRAP))
-                                p.catchTime?.let { m["catchT"] = it }
-                                ref.collection("photos").document(p.file.removeSuffix(".jpg")).set(m)
-                            }
-                        }
-                    }.start()
+                    // 작은 사진만 (이미 올린 건 건너뜀, 사진을 빼고 올리면 예전 사진은 지움)
+                    Cloud.uploadPhotos(ref, t, "public", limit = if (withPhotos) 8 else 0, withBig = false)
+                    cache.clear()
                     done(null)
                 }
                 .addOnFailureListener { main.post { done(it.message ?: "공개 실패 (보안 규칙 확인)") } }
@@ -213,7 +209,11 @@ object PublicBoard {
         ref.collection("photos").get().addOnCompleteListener { q ->
             q.result?.documents?.forEach { it.reference.delete() }
             ref.delete()
-                .addOnSuccessListener { localTripId?.let { Store.setPublic(it, false) }; done(null) }
+                .addOnSuccessListener {
+                    localTripId?.let { Store.setPublic(it, false); Store.photoUpClear("public", it) }
+                    cache.clear()
+                    done(null)
+                }
                 .addOnFailureListener { done(it.message ?: "내리기 실패") }
         }
     }
@@ -232,7 +232,7 @@ object PublicBoard {
             val catches = buildCatches(app, t, exact)
             db.collection("public").document(docIdStr)
                 .update(mapOf("catches" to catches, "prec" to (if (exact) "exact" else "approx")))
-                .addOnSuccessListener { Store.setPublic(t.id, true, exact); done(null) }
+                .addOnSuccessListener { Store.setPublic(t.id, true, exact); cache.clear(); done(null) }
                 .addOnFailureListener { main.post { done(it.message ?: "바꾸기 실패") } }
         }.start()
     }
@@ -248,7 +248,21 @@ object PublicBoard {
     }
 
     // ---------------- 불러오기 ----------------
+    /** 잠깐 저장 (3분): 같은 화면을 다시 열어도 또 받지 않게 */
+    private val cache = HashMap<Long, Pair<Long, List<PTrip>>>()
+
     fun load(since: Long, done: (List<PTrip>?, String?) -> Unit) {
+        val bucket = since / 3_600_000L
+        cache[bucket]?.let { (at, list) ->
+            if (System.currentTimeMillis() - at < 3 * 60_000L) { done(list, null); return }
+        }
+        loadServer(since) { list, err ->
+            if (list != null) cache[bucket] = System.currentTimeMillis() to list
+            done(list, err)
+        }
+    }
+
+    private fun loadServer(since: Long, done: (List<PTrip>?, String?) -> Unit) {
         var q: Query = db.collection("public").orderBy("start", Query.Direction.DESCENDING)
         if (since > 0) q = q.whereGreaterThan("start", since)
         q.limit(300).get()
@@ -270,7 +284,7 @@ object PublicBoard {
                         PTrip(d.id, d.getString("owner") ?: "", d.getString("nick") ?: "익명",
                             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L, d.getString("cat") ?: "",
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
-                            (d.getLong("photoCount") ?: 0L).toInt(), prec)
+                            (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true)
                     } catch (_: Exception) { null }
                 }, null)
             }

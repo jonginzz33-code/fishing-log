@@ -37,7 +37,7 @@ import java.util.Locale
 /** 지도에 그릴 한 사람(또는 한 출조)의 경로와 조과 */
 class MapLayer(val color: Int, val track: List<GeoPoint>, val catches: List<MapCatch>)
 class MapCatch(val point: GeoPoint, val color: Int, val title: String, val kind: String = "",
-               val time: Long = 0L, val who: String = "", val species: String = "")
+               val time: Long = 0L, val who: String = "", val species: String = "", val paid: Boolean = false)
 
 object MapDialog {
 
@@ -70,7 +70,10 @@ object MapDialog {
 
     private fun dp(a: Context, v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
-    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }, it.time, it.who, it.species) }
+    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }, it.time, it.who, it.species, it.paid) }
+
+    /** 해루질에서 유료로 적은 출조만 지도에 "유료" 표시 (선상낚시는 원래 다 유료라 표시 안 함) */
+    fun paidMark(cat: String, paid: Boolean?): Boolean = cat == "night" && paid == true
 
     private val dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
     private val dayLabel = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
@@ -483,7 +486,7 @@ object MapDialog {
             t.catches.filter { it.lat != null && it.lon != null }.map {
                 MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
                     "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
-                    it.time, "나", t.name(it.slot))
+                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid))
             }
         }
         val myId = Cloud.uid
@@ -497,7 +500,7 @@ object MapDialog {
                 t.catches.filter { it.lat != null && it.lon != null }.map {
                     MapDot(GeoPoint(it.lat!!, it.lon!!), color,
                         "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
-                        it.time, t.ownerName, t.name(it.slot))
+                        it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid))
                 }
             }
             done(mine + friends, mine.size, friends.size)
@@ -716,7 +719,7 @@ object MapDialog {
         val track = t.track.map { GeoPoint(it.lat, it.lon) }
         val catches = t.catches.filter { it.lat != null && it.lon != null }.map {
             MapCatch(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
-                df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot), it.time, "", t.name(it.slot))
+                df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid))
         }
         return MapLayer(trackColor, track, catches)
     }

@@ -23,15 +23,25 @@ object Cloud {
     }
 
     class RemoteCatch(val time: Long, val slot: Int, val lat: Double?, val lon: Double?)
+    /**
+     * 그룹에 올라간 출조. 목록을 받을 땐 이동 경로(track)는 빼고 받음 (데이터 절약)
+     * hasTrack = 서버에 경로가 따로 있음 → 지도로 볼 때 loadTracks 로 받기
+     */
     class RemoteTrip(
         val id: String, val owner: String, val ownerName: String,
         val start: Long, val end: Long, val names: List<String>,
         val catches: List<RemoteCatch>, val track: List<Store.Pt>,
-        val boat: String = "", val port: String = "", val photoCount: Int = 0, val cat: String = ""
+        val boat: String = "", val port: String = "", val photoCount: Int = 0, val cat: String = "",
+        val hasTrack: Boolean = false, val center: Pair<Double, Double>? = null,
+        val paid: Boolean? = null, val fee: Int = 0, val gear: List<String> = emptyList()
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
+        fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear)
+        /** "유료 5만원" / "무료" / "" */
+        fun costLabel(): String = Store.costLabel(paid, fee)
     }
 
     private val auth get() = FirebaseAuth.getInstance()
@@ -87,9 +97,15 @@ object Cloud {
                             if (left == 0) {
                                 groups = ids.mapNotNull { i -> loaded.firstOrNull { it.id == i } }
                                 // 멤버 목록에 내 이름 남기기 (예전에 가입한 경우 대비)
+                                // (이름이 바뀌었을 때만 다시 씀)
+                                val mp = appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
                                 groups.forEach { gr ->
-                                    db.collection("groups").document(gr.id).collection("members").document(id)
-                                        .set(mapOf("name" to displayName), SetOptions.merge())
+                                    val key = "memberName_${gr.id}"
+                                    if (mp.getString(key, null) != displayName) {
+                                        db.collection("groups").document(gr.id).collection("members").document(id)
+                                            .set(mapOf("name" to displayName), SetOptions.merge())
+                                            .addOnSuccessListener { mp.edit().putString(key, displayName).apply() }
+                                    }
                                 }
                                 fireChanged()
                                 done?.invoke(null)
@@ -167,24 +183,34 @@ object Cloud {
             if (it.lat != null && it.lon != null) { m["la"] = it.lat; m["lo"] = it.lon }
             m
         }
-        // 경로는 최대 600점으로 줄여서 올림
+        // 경로는 최대 600점으로 줄여서, 목록과 따로 저장 (목록 볼 때마다 경로까지 받지 않게)
         val src = if (Store.hideRoute) emptyList() else t.track
         val step = if (src.size > 600) src.size / 600 + 1 else 1
         val track = src.filterIndexed { i, _ -> i % step == 0 }.map { mapOf("t" to it.time, "la" to it.lat, "lo" to it.lon) }
         val doc = hashMapOf<String, Any>(
             "owner" to id, "ownerName" to displayName,
             "start" to t.start, "end" to t.end, "names" to t.names.toList(),
-            "catches" to catches, "track" to track,
+            "catches" to catches, "hasTrack" to track.isNotEmpty(),
             "boat" to t.boat, "port" to t.port, "cat" to t.cat,
             "total" to t.catches.size, "photoCount" to t.photos.size,
             "updated" to System.currentTimeMillis()
         )
+        // 같이 출조했는지 판별용 가운데 지점
+        val pts = t.track.map { it.lat to it.lon } + t.catches.filter { it.lat != null && it.lon != null }.map { it.lat!! to it.lon!! }
+        if (pts.isNotEmpty()) { doc["cla"] = pts.sumOf { it.first } / pts.size; doc["clo"] = pts.sumOf { it.second } / pts.size }
+        // 이용료·준비물 (그룹원만 봄)
+        t.paid?.let { doc["paid"] = it }
+        if (t.fee > 0) doc["fee"] = t.fee
+        if (t.gear.isNotEmpty()) doc["gear"] = t.gear.toList()
         val tripRef = db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
         tripRef.set(doc)
             .addOnSuccessListener {
+                val detail = tripRef.collection("detail").document("track")
+                if (track.isNotEmpty()) detail.set(mapOf("owner" to id, "pts" to track)) else detail.delete()
                 Store.markUploaded(t.id)
                 Store.addShared(t.id, g.id)
-                uploadPhotos(tripRef, t)
+                uploadPhotos(tripRef, t, g.id)
+                invalidateTrips(g.id)
                 done(null)
             }
             .addOnFailureListener { done(it.message ?: "올리기 실패") }
@@ -192,25 +218,53 @@ object Cloud {
 
     lateinit var appContext: Context
 
-    /** 사진 업로드: 목록용 작은 사진(photos) + 크게 볼 1080px 사진(photosBig) */
-    private fun uploadPhotos(tripRef: com.google.firebase.firestore.DocumentReference, t: Store.Trip) {
+    /**
+     * 사진 업로드: 목록용 작은 사진(photos) + 크게 볼 1080px 사진(photosBig)
+     *  - 이미 올린 사진은 다시 안 올림 (조과 연결만 바뀌었으면 그 칸만 고침)
+     *  - 폰에서 지운 사진은 서버에서도 지움
+     *  key = 어디에 올렸는지 (그룹 id 또는 "public")
+     */
+    fun uploadPhotos(tripRef: com.google.firebase.firestore.DocumentReference, t: Store.Trip, key: String,
+                     limit: Int = Int.MAX_VALUE, withBig: Boolean = true) {
         val id = uid ?: return
         if (!::appContext.isInitialized) return
-        val list = t.photos.toList()
+        val list = t.photos.toList().take(limit)
+        val done = Store.photosUp(key, t.id)   // 파일 이름 → 올릴 때의 조과 연결
         Thread {
+            // 지운 사진
+            done.keys.filter { f -> list.none { it.file == f } }.forEach { f ->
+                val docId = f.removeSuffix(".jpg")
+                tripRef.collection("photos").document(docId).delete()
+                if (withBig) tripRef.collection("photosBig").document(docId).delete()
+                Store.photoUpRemove(key, t.id, f)
+            }
             list.forEach { p ->
                 val docId = p.file.removeSuffix(".jpg")
-                val thumb = Photos.file(appContext, Photos.thumbName(p.file))
-                if (thumb.exists() && thumb.length() < 700_000) {
-                    val m = hashMapOf<String, Any>("owner" to id, "t" to p.time,
-                        "data" to android.util.Base64.encodeToString(thumb.readBytes(), android.util.Base64.NO_WRAP))
-                    p.catchTime?.let { m["catchT"] = it }
-                    tripRef.collection("photos").document(docId).set(m)
+                val sig = (p.catchTime ?: -1L).toString()
+                val prev = done[p.file]
+                if (prev != null) {
+                    // 이미 올림: 조과 연결만 바뀌었으면 그 칸만
+                    if (prev != sig) {
+                        tripRef.collection("photos").document(docId)
+                            .update("catchT", p.catchTime ?: FieldValue.delete())
+                            .addOnSuccessListener { Store.photoUpAdd(key, t.id, p.file, sig) }
+                    }
+                    return@forEach
                 }
-                val big = Photos.shareFile(appContext, p)
-                if (big != null && big.length() < 720_000) {
-                    tripRef.collection("photosBig").document(docId).set(mapOf("owner" to id,
-                        "data" to android.util.Base64.encodeToString(big.readBytes(), android.util.Base64.NO_WRAP)))
+                val thumb = Photos.file(appContext, Photos.thumbName(p.file))
+                if (!thumb.exists() || thumb.length() >= 700_000) return@forEach
+                val m = hashMapOf<String, Any>("owner" to id, "t" to p.time,
+                    "data" to android.util.Base64.encodeToString(thumb.readBytes(), android.util.Base64.NO_WRAP))
+                p.catchTime?.let { m["catchT"] = it }
+                tripRef.collection("photos").document(docId).set(m)
+                    .addOnSuccessListener { Store.photoUpAdd(key, t.id, p.file, sig) }
+                if (withBig) {
+                    val big = Photos.shareFile(appContext, p)
+                    if (big != null && big.length() < 720_000) {
+                        tripRef.collection("photosBig").document(docId).set(mapOf("owner" to id,
+                            "data" to android.util.Base64.encodeToString(big.readBytes(), android.util.Base64.NO_WRAP)))
+                    }
+                    big?.delete()
                 }
             }
         }.start()
@@ -255,15 +309,18 @@ object Cloud {
 
     private fun deleteTripIn(gid: String, docId: String, done: (String?) -> Unit) {
         val ref = db.collection("groups").document(gid).collection("trips").document(docId)
+        ref.collection("detail").document("track").delete()
         ref.collection("photos").get().addOnCompleteListener { a ->
             a.result?.documents?.forEach { it.reference.delete() }
             ref.collection("photosBig").get().addOnCompleteListener { b ->
                 b.result?.documents?.forEach { it.reference.delete() }
                 ref.delete()
                     .addOnSuccessListener {
+                        invalidateTrips(gid)
                         val myId = uid
                         if (myId != null && docId.startsWith(myId + "_")) {
                             docId.removePrefix(myId + "_").toLongOrNull()?.let {
+                                Store.photoUpClear(gid, it)
                                 Store.removeShared(it, gid)
                                 if (Store.sharedGroups(it).isEmpty()) Store.markNotUploaded(it)
                             }
@@ -602,22 +659,58 @@ object Cloud {
             RemoteCatch((it["t"] as Number).toLong(), (it["s"] as Number).toInt(),
                 (it["la"] as? Number)?.toDouble(), (it["lo"] as? Number)?.toDouble())
         } ?: emptyList()
-        val track = (d.get("track") as? List<Map<String, Any?>>)?.mapNotNull {
-            val la = (it["la"] as? Number)?.toDouble(); val lo = (it["lo"] as? Number)?.toDouble()
-            if (la == null || lo == null) null else Store.Pt((it["t"] as? Number)?.toLong() ?: 0L, la, lo)
-        } ?: emptyList()
+        // 예전 버전은 경로가 같은 문서 안에 있음
+        val track = parsePts(d.get("track") as? List<Map<String, Any?>>)
+        val cla = (d.get("cla") as? Number)?.toDouble(); val clo = (d.get("clo") as? Number)?.toDouble()
         RemoteTrip(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
             (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track,
-            d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt(), d.getString("cat") ?: "")
+            d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt(), d.getString("cat") ?: "",
+            d.getBoolean("hasTrack") == true, if (cla != null && clo != null) cla to clo else null,
+            d.getBoolean("paid"), (d.getLong("fee") ?: 0L).toInt(),
+            (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList())
     } catch (e: Exception) { null }
+
+    private fun parsePts(list: List<Map<String, Any?>>?): List<Store.Pt> = list?.mapNotNull {
+        val la = (it["la"] as? Number)?.toDouble(); val lo = (it["lo"] as? Number)?.toDouble()
+        if (la == null || lo == null) null else Store.Pt((it["t"] as? Number)?.toLong() ?: 0L, la, lo)
+    } ?: emptyList()
+
+    /** 지도로 볼 때만: 따로 저장된 이동 경로 받기 */
+    fun loadTracks(list: List<RemoteTrip>, done: (List<RemoteTrip>) -> Unit) {
+        val g = active ?: return done(list)
+        val need = list.filter { it.hasTrack && it.track.isEmpty() }
+        if (need.isEmpty()) return done(list)
+        val got = HashMap<String, List<Store.Pt>>()
+        var left = need.size
+        need.forEach { t ->
+            db.collection("groups").document(g.id).collection("trips").document(t.id).collection("detail").document("track").get()
+                .addOnSuccessListener { d ->
+                    @Suppress("UNCHECKED_CAST")
+                    got[t.id] = parsePts(d.get("pts") as? List<Map<String, Any?>>)
+                }
+                .addOnCompleteListener {
+                    left--
+                    if (left == 0) done(list.map { r -> got[r.id]?.let { r.withTrack(it) } ?: r })
+                }
+        }
+    }
+
+    // ---- 그룹 출조 목록 잠깐 저장 (3분) ----
+    private val tripsCache = HashMap<String, Pair<Long, List<RemoteTrip>>>()
+    fun invalidateTrips(gid: String) { tripsCache.remove(gid) }
 
     /** 그룹의 최근 출조 목록 */
     fun recentTrips(done: (List<RemoteTrip>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
+        tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 3 * 60_000L) { done(list, null); return } }
         db.collection("groups").document(g.id).collection("trips")
             .orderBy("start", Query.Direction.DESCENDING).limit(300).get()
-            .addOnSuccessListener { q -> done(q.documents.mapNotNull { parse(it) }, null) }
+            .addOnSuccessListener { q ->
+                val list = q.documents.mapNotNull { parse(it) }
+                tripsCache[g.id] = System.currentTimeMillis() to list
+                done(list, null)
+            }
             .addOnFailureListener { done(null, it.message ?: "불러오기 실패") }
     }
 
@@ -635,6 +728,7 @@ object Cloud {
 
     // ---- 같이 출조했는지 판별 ----
     private fun center(t: RemoteTrip): Pair<Double, Double>? {
+        if (t.track.isEmpty()) t.center?.let { return it }
         val pts = t.track.map { it.lat to it.lon } +
             t.catches.filter { it.lat != null && it.lon != null }.map { it.lat!! to it.lon!! }
         if (pts.isEmpty()) return null

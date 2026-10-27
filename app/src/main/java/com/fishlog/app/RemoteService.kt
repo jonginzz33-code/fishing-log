@@ -164,8 +164,8 @@ class RemoteService : Service() {
             private val downAt = HashMap<Int, Long>()
 
             // 갤럭시 워치 음악 컨트롤러는 버튼 신호 대신 이쪽으로 들어옴
-            override fun onSkipToNext() { ButtonRouter.watch(this@RemoteService, 1) }
-            override fun onSkipToPrevious() { ButtonRouter.watch(this@RemoteService, 2) }
+            override fun onSkipToNext() { ButtonRouter.watch(this@RemoteService, 2) }
+            override fun onSkipToPrevious() { ButtonRouter.watch(this@RemoteService, 1) }
             override fun onPlay() { keepPlaying() }
             override fun onPause() { keepPlaying() }
 
@@ -218,7 +218,7 @@ class RemoteService : Service() {
     private fun updateMetadata() {
         val t = Store.current ?: return
         session?.setMetadata(android.media.MediaMetadata.Builder()
-            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "⏭ ${t.name(1)} ${t.count(1)}  ·  ⏮ ${t.name(2)} ${t.count(2)}")
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "⏮ ${t.name(1)} ${t.count(1)}  ·  ⏭ ${t.name(2)} ${t.count(2)}")
             .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과기록 · 총 ${t.catches.size}마리")
             .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "조과기록")
             .build())

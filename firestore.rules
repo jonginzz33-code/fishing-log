@@ -129,6 +129,11 @@ service cloud.firestore {
           allow create, update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
           allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
         }
+        match /detail/{did} {
+          allow read: if isMember(gid);
+          allow create, update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+          allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+        }
       }
     }
   }

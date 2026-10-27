@@ -31,8 +31,15 @@ object Store {
         var cat: String = "",
         var pub: Boolean = false,
         /** 전체 공개 위치 방법: "exact" 정확 / "approx" 대략 / "" 예전 공개 */
-        var pubPrec: String = ""
+        var pubPrec: String = "",
+        /** 이용료: null = 안 적음, false = 무료, true = 유료 */
+        var paid: Boolean? = null,
+        /** 이용료 금액 (원) */
+        var fee: Int = 0,
+        /** 꼭 필요한 물건 */
+        val gear: MutableList<String> = mutableListOf()
     ) {
+        fun costLabel(): String = Store.costLabel(paid, fee)
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names[slot - 1]
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
@@ -49,9 +56,12 @@ object Store {
     val history = mutableListOf<Trip>()
     private val listeners = mutableSetOf<() -> Unit>()
 
+    private lateinit var tripDir: java.io.File
+
     fun init(ctx: Context) {
         if (::prefs.isInitialized) return
         prefs = ctx.applicationContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        tripDir = java.io.File(ctx.applicationContext.filesDir, "trips").apply { mkdirs() }
         load()
     }
 
@@ -288,6 +298,35 @@ object Store {
         get() = prefs.getBoolean("pubExact", true)
         set(v) { prefs.edit().putBoolean("pubExact", v).apply() }
 
+    // ---- 이미 올린 사진 (같은 사진을 두 번 안 올리려고) ----
+    // 키: "그룹id|출조id" 또는 "public|출조id" → { 파일 이름: 올릴 때 조과 연결 }
+    private val photoLock = Any()
+    private fun photoUpAll(): JSONObject = try { JSONObject(prefs.getString("photoUp", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+
+    fun photosUp(key: String, tripId: Long): Map<String, String> = synchronized(photoLock) {
+        val o = photoUpAll().optJSONObject("$key|$tripId") ?: return emptyMap()
+        o.keys().asSequence().associateWith { o.optString(it) }
+    }
+
+    fun photoUpAdd(key: String, tripId: Long, file: String, sig: String) = synchronized(photoLock) {
+        val all = photoUpAll()
+        val o = all.optJSONObject("$key|$tripId") ?: JSONObject()
+        o.put(file, sig); all.put("$key|$tripId", o)
+        prefs.edit().putString("photoUp", all.toString()).apply()
+    }
+
+    fun photoUpRemove(key: String, tripId: Long, file: String) = synchronized(photoLock) {
+        val all = photoUpAll()
+        all.optJSONObject("$key|$tripId")?.let { it.remove(file) }
+        prefs.edit().putString("photoUp", all.toString()).apply()
+    }
+
+    fun photoUpClear(key: String, tripId: Long) = synchronized(photoLock) {
+        val all = photoUpAll()
+        all.remove("$key|$tripId")
+        prefs.edit().putString("photoUp", all.toString()).apply()
+    }
+
     // ---- 출조를 올린 그룹 (출조 id → 그룹 id 목록) ----
     private fun sharedMap(): JSONObject = try { JSONObject(prefs.getString("shared", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
 
@@ -354,6 +393,9 @@ object Store {
         o.put("id", t.id); o.put("start", t.start); o.put("end", t.end)
         o.put("up", t.uploaded); o.put("bk", t.backedUp)
         o.put("boat", t.boat); o.put("port", t.port); o.put("cat", t.cat); o.put("pub", t.pub); o.put("pp", t.pubPrec)
+        t.paid?.let { o.put("paid", it) }
+        if (t.fee > 0) o.put("fee", t.fee)
+        if (t.gear.isNotEmpty()) o.put("gear", JSONArray().apply { t.gear.forEach { put(it) } })
         o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
         val arr = JSONArray()
         t.catches.forEach {
@@ -398,7 +440,9 @@ object Store {
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
             arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
             o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""),
-            o.optBoolean("pub", false), o.optString("pp", ""))
+            o.optBoolean("pub", false), o.optString("pp", ""),
+            if (o.has("paid")) o.getBoolean("paid") else null, o.optInt("fee", 0),
+            o.optJSONArray("gear")?.let { g -> (0 until g.length()).map { g.getString(it) }.toMutableList() } ?: mutableListOf())
     }
 
     private fun saveCurrent() {
@@ -408,27 +452,119 @@ object Store {
         e.apply()
     }
 
+    // ---- 지난 출조는 출조마다 파일 하나 (바뀐 출조만 다시 씀) ----
+    private val savedSig = HashMap<Long, Int>()
+
+    /** 저장할 내용이 바뀌었는지 빨리 보는 값 (전체를 JSON으로 만들지 않고) */
+    private fun signature(t: Trip): Int = listOf(
+        t.end, t.names.joinToString("|"), t.catches.size, t.catches.lastOrNull()?.time, t.track.size, t.track.lastOrNull()?.time,
+        t.photos.size, t.photos.sumOf { (it.file.hashCode().toLong() + (it.catchTime ?: 0L)) },
+        t.boat, t.port, t.cat, t.pub, t.pubPrec, t.uploaded, t.backedUp, t.paid, t.fee, t.gear.joinToString("|")
+    ).hashCode()
+
+    private fun tripFile(id: Long) = java.io.File(tripDir, "$id.json")
+
+    private fun writeTrip(t: Trip) {
+        val tmp = java.io.File(tripDir, "${t.id}.tmp")
+        tmp.writeText(tripToJson(t).toString())
+        if (!tmp.renameTo(tripFile(t.id))) { tripFile(t.id).delete(); tmp.renameTo(tripFile(t.id)) }
+        savedSig[t.id] = signature(t)
+    }
+
     private fun save() {
         val e = prefs.edit()
         val cur = current
         if (cur == null) e.remove("current") else e.putString("current", tripToJson(cur).toString())
-        val h = JSONArray()
-        history.forEach { h.put(tripToJson(it)) }
-        e.putString("history", h.toString())
-        e.commit()
+        e.apply()
+        try {
+            history.forEach { t -> if (savedSig[t.id] != signature(t)) writeTrip(t) }
+            // 지운 출조는 파일도 지움
+            val ids = history.map { it.id }.toSet()
+            savedSig.keys.filter { it !in ids }.forEach { id -> tripFile(id).delete(); savedSig.remove(id) }
+        } catch (_: Exception) {}
     }
 
     private fun load() {
         try {
             prefs.getString("current", null)?.let { current = tripFromJson(JSONObject(it)) }
-            history.clear()
-            prefs.getString("history", null)?.let {
-                val h = JSONArray(it)
-                for (i in 0 until h.length()) history.add(tripFromJson(h.getJSONObject(i)))
+        } catch (_: Exception) {}
+        history.clear()
+        // 예전 버전: 모든 기록이 한 덩어리로 저장돼 있음 → 출조마다 파일로 옮기기 (한 번만)
+        val old = prefs.getString("history", null)
+        if (old != null) {
+            try {
+                val h = JSONArray(old)
+                for (i in 0 until h.length()) try { history.add(tripFromJson(h.getJSONObject(i))) } catch (_: Exception) {}
+                history.forEach { writeTrip(it) }
+                prefs.edit().remove("history").commit()
+            } catch (_: Exception) {}
+        } else {
+            tripDir.listFiles()?.filter { it.name.endsWith(".json") }?.forEach { f ->
+                try {
+                    val t = tripFromJson(JSONObject(f.readText()))
+                    history.add(t)
+                    savedSig[t.id] = signature(t)
+                } catch (_: Exception) { /* 손상된 파일은 건너뜀 */ }
             }
-        } catch (e: Exception) {
-            // 손상된 데이터는 건너뜀
         }
+        history.sortByDescending { it.start }
+    }
+
+    // ---- 이용료 · 준비물 ----
+    /** 50000 → "5만원", 15000 → "15,000원" */
+    fun feeText(fee: Int): String =
+        if (fee >= 10_000 && fee % 10_000 == 0) "${fee / 10_000}만원" else String.format(java.util.Locale.KOREA, "%,d원", fee)
+
+    fun costLabel(paid: Boolean?, fee: Int): String = when (paid) {
+        true -> if (fee > 0) "유료 " + feeText(fee) else "유료"
+        false -> "무료"
+        null -> ""
+    }
+
+    private val DEFAULT_GEAR = mapOf(
+        "night" to listOf("장화", "헤드랜턴", "집게", "뜰채", "장갑", "바구니", "여분 배터리"),
+        "boat" to listOf("에기", "봉돌", "채비", "구명조끼", "멀미약", "쿨러", "장갑"),
+        "walk" to listOf("낚싯대", "채비", "미끼", "구명조끼", "갯바위 신발", "장갑", "쿨러")
+    )
+
+    /** 고를 수 있는 준비물 (기본 + 내가 적은 것) */
+    fun gearOptions(cat: String): List<String> = (DEFAULT_GEAR[cat].orEmpty() + readList("gear_$cat")).distinct()
+
+    fun addGearOption(cat: String, name: String) {
+        val n = name.trim()
+        if (n.isEmpty() || n in gearOptions(cat)) return
+        val l = readList("gear_$cat"); l.add(n)
+        val a = JSONArray(); l.forEach { a.put(it) }
+        prefs.edit().putString("gear_$cat", a.toString()).apply()
+    }
+
+    class Cost(val paid: Boolean?, val fee: Int, val gear: List<String>)
+
+    private fun costKey(place: String, cat: String) = place.ifBlank { "종류:$cat" }
+
+    /** 같은 장소(배·항구)에서 지난번에 적은 이용료·준비물 */
+    fun lastCost(place: String, cat: String): Cost? {
+        val o = try { JSONObject(prefs.getString("costByPlace", "{}") ?: "{}") } catch (_: Exception) { return null }
+        val c = o.optJSONObject(costKey(place, cat)) ?: return null
+        val g = c.optJSONArray("g")
+        return Cost(if (c.has("p")) c.getBoolean("p") else null, c.optInt("f", 0),
+            if (g == null) emptyList() else (0 until g.length()).map { g.getString(it) })
+    }
+
+    /** 출조에 이용료·준비물 저장 (+ 같은 장소 다음번에 미리 채우게 기억) */
+    fun setCost(tripId: Long, c: Cost) {
+        val t = find(tripId) ?: return
+        t.paid = c.paid; t.fee = c.fee
+        t.gear.clear(); t.gear.addAll(c.gear)
+        t.backedUp = false
+        val o = try { JSONObject(prefs.getString("costByPlace", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        val co = JSONObject()
+        c.paid?.let { co.put("p", it) }
+        co.put("f", c.fee)
+        co.put("g", JSONArray().apply { c.gear.forEach { put(it) } })
+        o.put(costKey(t.place(), t.cat), co)
+        prefs.edit().putString("costByPlace", o.toString()).apply()
+        changed()
     }
 
     /** 친구 공유·백업용 텍스트 */

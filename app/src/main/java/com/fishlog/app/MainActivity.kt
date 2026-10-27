@@ -141,6 +141,8 @@ class MainActivity : Activity() {
             Cloud.backupPending()
         }
         Cloud.loadSpecies()
+        Tide.prune(this)
+        Photos.cleanOldShareCopies(this)
         eventsFor = null
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
@@ -267,7 +269,7 @@ class MainActivity : Activity() {
         }
         remote.addView(touchBox, Ui.lp(this, MATCH, WRAP, top = 6))
         watchBox = CheckBox(this).apply {
-            text = "갤럭시 워치로 기록 (워치 음악 화면 ⏭ = 1번, ⏮ = 2번)"
+            text = "갤럭시 워치로 기록 (워치 음악 화면 ⏮ = 1번, ⏭ = 2번)"
             setTextColor(Ui.TEXT); textSize = 15f
             buttonTintList = ColorStateList.valueOf(Ui.BLUE)
             minHeight = dp(44)
@@ -435,6 +437,10 @@ class MainActivity : Activity() {
                 visibility = if (canShare) View.VISIBLE else View.GONE
             }
             box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 4))
+            // 이용료 · 꼭 필요한 물건 (같은 장소면 지난번 것으로 미리 채움)
+            val tripCat = t.cat.ifBlank { Store.category }
+            val cost = CostUi.editor(this, tripCat, Store.lastCost(t.place(), tripCat))
+            box.addView(cost.view)
             fun titleText(): String {
                 val where = when {
                     Cloud.user == null || Cloud.active == null -> "그룹 없음 · $catName · 내 폰에만 저장"
@@ -447,10 +453,12 @@ class MainActivity : Activity() {
             val titleView = Ui.text(this, 19f, Ui.TEXT, true, titleText()).apply { setPadding(dp(22), dp(20), dp(22), dp(4)) }
             val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setCustomTitle(titleView)
-                .setView(box)
+                .setView(ScrollView(this).apply { addView(box) })
                 .setPositiveButton("종료") { _, _ ->
                     val ended = Store.endTrip()
                     RemoteService.stop(this)
+                    // 이용료·준비물은 그룹에 올리기 전에 저장
+                    if (ended != null) Store.setCost(ended.id, cost.read())
                     if (ended != null && Cloud.user != null) {
                         if (ended.catches.isNotEmpty()) {
                             if (allBox.isChecked && groups.size > 1) account.uploadAll(ended)
@@ -750,7 +758,7 @@ class MainActivity : Activity() {
     private fun showWatchGuide() {
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("갤럭시 워치로 기록")
-            .setMessage("출조 중에 워치의 음악(미디어 컨트롤러) 화면에서\n⏭ = 1번 어종 +1, ⏮ = 2번 어종 +1\n\n" +
+            .setMessage("출조 중에 워치의 음악(미디어 컨트롤러) 화면에서\n⏮ (왼쪽) = 1번 어종 +1, ⏭ (오른쪽) = 2번 어종 +1\n\n" +
                 "출조를 시작하면 워치에 음악 화면이 자동으로 뜨게 하려면:\n" +
                 "Galaxy Wearable 앱 → 워치 설정 → 앱 → 미디어 컨트롤러 → '미디어 컨트롤러 자동 실행' 켜기\n" +
                 "(메뉴 이름은 버전마다 조금 다를 수 있어요)")

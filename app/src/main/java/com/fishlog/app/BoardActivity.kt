@@ -208,7 +208,8 @@ class BoardActivity : Activity() {
                 c.cell != null -> org.osmdroid.util.GeoPoint(c.cell.lat, c.cell.lon) to c.cell.r
                 else -> return@mapNotNull null
             }
-            SpotDot(MapDot(pt, color(t, c), "${t.nick} · ${df.format(Date(c.time))} · $sp", "${t.nick} $sp", c.time, t.nick, sp), r)
+            SpotDot(MapDot(pt, color(t, c), "${t.nick} · ${df.format(Date(c.time))} · $sp", "${t.nick} $sp", c.time, t.nick, sp,
+                MapDialog.paidMark(t.cat, t.paid)), r)
         }
     }
 
@@ -304,6 +305,8 @@ class BoardActivity : Activity() {
             val pr = Ui.row(this)
             pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick} · ${t.speciesLine()} · 총 ${t.catches.size}"),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (MapDialog.paidMark(t.cat, t.paid)) pr.addView(Ui.chip(this, "유료", android.graphics.Color.parseColor("#F2C14E")),
+                LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             if (t.anyCell() != null) pr.addView(Ui.text(this, 12f, if (t.exact) Ui.GREEN else Ui.SUB, true,
                 if (t.exact) "📍정확" else "◯대략"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             c.addView(pr, Ui.lp(this, MATCH, WRAP, top = 4))
@@ -493,16 +496,6 @@ class BoardActivity : Activity() {
         }
     }
 
-    private fun bars(title: String, rows: List<Pair<String, Int>>): String {
-        if (rows.isEmpty()) return ""
-        val max = rows.maxOf { it.second }.coerceAtLeast(1)
-        val sb = StringBuilder(title).append("\n")
-        rows.forEach { (k, v) ->
-            sb.append(k.padEnd(6)).append(" ").append("■".repeat(((v * 10.0) / max).toInt().coerceAtLeast(1))).append(" ").append(v).append("\n")
-        }
-        return sb.append("\n").toString()
-    }
-
     private fun pointDetail(p: PublicBoard.Point, title: String) {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6)) }
         val spLabel = PublicBoard.keyLabel(species!!)
@@ -514,28 +507,44 @@ class BoardActivity : Activity() {
         box.addView(em.view, LinearLayout.LayoutParams(MATCH, dp(240)))
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "파란 점 = 지금 내 위치 · 점선과 위 글씨 = 포인트까지 방향·거리"),
             Ui.lp(this, MATCH, WRAP, top = 6))
-        val sb = StringBuilder()
-        sb.append(String.format(Locale.KOREA, "%s %d마리 · 출조 %d번 · 1시간에 평균 %.1f마리\n\n", spLabel, p.total, p.trips.size, p.rate))
-        sb.append("날짜별\n")
+        // 글자는 보통 글꼴, 막대는 줄 맞춰 그림 (예전엔 고정폭 글꼴이라 글자 사이가 벌어져 보였음)
+        fun para(text: String, top: Int = 10, bold: Boolean = false) =
+            box.addView(Ui.text(this, 13.5f, Ui.TEXT, bold, text).apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = top))
+        fun barRows(title: String, rows: List<Pair<String, Int>>) {
+            if (rows.isEmpty()) return
+            para(title, 14, true)
+            val max = rows.maxOf { it.second }.coerceAtLeast(1)
+            rows.forEach { (k, v) ->
+                val r = Ui.row(this)
+                r.addView(Ui.text(this, 13f, Ui.SUB, false, k), LinearLayout.LayoutParams(dp(64), WRAP))
+                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                track.addView(View(this).apply { background = Ui.bg(this@BoardActivity, Ui.ORANGE, 3) },
+                    LinearLayout.LayoutParams(0, dp(10), v.toFloat() / max))
+                track.addView(View(this), LinearLayout.LayoutParams(0, dp(10), 1f - v.toFloat() / max + 0.0001f))
+                r.addView(track, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.text(this, 13f, Ui.TEXT, true, v.toString()), LinearLayout.LayoutParams(dp(32), WRAP).apply { leftMargin = dp(8) })
+                box.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
+            }
+        }
+        para(String.format(Locale.KOREA, "%s %d마리 · 출조 %d번 · 1시간에 평균 %.1f마리", spLabel, p.total, p.trips.size, p.rate), 10, true)
+        val days = StringBuilder()
         p.catches.groupBy { dateFmt.format(Date(it.first.start)) + "|" + it.first.nick }
             .entries.sortedByDescending { e -> e.value[0].first.start }
-            .forEach { e -> sb.append(e.key.substringBefore("|")).append("  ").append(e.key.substringAfter("|"))
+            .forEach { e -> days.append(e.key.substringBefore("|")).append("  ").append(e.key.substringAfter("|"))
                 .append("  ").append(e.value.size).append("마리 · ").append(Tide.mulName(e.value[0].first.start).substringBefore(" ·")).append("\n") }
-        sb.append("\n")
+        para("날짜별", 14, true)
+        para(days.toString().trimEnd(), 2)
         val cs = p.catches.map { it.second }
-        sb.append(bars("물때 단계", cs.groupingBy { Tide.mulName(it.time).substringAfter("· ").substringBefore(" (") }
-            .eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value }))
+        barRows("물때 단계", cs.groupingBy { Tide.mulName(it.time).substringAfter("· ").substringBefore(" (") }
+            .eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value })
         val ph = phaseText(cs)
-        if (ph.isNotBlank()) sb.append("물 흐름 · 만조·간조 기준\n").append(ph).append("\n")
+        if (ph.isNotBlank()) { para("물 흐름 · 만조·간조 기준", 14, true); para(ph.trimEnd(), 2) }
         val hourFmt = SimpleDateFormat("H", Locale.KOREA)
-        sb.append(bars("시간대", cs.groupingBy { hourFmt.format(Date(it.time)).toInt() }.eachCount()
-            .entries.sortedBy { it.key }.map { "${it.key}시" to it.value }))
+        barRows("시간대", cs.groupingBy { hourFmt.format(Date(it.time)).toInt() }.eachCount()
+            .entries.sortedBy { it.key }.map { "${it.key}시" to it.value })
         val monFmt = SimpleDateFormat("M월", Locale.KOREA)
-        sb.append(bars("잘 나온 달", cs.groupingBy { monFmt.format(Date(it.time)) }.eachCount()
-            .entries.sortedByDescending { it.value }.map { it.key to it.value }))
-        box.addView(Ui.text(this, 13f, Ui.TEXT, false, sb.toString().trimEnd()).apply {
-            typeface = android.graphics.Typeface.MONOSPACE; setLineSpacing(0f, 1.25f)
-        }, Ui.lp(this, MATCH, WRAP, top = 10))
+        barRows("잘 나온 달", cs.groupingBy { monFmt.format(Date(it.time)) }.eachCount()
+            .entries.sortedByDescending { it.value }.map { it.key to it.value })
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("$title · $spLabel")
             .setView(ScrollView(this).apply { addView(box) })

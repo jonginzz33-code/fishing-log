@@ -24,19 +24,31 @@ object Photos {
     fun thumbName(name: String): String = name.removeSuffix(".jpg") + "_t.jpg"
     fun shareName(name: String): String = name.removeSuffix(".jpg") + "_s.jpg"
 
-    /** 그룹 공유용 1080px 사진. 없으면 큰 사진에서 만들어 둠 */
+    /**
+     * 그룹 공유용 1080px 사진. 올릴 때만 임시 폴더에 만들고, 다 올리면 지움 (폰에 따로 안 남김)
+     * 화질 70 → 한 장 보통 150~300KB
+     */
     fun shareFile(ctx: Context, p: Store.Photo): File? {
-        val f = file(ctx, shareName(p.file))
-        if (f.exists()) return f
         val src = file(ctx, p.file)
         if (!src.exists()) return null
+        val f = File(ctx.cacheDir, shareName(p.file))
         return try {
             val b = BitmapFactory.decodeFile(src.absolutePath) ?: return null
             val out = scaleRotate(b, 1080, ExifInterface.ORIENTATION_NORMAL)
-            saveJpeg(out, f, 80)
-            if (f.length() > 700_000) saveJpeg(out, f, 65)
+            saveJpeg(out, f, 70)
+            if (f.length() > 400_000) saveJpeg(out, f, 55)
             f
         } catch (_: Exception) { null }
+    }
+
+    /** 예전 버전이 폰에 따로 만들어 둔 1080px 사본(_s.jpg) 지우기 (한 번만) */
+    fun cleanOldShareCopies(ctx: Context) {
+        val prefs = ctx.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("shareCopiesCleaned", false)) return
+        Thread {
+            try { dir(ctx).listFiles()?.filter { it.name.endsWith("_s.jpg") }?.forEach { it.delete() } } catch (_: Exception) {}
+            prefs.edit().putBoolean("shareCopiesCleaned", true).apply()
+        }.start()
     }
 
     /** 사진 촬영 시각 (EXIF). 없으면 0 */
@@ -84,7 +96,7 @@ object Photos {
         FileOutputStream(f).use { b.compress(Bitmap.CompressFormat.JPEG, quality, it) }
     }
 
-    /** 사진 한 장을 앱 폴더로 복사 (큰 사진 1600px + 미리보기 360px). 실패하면 null */
+    /** 사진 한 장을 앱 폴더로 복사 (큰 사진 1600px + 미리보기 480px). 실패하면 null */
     fun import(ctx: Context, uri: Uri, tripId: Long, index: Int): Store.Photo? {
         return try {
             val (taken, orientation) = takenTime(ctx, uri)
@@ -92,9 +104,6 @@ object Photos {
             val name = "${tripId}_${System.currentTimeMillis()}_$index.jpg"
             val big = scaleRotate(src, 1600, orientation)
             saveJpeg(big, file(ctx, name), 85)
-            val share = scaleRotate(src, 1080, orientation)
-            saveJpeg(share, file(ctx, shareName(name)), 80)
-            if (file(ctx, shareName(name)).length() > 700_000) saveJpeg(share, file(ctx, shareName(name)), 65)
             val thumb = scaleRotate(src, 480, orientation)
             saveJpeg(thumb, file(ctx, thumbName(name)), 70)
             Store.Photo(taken, name, null)

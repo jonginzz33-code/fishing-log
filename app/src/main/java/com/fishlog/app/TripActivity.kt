@@ -116,6 +116,14 @@ class TripActivity : Activity() {
         stats.addView(Ui.stat(this, t.name(2), t.count(2).toString(), Ui.BLUE), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         root.addView(stats, Ui.lp(this, MATCH, WRAP, top = 16))
 
+        // 이용료 · 준비물
+        section("이용료 · 준비물")
+        val costCard = Ui.card(this).apply { isClickable = true; setOnClickListener { CostUi.edit(this@TripActivity, t) { render() } } }
+        costCard.addView(Ui.text(this, 14f, Ui.TEXT, false,
+            (t.costLabel().ifBlank { "이용료 안 적음" }) + "\n" +
+                (if (t.gear.isEmpty()) "준비물 안 적음" else "준비물: " + t.gear.joinToString(", ")) + "\n✎ 눌러서 고치기").apply { setLineSpacing(0f, 1.3f) })
+        root.addView(costCard, Ui.lp(this, MATCH, WRAP, top = 10))
+
         // 지도
         section("이동 경로 · 잡은 위치")
         val m = MapDialog.preview(this, t) { MapDialog.showTrip(this, t) }

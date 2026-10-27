@@ -189,6 +189,7 @@ class HistoryActivity : Activity() {
                 "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
             val tags = mutableListOf("${dur / 60}시간 ${dur % 60}분")
             if (t.cat.isNotBlank()) tags.add(0, Store.catShort(t.cat))
+            if (t.costLabel().isNotBlank()) tags.add(t.costLabel())
             if (t.pub && t.pubPrec.isNotBlank()) tags.add(if (t.pubPrec == "exact") "위치 정확 공개" else "위치 대략 공개")
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))

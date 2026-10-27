@@ -17,6 +17,7 @@ import java.util.TimeZone
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.sin
 
 /**
  * 물때
@@ -30,11 +31,47 @@ object Tide {
     private const val SYNODIC = 29.530588853
     private const val NEW_MOON_2000 = 947182440000.0 // 2000-01-06 18:14 UTC
 
+    /** k번째 그믐(합삭)의 실제 시각 (Meeus 천문 계산식, 오차 수 분) */
+    fun newMoonMillis(k: Int): Long {
+        newMoons[k]?.let { return it }
+        val kk = k.toDouble()
+        val t = kk / 1236.85
+        val jde = 2451550.09766 + 29.530588861 * kk + 0.00015437 * t * t - 0.000000150 * t * t * t + 0.00000000073 * t * t * t * t
+        val e = 1 - 0.002516 * t - 0.0000074 * t * t
+        val m = Math.toRadians(2.5534 + 29.10535670 * kk - 0.0000014 * t * t)
+        val mp = Math.toRadians(201.5643 + 385.81693528 * kk + 0.0107582 * t * t)
+        val f = Math.toRadians(160.7108 + 390.67050284 * kk - 0.0016118 * t * t)
+        val om = Math.toRadians(124.7746 - 1.56375588 * kk + 0.0020672 * t * t)
+        val c = -0.40720 * sin(mp) + 0.17241 * e * sin(m) + 0.01608 * sin(2 * mp) + 0.01039 * sin(2 * f) +
+            0.00739 * e * sin(mp - m) - 0.00514 * e * sin(mp + m) + 0.00208 * e * e * sin(2 * m) -
+            0.00111 * sin(mp - 2 * f) - 0.00057 * sin(mp + 2 * f) + 0.00056 * e * sin(2 * mp + m) -
+            0.00042 * sin(3 * mp) + 0.00042 * e * sin(m + 2 * f) + 0.00038 * e * sin(m - 2 * f) -
+            0.00024 * e * sin(2 * mp - m) - 0.00017 * sin(om)
+        // 천문시(TT) → 세계시(UT) 약 69초
+        val ms = ((jde + c - 2440587.5) * 86_400_000.0).toLong() - 69_000L
+        newMoons[k] = ms
+        return ms
+    }
+    private val newMoons = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+
+    /** 한국 시각으로 그날 0시 */
+    private fun kstDayStart(time: Long): Long {
+        val cal = Calendar.getInstance(KST).apply {
+            timeInMillis = time
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
+    /** 음력 날짜: 그믐(합삭)이 든 날(한국 시각) = 1일 */
     fun lunarDay(time: Long): Int {
-        val cal = Calendar.getInstance(KST).apply { timeInMillis = time; set(Calendar.HOUR_OF_DAY, 12) }
-        val days = (cal.timeInMillis - NEW_MOON_2000) / 86_400_000.0
-        val age = ((days % SYNODIC) + SYNODIC) % SYNODIC
-        return floor(age).toInt() + 1
+        val day = kstDayStart(time)
+        val k0 = floor((day - NEW_MOON_2000) / (SYNODIC * 86_400_000.0)).toInt()
+        for (k in (k0 + 1) downTo (k0 - 2)) {
+            val nmDay = kstDayStart(newMoonMillis(k))
+            if (nmDay <= day) return (Math.round((day - nmDay) / 86_400_000.0)).toInt() + 1
+        }
+        return 1
     }
 
     /** 물때 번호: 0 = 무시, 1~13 = 1물~13물, 14 = 조금 */
@@ -247,6 +284,20 @@ object Tide {
             val d = tryKhoa(app, lat, lon, time) ?: tryOpenMeteo(lat, lon, time)
             main.post { if (d != null) done(d, null) else done(null, "물때 정보를 불러오지 못했어요 (인터넷 확인)") }
         }.start()
+    }
+
+    /** 폰에 저장된 물때 중 30일 지난 것 지우기 (하루 한 번) */
+    fun prune(ctx: Context) {
+        val prefs = ctx.getSharedPreferences("tide", Context.MODE_PRIVATE)
+        val today = keyFmt.format(Date())
+        if (prefs.getString("_pruned", "") == today) return
+        val cut = keyFmt.format(Date(System.currentTimeMillis() - 30 * 86_400_000L))
+        val e = prefs.edit()
+        prefs.all.keys.forEach { k ->
+            val ymd = k.substringAfterLast("_", "")
+            if (ymd.length == 8 && ymd.all { it.isDigit() } && ymd < cut) e.remove(k)
+        }
+        e.putString("_pruned", today).apply()
     }
 
     /** 출조 시작할 때 오늘·내일 물때를 미리 받아 둠 (바다에서 인터넷이 없어도 보이게) */
