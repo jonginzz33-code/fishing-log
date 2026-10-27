@@ -25,7 +25,7 @@ import android.view.KeyEvent
  * 출조 중에 계속 떠 있는 서비스
  *  - 리모컨 버튼 받기 (미디어 세션). 무음 재생은 리모컨을 등록했을 때만 (배터리 절약)
  *  - 알림: 지워도 바로 다시 뜸, 작은 +1 버튼 두 개, 잠금화면에서도 보임
- *  - 10시간 넘게 켜져 있으면 "아직 출조 중인가요?" 알림
+ *  - 8시간 넘게 켜져 있으면 "아직 출조 중인가요?" 알림
  */
 class RemoteService : Service() {
 
@@ -342,7 +342,7 @@ class RemoteService : Service() {
     private fun checkLongTrip() {
         val t = Store.current ?: return
         val now = System.currentTimeMillis()
-        if (now - t.start < 10 * 3600_000L || now - lastReminder < 2 * 3600_000L) return
+        if (now - t.start < 8 * 3600_000L || now - lastReminder < 2 * 3600_000L) return
         lastReminder = now
         val hours = (now - t.start) / 3600_000L
         val n = Notification.Builder(this, CHANNEL_REMIND)

@@ -181,6 +181,11 @@ object Store {
         get() = prefs.getBoolean("watch", false)
         set(v) { prefs.edit().putBoolean("watch", v).apply(); fireChanged() }
 
+    /** 기록 방식(리모컨·터치·워치·배터리 절약)을 한 번이라도 골랐는지 */
+    var methodsChosen: Boolean
+        get() = prefs.getBoolean("methodsChosen", false)
+        set(v) { prefs.edit().putBoolean("methodsChosen", v).apply() }
+
     /** 메인 화면 아래 메뉴 펼침 */
     var menuOpen: Boolean
         get() = prefs.getBoolean("menuOpen", false)
@@ -233,7 +238,8 @@ object Store {
         current = Trip(now, now, 0L, arrayOf(defaultName(1), defaultName(2)), mutableListOf(),
             boat = boat.trim(), port = port.trim(), cat = category)
         remember("boats", boat.trim()); remember("ports", port.trim())
-        Tracker.last?.let { current?.track?.add(Pt(it.time, it.latitude, it.longitude)) }
+        // 폰이 기억하던 예전 위치(2분보다 오래된 것)는 출발 지점으로 쓰지 않음 → GPS가 새로 잡은 첫 위치가 출발 지점
+        Tracker.last?.takeIf { now - it.time < 2 * 60_000L }?.let { current?.track?.add(Pt(it.time, it.latitude, it.longitude)) }
         changed()
     }
 

@@ -52,18 +52,17 @@ class MainActivity : Activity() {
     private var upcoming = 0
     private var todayEvents = 0
     private lateinit var updateBar: TextView
-    private lateinit var remoteInfo: TextView
     private lateinit var message: TextView
-    private lateinit var learnBtn: TextView
-    private lateinit var touchBox: CheckBox
-    private lateinit var saverBox: CheckBox
-    private lateinit var watchBox: CheckBox
     private lateinit var menuBtn: TextView
     private lateinit var menuBox: LinearLayout
     private lateinit var recentBox: LinearLayout
     private lateinit var outerRecent: LinearLayout
     private lateinit var innerRecent: LinearLayout
     private lateinit var catRow: LinearLayout
+    private lateinit var methodBox: LinearLayout
+    private var methodsOpen = false
+    private lateinit var art1: SpeciesArtView
+    private lateinit var art2: SpeciesArtView
     private lateinit var name1: TextView
     private lateinit var name2: TextView
     private lateinit var count1: TextView
@@ -242,7 +241,6 @@ class MainActivity : Activity() {
         // 상단: 왼쪽 지도·물때 버튼 + 제목
         val header = Ui.row(this)
         header.addView(smallBtn("지도") { openMap() }, LinearLayout.LayoutParams(dp(56), dp(48)))
-        header.addView(smallBtn("물때") { openTodayTide() }, LinearLayout.LayoutParams(dp(56), dp(48)).apply { leftMargin = dp(8) })
         header.addView(Ui.text(this, 20f, Ui.TEXT, true, "조과기록"),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
         // 가입한 그룹: 옆으로 밀어서 보고 눌러서 바꾸기
@@ -293,53 +291,21 @@ class MainActivity : Activity() {
         status = Ui.text(this, 14f, Ui.SUB)
         col.addView(status, Ui.lp(this, MATCH, WRAP, top = 2))
 
-        // 리모컨 카드
-        val remote = Ui.card(this)
-        remoteInfo = Ui.text(this, 14f)
+        // 기록 방식 카드: 처음엔 네 가지 모두, 고른 뒤엔 한 줄 칩 + "바꾸기 ▼"
+        methodBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = Ui.bg(this@MainActivity, Ui.CARD, 14)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        col.addView(methodBox, Ui.lp(this, MATCH, WRAP, top = 12))
         message = Ui.text(this, 13f, Ui.GREEN).apply { visibility = View.GONE }
-        learnBtn = Ui.button(this, "리모컨 버튼 등록") {
-            if (ButtonRouter.learningStep == 0) ButtonRouter.startLearning() else ButtonRouter.cancelLearning()
-            refresh()
-        }.apply { minHeight = dp(44); textSize = 14f }
-        touchBox = CheckBox(this).apply {
-            text = "터치로 기록 (리모컨 없을 때 카드를 눌러 +1)"
-            setTextColor(Ui.TEXT); textSize = 15f
-            buttonTintList = ColorStateList.valueOf(Ui.BLUE)
-            minHeight = dp(44)
-            setOnCheckedChangeListener { _, checked -> if (checked != Store.touchMode) Store.touchMode = checked }
-        }
-        remote.addView(remoteInfo)
-        remote.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
-        remote.addView(learnBtn, Ui.lp(this, MATCH, WRAP, top = 10))
-        saverBox = CheckBox(this).apply {
-            text = "배터리 절약 모드 (이동 경로를 3분 간격으로)"
-            setTextColor(Ui.TEXT); textSize = 15f
-            buttonTintList = ColorStateList.valueOf(Ui.BLUE)
-            minHeight = dp(44)
-            setOnCheckedChangeListener { _, checked -> if (checked != Store.saver) Store.saver = checked }
-        }
-        remote.addView(touchBox, Ui.lp(this, MATCH, WRAP, top = 6))
-        watchBox = CheckBox(this).apply {
-            text = "갤럭시 워치로 기록 (워치 음악 화면 ⏮ = 1번, ⏭ = 2번)"
-            setTextColor(Ui.TEXT); textSize = 15f
-            buttonTintList = ColorStateList.valueOf(Ui.BLUE)
-            minHeight = dp(44)
-            setOnCheckedChangeListener { _, checked ->
-                if (checked != Store.watchMode) {
-                    Store.watchMode = checked
-                    if (checked) showWatchGuide()
-                }
-            }
-        }
-        remote.addView(watchBox, Ui.lp(this, MATCH, WRAP))
-        remote.addView(saverBox, Ui.lp(this, MATCH, WRAP))
-        col.addView(remote, Ui.lp(this, MATCH, WRAP, top = 14))
+        col.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 카운터
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        row.addView(counterCard(1, Ui.ORANGE, Color.parseColor("#1B0E02")), Ui.lp(this, 0, dp(190), 1f))
+        row.addView(counterCard(1, Ui.ORANGE, Color.parseColor("#1B0E02")), Ui.lp(this, 0, dp(285), 1f))
         row.addView(View(this), Ui.lp(this, dp(12), 1))
-        row.addView(counterCard(2, Ui.BLUE, Color.parseColor("#04222A")), Ui.lp(this, 0, dp(190), 1f))
+        row.addView(counterCard(2, Ui.BLUE, Color.parseColor("#04222A")), Ui.lp(this, 0, dp(285), 1f))
         col.addView(row, Ui.lp(this, MATCH, WRAP, top = 14))
         // 같이 낚시 중인 그룹원 (50m 안, 5분마다)
         liveBox = LinearLayout(this).apply {
@@ -350,7 +316,7 @@ class MainActivity : Activity() {
         }
         col.addView(liveBox, Ui.lp(this, MATCH, WRAP, top = 8))
         col.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "어종 이름(흰 칸)을 누르면 언제든 변경 · 리모컨 버튼을 길게(1초) 누르면 마지막 기록 취소"),
+            "✎를 누르면 어종 변경 · 리모컨 버튼을 길게(1초) 누르면 마지막 기록 취소"),
             Ui.lp(this, MATCH, WRAP, top = 8))
 
         tripBtn = Ui.button(this, "출조 시작", filled = true) { onTripButton() }
@@ -436,35 +402,171 @@ class MainActivity : Activity() {
     }
 
     private fun counterCard(slot: Int, color: Int, ink: Int): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = Ui.bg(this@MainActivity, color, 20)
-            setPadding(dp(16), dp(14), dp(16), dp(14))
+        val card = android.widget.FrameLayout(this).apply {
+            background = Ui.bg(this@MainActivity, color, 22)
             isClickable = true
+            clipToOutline = true
             setOnClickListener {
-                if (!Store.touchMode) { showMessage("터치 기록이 꺼져 있어요 (위 체크박스)"); return@setOnClickListener }
+                if (!Store.touchMode) { showMessage("터치 기록이 꺼져 있어요 (기록 방식에서 '터치' 켜기)"); return@setOnClickListener }
                 if (Store.current == null) { showMessage("먼저 '출조 시작'을 눌러주세요"); return@setOnClickListener }
                 Store.addCatch(slot)
                 Haptics.slot(this@MainActivity, slot)
             }
         }
-        card.addView(Ui.text(this, 12f, ink, true, "버튼 $slot").apply {
+        // 오른쪽 아래: 반투명 귀여운 어종 그림
+        val art = SpeciesArtView(this).apply { this.ink = ink }
+        card.addView(art, android.widget.FrameLayout.LayoutParams(dp(130), dp(130), Gravity.BOTTOM or Gravity.END).apply {
+            rightMargin = -dp(4); bottomMargin = -dp(4)
+        })
+        // 어종 이름: 밝은 흰색 반투명 큰 글씨 (카드 폭에 맞춰 자동 크기)
+        val name = TextView(this).apply {
+            setTextColor(Color.argb(205, 255, 255, 255))
+            typeface = Typeface.DEFAULT_BOLD
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(18, 46, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
+        card.addView(name, android.widget.FrameLayout.LayoutParams(MATCH, dp(58), Gravity.TOP).apply {
+            topMargin = dp(46); leftMargin = dp(14); rightMargin = dp(10)
+        })
+        // 위: "버튼 1" + 작은 연필 (연필을 눌러야 어종 바꾸기)
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Ui.text(this, 12f, ink, true, "버튼 $slot").apply {
             background = Ui.bg(this@MainActivity, Color.argb(36, 0, 0, 0), 99)
             setPadding(dp(10), dp(3), dp(10), dp(3))
-        }, LinearLayout.LayoutParams(WRAP, WRAP))
-        val name = Ui.text(this, 20f, ink, true).apply {
-            setPadding(dp(10), dp(6), dp(10), dp(6))
-            background = Ui.bg(this@MainActivity, Color.argb(60, 255, 255, 255), 10)
+        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(40) })
+        top.addView(Ui.text(this, 15f, ink, true, "✎").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Color.argb(80, 255, 255, 255), 10)
             setOnClickListener { askRename(slot) }
-        }
-        card.addView(name, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(8) })
-        card.addView(View(this), Ui.lp(this, MATCH, 0, 1f))
-        val count = Ui.text(this, 60f, ink, true).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
-        card.addView(count)
-        val last = Ui.text(this, 12f, ink)
-        card.addView(last)
-        if (slot == 1) { name1 = name; count1 = count; last1 = last } else { name2 = name; count2 = count; last2 = last }
+        }, LinearLayout.LayoutParams(dp(36), dp(36)))
+        card.addView(top, android.widget.FrameLayout.LayoutParams(MATCH, WRAP, Gravity.TOP).apply {
+            topMargin = dp(10); leftMargin = dp(12); rightMargin = dp(10)
+        })
+        // 아래: 마릿수 + 마지막 시각 · 경과
+        val bottom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val count = Ui.text(this, 64f, ink, true).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); includeFontPadding = false }
+        bottom.addView(count)
+        val last = Ui.text(this, 12f, ink).apply { maxLines = 1 }
+        bottom.addView(last, Ui.lp(this, WRAP, WRAP, top = 2))
+        card.addView(bottom, android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply {
+            leftMargin = dp(14); bottomMargin = dp(12)
+        })
+        if (slot == 1) { name1 = name; count1 = count; last1 = last; art1 = art } else { name2 = name; count2 = count; last2 = last; art2 = art }
         return card
+    }
+
+    /** 마지막 시각 + 경과: "마지막 20:00 · 26분 전" */
+    private fun lastText(t: Store.Trip?, slot: Int): CharSequence {
+        val c = t?.catches?.lastOrNull { it.slot == slot } ?: return " "
+        val min = ((System.currentTimeMillis() - c.time) / 60_000L).coerceAtLeast(0)
+        val ago = when {
+            min < 1 -> "방금"
+            min < 60 -> "${min}분 전"
+            else -> "${min / 60}시간 ${min % 60}분 전"
+        }
+        val sb = android.text.SpannableStringBuilder("마지막 " + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(c.time)) + "  ")
+        val st = sb.length
+        sb.append(" $ago ")
+        sb.setSpan(android.text.style.BackgroundColorSpan(Color.argb(40, 0, 0, 0)), st, sb.length, 0)
+        sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), st, sb.length, 0)
+        return sb
+    }
+
+    // ---------------- 기록 방식 (리모컨 · 터치 · 워치 · 배터리 절약) ----------------
+    private fun remoteOn() = Store.key1 != null && Store.key2 != null
+
+    /** 한 번이라도 골랐는지 (예전부터 쓰던 사람은 고른 걸로) */
+    private fun methodsChosen(): Boolean = Store.methodsChosen || Store.history.isNotEmpty() || remoteOn() || Store.watchMode
+
+    private fun chip(label: String, on: Boolean) = Ui.text(this, 12f, if (on) Color.parseColor("#04222A") else Ui.SUB, on, label).apply {
+        setPadding(dp(10), dp(4), dp(10), dp(4))
+        background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+    }
+
+    private fun renderMethods() {
+        if (!::methodBox.isInitialized) return
+        methodBox.removeAllViews()
+        val learning = ButtonRouter.learningStep != 0
+        val open = methodsOpen || learning || !methodsChosen()
+        if (!open) {
+            // 한 줄: 기록 방식 칩 + 바꾸기 ▼
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                isClickable = true; setOnClickListener { methodsOpen = true; renderMethods() }
+            }
+            val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            left.addView(Ui.text(this, 12f, Ui.SUB, false, "기록 방식"))
+            val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val on = mutableListOf<String>()
+            if (remoteOn()) on.add("리모컨")
+            if (Store.touchMode) on.add("터치")
+            if (Store.watchMode) on.add("워치 ⏮1 ⏭2")
+            if (on.isEmpty()) on.add("선택 안 됨")
+            on.forEach { chips.addView(chip(it, it != "선택 안 됨"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }) }
+            chips.addView(chip(if (Store.saver) "배터리 절약" else "배터리 절약 꺼짐", Store.saver))
+            left.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
+                Ui.lp(this, MATCH, WRAP, top = 6))
+            row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
+            row.addView(Ui.text(this, 13f, Ui.TEXT, true, "바꾸기 ▼").apply {
+                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+                setOnClickListener { methodsOpen = true; renderMethods() }
+            }, LinearLayout.LayoutParams(WRAP, dp(36)).apply { leftMargin = dp(8) })
+            methodBox.addView(row)
+            return
+        }
+        // 펼친 상태
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(Ui.text(this, 14f, Ui.TEXT, true,
+            if (methodsChosen()) "기록 방식 바꾸기" else "기록 방식을 골라 주세요 (여러 개 가능)"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (methodsChosen() && !learning) head.addView(Ui.text(this, 13f, Color.parseColor("#04222A"), true, "접기 ▲").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+            background = Ui.bg(this@MainActivity, Ui.BLUE, 99)
+            setOnClickListener { methodsOpen = false; renderMethods() }
+        }, LinearLayout.LayoutParams(WRAP, dp(34)))
+        methodBox.addView(head)
+
+        fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, onToggle: () -> Unit) {
+            val r = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 12, if (on) Ui.BLUE else Ui.LINE)
+                isClickable = true
+                setOnClickListener { Store.methodsChosen = true; onToggle(); renderMethods() }
+            }
+            r.addView(Ui.text(this, 14f, Color.parseColor("#04222A"), true, if (on) "✓" else "").apply {
+                gravity = Gravity.CENTER
+                background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 5) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 5, Ui.BLUE)
+            }, LinearLayout.LayoutParams(dp(22), dp(22)))
+            val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            txt.addView(Ui.text(this, 15f, Ui.TEXT, true, title))
+            txt.addView(Ui.text(this, 12f, Ui.SUB, false, sub))
+            r.addView(txt, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+            if (action != null) r.addView(Ui.text(this, 12f, Ui.TEXT, true, if (learning) "등록 취소" else "버튼 등록").apply {
+                gravity = Gravity.CENTER; setPadding(dp(10), 0, dp(10), 0)
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 8, Ui.LINE)
+                setOnClickListener { Store.methodsChosen = true; action(); renderMethods() }
+            }, LinearLayout.LayoutParams(WRAP, dp(34)))
+            methodBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
+        val learnAction = {
+            if (ButtonRouter.learningStep == 0) ButtonRouter.startLearning() else ButtonRouter.cancelLearning()
+            refresh()
+        }
+        option("리모컨", "1번: ${ButtonRouter.label(Store.key1)} · 2번: ${ButtonRouter.label(Store.key2)}", remoteOn(), learnAction) {
+            if (remoteOn()) {
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("리모컨 등록을 지울까요?")
+                    .setPositiveButton("지우기") { _, _ -> Store.key1 = null; Store.key2 = null; renderMethods() }
+                    .setNegativeButton("취소", null).show()
+            } else learnAction()
+        }
+        option("터치", "카드를 눌러 +1", Store.touchMode, null) { Store.touchMode = !Store.touchMode }
+        option("갤럭시 워치", "워치 음악 화면 ⏮ = 1번 · ⏭ = 2번", Store.watchMode, null) {
+            Store.watchMode = !Store.watchMode
+            if (Store.watchMode) showWatchGuide()
+        }
+        option("배터리 절약", "이동 경로를 3분 간격으로", Store.saver, null) { Store.saver = !Store.saver }
     }
 
     // ---------------- 동작 ----------------
@@ -666,7 +768,7 @@ class MainActivity : Activity() {
     /** 메인 물때 한 줄: "8물 · 사리" / "지금 날물 · 다음 간조 23:52 · 물세기 100%" */
     private fun refreshTideRow() {
         val now = System.currentTimeMillis()
-        tideTitle.text = Tide.mulName(now).substringBefore(" (")
+        tideTitle.text = TideDialog.dayTitle(Tide.mulName(now).substringBefore(" ("), now)
         val loc = bestLocation()
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
         val st = Tide.stationFor(this, loc.first, loc.second)
@@ -913,8 +1015,11 @@ class MainActivity : Activity() {
 
     // ---------------- 화면 갱신 ----------------
 
+    private var lastMinute = -1L
     private fun updateStatus() {
         val t = Store.current
+        val minute = System.currentTimeMillis() / 60_000L
+        if (minute != lastMinute && ::last1.isInitialized) { lastMinute = minute; last1.text = lastText(t, 1); last2.text = lastText(t, 2) }
         status.text = if (t == null) {
             "대기 중 · '출조 시작'을 누르면 기록을 시작해요"
         } else {
@@ -926,9 +1031,9 @@ class MainActivity : Activity() {
     }
 
     private fun refreshRemote() {
-        remoteInfo.text = "리모컨  1번: ${ButtonRouter.label(Store.key1)}   2번: ${ButtonRouter.label(Store.key2)}"
-        learnBtn.text = if (ButtonRouter.learningStep == 0) "리모컨 버튼 등록" else "등록 취소"
+        if (lastLearning != ButtonRouter.learningStep) { lastLearning = ButtonRouter.learningStep; renderMethods() }
     }
+    private var lastLearning = -1
 
     private fun refresh() {
         updateStatus()
@@ -942,15 +1047,14 @@ class MainActivity : Activity() {
             t.place().isBlank() -> "배·항구 입력하기 ✎"
             else -> t.place() + "  ✎"
         }
-        name1.text = (t?.name(1) ?: Store.defaultName(1)) + "  ✎"
-        name2.text = (t?.name(2) ?: Store.defaultName(2)) + "  ✎"
-        if (touchBox.isChecked != Store.touchMode) touchBox.isChecked = Store.touchMode
-        if (saverBox.isChecked != Store.saver) saverBox.isChecked = Store.saver
-        if (watchBox.isChecked != Store.watchMode) watchBox.isChecked = Store.watchMode
+        name1.text = t?.name(1) ?: Store.defaultName(1)
+        name2.text = t?.name(2) ?: Store.defaultName(2)
+        art1.species = name1.text.toString(); art2.species = name2.text.toString()
+        renderMethods()
         count1.text = (t?.count(1) ?: 0).toString()
         count2.text = (t?.count(2) ?: 0).toString()
-        last1.text = t?.catches?.lastOrNull { it.slot == 1 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "
-        last2.text = t?.catches?.lastOrNull { it.slot == 2 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "
+        last1.text = lastText(t, 1)
+        last2.text = lastText(t, 2)
         tripBtn.text = if (t == null) "출조 시작" else "출조 종료"
         undoBtn.visibility = if (t == null) View.GONE else View.VISIBLE
         placeRecent()

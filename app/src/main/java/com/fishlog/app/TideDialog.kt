@@ -24,6 +24,26 @@ object TideDialog {
         timeInMillis = time; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
+    /** 오늘 기준 며칠 차이: 0 → "오늘", 1 → "+1일", -1 → "−1일" */
+    fun dayOffsetLabel(time: Long): String {
+        val d = Math.round((dayStart(time) - dayStart(System.currentTimeMillis())) / 86_400_000.0).toInt()
+        return when { d == 0 -> "오늘"; d > 0 -> "+${d}일"; else -> "−${-d}일" }
+    }
+
+    private fun offsetColor(time: Long): Int {
+        val l = dayOffsetLabel(time)
+        return when { l == "오늘" -> Ui.GREEN; l.startsWith("+") -> android.graphics.Color.parseColor("#F2C14E"); else -> Ui.SUB }
+    }
+
+    /** "8물 · 사리 · 10/27(화) 오늘" (날짜·오늘 부분은 같은 크기, 색만 다르게) */
+    fun dayTitle(mul: String, time: Long): CharSequence {
+        val sb = android.text.SpannableStringBuilder(mul)
+        val st = sb.length
+        sb.append(" · ").append(SimpleDateFormat("M/d(E)", Locale.KOREA).format(Date(time))).append(" ").append(dayOffsetLabel(time))
+        sb.setSpan(android.text.style.ForegroundColorSpan(offsetColor(time)), st, sb.length, 0)
+        return sb
+    }
+
     /** 만조·간조 알람 고르기 (출조 중에만 울림) */
     fun pickAlarm(a: Activity, done: () -> Unit) {
         val mins = listOf(0, 10, 20, 30, 40, 50, 60)
@@ -168,8 +188,18 @@ object TideDialog {
         fun load() {
             val id = ++loadId
             val noon = cur + 12 * 3_600_000L
-            dateText.text = titleFmt.format(Date(cur)) + (if (cur == today) " · 오늘" else "") + " ▾"
-            head.text = Tide.mulName(noon)
+            dateText.text = android.text.SpannableStringBuilder(titleFmt.format(Date(cur)) + " · ").apply {
+                val st = length
+                append(dayOffsetLabel(cur))
+                setSpan(android.text.style.ForegroundColorSpan(offsetColor(cur)), st, length, 0)
+                append(" ▾")
+            }
+            head.text = android.text.SpannableStringBuilder(dayTitle(Tide.mulName(noon).substringBefore(" ("), noon)).apply {
+                val st = length
+                append("  (" + Tide.mulName(noon).substringAfter(" (", ""))
+                if (length - st <= 3) delete(st, length)
+                else setSpan(android.text.style.AbsoluteSizeSpan(12, true), st, length, 0)
+            }
             info.text = "물때 불러오는 중…"
             strength.text = "물세기 계산 중…"
             flowNote.text = ""; src.text = ""
