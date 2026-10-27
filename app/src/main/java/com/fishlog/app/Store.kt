@@ -54,7 +54,8 @@ object Store {
     fun addListener(l: () -> Unit) { listeners.add(l) }
     fun removeListener(l: () -> Unit) { listeners.remove(l) }
     private fun fireChanged() = listeners.toList().forEach { it() }
-    private fun changed() { save(); fireChanged() }
+    /** all=false 이면 지금 출조만 저장 (가볍게) */
+    private fun changed(all: Boolean = true) { if (all) save() else saveCurrent(); fireChanged() }
 
     fun find(id: Long): Trip? = if (current?.id == id) current else history.firstOrNull { it.id == id }
 
@@ -76,6 +77,11 @@ object Store {
     var hideRoute: Boolean
         get() = prefs.getBoolean("hideRoute", false)
         set(v) { prefs.edit().putBoolean("hideRoute", v).apply(); fireChanged() }
+
+    /** 배터리 절약 모드: 경로를 3분 간격으로 */
+    var saver: Boolean
+        get() = prefs.getBoolean("saver", false)
+        set(v) { prefs.edit().putBoolean("saver", v).apply(); Tracker.reapply(); fireChanged() }
 
     var satellite: Boolean
         get() = prefs.getBoolean("satellite", true)
@@ -129,7 +135,7 @@ object Store {
         val now = System.currentTimeMillis()
         val loc = Tracker.recent(now)
         t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude))
-        changed()
+        changed(false)
         return t.count(slot)
     }
 
@@ -137,21 +143,21 @@ object Store {
         val t = current ?: return 0
         if (t.catches.isEmpty()) return 0
         val c = t.catches.removeAt(t.catches.size - 1)
-        changed()
+        changed(false)
         return c.slot
     }
 
     fun addTrackPoint(time: Long, lat: Double, lon: Double) {
         val t = current ?: return
         t.track.add(Pt(time, lat, lon))
-        save()
+        saveCurrent()
     }
 
     fun rename(slot: Int, name: String) {
         val v = name.ifBlank { "${slot}번" }
         prefs.edit().putString("name$slot", v).apply()
         current?.names?.set(slot - 1, v)
-        changed()
+        changed(false)
     }
 
     fun renameInTrip(tripId: Long, slot: Int, name: String) {
@@ -260,6 +266,13 @@ object Store {
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
             arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
             o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false))
+    }
+
+    private fun saveCurrent() {
+        val cur = current
+        val e = prefs.edit()
+        if (cur == null) e.remove("current") else e.putString("current", tripToJson(cur).toString())
+        e.apply()
     }
 
     private fun save() {

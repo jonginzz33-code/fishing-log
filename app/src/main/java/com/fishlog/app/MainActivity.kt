@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var message: TextView
     private lateinit var learnBtn: TextView
     private lateinit var touchBox: CheckBox
+    private lateinit var saverBox: CheckBox
     private lateinit var name1: TextView
     private lateinit var name2: TextView
     private lateinit var count1: TextView
@@ -193,7 +194,15 @@ class MainActivity : Activity() {
         remote.addView(remoteInfo)
         remote.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
         remote.addView(learnBtn, Ui.lp(this, MATCH, WRAP, top = 10))
+        saverBox = CheckBox(this).apply {
+            text = "배터리 절약 모드 (이동 경로를 3분 간격으로)"
+            setTextColor(Ui.TEXT); textSize = 15f
+            buttonTintList = ColorStateList.valueOf(Ui.BLUE)
+            minHeight = dp(44)
+            setOnCheckedChangeListener { _, checked -> if (checked != Store.saver) Store.saver = checked }
+        }
         remote.addView(touchBox, Ui.lp(this, MATCH, WRAP, top = 6))
+        remote.addView(saverBox, Ui.lp(this, MATCH, WRAP))
         col.addView(remote, Ui.lp(this, MATCH, WRAP, top = 14))
 
         // 카운터
@@ -468,6 +477,7 @@ class MainActivity : Activity() {
         name1.text = (t?.name(1) ?: Store.defaultName(1)) + "  ✎"
         name2.text = (t?.name(2) ?: Store.defaultName(2)) + "  ✎"
         if (touchBox.isChecked != Store.touchMode) touchBox.isChecked = Store.touchMode
+        if (saverBox.isChecked != Store.saver) saverBox.isChecked = Store.saver
         count1.text = (t?.count(1) ?: 0).toString()
         count2.text = (t?.count(2) ?: 0).toString()
         last1.text = t?.catches?.lastOrNull { it.slot == 1 }?.let { "마지막 " + timeFmt.format(Date(it.time)) } ?: " "

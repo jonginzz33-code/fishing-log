@@ -240,13 +240,28 @@ class TripActivity : Activity() {
 
     // ---------------- 사진 ----------------
     private fun pickPhotos() {
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        // 안드로이드 기본 사진 선택 화면: 체크박스로 톡톡 눌러 여러 장 (최대 30장)
+        val i = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).apply {
+                putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX, 30)
+            }
+        } else {
+            Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
         }
-        @Suppress("DEPRECATION")
-        startActivityForResult(i, 10)
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(i, 10)
+        } catch (_: Exception) {
+            val fallback = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = "image/*"; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(fallback, 10)
+        }
     }
 
     @Deprecated("old api")
@@ -258,10 +273,24 @@ class TripActivity : Activity() {
         data.clipData?.let { cd -> for (k in 0 until cd.itemCount) uris.add(cd.getItemAt(k).uri) }
         if (uris.isEmpty()) data.data?.let { uris.add(it) }
         if (uris.isEmpty()) return
-        Toast.makeText(this, "사진 ${uris.size}장 가져오는 중…", Toast.LENGTH_SHORT).show()
+        val progressText = Ui.text(this, 15f, Ui.TEXT, false, "0 / ${uris.size}장").apply {
+            setPadding(dp(24), dp(16), dp(24), dp(8))
+        }
+        val progress = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("사진 가져오는 중")
+            .setView(progressText)
+            .setCancelable(false)
+            .show()
         Thread {
-            val imported = uris.mapIndexedNotNull { k, u -> Photos.import(this, u, tripId, k) }
-            main.post { confirmPhotos(imported, uris.size) }
+            val imported = mutableListOf<Store.Photo>()
+            uris.forEachIndexed { k, u ->
+                Photos.import(this, u, tripId, k)?.let { imported.add(it) }
+                main.post { progressText.text = "${k + 1} / ${uris.size}장" }
+            }
+            main.post {
+                progress.dismiss()
+                confirmPhotos(imported, uris.size)
+            }
         }.start()
     }
 

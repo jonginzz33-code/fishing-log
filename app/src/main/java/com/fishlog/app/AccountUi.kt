@@ -218,7 +218,7 @@ class AccountUi(private val a: Activity) {
             val c = personColors[i % personColors.size]
             MapLayer(c, t.track.map { GeoPoint(it.lat, it.lon) },
                 t.catches.filter { it.lat != null && it.lon != null }.map {
-                    MapCatch(GeoPoint(it.lat!!, it.lon!!), c, "${t.ownerName} ${tf.format(Date(it.time))} ${t.name(it.slot)}")
+                    MapCatch(GeoPoint(it.lat!!, it.lon!!), c, "${t.ownerName} ${tf.format(Date(it.time))} ${t.name(it.slot)}", "${t.ownerName} ${t.name(it.slot)}")
                 })
         }
         val total = group.sumOf { it.catches.size }
