@@ -25,6 +25,56 @@ object Live {
     @Volatile var updatedAt = 0L
         private set
 
+    /** 친구 돌파 축하 띠: 1분 동안 */
+    class Cheer(val text: String, val time: Long)
+    @Volatile var cheer: Cheer? = null
+        private set
+    private val prevCounts = HashMap<String, Pair<Int, Int>>()
+
+    /** 직전 갱신 때보다 늘어난 사이에 넘은 가장 큰 단계 */
+    private fun crossed(old: Int, now: Int): Int? = Milestone.STEPS.filter { it in (old + 1)..now }.maxOrNull()
+
+    private fun checkCheers(list: List<Mate>) {
+        list.forEach { m ->
+            val prev = prevCounts[m.uid]
+            if (prev != null) {
+                listOf(Triple(prev.first, m.c1, m.names.getOrElse(0) { "1번" }), Triple(prev.second, m.c2, m.names.getOrElse(1) { "2번" }))
+                    .forEach { (o, n, sp) ->
+                        crossed(o, n)?.let { step ->
+                            val text = "${m.name}님 $sp ${step}마리 돌파! " + Milestone.titleWithCrown(Milestone.STEPS.indexOf(step))
+                            cheer = Cheer(text, System.currentTimeMillis())
+                            notifyCheer(text, m)
+                        }
+                    }
+            }
+            prevCounts[m.uid] = m.c1 to m.c2
+        }
+    }
+
+    private fun notifyCheer(text: String, m: Mate) {
+        if (!Store.friendAlerts || !Cloud.isInitialized()) return
+        val c = Cloud.appContext
+        try {
+            val nm = c.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel("friendCheer") == null) {
+                nm.createNotificationChannel(android.app.NotificationChannel("friendCheer", "같이 낚시 중 친구 돌파 알림",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT))
+            }
+            val open = android.app.PendingIntent.getActivity(c, 11, android.content.Intent(c, MainActivity::class.java),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = android.app.Notification.Builder(c, "friendCheer")
+                .setSmallIcon(R.drawable.ic_stat_octo)
+                .setColor(Ui.ORANGE)
+                .setContentTitle("🎉 $text")
+                .setContentText("${m.name} " + m.names.getOrElse(0) { "1번" } + " ${m.c1} · " + m.names.getOrElse(1) { "2번" } + " ${m.c2}")
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setVisibility(if (Store.lockScreenShow) android.app.Notification.VISIBILITY_PUBLIC else android.app.Notification.VISIBILITY_PRIVATE)
+                .build()
+            nm.notify(20 + (m.uid.hashCode() and 0xff), n)
+        } catch (_: Exception) {}
+    }
+
     private val db get() = FirebaseFirestore.getInstance()
     private val main = Handler(Looper.getMainLooper())
     private val listeners = mutableSetOf<() -> Unit>()
@@ -79,7 +129,11 @@ object Live {
                 }
                 .addOnCompleteListener {
                     left--
-                    if (left == 0) { mates = found.values.sortedBy { it.meters }; fire() }
+                    if (left == 0) {
+                        mates = found.values.sortedBy { it.meters }
+                        checkCheers(mates)
+                        fire()
+                    }
                 }
         }
     }
@@ -88,7 +142,7 @@ object Live {
     fun clear() {
         val me = Cloud.uid ?: return
         Cloud.groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).delete() }
-        mates = emptyList(); updatedAt = 0L
+        mates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null
         fire()
     }
 }

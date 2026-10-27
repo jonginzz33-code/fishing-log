@@ -345,19 +345,48 @@ object MapDialog {
 
         val pastBtn = pill("지난 기록 겹치기")
         var pastLoaded = false
+        // 맨 위 한 줄: 지금 어떤 기록을 겹쳐 보는지 + 보기 바꾸기
+        val pastBar = TextView(a).apply {
+            textSize = 12f; setTextColor(Color.WHITE)
+            setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+            background = GradientDrawable().apply { setColor(Color.parseColor("#12293A")); cornerRadius = dp(a, 10).toFloat() }
+            visibility = android.view.View.GONE
+        }
+        past.icons = true
+        fun loadPastNow() {
+            val mode = pastModeNow()
+            pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
+            pastNote = "\n지난 기록 불러오는 중…"
+            updateLegend()
+            loadPast(excludeId, mode) { list, mine, others ->
+                past.dots = list
+                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +
+                    " · 그림 = 많이 잡힌 어종 · 숫자 = 마릿수 · 분홍 테두리 = 친구 · 보라 = 게시판"
+                updateLegend()
+                map.invalidate()
+            }
+        }
+        pastBar.setOnClickListener {
+            val modes = mutableListOf("mine")
+            Cloud.groups.forEach { modes.add("g:${it.id}") }
+            if (Cloud.groups.size > 1) modes.add("allg")
+            if (Cloud.user != null) modes.add("public")
+            val cur = pastModeNow()
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("지난 기록 보기")
+                .setItems(modes.map { (if (it == cur) "● " else "○ ") + pastModeLabel(it) }.toTypedArray()) { _, i ->
+                    Store.pastMode = modes[i]
+                    loadPastNow()
+                }
+                .show()
+        }
         pastBtn.setOnClickListener {
             past.isEnabled = !past.isEnabled
             setOn(pastBtn, past.isEnabled)
+            pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
             if (past.isEnabled && !pastLoaded) {
                 pastLoaded = true
-                pastNote = "\n지난 기록 불러오는 중…"
-                updateLegend()
-                loadPast(excludeId) { list, mine, friends ->
-                    past.dots = list
-                    pastNote = "\n반투명 = 지난 기록 (내 조과 $mine · 친구 조과 $friends) · 친구는 사람마다 색이 달라요"
-                    updateLegend()
-                    map.invalidate()
-                }
+                loadPastNow()
             } else {
                 pastNote = if (past.isEnabled && pastLoaded) pastNote else ""
                 updateLegend()
@@ -377,6 +406,7 @@ object MapDialog {
         close.setOnClickListener { dialog.dismiss() }
         addPill(close)
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
 
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -479,31 +509,77 @@ object MapDialog {
     }
 
     /** 내 지난 출조 + 같은 그룹 친구 출조의 조과 점 */
-    private fun loadPast(excludeId: Long?, done: (List<MapDot>, Int, Int) -> Unit) {
+    /** 지금 고른 "지난 기록 보기" */
+    private fun pastModeNow(): String {
+        val m = Store.pastMode
+        val gs = Cloud.groups
+        return when {
+            Cloud.user == null -> "mine"
+            m == null -> Cloud.active?.let { "g:${it.id}" } ?: "mine"
+            m.startsWith("g:") && gs.none { "g:${it.id}" == m } -> Cloud.active?.let { "g:${it.id}" } ?: "mine"
+            else -> m
+        }
+    }
+
+    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+
+    fun pastModeLabel(mode: String): String = when {
+        mode == "mine" -> "내 기록만"
+        mode == "allg" -> "내 기록 + 가입한 그룹 전부"
+        mode == "public" -> "내 기록 + 전체 게시판 (최근 3개월)"
+        mode.startsWith("g:") -> "내 기록 + " + (Cloud.groups.firstOrNull { "g:${it.id}" == mode }?.let { groupLabel(it) } ?: "그룹") + " 친구 기록"
+        else -> mode
+    }
+
+    /** 지난 기록: 내 기록 + (고른 그룹 친구 / 전체 게시판). 점에는 어종 그림 */
+    private fun loadPast(excludeId: Long?, mode: String, done: (List<MapDot>, Int, Int) -> Unit) {
         val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
         val mine = Store.history.filter { it.id != excludeId }.take(150).flatMap { t ->
             val mul = Tide.mulName(t.start).substringBefore(" (")
             t.catches.filter { it.lat != null && it.lon != null }.map {
                 MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
                     "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
-                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid))
+                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0)
             }
         }
         val myId = Cloud.uid
-        if (myId == null || Cloud.active == null) { done(mine, mine.size, 0); return }
-        Cloud.recentTrips { list, _ ->
-            val friendsTrips = list?.filter { it.owner != myId } ?: emptyList()
-            val owners = friendsTrips.map { it.owner }.distinct()
-            val friends = friendsTrips.flatMap { t ->
-                val color = FRIEND_COLORS[owners.indexOf(t.owner) % FRIEND_COLORS.size]
-                val mul = Tide.mulName(t.start).substringBefore(" (")
-                t.catches.filter { it.lat != null && it.lon != null }.map {
-                    MapDot(GeoPoint(it.lat!!, it.lon!!), color,
-                        "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
-                        it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid))
+        if (myId == null || mode == "mine") { done(mine, mine.size, 0); return }
+        if (mode == "public") {
+            PublicBoard.load(System.currentTimeMillis() - 92L * 86_400_000L) { list, _ ->
+                val others = list.orEmpty().filter { it.owner != myId && !Moderation.isBlocked(it.owner) }.flatMap { t ->
+                    val mul = Tide.mulName(t.start).substringBefore(" (")
+                    t.catches.mapNotNull { c ->
+                        val cell = c.cell ?: return@mapNotNull null
+                        MapDot(GeoPoint(cell.lat, cell.lon), SLOT_COLORS[(c.slot - 1).coerceIn(0, 1)],
+                            "${t.nick} · ${df.format(Date(c.time))} · ${t.name(c.slot)} · $mul", "${t.nick} ${t.name(c.slot)}",
+                            c.time, t.nick, t.name(c.slot), false, 2, if (t.exact) 0.0 else cell.r)
+                    }
+                }
+                done(mine + others, mine.size, others.size)
+            }
+            return
+        }
+        val gs = if (mode == "allg") Cloud.groups else Cloud.groups.filter { "g:${it.id}" == mode }
+        if (gs.isEmpty()) { done(mine, mine.size, 0); return }
+        val got = mutableListOf<Cloud.RemoteTrip>()
+        var left = gs.size
+        gs.forEach { g ->
+            Cloud.recentTripsOf(g) { list, _ ->
+                list?.let { got.addAll(it) }
+                left--
+                if (left == 0) {
+                    val friendsTrips = got.filter { it.owner != myId }.distinctBy { it.id }
+                    val friends = friendsTrips.flatMap { t ->
+                        val mul = Tide.mulName(t.start).substringBefore(" (")
+                        t.catches.filter { it.lat != null && it.lon != null }.map {
+                            MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[(it.slot - 1).coerceIn(0, 1)],
+                                "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
+                                it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1)
+                        }
+                    }
+                    done(mine + friends, mine.size, friends.size)
                 }
             }
-            done(mine + friends, mine.size, friends.size)
         }
     }
 

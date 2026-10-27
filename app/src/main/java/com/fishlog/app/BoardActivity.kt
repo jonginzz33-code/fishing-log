@@ -92,15 +92,19 @@ class BoardActivity : Activity() {
         blockBtn.text = if (n > 0) "차단 목록 ($n)" else "차단 목록"
     }
 
+    /** 게시판에 내 닉네임으로 올릴지, 익명으로 올릴지 (닉네임 자체는 개인 설정에서) */
     private fun askNick() {
-        val input = EditText(this).apply { setText(Store.nick ?: Cloud.displayName); inputType = InputType.TYPE_CLASS_TEXT }
+        val items = arrayOf((if (Store.nick != "") "✓ " else "") + "내 닉네임으로 (${Cloud.nick ?: "아직 없음"})",
+            (if (Store.nick == "") "✓ " else "") + "익명으로", "닉네임 정하기 · 바꾸기 (개인 설정)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("전체 게시판에 보일 이름")
-            .setMessage("앞으로 공개하는 출조부터 이 이름으로 보여요")
-            .setView(input)
-            .setPositiveButton("저장") { _, _ -> Store.nick = input.text.toString().trim().take(20); refreshNick() }
-            .setNeutralButton("익명") { _, _ -> Store.nick = ""; refreshNick() }
-            .setNegativeButton("취소", null)
+            .setItems(items) { _, w ->
+                when (w) {
+                    0 -> { Store.nick = "me"; refreshNick() }
+                    1 -> { Store.nick = ""; refreshNick() }
+                    else -> startActivity(android.content.Intent(this, SettingsActivity::class.java))
+                }
+            }
             .show()
     }
 

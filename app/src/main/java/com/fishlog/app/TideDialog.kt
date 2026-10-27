@@ -36,12 +36,28 @@ object TideDialog {
     }
 
     /** "8물 · 사리 · 10/27(화) 오늘" (날짜·오늘 부분은 같은 크기, 색만 다르게) */
-    fun dayTitle(mul: String, time: Long): CharSequence {
+    fun dayTitle(mul: String, time: Long, pct: Int? = null, short: Boolean = false): CharSequence {
         val sb = android.text.SpannableStringBuilder(mul)
         val st = sb.length
         sb.append(" · ").append(SimpleDateFormat("M/d(E)", Locale.KOREA).format(Date(time))).append(" ").append(dayOffsetLabel(time))
         sb.setSpan(android.text.style.ForegroundColorSpan(offsetColor(time)), st, sb.length, 0)
+        // 날짜 바로 옆 작은 글씨: 물 많이/중간쯤/덜 빠지는 날 (물세기 기준이라 서해·남해·동해 모두 맞음)
+        if (pct != null) {
+            val (txt, col) = drainLabel(pct, short)
+            sb.append(" ")
+            val s2 = sb.length
+            sb.append(txt)
+            sb.setSpan(android.text.style.ForegroundColorSpan(col), s2, sb.length, 0)
+            sb.setSpan(android.text.style.AbsoluteSizeSpan(12, true), s2, sb.length, 0)
+        }
         return sb
+    }
+
+    /** 물세기 85% 이상 = 많이, 55~85 = 중간쯤, 55 미만 = 덜 */
+    fun drainLabel(pct: Int, short: Boolean = false): Pair<String, Int> = when {
+        pct >= 85 -> (if (short) "물 많이 빠짐" else "물 많이 빠지는 날") to Ui.GREEN
+        pct >= 55 -> (if (short) "물 중간쯤 빠짐" else "물 중간쯤 빠지는 날") to android.graphics.Color.parseColor("#F2C14E")
+        else -> (if (short) "물 덜 빠짐" else "물 덜 빠지는 날") to Ui.SUB
     }
 
     /** 만조·간조 알람 고르기 (출조 중에만 울림) */
@@ -90,7 +106,7 @@ object TideDialog {
         val head = Ui.text(a, 16f, Ui.TEXT, true, "")
         col.addView(head, Ui.lp(a, MATCH, WRAP, top = 10))
         val graph = TideView(a)
-        col.addView(graph, Ui.lp(a, MATCH, dp(250), top = 8))
+        col.addView(graph, Ui.lp(a, MATCH, dp(290), top = 8))
         // 물세기: 그날 % + 시간별 물흐름 세기
         val strength = Ui.text(a, 15f, Ui.TEXT, true, "")
         col.addView(strength, Ui.lp(a, MATCH, WRAP, top = 10))
@@ -214,6 +230,12 @@ object TideDialog {
                 src.text = day.source + "\n물때 단계: 실제 그믐 시각으로 계산 (서해 7물때식)"
                 Tide.strength(a, day) { st ->
                     if (!dlg.isShowing || id != loadId) return@strength
+                    head.text = android.text.SpannableStringBuilder(dayTitle(Tide.mulName(noon).substringBefore(" ("), noon, st.pct)).apply {
+                        val s0 = length
+                        append("  (" + Tide.mulName(noon).substringAfter(" (", ""))
+                        if (length - s0 <= 3) delete(s0, length)
+                        else setSpan(android.text.style.AbsoluteSizeSpan(11, true), s0, length, 0)
+                    }
                     strength.text = strengthLine(day, st)
                     flow.set(day, st)
                     flowNote.text = "막대 = 시간별 물흐름 세기 (물이 빨리 들고 나는 때일수록 높고 주황)" +

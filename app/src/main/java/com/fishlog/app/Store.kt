@@ -186,6 +186,21 @@ object Store {
         get() = prefs.getBoolean("methodsChosen", false)
         set(v) { prefs.edit().putBoolean("methodsChosen", v).apply() }
 
+    /** 개인 설정: 출조 중 잠금 화면·AOD에 아이콘·마릿수·+1 버튼 보이기 */
+    var lockScreenShow: Boolean
+        get() = prefs.getBoolean("lockShow", true)
+        set(v) { prefs.edit().putBoolean("lockShow", v).apply(); fireChanged() }
+
+    /** 개인 설정: 같이 낚시 중 친구 돌파 알림 받기 */
+    var friendAlerts: Boolean
+        get() = prefs.getBoolean("friendAlerts", true)
+        set(v) { prefs.edit().putBoolean("friendAlerts", v).apply() }
+
+    /** 지도 지난 기록 보기: "mine" / "g:그룹id" / "allg" / "public" (null = 지금 그룹) */
+    var pastMode: String?
+        get() = prefs.getString("pastMode", null)
+        set(v) { prefs.edit().putString("pastMode", v).apply() }
+
     /** 메인 화면 아래 메뉴 펼침 */
     var menuOpen: Boolean
         get() = prefs.getBoolean("menuOpen", false)
@@ -258,6 +273,7 @@ object Store {
         val loc = Tracker.recent(now)
         t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude))
         changed(false)
+        Milestone.onCount(slot, t.count(slot))
         return t.count(slot)
     }
 

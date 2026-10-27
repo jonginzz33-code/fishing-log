@@ -49,7 +49,18 @@ object Cloud {
 
     val user: FirebaseUser? get() = auth.currentUser
     val uid: String? get() = auth.currentUser?.uid
-    val displayName: String get() = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: "나"
+    /** 구글 계정 실명 (관리자 화면에서만 보임) */
+    val realName: String get() = auth.currentUser?.displayName?.takeIf { it.isNotBlank() } ?: ""
+    /** 내 닉네임 (한 번 정하면 변경은 관리자 승인). null = 아직 안 정함 */
+    @Volatile var nick: String? = null
+    /** 서버에서 닉네임을 확인했는지 (처음 닉네임 정하기 안내용) */
+    @Volatile var nickLoaded = false
+    /** 남들에게 보이는 이름: 닉네임, 없으면 "회원 1a2b" (실명은 안 보임) */
+    val displayName: String get() = nick ?: uid?.let { "회원 " + it.takeLast(4) } ?: "나"
+
+    /** 다른 사람 이름: 그룹 멤버 목록의 지금 이름(닉네임)을 우선 */
+    val memberNames = HashMap<String, String>()
+    fun shownName(owner: String, stored: String): String = memberNames[owner] ?: stored
 
     /** 앱 관리자 (어종 목록 관리, 사용자 확인) */
     const val ADMIN_EMAIL = "jonginzz33@gmail.com"
@@ -82,6 +93,9 @@ object Cloud {
                 @Suppress("UNCHECKED_CAST")
                 val ids = (doc.get("groups") as? List<String>) ?: emptyList()
                 activeId = doc.getString("active")
+                nick = doc.getString("nick")?.takeIf { it.isNotBlank() }
+                nickLoaded = true
+                if (::appContext.isInitialized) appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putString("myNick", nick).apply()
                 if (ids.isEmpty()) { groups = emptyList(); fireChanged(); done?.invoke(null); return@addOnSuccessListener }
                 val loaded = mutableListOf<Group>()
                 var left = ids.size
@@ -107,6 +121,11 @@ object Cloud {
                                             .addOnSuccessListener { mp.edit().putString(key, displayName).apply() }
                                     }
                                 }
+                                // 그룹원 이름(닉네임) 미리 받아 두기: 예전 기록도 지금 닉네임으로 보이게
+                                groups.forEach { gr ->
+                                    db.collection("groups").document(gr.id).collection("members").get()
+                                        .addOnSuccessListener { q -> q.documents.forEach { m -> m.getString("name")?.let { memberNames[m.id] = it } }; fireChanged() }
+                                }
                                 fireChanged()
                                 done?.invoke(null)
                             }
@@ -120,7 +139,7 @@ object Cloud {
     fun afterSignIn(done: (String?) -> Unit) {
         val id = uid ?: return done("로그인 실패")
         db.collection("users").document(id)
-            .set(mapOf("name" to displayName), SetOptions.merge())
+            .set(mapOf("realName" to realName, "email" to (auth.currentUser?.email ?: "")), SetOptions.merge())
             .addOnCompleteListener { refresh(done) }
     }
 
@@ -217,6 +236,7 @@ object Cloud {
     }
 
     lateinit var appContext: Context
+    fun isInitialized() = ::appContext.isInitialized
 
     /**
      * 사진 업로드: 목록용 작은 사진(photos) + 크게 볼 1080px 사진(photosBig)
@@ -515,6 +535,112 @@ object Cloud {
             .addOnFailureListener { done(it.message ?: "내보내기 실패") }
     }
 
+    // ---------------- 닉네임 (한 번 정하면 변경은 관리자 승인) ----------------
+    private fun nickKey(n: String) = n.trim().lowercase().replace(" ", "")
+
+    fun validNick(n: String): String? {
+        val t = n.trim()
+        return when {
+            t.length < 2 || t.length > 10 -> "닉네임은 2~10자로 정해 주세요"
+            t.startsWith("회원") -> "'회원'으로 시작하는 이름은 쓸 수 없어요"
+            t.contains("/") || t.contains(".") -> "'/'나 '.'은 쓸 수 없어요"
+            else -> null
+        }
+    }
+
+    /** 처음 정하기 (관리자는 언제든 바로 바꾸기) */
+    fun setNick(n: String, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        validNick(n)?.let { return done(it) }
+        if (nick != null && !isAdmin) return done("닉네임은 이미 정했어요. 바꾸려면 변경 요청을 보내 주세요")
+        val name = n.trim()
+        val keyRef = db.collection("nicknames").document(nickKey(name))
+        keyRef.get().addOnSuccessListener { k ->
+            if (k.exists() && k.getString("uid") != me) return@addOnSuccessListener done("이미 다른 사람이 쓰는 닉네임이에요")
+            val b = db.batch()
+            nick?.let { old -> if (nickKey(old) != nickKey(name)) b.delete(db.collection("nicknames").document(nickKey(old))) }
+            b.set(keyRef, mapOf("uid" to me))
+            b.set(db.collection("users").document(me), mapOf("nick" to name, "name" to name), SetOptions.merge())
+            b.commit().addOnSuccessListener {
+                nick = name
+                applyMyName()
+                done(null)
+            }.addOnFailureListener { done(it.message ?: "저장 실패 (보안 규칙 확인)") }
+        }.addOnFailureListener { done(it.message ?: "확인 실패") }
+    }
+
+    /** 내 그룹 멤버 이름을 지금 닉네임으로 */
+    private fun applyMyName() {
+        val me = uid ?: return
+        memberNames[me] = displayName
+        groups.forEach { g ->
+            db.collection("groups").document(g.id).collection("members").document(me).set(mapOf("name" to displayName), SetOptions.merge())
+        }
+        fireChanged()
+    }
+
+    class NickRequest(val uid: String, val old: String, val new: String, val reason: String, val time: Long,
+                      val status: String, val email: String, val realName: String)
+
+    private fun reqOf(d: com.google.firebase.firestore.DocumentSnapshot) = NickRequest(d.id, d.getString("old") ?: "",
+        d.getString("new") ?: "", d.getString("reason") ?: "", d.getLong("t") ?: 0L, d.getString("status") ?: "wait",
+        d.getString("email") ?: "", d.getString("realName") ?: "")
+
+    fun myNickRequest(done: (NickRequest?) -> Unit) {
+        val me = uid ?: return done(null)
+        db.collection("nickRequests").document(me).get()
+            .addOnSuccessListener { d -> done(if (d.exists()) reqOf(d) else null) }
+            .addOnFailureListener { done(null) }
+    }
+
+    /** 변경 요청 보내기 → 관리자 승인 */
+    fun requestNick(n: String, reason: String, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        validNick(n)?.let { return done(it) }
+        val name = n.trim()
+        db.collection("nicknames").document(nickKey(name)).get().addOnSuccessListener { k ->
+            if (k.exists() && k.getString("uid") != me) return@addOnSuccessListener done("이미 다른 사람이 쓰는 닉네임이에요")
+            db.collection("nickRequests").document(me).set(mapOf("old" to (nick ?: ""), "new" to name, "reason" to reason,
+                "t" to System.currentTimeMillis(), "status" to "wait", "email" to (auth.currentUser?.email ?: ""), "realName" to realName))
+                .addOnSuccessListener { done(null) }
+                .addOnFailureListener { done(it.message ?: "요청 실패 (보안 규칙 확인)") }
+        }.addOnFailureListener { done(it.message ?: "확인 실패") }
+    }
+
+    fun cancelNickRequest(done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        db.collection("nickRequests").document(me).delete().addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message) }
+    }
+
+    /** 관리자: 대기 중인 요청 */
+    fun adminNickRequests(done: (List<NickRequest>) -> Unit) {
+        if (!isAdmin) return done(emptyList())
+        db.collection("nickRequests").whereEqualTo("status", "wait").get()
+            .addOnSuccessListener { q -> done(q.documents.map { reqOf(it) }.sortedBy { it.time }) }
+            .addOnFailureListener { done(emptyList()) }
+    }
+
+    /** 관리자: 승인 = 예전 이름 풀고 새 이름 등록, 사용자 닉네임 바꾸기 */
+    fun approveNick(r: NickRequest, done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 할 수 있어요")
+        val keyRef = db.collection("nicknames").document(nickKey(r.new))
+        keyRef.get().addOnSuccessListener { k ->
+            if (k.exists() && k.getString("uid") != r.uid) return@addOnSuccessListener done("그 사이 다른 사람이 같은 닉네임을 쓰고 있어요")
+            val b = db.batch()
+            if (r.old.isNotBlank() && nickKey(r.old) != nickKey(r.new)) b.delete(db.collection("nicknames").document(nickKey(r.old)))
+            b.set(keyRef, mapOf("uid" to r.uid))
+            b.set(db.collection("users").document(r.uid), mapOf("nick" to r.new, "name" to r.new), SetOptions.merge())
+            b.delete(db.collection("nickRequests").document(r.uid))
+            b.commit().addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "승인 실패") }
+        }
+    }
+
+    fun rejectNick(r: NickRequest, done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 할 수 있어요")
+        db.collection("nickRequests").document(r.uid).update("status", "rejected")
+            .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "거절 실패") }
+    }
+
     // ---------------- 사용자 마지막 접속 (관리자 확인용) ----------------
     private var lastTouch = 0L
     fun touchUser() {
@@ -523,7 +649,7 @@ object Cloud {
         if (now - lastTouch < 5 * 60_000L) return
         lastTouch = now
         db.collection("users").document(id).set(mapOf(
-            "name" to displayName, "email" to (auth.currentUser?.email ?: ""),
+            "name" to displayName, "realName" to realName, "email" to (auth.currentUser?.email ?: ""),
             "lastSeen" to now, "app" to BuildConfigInfo.VERSION,
             "device" to (if (::appContext.isInitialized) Moderation.deviceId(appContext) else ""),
             "model" to phoneName(), "modelCode" to android.os.Build.MODEL, "os" to android.os.Build.VERSION.RELEASE), SetOptions.merge())
@@ -539,7 +665,8 @@ object Cloud {
     }
 
     class AppUser(val uid: String, val name: String, val email: String, val lastSeen: Long, val groups: Int, val version: String,
-                  val device: String = "", val model: String = "", val modelCode: String = "", val os: String = "")
+                  val device: String = "", val model: String = "", val modelCode: String = "", val os: String = "",
+                  val realName: String = "", val nick: String? = null)
 
     fun adminUsers(done: (List<AppUser>?, String?) -> Unit) {
         db.collection("users").get()
@@ -547,7 +674,8 @@ object Cloud {
                 done(q.documents.map { d ->
                     AppUser(d.id, d.getString("name") ?: "?", d.getString("email") ?: "",
                         d.getLong("lastSeen") ?: 0L, (d.get("groups") as? List<*>)?.size ?: 0, d.getString("app") ?: "",
-                        d.getString("device") ?: "", d.getString("model") ?: "", d.getString("modelCode") ?: "", d.getString("os") ?: "")
+                        d.getString("device") ?: "", d.getString("model") ?: "", d.getString("modelCode") ?: "", d.getString("os") ?: "",
+                        d.getString("realName") ?: "", d.getString("nick"))
                 }.sortedByDescending { it.lastSeen }, null)
             }
             .addOnFailureListener { done(null, it.message ?: "불러오기 실패 (보안 규칙 확인)") }
@@ -582,7 +710,7 @@ object Cloud {
         db.collection("groups").document(g.id).collection("events").get()
             .addOnSuccessListener { q ->
                 done(q.documents.map { d ->
-                    Event(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
+                    Event(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "?"),
                         d.getString("date") ?: "", d.getString("time") ?: "", d.getString("place") ?: "",
                         d.getString("boat") ?: "", d.getString("cat") ?: "", d.getString("memo") ?: "",
                         d.getLong("created") ?: 0L)
@@ -624,6 +752,7 @@ object Cloud {
             gref.collection("members").get()
                 .addOnSuccessListener { q ->
                     val named = q.documents.associate { it.id to (it.getString("name") to (it.getLong("joined") ?: 0L)) }
+                    named.forEach { (k, v) -> v.first?.let { memberNames[k] = it } }
                     done(uids.map { u ->
                         val n = named[u]
                         Member(u, n?.first ?: "이름 없음 (앱 업데이트 전)", n?.second ?: 0L)
@@ -672,7 +801,7 @@ object Cloud {
         // 예전 버전은 경로가 같은 문서 안에 있음
         val track = parsePts(d.get("track") as? List<Map<String, Any?>>)
         val cla = (d.get("cla") as? Number)?.toDouble(); val clo = (d.get("clo") as? Number)?.toDouble()
-        RemoteTrip(d.id, d.getString("owner") ?: "", d.getString("ownerName") ?: "?",
+        RemoteTrip(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "?"),
             d.getLong("start") ?: 0L, d.getLong("end") ?: 0L,
             (d.get("names") as? List<String>) ?: listOf("1번", "2번"), catches, track,
             d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt(), d.getString("cat") ?: "",
@@ -713,6 +842,11 @@ object Cloud {
     /** 그룹의 최근 출조 목록 */
     fun recentTrips(done: (List<RemoteTrip>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
+        recentTripsOf(g, done)
+    }
+
+    /** 특정 그룹의 최근 출조 (지난 기록 겹치기에서 그룹을 골라 볼 때) */
+    fun recentTripsOf(g: Group, done: (List<RemoteTrip>?, String?) -> Unit) {
         tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 3 * 60_000L) { done(list, null); return } }
         db.collection("groups").document(g.id).collection("trips")
             .orderBy("start", Query.Direction.DESCENDING).limit(300).get()

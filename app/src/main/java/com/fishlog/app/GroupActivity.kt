@@ -470,6 +470,7 @@ class GroupActivity : Activity() {
             card.addView(r)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
                 "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
+            stampRow(this, listOf(t.name(1), t.name(2)), listOf(t.count(1), t.count(2)))?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             // 이용료·준비물 (그룹원만 봄)
             val cost = listOfNotNull(t.costLabel().ifBlank { null }, if (t.gear.isNotEmpty()) "준비물: " + t.gear.joinToString(", ") else null)
             if (cost.isNotEmpty()) card.addView(Ui.text(this, 12f, Ui.SUB, false, cost.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 2))

@@ -164,8 +164,29 @@ class TideView(c: Context) : View(c) {
     }
     private val minor = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#6F8797"); textSize = 8 * d; textAlign = Paint.Align.CENTER }
     private val small = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = 10 * d; textAlign = Paint.Align.CENTER }
+    // 물높이 (노랑): 세로 눈금 · 만조·간조 높이 · 지금 높이
+    private val YELLOW = Color.parseColor("#F2C14E")
+    private val axisTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = YELLOW; textSize = 9 * d; textAlign = Paint.Align.RIGHT }
+    private val axisLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(80, 242, 193, 78); strokeWidth = 0.7f * d
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 4 * d), 0f)
+    }
+    private val hTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = YELLOW; textSize = 10.5f * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val chipBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#12293A") }
+    private val chipEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1 * d }
+    private val chipTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 9.5f * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+    private val nowHPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = YELLOW }
+    private val nowHTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#412402"); textSize = 9.5f * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
 
     fun set(dd: Tide.Day, t: Store.Trip?) { day = dd; trip = t; invalidate() }
+
+    /** 눈금 간격(cm): 범위에 맞춰 4~6칸 */
+    private fun niceStep(rangeCm: Double): Int =
+        listOf(10, 20, 50, 100, 200, 250, 500).firstOrNull { rangeCm / it <= 6 } ?: 500
 
     override fun onDraw(canvas: Canvas) {
         val dy = day ?: return
@@ -178,8 +199,8 @@ class TideView(c: Context) : View(c) {
         val hi = maxOf(known.max(), exts.maxOfOrNull { it.value } ?: known.max())
         val range = (hi - lo).coerceAtLeast(0.1)
         val w = width.toFloat(); val h = height.toFloat()
-        val left = 12 * d; val right = w - 14 * d
-        val top = 34 * d; val bottom = h - 26 * d
+        val left = 34 * d; val right = w - 14 * d
+        val top = 44 * d; val bottom = h - 26 * d
         fun x(hour: Double) = (left + (right - left) * hour / 24.0).toFloat()
         fun y(v: Double) = (top + (1 - (v - lo) / range) * (bottom - top)).toFloat()
         fun hourOf(t: Long) = (t - dy.dateMillis) / 3600_000.0
@@ -190,6 +211,18 @@ class TideView(c: Context) : View(c) {
             val s = hourOf(t.start).coerceIn(0.0, 24.0)
             val e = hourOf(if (t.end > 0) t.end else System.currentTimeMillis()).coerceIn(0.0, 24.0)
             if (e > s) canvas.drawRect(x(s), top - 6 * d, x(e), bottom, win)
+        }
+        // 물높이 눈금 (왼쪽 cm + 가로 점선)
+        run {
+            val stepCm = niceStep(range * 100)
+            var cm = Math.ceil(lo * 100 / stepCm).toInt() * stepCm
+            while (cm <= hi * 100 + 0.01) {
+                val yy = y(cm / 100.0)
+                canvas.drawLine(left, yy, right, yy, axisLine)
+                canvas.drawText(cm.toString(), left - 4 * d, yy + 3 * d, axisTxt)
+                cm += stepCm
+            }
+            canvas.drawText("cm", left - 4 * d, top - 10 * d, axisTxt)
         }
         // 1시간 세로선 (6시간마다 진하게)
         for (hh in 0..24) canvas.drawLine(x(hh.toDouble()), top - 6 * d, x(hh.toDouble()), bottom, if (hh % 6 == 0) gridThick else gridThin)
@@ -211,10 +244,40 @@ class TideView(c: Context) : View(c) {
             canvas.drawPath(path, line)
         }
 
+        // 만조↔간조 사이 높이 차이: "↓ 827cm" (분홍 = 빠짐, 초록 = 들어옴)
+        val inDay = exts.filter { hourOf(it.time) in -6.0..30.0 }.sortedBy { it.time }
+        for (i in 0 until inDay.size - 1) {
+            val a = inDay[i]; val b = inDay[i + 1]
+            val mid = (a.time + b.time) / 2
+            val mh = hourOf(mid)
+            if (mh < 0.5 || mh > 23.5) continue
+            val mv = Tide.valueAt(dy, mid) ?: continue
+            val up = b.value > a.value
+            val txt = (if (up) "↑ " else "↓ ") + Math.round(kotlin.math.abs(b.value - a.value) * 100) + "cm"
+            val col = if (up) Ui.GREEN else Color.parseColor("#F07AA0")
+            val tw = chipTxt.measureText(txt) + 10 * d
+            val cx = x(mh).coerceIn(left + tw / 2, right - tw / 2)
+            val cy = y(mv)
+            chipEdge.color = col; chipTxt.color = col
+            canvas.drawRoundRect(cx - tw / 2, cy - 8 * d, cx + tw / 2, cy + 8 * d, 8 * d, 8 * d, chipBg)
+            canvas.drawRoundRect(cx - tw / 2, cy - 8 * d, cx + tw / 2, cy + 8 * d, 8 * d, 8 * d, chipEdge)
+            canvas.drawText(txt, cx, cy + 3.5f * d, chipTxt)
+        }
+
         // 지금
         val nowH = hourOf(System.currentTimeMillis())
         if (nowH in 0.0..24.0) {
             val nx = x(nowH)
+            Tide.valueAt(dy, System.currentTimeMillis())?.let { nv ->
+                val ny = y(nv)
+                canvas.drawCircle(nx, ny, 4 * d, nowHPaint)
+                canvas.drawCircle(nx, ny, 4 * d, ring)
+                val txt = "${Math.round(nv * 100)}cm"
+                val tw = nowHTxt.measureText(txt) + 10 * d
+                val cx = (nx - tw / 2 - 6 * d).let { if (it - tw / 2 < left) nx + tw / 2 + 6 * d else it }
+                canvas.drawRoundRect(cx - tw / 2, ny - 8 * d, cx + tw / 2, ny + 8 * d, 8 * d, 8 * d, nowHPaint)
+                canvas.drawText(txt, cx, ny + 3.5f * d, nowHTxt)
+            }
             canvas.drawLine(nx, top - 6 * d, nx, bottom, nowLine)
             val pw = 30 * d
             val px = nx.coerceIn(left + pw / 2, right - pw / 2)
@@ -238,11 +301,14 @@ class TideView(c: Context) : View(c) {
             if (hourOf(e.time) < 0 || hourOf(e.time) > 24) return@forEach
             dot.color = Ui.TEXT
             canvas.drawCircle(hx, hy, 3.5f * d, dot)
+            // 시각은 흰색, 높이는 노랑으로 두 줄
             val label = (if (e.high) "만조 " else "간조 ") + tf.format(java.util.Date(e.time))
+            val hLabel = "${Math.round(e.value * 100)}cm"
             val half = ext.measureText(label) / 2
             val lx = hx.coerceIn(left + half, right - half)
-            val ly = if (e.high) (hy - 9 * d).coerceAtLeast(30 * d) else (hy - 12 * d)
+            val ly = if (e.high) (hy - 20 * d).coerceAtLeast(28 * d) else (hy - 22 * d)
             canvas.drawText(label, lx, ly, ext)
+            canvas.drawText(hLabel, lx, ly + 11 * d, hTxt)
         }
 
         // 시간 숫자: 3시간마다 크게, 사이 매시간 작게

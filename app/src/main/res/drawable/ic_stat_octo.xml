@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 알림·AOD 아이콘: 주꾸미 (흰색 한 가지 색) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="100" android:viewportHeight="100">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M50,12 C66,12 77,24 77,38 C77,46 73,52 68,56 C74,66 80,74 90,80 C82,84 72,76 66,66 C66,76 70,86 68,94 C60,90 58,78 58,66 C56,78 54,88 50,96 C46,88 44,78 42,66 C42,78 40,90 32,94 C30,86 34,76 34,66 C28,76 18,84 10,80 C20,74 26,66 32,56 C27,52 23,46 23,38 C23,24 34,12 50,12 Z"/>
+</vector>

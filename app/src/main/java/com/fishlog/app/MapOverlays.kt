@@ -17,7 +17,11 @@ import kotlin.math.min
 class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: String,
              val time: Long = 0L, val who: String = "", val species: String = "",
              /** 해루질 유료 자리 → 점 옆에 작게 "유료" */
-             val paid: Boolean = false)
+             val paid: Boolean = false,
+             /** 0 = 내 기록, 1 = 그룹 친구, 2 = 전체 게시판 */
+             val src: Int = 0,
+             /** 게시판 기록: 대략 위치 범위(m), 0 = 정확한 점 */
+             val radiusM: Double = 0.0)
 
 /**
  * 조과 점 그리기. 화면에서 가까이 겹치는 점은 하나로 묶어서
@@ -32,6 +36,60 @@ class DotsOverlay(
 
     /** 화면에서 이 거리(dp) 안의 점은 하나로 묶음 */
     var mergeDp = 18f
+    /** 지난 기록: 색 점 대신 어종 그림 + 마릿수 + 이름표 */
+    var icons = false
+    private val art = SpeciesArtView(ctx)
+    private val PINK = Color.parseColor("#F07AA0")
+    private val PURPLE = Color.parseColor("#B9A6FF")
+    private val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0B1A26") }
+    private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val area = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val tagTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+
+    /** 어종 그림 마커 하나 */
+    private fun drawIcon(c: Canvas, map: MapView, cl: Cluster) {
+        val n = cl.items.size
+        val top = cl.items.groupingBy { it.species.ifBlank { it.kind } }.eachCount().entries.sortedByDescending { it.value }
+        val src = cl.items.groupingBy { it.src }.eachCount().maxByOrNull { it.value }!!.key
+        // 게시판 대략 위치: 옅은 보라 원 (범위)
+        cl.items.firstOrNull { it.src == 2 && it.radiusM > 0 }?.let { p ->
+            val rr = map.projection.metersToPixels(p.radiusM.toFloat())
+            if (rr > 14 * d) {
+                area.color = Color.argb(45, 185, 166, 255); c.drawCircle(cl.x, cl.y, rr, area)
+                edge.color = Color.argb(140, 185, 166, 255); edge.strokeWidth = 1 * d; c.drawCircle(cl.x, cl.y, rr, edge)
+            }
+        }
+        val rad = (17 + min(n, 60) * 0.12f) * d
+        val bg = cl.items.groupingBy { it.color }.eachCount().maxByOrNull { it.value }!!.key
+        fill.color = bg; fill.alpha = 235
+        c.drawCircle(cl.x, cl.y, rad, fill)
+        edge.color = when (src) { 1 -> PINK; 2 -> PURPLE; else -> Color.WHITE }
+        edge.strokeWidth = (if (src == 0) 2f else 3f) * d
+        c.drawCircle(cl.x, cl.y, rad, edge)
+        val ink = Color.parseColor(if (Color.blue(bg) > 180) "#04222A" else "#1B0E02")
+        if (top.size >= 2 && top[1].value * 4 >= top[0].value) {
+            art.drawArt(c, top[0].key, cl.x - rad * 0.33f, cl.y, rad * 1.15f, ink)
+            art.drawArt(c, top[1].key, cl.x + rad * 0.38f, cl.y + rad * 0.05f, rad * 1.0f, ink)
+        } else art.drawArt(c, top[0].key, cl.x, cl.y, rad * 1.5f, ink)
+        // 마릿수 (오른쪽 위 검은 동그라미)
+        val br = 9 * d + (if (n >= 100) 3 * d else if (n >= 10) 1.5f * d else 0f)
+        val bx = cl.x + rad * 0.75f; val by = cl.y - rad * 0.75f
+        c.drawCircle(bx, by, br, badge)
+        num.textSize = 11 * d
+        c.drawText(n.toString(), bx, by - (num.descent() + num.ascent()) / 2, num)
+        num.textSize = 13 * d
+        // 친구·게시판: 이름표
+        if (src != 0) {
+            val names = cl.items.filter { it.src == src }.map { it.who }.distinct()
+            val label = if (names.size == 1) names[0] else "${names[0]} 외 ${names.size - 1}"
+            tagTxt.textSize = 10 * d
+            val w = tagTxt.measureText(label) + 10 * d
+            area.color = if (src == 1) PINK else PURPLE
+            c.drawRoundRect(cl.x - w / 2, cl.y + rad + 2 * d, cl.x + w / 2, cl.y + rad + 16 * d, 7 * d, 7 * d, area)
+            tagTxt.color = Color.parseColor(if (src == 1) "#4B1528" else "#26215C")
+            c.drawText(label, cl.x, cl.y + rad + 12.5f * d, tagTxt)
+        }
+    }
 
     private val d = ctx.resources.displayMetrics.density
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -68,6 +126,7 @@ class DotsOverlay(
             if (hit != null) hit.items.add(dot) else list.add(Cluster(x, y, mutableListOf(dot)))
         }
         clusters = list
+        if (icons) { for (cl in list) drawIcon(c, map, cl); return }
         val alpha = if (faded) 105 else 255
         for (cl in list) {
             val n = cl.items.size

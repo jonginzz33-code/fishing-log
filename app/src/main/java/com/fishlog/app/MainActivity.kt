@@ -61,6 +61,14 @@ class MainActivity : Activity() {
     private lateinit var catRow: LinearLayout
     private lateinit var methodBox: LinearLayout
     private var methodsOpen = false
+    private lateinit var card1: android.widget.FrameLayout
+    private lateinit var card2: android.widget.FrameLayout
+    private lateinit var tier1: TextView
+    private lateinit var tier2: TextView
+    private lateinit var confetti1: ConfettiView
+    private lateinit var confetti2: ConfettiView
+    private lateinit var banner1: TextView
+    private lateinit var banner2: TextView
     private lateinit var art1: SpeciesArtView
     private lateinit var art2: SpeciesArtView
     private lateinit var name1: TextView
@@ -83,10 +91,21 @@ class MainActivity : Activity() {
         override fun run() { updateStatus(); handler.postDelayed(this, 1000) }
     }
     private val storeListener: () -> Unit = { refresh() }
-    private val cloudListener: () -> Unit = { refreshAccount() }
+    private val cloudListener: () -> Unit = { refreshAccount(); maybeAskNick() }
+
+    /** 닉네임을 아직 안 정했으면 한 번 안내 (실명 대신 보일 이름) */
+    private fun maybeAskNick() {
+        if (Cloud.user != null && Cloud.nickLoaded && Cloud.nick == null && !nickAsked && !isFinishing) {
+            nickAsked = true
+            startActivity(Intent(this, SettingsActivity::class.java).putExtra("askNick", true))
+        }
+    }
     private var crashShown = false
     /** 로그인 전: 로그인 화면만 */
     private var gated = false
+    private var nickAsked = false
+    private var adminReq = 0
+    private var adminReqAt = 0L
     private var cloudLoaded = false
 
     private fun dp(v: Int) = Ui.dp(this, v)
@@ -111,6 +130,8 @@ class MainActivity : Activity() {
             return
         }
         Store.init(this)
+        // 앱을 새로 켜면 메뉴는 항상 접힌 상태로 시작
+        if (savedInstanceState == null) Store.menuOpen = false
         account = AccountUi(this)
         window.statusBarColor = Ui.BG
         window.navigationBarColor = Ui.BG
@@ -137,9 +158,11 @@ class MainActivity : Activity() {
         Store.addListener(storeListener)
         Cloud.addListener(cloudListener)
         Live.addListener(liveListener)
+        Milestone.addListener(milestoneListener)
         if (Store.current != null) Live.sync()
         ButtonRouter.onMessage = { showMessage(it) }
         if (Store.current != null) RemoteService.start(this)
+        maybeAskNick()
         if (!cloudLoaded && Cloud.user != null) {
             cloudLoaded = true
             Cloud.refresh()
@@ -163,6 +186,7 @@ class MainActivity : Activity() {
         Store.removeListener(storeListener)
         Cloud.removeListener(cloudListener)
         Live.removeListener(liveListener)
+        Milestone.removeListener(milestoneListener)
         ButtonRouter.onMessage = null
         handler.removeCallbacks(ticker)
         super.onPause()
@@ -255,6 +279,12 @@ class MainActivity : Activity() {
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
             setOnClickListener { startActivity(Intent(this@MainActivity, HelpActivity::class.java)) }
         }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        // 개인 설정 (톱니바퀴)
+        header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(6) })
         col.addView(header)
 
         // 낚시 종류: 선상 · 해루질 · 워킹 (선택된 걸 한 번 더 누르면 어종 관리)
@@ -403,7 +433,7 @@ class MainActivity : Activity() {
 
     private fun counterCard(slot: Int, color: Int, ink: Int): View {
         val card = android.widget.FrameLayout(this).apply {
-            background = Ui.bg(this@MainActivity, color, 22)
+            background = Milestone.cardBackground(this@MainActivity, color, -1)
             isClickable = true
             clipToOutline = true
             setOnClickListener {
@@ -413,27 +443,43 @@ class MainActivity : Activity() {
                 Haptics.slot(this@MainActivity, slot)
             }
         }
-        // 오른쪽 아래: 반투명 귀여운 어종 그림
-        val art = SpeciesArtView(this).apply { this.ink = ink }
-        card.addView(art, android.widget.FrameLayout.LayoutParams(dp(130), dp(130), Gravity.BOTTOM or Gravity.END).apply {
-            rightMargin = -dp(4); bottomMargin = -dp(4)
+        // 오른쪽 아래 구석: 작고 연한 어종 그림
+        val art = SpeciesArtView(this).apply { this.ink = ink; alpha = 0.3f }
+        card.addView(art, android.widget.FrameLayout.LayoutParams(dp(92), dp(92), Gravity.BOTTOM or Gravity.END).apply {
+            rightMargin = -dp(6); bottomMargin = -dp(6)
         })
-        // 어종 이름: 밝은 흰색 반투명 큰 글씨 (카드 폭에 맞춰 자동 크기)
+        // 어종 이름: 가운데, 카드 폭에 꽉 차게 (흰색 반투명)
         val name = TextView(this).apply {
-            setTextColor(Color.argb(205, 255, 255, 255))
+            setTextColor(Color.argb(215, 255, 255, 255))
             typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
-            setAutoSizeTextTypeUniformWithConfiguration(18, 46, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            gravity = Gravity.CENTER
+            setAutoSizeTextTypeUniformWithConfiguration(16, 64, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }
-        card.addView(name, android.widget.FrameLayout.LayoutParams(MATCH, dp(58), Gravity.TOP).apply {
-            topMargin = dp(46); leftMargin = dp(14); rightMargin = dp(10)
+        card.addView(name, android.widget.FrameLayout.LayoutParams(MATCH, dp(56), Gravity.TOP).apply {
+            topMargin = dp(48); leftMargin = dp(8); rightMargin = dp(8)
+        })
+        // 가운데: 아주 크고 굵은 숫자 (세 자리까지 자동 크기, 흰 테두리 빛)
+        val count = TextView(this).apply {
+            setTextColor(ink)
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            maxLines = 1
+            gravity = Gravity.CENTER
+            textScaleX = 0.86f
+            includeFontPadding = false
+            setShadowLayer(6 * resources.displayMetrics.density, 0f, 0f, Color.argb(170, 255, 255, 255))
+            setAutoSizeTextTypeUniformWithConfiguration(40, 150, 2, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
+        card.addView(count, android.widget.FrameLayout.LayoutParams(MATCH, dp(126), Gravity.TOP).apply {
+            topMargin = dp(104); leftMargin = dp(2); rightMargin = dp(2)
         })
         // 위: "버튼 1" + 작은 연필 (연필을 눌러야 어종 바꾸기)
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         top.addView(Ui.text(this, 12f, ink, true, "버튼 $slot").apply {
             background = Ui.bg(this@MainActivity, Color.argb(36, 0, 0, 0), 99)
             setPadding(dp(10), dp(3), dp(10), dp(3))
-        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(40) })
+        }, LinearLayout.LayoutParams(WRAP, WRAP))
+        top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         top.addView(Ui.text(this, 15f, ink, true, "✎").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Color.argb(80, 255, 255, 255), 10)
@@ -442,17 +488,52 @@ class MainActivity : Activity() {
         card.addView(top, android.widget.FrameLayout.LayoutParams(MATCH, WRAP, Gravity.TOP).apply {
             topMargin = dp(10); leftMargin = dp(12); rightMargin = dp(10)
         })
-        // 아래: 마릿수 + 마지막 시각 · 경과
+        // 아래: 칭호 + 마지막 시각 · 경과
         val bottom = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val count = Ui.text(this, 64f, ink, true).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); includeFontPadding = false }
-        bottom.addView(count)
+        val tierText = Ui.text(this, 13f, Color.WHITE, true, "").apply { visibility = View.GONE; setShadowLayer(3f, 0f, 1f, Color.argb(120, 0, 0, 0)) }
+        bottom.addView(tierText)
         val last = Ui.text(this, 12f, ink).apply { maxLines = 1 }
         bottom.addView(last, Ui.lp(this, WRAP, WRAP, top = 2))
         card.addView(bottom, android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply {
             leftMargin = dp(14); bottomMargin = dp(12)
         })
-        if (slot == 1) { name1 = name; count1 = count; last1 = last; art1 = art } else { name2 = name; count2 = count; last2 = last; art2 = art }
+        // 돌파 순간: 색종이 + 금색 띠
+        val confetti = ConfettiView(this)
+        card.addView(confetti, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+        val banner = Ui.text(this, 13f, Color.parseColor("#412402"), true, "").apply {
+            gravity = Gravity.CENTER; visibility = View.GONE
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+            background = Ui.bg(this@MainActivity, Color.parseColor("#F2C14E"), 99)
+        }
+        card.addView(banner, android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(52) })
+        if (slot == 1) { name1 = name; count1 = count; last1 = last; art1 = art; card1 = card; tier1 = tierText; confetti1 = confetti; banner1 = banner }
+        else { name2 = name; count2 = count; last2 = last; art2 = art; card2 = card; tier2 = tierText; confetti2 = confetti; banner2 = banner }
         return card
+    }
+
+    private val SLOT_BG = intArrayOf(Ui.ORANGE, Ui.BLUE)
+    private val lastTier = intArrayOf(-2, -2)
+
+    /** 카드 테두리·칭호를 지금 마릿수 단계에 맞추기 */
+    private fun paintTier(slot: Int, count: Int) {
+        val t = Milestone.tier(count)
+        if (lastTier[slot - 1] == t) return
+        lastTier[slot - 1] = t
+        val card = if (slot == 1) card1 else card2
+        val tv = if (slot == 1) tier1 else tier2
+        card.background = Milestone.cardBackground(this, SLOT_BG[slot - 1], t)
+        tv.text = Milestone.titleWithCrown(t)
+        tv.visibility = if (t < 0) View.GONE else View.VISIBLE
+    }
+
+    /** 돌파하는 순간: 금색 띠 + 색종이 (2~3초) */
+    private val milestoneListener: (Int, Int, Int) -> Unit = { slot, count, tier ->
+        val banner = if (slot == 1) banner1 else banner2
+        val conf = if (slot == 1) confetti1 else confetti2
+        banner.text = "${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"
+        banner.visibility = View.VISIBLE
+        conf.start(if (tier >= 7) 90 else if (tier >= 4) 60 else 30)
+        handler.postDelayed({ banner.visibility = View.GONE }, 3000)
     }
 
     /** 마지막 시각 + 경과: "마지막 20:00 · 26분 전" */
@@ -766,9 +847,10 @@ class MainActivity : Activity() {
     }
 
     /** 메인 물때 한 줄: "8물 · 사리" / "지금 날물 · 다음 간조 23:52 · 물세기 100%" */
+    private var mainPct: Int? = null
     private fun refreshTideRow() {
         val now = System.currentTimeMillis()
-        tideTitle.text = TideDialog.dayTitle(Tide.mulName(now).substringBefore(" ("), now)
+        tideTitle.text = TideDialog.dayTitle(Tide.mulName(now).substringBefore(" ("), now, mainPct, true)
         val loc = bestLocation()
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
         val st = Tide.stationFor(this, loc.first, loc.second)
@@ -785,6 +867,8 @@ class MainActivity : Activity() {
                 parts.add((if (it.high) "다음 만조 " else "다음 간조 ") + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it.time)))
             }
             stg?.let { parts.add("물세기 ${it.pct}%" + if (it.estimated) "(추정)" else "") }
+            mainPct = stg?.pct
+            tideTitle.text = TideDialog.dayTitle(Tide.mulName(t).substringBefore(" ("), t, mainPct, true)
             tideSub.text = parts.joinToString(" · ").ifBlank { "눌러서 물때 보기" }
             tideSub.setTextColor(if ((stg?.pct ?: 0) >= 80) Ui.ORANGE else Ui.SUB)
         }
@@ -878,7 +962,7 @@ class MainActivity : Activity() {
             upcoming > 0 -> " · 일정 $upcoming"
             else -> ""
         }
-        menuBtn.text = if (Store.menuOpen) "메뉴 접기 ▲" else "메뉴 ▼$badge"
+        menuBtn.text = if (Store.menuOpen) "메뉴 접기 ▲" else "메뉴 ▼$badge" + (if (adminReq > 0) " · 🔴 요청 $adminReq" else "")
         when {
             !Store.menuOpen && todayEvents > 0 -> { menuBtn.setTextColor(Ui.BG); menuBtn.background = Ui.bg(this, Ui.GREEN, 14) }
             !Store.menuOpen && upcoming > 0 -> { menuBtn.setTextColor(Ui.GREEN); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN) }
@@ -973,6 +1057,14 @@ class MainActivity : Activity() {
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        if (Cloud.isAdmin && System.currentTimeMillis() - adminReqAt > 60_000L) {
+            adminReqAt = System.currentTimeMillis()
+            Cloud.adminNickRequests { l ->
+                adminReq = l.size
+                adminBtn.text = "관리자 · 사용자 목록" + if (adminReq > 0) "  🔴 닉네임 요청 $adminReq" else ""
+                paintMenu()
+            }
+        }
         scheduleBtn.visibility = if (Cloud.active != null) View.VISIBLE else View.GONE
         refreshSchedule()
         renderCats()
@@ -988,20 +1080,41 @@ class MainActivity : Activity() {
         val ago = ((System.currentTimeMillis() - Live.updatedAt) / 60_000L).coerceAtLeast(0)
         liveBox.addView(Ui.text(this, 12f, Ui.GREEN, true,
             "같이 낚시 중 (50m 안) · " + (if (ago == 0L) "방금 갱신" else "${ago}분 전 갱신")))
+        // 친구 돌파 축하 띠 (1분 동안)
+        Live.cheer?.takeIf { System.currentTimeMillis() - it.time < 60_000L }?.let { ch ->
+            liveBox.addView(Ui.text(this, 13f, Color.parseColor("#412402"), true, "🎉 ${ch.text}").apply {
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                background = Ui.bg(this@MainActivity, Color.parseColor("#F2C14E"), 10)
+            }, Ui.lp(this, MATCH, WRAP, top = 6))
+            handler.removeCallbacks(liveRefresh)
+            handler.postDelayed(liveRefresh, 61_000L - (System.currentTimeMillis() - ch.time))
+        }
         ms.forEach { m ->
             val old = (System.currentTimeMillis() - m.time) > 15 * 60_000L
-            val line = m.name + "   " + listOf(m.names.getOrElse(0) { "1번" } to m.c1, m.names.getOrElse(1) { "2번" } to m.c2)
-                .joinToString(" · ") { "${it.first} ${it.second}" } +
-                (if (old) "  (${(System.currentTimeMillis() - m.time) / 60_000L}분 전)" else "")
-            liveBox.addView(Ui.text(this, 13f, if (old) Ui.SUB else Ui.TEXT, false, line).apply {
-                setPadding(0, dp(3), 0, dp(3))
+            val best = maxOf(Milestone.tier(m.c1), Milestone.tier(m.c2))
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(4), 0, dp(4))
                 setOnClickListener {
                     showMessage(String.format(Locale.KOREA, "%s · 약 %.0fm 거리 · %s 기준",
                         m.name, m.meters, SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(m.time))))
                 }
+            }
+            // 이름표: 그 친구의 지금 단계 테두리
+            row.addView(Ui.text(this, 13f, if (old) Ui.SUB else Ui.TEXT, true, m.name).apply {
+                setPadding(dp(8), dp(1), dp(8), dp(1))
+                background = if (best >= 0) Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Milestone.tierColor(best)) else null
             })
+            row.addView(Ui.text(this, 13f, if (old) Ui.SUB else Ui.TEXT, false,
+                "  " + listOf(m.names.getOrElse(0) { "1번" } to m.c1, m.names.getOrElse(1) { "2번" } to m.c2)
+                    .joinToString(" · ") { "${it.first} ${it.second}" } +
+                    (if (old) "  (${(System.currentTimeMillis() - m.time) / 60_000L}분 전)" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (best >= 0) row.addView(Ui.text(this, 11f, Milestone.tierColor(best), true, Milestone.titleWithCrown(best)))
+            liveBox.addView(row)
         }
     }
+
+    private val liveRefresh = Runnable { renderLive() }
 
     private fun showMessage(msg: String) {
         message.text = msg
@@ -1053,6 +1166,7 @@ class MainActivity : Activity() {
         renderMethods()
         count1.text = (t?.count(1) ?: 0).toString()
         count2.text = (t?.count(2) ?: 0).toString()
+        paintTier(1, t?.count(1) ?: 0); paintTier(2, t?.count(2) ?: 0)
         last1.text = lastText(t, 1)
         last2.text = lastText(t, 2)
         tripBtn.text = if (t == null) "출조 시작" else "출조 종료"

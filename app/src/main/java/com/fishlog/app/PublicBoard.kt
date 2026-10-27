@@ -144,22 +144,20 @@ object PublicBoard {
             .show()
     }
 
+    /** 게시판 이름 = 내 닉네임 (개인 설정에서 정함) 또는 익명 */
     private fun ensureNick(a: Activity, then: () -> Unit) {
-        if (Store.nick != null) { then(); return }
-        val input = EditText(a).apply {
-            setText(Cloud.displayName); setSelection(text.length); inputType = InputType.TYPE_CLASS_TEXT
-        }
+        if (Cloud.nick != null || Store.nick == "") { then(); return }
         AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("전체 게시판에 보일 이름")
-            .setMessage("처음 한 번만 정해요. 나중에 전체 게시판 화면에서 바꿀 수 있어요.")
-            .setView(input)
-            .setPositiveButton("이 이름으로") { _, _ -> Store.nick = input.text.toString().trim().take(20); then() }
-            .setNeutralButton("익명") { _, _ -> Store.nick = ""; then() }
+            .setMessage("아직 닉네임이 없어요. 개인 설정(⚙)에서 닉네임을 정하거나, 익명으로 올릴 수 있어요.")
+            .setPositiveButton("닉네임 정하기") { _, _ -> a.startActivity(android.content.Intent(a, SettingsActivity::class.java)) }
+            .setNeutralButton("익명으로 올리기") { _, _ -> Store.nick = ""; then() }
             .setNegativeButton("취소", null)
             .show()
     }
 
-    fun nickShown(): String = Store.nick?.ifBlank { "익명" } ?: "익명"
+    /** "" = 익명으로 올리기, 그 외 = 내 닉네임 */
+    fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명" else Cloud.displayName
 
     /** 서버에 올릴 조과 목록 (백그라운드 스레드에서) */
     private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {

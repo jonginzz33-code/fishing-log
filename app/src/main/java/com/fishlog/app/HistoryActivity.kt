@@ -193,6 +193,7 @@ class HistoryActivity : Activity() {
             if (t.pub && t.pubPrec.isNotBlank()) tags.add(if (t.pubPrec == "exact") "위치 정확 공개" else "위치 대략 공개")
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))
+            stampRow(this, listOf(t.name(1), t.name(2)), listOf(t.count(1), t.count(2)))?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             list.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         restoreBtn.visibility = View.VISIBLE

@@ -62,13 +62,42 @@ class AdminActivity : Activity() {
     private fun load() {
         listBox.removeAllViews()
         listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 10))
-        var left = 4
+        var left = 5
         var err: String? = null
         fun step() { left--; if (left == 0) render(err) }
+        Cloud.adminNickRequests { list -> nickReqs = list; step() }
         Cloud.adminUsers { list, e -> users = list ?: emptyList(); if (list == null) err = e; step() }
         Moderation.loadBans { list, e -> bans = list ?: emptyList(); if (list == null && err == null) err = e; step() }
         Moderation.reportCounts { m -> reports = m; step() }
         Moderation.loadLimit { step() }
+    }
+
+    private var nickReqs: List<Cloud.NickRequest> = emptyList()
+
+    // ---------------- 닉네임 변경 요청 ----------------
+    private fun renderNickRequests() {
+        section("닉네임 변경 요청 (${nickReqs.size})")
+        if (nickReqs.isEmpty()) {
+            listBox.addView(Ui.text(this, 13f, Ui.SUB, false, "대기 중인 요청이 없어요"), Ui.lp(this, MATCH, WRAP, top = 6))
+            return
+        }
+        val df = java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.KOREA)
+        nickReqs.forEach { r ->
+            val c = Ui.card(this)
+            c.addView(Ui.text(this, 15f, Ui.TEXT, true, "${r.old.ifBlank { "(없음)" }} → ${r.new}"))
+            c.addView(Ui.text(this, 12f, Ui.SUB, false,
+                listOf(r.realName, r.email, df.format(java.util.Date(r.time))).filter { it.isNotBlank() }.joinToString(" · ") +
+                    (if (r.reason.isNotBlank()) "\n이유: ${r.reason}" else "")), Ui.lp(this, MATCH, WRAP, top = 2))
+            val row = Ui.row(this)
+            row.addView(Ui.button(this, "승인", true) {
+                Cloud.approveNick(r) { e -> toast(e ?: "'${r.new}'(으)로 바꿨어요"); load() }
+            }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            row.addView(Ui.button(this, "거절") {
+                Cloud.rejectNick(r) { e -> toast(e ?: "거절했어요"); load() }
+            }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            c.addView(row, Ui.lp(this, MATCH, WRAP, top = 8))
+            listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
     }
 
     private fun nameOf(uid: String): String = users.firstOrNull { it.uid == uid }?.name ?: bans.firstOrNull { it.uid == uid }?.name ?: "알 수 없음"
@@ -76,6 +105,7 @@ class AdminActivity : Activity() {
     private fun render(err: String?) {
         listBox.removeAllViews()
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
+        renderNickRequests()
         renderLimit()
         renderReports()
         renderBans()
@@ -235,7 +265,9 @@ class AdminActivity : Activity() {
         users.forEach { u ->
             val c = Ui.card(this)
             val r = Ui.row(this)
-            r.addView(Ui.text(this, 16f, Ui.TEXT, true, u.name), LinearLayout.LayoutParams(0, WRAP, 1f))
+            // 관리자만: 닉네임 + 실명
+            r.addView(Ui.text(this, 16f, Ui.TEXT, true, (u.nick ?: "(닉네임 없음)") +
+                (if (u.realName.isNotBlank()) "  ·  ${u.realName}" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
             r.addView(Ui.text(this, 13f, if (u.lastSeen > day) Ui.GREEN else Ui.SUB, true, ago(u.lastSeen)))
             c.addView(r)
             if (u.email.isNotBlank()) c.addView(Ui.text(this, 13f, Ui.SUB, false, u.email), Ui.lp(this, MATCH, WRAP, top = 2))

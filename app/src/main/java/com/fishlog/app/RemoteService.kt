@@ -307,27 +307,30 @@ class RemoteService : Service() {
 
     private fun buildNotification(): Notification {
         val t = Store.current
-        val text = if (t == null) "출조 준비" else
-            "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}" +
-                if (Tracker.running) " · 위치 기록 중" else ""
+        val counts = if (t == null) "출조 준비" else "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
+        val sub = listOfNotNull("출조 중", t?.place()?.takeIf { it.isNotBlank() }, if (Tracker.running) "위치 기록 중" else null).joinToString(" · ")
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val b = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle("출조 중" + (t?.place()?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""))
-            .setContentText(text)
+            .setSmallIcon(R.drawable.ic_stat_octo)          // AOD·상태바: 주꾸미 아이콘
+            .setColor(Ui.ORANGE)
+            .setSubText("조과기록")
+            .setContentTitle(counts)                        // 마릿수를 크게
+            .setContentText(sub)
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            // 출조 경과 시간이 알림에 저절로 흘러감
+            .setShowWhen(t != null).setUsesChronometer(t != null).setWhen(t?.start ?: System.currentTimeMillis())
+            // 개인 설정: 잠금 화면·AOD에 보일지
+            .setVisibility(if (Store.lockScreenShow) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_SECRET)
             .setDeleteIntent(servicePi(ACT_REPOST, 3)) // 지우면 바로 다시 띄움
         if (t != null) {
-            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_input_add),
+            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_octo),
                 "${t.name(1)} +1", servicePi(ACT_ADD1, 1)).build())
-            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, android.R.drawable.ic_input_add),
+            b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_octo),
                 "${t.name(2)} +1", servicePi(ACT_ADD2, 2)).build())
         }
         return b.build()

@@ -35,6 +35,15 @@ class SpeciesArtView(c: Context) : View(c) {
         cv.restore()
     }
 
+    /** 지도 아이콘용: (cx, cy) 가운데에 size 크기로 어종 그림 */
+    fun drawArt(cv: Canvas, name: String, cx: Float, cy: Float, size: Float, inkColor: Int) {
+        ink = inkColor
+        val s = size / 100f
+        cv.save(); cv.translate(cx - size / 2, cy - size / 2); cv.scale(s, s)
+        draw(cv, SpeciesArt.keyOf(name))
+        cv.restore()
+    }
+
     // ---------------- 그리기 도구 ----------------
     private fun p(d: String): Path = SpeciesArt.path(d)
     private fun fill(cv: Canvas, vararg ds: String) = ds.forEach { cv.drawPath(p(it), white) }
@@ -134,6 +143,16 @@ class SpeciesArtView(c: Context) : View(c) {
                 listOf("M24 64 L 10 76", "M30 68 L 20 84", "M76 64 L 90 76", "M70 68 L 80 84").forEach { strokeWhite(cv, it, 4f) }
                 face(cv, 50f, 52f)
             }
+            "작은게" -> {
+                // 박하지·민꽃게·돌게 등: 동글고 작은 게
+                cv.save(); cv.translate(50f, 58f); cv.scale(0.78f, 0.78f); cv.translate(-50f, -52f)
+                oval(cv, 50f, 54f, 30f, 20f, white)
+                fill(cv, "M24 46 C 14 42,10 32,16 26 C 20 30,24 30,24 24 C 32 28,30 38,28 46Z",
+                    "M76 46 C 86 42,90 32,84 26 C 80 30,76 30,76 24 C 68 28,70 38,72 46Z")
+                listOf("M26 62 L 14 72", "M32 66 L 24 80", "M74 62 L 86 72", "M68 66 L 76 80").forEach { strokeWhite(cv, it, 4.5f) }
+                face(cv, 50f, 52f, 1.05f, 16f)
+                cv.restore()
+            }
             "키조개" -> {
                 fill(cv, "M50 10 L 88 82 C 70 92,30 92,12 82Z")
                 strokeInk(cv, "M50 14 L 30 84"); strokeInk(cv, "M50 14 L 50 88"); strokeInk(cv, "M50 14 L 70 84")
@@ -192,7 +211,7 @@ object SpeciesArt {
     fun path(d: String): Path = cache.getOrPut(d) { PathParser.createPathFromPathData(d) }
 
     private val NAMES = listOf("주꾸미", "갑오징어", "쭈갑", "낙지", "문어", "해삼", "소라", "골뱅이", "꽃게", "키조개", "맛조개", "조개",
-        "광어", "우럭", "참돔", "노래미", "감성돔", "농어", "볼락", "학꽁치")
+        "광어", "우럭", "참돔", "노래미", "감성돔", "농어", "볼락", "학꽁치", "작은게")
 
     /** 어종 이름 → 그림 이름 */
     fun keyOf(name: String): String {
@@ -210,6 +229,8 @@ object SpeciesArt {
             n.contains("맛") && n.contains("조개") -> "맛조개"
             n.contains("키조개") -> "키조개"
             n.contains("조개") || n.contains("바지락") || n.contains("가리비") || n.contains("홍합") || n.contains("굴") -> "조개"
+            n.contains("박하지") || n.contains("민꽃게") || n.contains("돌게") || n.contains("칠게") || n.contains("방게") ||
+                n.contains("농게") || n.contains("달랑게") || n.contains("깨다시") -> "작은게"
             n.endsWith("게") || n.contains("꽃게") || n.contains("대게") -> "꽃게"
             n.contains("광어") || n.contains("도다리") || n.contains("가자미") || n.contains("넙치") -> "광어"
             n.contains("우럭") || n.contains("쏨뱅이") -> "우럭"
