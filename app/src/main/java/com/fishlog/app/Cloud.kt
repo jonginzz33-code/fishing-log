@@ -867,6 +867,56 @@ object Cloud {
         }.addOnFailureListener { done(null, it.message ?: "불러오기 실패") }
     }
 
+    // ---- 여러 출조 한 번에 지우기 (폰 · 서버 백업 · 올린 모든 그룹 · 전체 게시판) ----
+    /** 인터넷이 안 돼서 못 지운 것은 폰에 적어 두고 다음에 다시 (pendingDel: "tripId|pub") */
+    private fun pendPrefs() = appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+    private fun pending(): MutableSet<String> = (pendPrefs().getStringSet("pendingDel", emptySet()) ?: emptySet()).toMutableSet()
+    private fun savePending(s: Set<String>) { pendPrefs().edit().putStringSet("pendingDel", s).apply() }
+
+    fun deleteTripsEverywhere(trips: List<Store.Trip>, done: (String?) -> Unit) {
+        if (trips.isEmpty()) return done(null)
+        val p = pending()
+        trips.forEach { t -> p.add("${t.id}|${if (t.pub) 1 else 0}") }
+        savePending(p)
+        trips.forEach { Store.deleteTrip(it.id) }
+        flushDeletes(done)
+    }
+
+    /** 지울 목록을 서버에서 지우기 (앱을 켤 때도 한 번) */
+    fun flushDeletes(done: ((String?) -> Unit)? = null) {
+        val me = uid
+        if (me == null) { done?.invoke(null); return }
+        val items = pending().toList()
+        if (items.isEmpty()) { done?.invoke(null); return }
+        var left = items.size
+        var fail = 0
+        items.forEach { item ->
+            val tid = item.substringBefore("|").toLongOrNull() ?: run { left--; return@forEach }
+            val pub = item.endsWith("|1")
+            val gids = (groups.map { it.id } + Store.sharedGroups(tid)).distinct()
+            var sub = 2 + gids.size
+            var ok = true
+            fun step(err: String?) {
+                if (err != null) ok = false
+                sub--
+                if (sub == 0) {
+                    if (ok) savePending(pending().apply { remove(item) }) else fail++
+                    left--
+                    if (left == 0) done?.invoke(if (fail == 0) null else "${fail}개는 서버에서 아직 못 지웠어요 · 인터넷이 되면 자동으로 다시 지워요")
+                }
+            }
+            db.collection("users").document(me).collection("trips").document(tid.toString()).delete()
+                .addOnSuccessListener { step(null) }.addOnFailureListener { step(it.message ?: "실패") }
+            gids.forEach { gid ->
+                // 그 그룹에 없으면 그냥 넘어감
+                db.collection("groups").document(gid).collection("trips").document("${me}_$tid").get()
+                    .addOnSuccessListener { d -> if (d.exists()) deleteTripIn(gid, "${me}_$tid") { e -> step(e) } else step(null) }
+                    .addOnFailureListener { step(it.message ?: "실패") }
+            }
+            if (pub) PublicBoard.unpublish(PublicBoard.docIdOf(me, tid), tid) { e -> step(e) } else step(null)
+        }
+    }
+
     // ---- 내 기록 보관함 (서버 백업 / 복원) ----
     /** 백업 안 된 기록을 내 계정에 올림 (사진 원본은 폰에만, 기록·경로만) */
     fun backupPending() {

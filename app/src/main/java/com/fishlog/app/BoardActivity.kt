@@ -44,7 +44,7 @@ class BoardActivity : Activity() {
     private var reports: Map<String, Int> = emptyMap()
     private var banned: Set<String> = emptySet()
 
-    private val dayFmt = SimpleDateFormat("M/d (E)", Locale.KOREA)
+    private val dayFmt = SimpleDateFormat("yyyy.M.d (E)", Locale.KOREA)
     private val dateFmt = SimpleDateFormat("yy.M.d (E)", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
 

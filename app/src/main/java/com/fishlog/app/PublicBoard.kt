@@ -89,6 +89,7 @@ object PublicBoard {
     }
 
     private fun docId(t: Store.Trip) = "${Cloud.uid}_${t.id}"
+    fun docIdOf(uid: String, tripId: Long) = "${uid}_$tripId"
 
     // ---------------- 올리기 ----------------
     /** 닉네임 정하기 → (사진이 있으면) 사진도 올릴지 → 올리기 */

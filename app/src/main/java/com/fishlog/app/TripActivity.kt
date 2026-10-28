@@ -40,7 +40,7 @@ class TripActivity : Activity() {
 
     private val tf = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
-    private val df = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
+    private val df = SimpleDateFormat("yyyy년 M월 d일 (E)", Locale.KOREA)
 
     private fun dp(v: Int) = Ui.dp(this, v)
     private val trip: Store.Trip? get() = Store.find(tripId)
@@ -140,6 +140,7 @@ class TripActivity : Activity() {
         root.addView(Ui.text(this, 13f, Ui.SUB, false,
             (if (t.end > 0) "출조 완료" else "출조 중") + " · ${hm.format(Date(t.start))} ~ ${hm.format(Date(endTime))}"),
             Ui.lp(this, MATCH, WRAP, top = 14))
+        root.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = Ui.dp(this@TripActivity, 4) })
         root.addView(Ui.text(this, 22f, Ui.TEXT, true, df.format(Date(t.start)) + " " +
             (if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
             setOnClickListener { askPlace(t) }

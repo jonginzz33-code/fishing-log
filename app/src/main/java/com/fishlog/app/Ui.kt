@@ -62,6 +62,35 @@ object Ui {
             background = bg(c, color, 99)
         }
 
+    /** 오늘과 비교: 오늘 · 어제 · N일 전 · N개월 전 · N년 · N년 N개월 전 (두 번째 = 몇 년 전 같은 달) */
+    fun ago(time: Long): Pair<String, Boolean> {
+        val a = java.util.Calendar.getInstance().apply { timeInMillis = time }
+        val b = java.util.Calendar.getInstance()
+        fun dayNo(c: java.util.Calendar) = (c.timeInMillis + c.get(java.util.Calendar.ZONE_OFFSET) + c.get(java.util.Calendar.DST_OFFSET)) / 86_400_000L
+        val days = dayNo(b) - dayNo(a)
+        if (days <= 0L) return "오늘" to false
+        if (days == 1L) return "어제" to false
+        var months = (b.get(java.util.Calendar.YEAR) - a.get(java.util.Calendar.YEAR)) * 12 + (b.get(java.util.Calendar.MONTH) - a.get(java.util.Calendar.MONTH))
+        if (b.get(java.util.Calendar.DAY_OF_MONTH) < a.get(java.util.Calendar.DAY_OF_MONTH)) months--
+        if (months < 1) return "${days}일 전" to false
+        val y = months / 12; val m = months % 12
+        val sameMonth = y >= 1 && a.get(java.util.Calendar.MONTH) == b.get(java.util.Calendar.MONTH)
+        val s = when { y == 0 -> "${m}개월 전"; m == 0 -> "${y}년 전"; else -> "${y}년 ${m}개월 전" }
+        return (if (sameMonth) "$s · 같은 달" else s) to sameMonth
+    }
+
+    /** 날짜 옆 작은 표시 (오늘·어제 초록, 몇 년 전 같은 달 노랑, 나머지 회색) */
+    fun agoChip(c: Context, time: Long): TextView {
+        val (s, same) = ago(time)
+        val recent = s == "오늘" || s == "어제"
+        val fg = when { recent -> GREEN; same -> Color.parseColor("#F2C14E"); else -> SUB }
+        val bgc = when { recent -> Color.parseColor("#16352A"); same -> Color.parseColor("#2A2310"); else -> Color.parseColor("#1E3247") }
+        return text(c, 11f, fg, true, s).apply {
+            setPadding(dp(c, 8), dp(c, 1), dp(c, 8), dp(c, 1))
+            background = bg(c, bgc, 99)
+        }
+    }
+
     fun lp(c: Context, w: Int, h: Int, weight: Float = 0f, top: Int = 0) =
         LinearLayout.LayoutParams(w, h, weight).apply { topMargin = dp(c, top) }
 

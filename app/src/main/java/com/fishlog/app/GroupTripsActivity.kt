@@ -33,7 +33,7 @@ class GroupTripsActivity : Activity() {
     private var person: String? = null   // null = 모든 사람
     private var rankSpecies: String? = null
 
-    private val dayFmt = SimpleDateFormat("M/d(E)", Locale.KOREA)
+    private val dayFmt = SimpleDateFormat("yyyy.M.d(E)", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
     private fun dp(v: Int) = Ui.dp(this, v)
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
@@ -176,6 +176,7 @@ class GroupTripsActivity : Activity() {
                 LinearLayout.LayoutParams(0, WRAP, 1f))
             r.addView(Ui.text(this, 12f, if (t.owner == Cloud.uid) Ui.GREEN else Ui.SUB, true, if (t.owner == Cloud.uid) "나" else t.ownerName))
             c.addView(r)
+            c.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = Ui.dp(this@GroupTripsActivity, 2) })
             val endText = if (t.end > 0) hm.format(Date(t.end)) else "출조 중"
             val counts = (1..2).filter { t.count(it) > 0 || it == 1 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
             c.addView(Ui.text(this, 13f, Color.parseColor("#B8C7D4"), false,

@@ -214,6 +214,7 @@ class MainActivity : Activity() {
             cloudLoaded = true
             Cloud.refresh()
             Cloud.backupPending()
+            Cloud.flushDeletes()
         }
         Cloud.loadSpecies()
         Tide.prune(this)
@@ -325,6 +326,12 @@ class MainActivity : Activity() {
 
         // 상단: 왼쪽 지도·물때 버튼 + 제목
         val header = Ui.row(this)
+        // 제목: 맨 왼쪽, 남는 폭에 맞춰 글자 크기 자동 (지도·채팅·?·⚙는 오른쪽)
+        header.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(13, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
         // 지도 버튼: 큰 글씨 '지도' + 작은 글씨 '그룹 · 현위치'
         header.addView(smallBtn("") { openMap() }.apply {
             text = android.text.SpannableStringBuilder("지도\n").apply {
@@ -349,14 +356,8 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(17), Gravity.TOP or Gravity.END).apply { topMargin = -dp(7); rightMargin = -dp(5) })
-        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6); rightMargin = dp(6) })
         paintChat()
-        // 제목: 지도 버튼과 ?·⚙ 사이 가운데, 남는 폭에 맞춰 글자 크기 자동
-        header.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
-            gravity = Gravity.CENTER
-            maxLines = 1
-            setAutoSizeTextTypeUniformWithConfiguration(13, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6); rightMargin = dp(6) })
         // (그룹은 맨 아래 '그룹' 칸으로 옮김)
         header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
             gravity = Gravity.CENTER
@@ -555,7 +556,11 @@ class MainActivity : Activity() {
             }
         }
         // 오른쪽 아래 구석: 작고 연한 어종 그림
-        val art = SpeciesArtView(this).apply { this.ink = ink; alpha = 0.3f }
+        // 그림은 연하게, 이마의 어종 이름표(1번 빨강 띠 · 2번 청록 띠)는 진하게
+        val art = SpeciesArtView(this).apply {
+            this.ink = ink; artAlpha = 0.3f
+            labelBg = if (slot == 1) Color.parseColor("#E8505B") else Color.parseColor("#0B6E86")
+        }
         card.addView(art, android.widget.FrameLayout.LayoutParams(dp(92), dp(92), Gravity.BOTTOM or Gravity.END).apply {
             rightMargin = -dp(6); bottomMargin = -dp(6)
         })

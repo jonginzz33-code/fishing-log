@@ -21,6 +21,73 @@ class HistoryActivity : Activity() {
     private lateinit var sunBox: LinearLayout
     private lateinit var chips: LinearLayout
     private lateinit var list: LinearLayout
+    private lateinit var selBar: LinearLayout
+    private var selMode = false
+    private val selected = LinkedHashSet<Long>()
+    private var lastShown: List<Store.Trip> = emptyList()
+    private val SEL_RED = android.graphics.Color.parseColor("#E8505B")
+
+    /** 선택 모드 위쪽 띠: 전체 선택 · N개 선택됨 · 취소 / 빠른 선택 / 선택 삭제 */
+    private fun renderSelBar() {
+        selBar.removeAllViews()
+        if (!selMode) { selBar.visibility = View.GONE; return }
+        selBar.visibility = View.VISIBLE
+        fun d(v: Int) = Ui.dp(this, v)
+        val all = lastShown.isNotEmpty() && lastShown.all { it.id in selected }
+        val r = Ui.row(this).apply {
+            setPadding(d(10), d(8), d(10), d(8))
+            background = Ui.bg(this@HistoryActivity, android.graphics.Color.parseColor("#2A1418"), 14, SEL_RED)
+        }
+        r.addView(Ui.text(this, 13f, Ui.TEXT, true, (if (all) "☑" else "☐") + " 전체 선택").apply {
+            setOnClickListener { if (all) selected.removeAll(lastShown.map { it.id }.toSet()) else selected.addAll(lastShown.map { it.id }); render() }
+        })
+        r.addView(Ui.text(this, 13f, android.graphics.Color.parseColor("#FF8A92"), true, "${selected.size}개 선택됨").apply {
+            gravity = android.view.Gravity.CENTER
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        r.addView(Ui.text(this, 13f, Ui.SUB, false, "취소").apply { setOnClickListener { selMode = false; selected.clear(); render() } })
+        selBar.addView(r)
+        val q = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun quick(label: String, click: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
+            gravity = android.view.Gravity.CENTER; setPadding(0, d(7), 0, d(7))
+            background = Ui.bg(this@HistoryActivity, android.graphics.Color.TRANSPARENT, 12, Ui.LINE)
+            setOnClickListener { click() }
+        }
+        val dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
+        q.addView(quick("오늘 것만") {
+            val k = dayKey.format(Date()); selected.clear(); selected.addAll(lastShown.filter { dayKey.format(Date(it.start)) == k }.map { it.id }); render()
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        q.addView(quick("이 날짜 선택 ▾") {
+            val c = java.util.Calendar.getInstance()
+            android.app.DatePickerDialog(this, android.R.style.Theme_DeviceDefault_Dialog_Alert, { _, y, m, dd ->
+                val k = String.format(Locale.US, "%04d%02d%02d", y, m + 1, dd)
+                selected.addAll(lastShown.filter { dayKey.format(Date(it.start)) == k }.map { it.id }); render()
+            }, c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH)).show()
+        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = d(6) })
+        q.addView(quick("10마리 이하") {
+            selected.addAll(lastShown.filter { it.catches.size <= 10 }.map { it.id }); render()
+        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = d(6) })
+        selBar.addView(q, Ui.lp(this, MATCH, WRAP, top = 6))
+        if (selected.isNotEmpty()) selBar.addView(Ui.text(this, 15f, android.graphics.Color.WHITE, true, "🗑 선택한 ${selected.size}개 삭제").apply {
+            gravity = android.view.Gravity.CENTER; setPadding(0, d(12), 0, d(12))
+            background = Ui.bg(this@HistoryActivity, SEL_RED, 14)
+            setOnClickListener { confirmDeleteSelected() }
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    private fun confirmDeleteSelected() {
+        val trips = Store.history.filter { it.id in selected }
+        if (trips.isEmpty()) return
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("${trips.size}개 출조를 지울까요?")
+            .setMessage("내 폰 · 서버 백업 · 올린 모든 그룹(사진 포함) · 전체 게시판에서 같이 지워져요. 되돌릴 수 없어요.")
+            .setPositiveButton("${trips.size}개 삭제") { _, _ ->
+                if (Cloud.user != null) Cloud.deleteTripsEverywhere(trips) { err ->
+                    if (!isFinishing) android.widget.Toast.makeText(this, err ?: "${trips.size}개를 모두 지웠어요", android.widget.Toast.LENGTH_LONG).show()
+                } else trips.forEach { Store.deleteTrip(it.id) }
+                selMode = false; selected.clear(); render()
+            }
+            .setNegativeButton("취소", null).show()
+    }
     private lateinit var restoreBtn: android.widget.TextView
     private var filter: String? = null
     private var byDate = false
@@ -32,7 +99,7 @@ class HistoryActivity : Activity() {
     private val listener: () -> Unit = { render() }
 
     private val monthFmt = SimpleDateFormat("yyyy년 M월", Locale.KOREA)
-    private val dayFmt = SimpleDateFormat("M월 d일 (E) HH:mm", Locale.KOREA)
+    private val dayFmt = SimpleDateFormat("yyyy년 M월 d일 (E) HH:mm", Locale.KOREA)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,8 +111,16 @@ class HistoryActivity : Activity() {
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = Ui.dp(this@HistoryActivity, 44) },
             LinearLayout.LayoutParams(WRAP, WRAP))
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "지난 출조"),
-            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 14) })
+            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 14) })
+        // 여러 개 골라서 한 번에 지우기
+        top.addView(Ui.text(this, 13f, Ui.TEXT, true, "☑ 선택").apply {
+            setPadding(Ui.dp(this@HistoryActivity, 12), Ui.dp(this@HistoryActivity, 6), Ui.dp(this@HistoryActivity, 12), Ui.dp(this@HistoryActivity, 6))
+            background = Ui.bg(this@HistoryActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { selMode = !selMode; selected.clear(); render() }
+        })
         col.addView(top)
+        selBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(selBar, Ui.lp(this, MATCH, WRAP, top = 10))
 
         summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(summary, Ui.lp(this, MATCH, WRAP, top = 16))
@@ -164,6 +239,9 @@ class HistoryActivity : Activity() {
             }),
                 Ui.lp(this, MATCH, WRAP, top = 10))
         }
+        lastShown = shown
+        selected.retainAll(Store.history.map { it.id }.toSet())
+        renderSelBar()
         var lastMonth = ""
         shown.forEach { t ->
             val m = monthFmt.format(Date(t.start))
@@ -172,13 +250,28 @@ class HistoryActivity : Activity() {
                 list.addView(Ui.text(this, 14f, Ui.SUB, true, m), Ui.lp(this, MATCH, WRAP, top = 16))
             }
             val dur = ((if (t.end > 0) t.end else t.start) - t.start) / 60000
+            val picked = t.id in selected
             val card = Ui.card(this).apply {
                 isClickable = true
-                setOnClickListener { startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id)) }
+                if (selMode) background = Ui.bg(this@HistoryActivity, Ui.CARD, 14, if (picked) SEL_RED else 0)
+                setOnClickListener {
+                    if (selMode) { if (!selected.remove(t.id)) selected.add(t.id); render() }
+                    else startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id))
+                }
             }
             val head = Ui.row(this).apply { gravity = android.view.Gravity.TOP }
-            head.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
-                (if (t.place().isNotBlank()) " · " + t.place() else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (selMode) head.addView(Ui.text(this, 14f, android.graphics.Color.WHITE, true, if (picked) "✓" else "").apply {
+                gravity = android.view.Gravity.CENTER
+                background = if (picked) Ui.bg(this@HistoryActivity, SEL_RED, 6) else Ui.bg(this@HistoryActivity, android.graphics.Color.TRANSPARENT, 6, Ui.SUB)
+            }, LinearLayout.LayoutParams(Ui.dp(this, 22), Ui.dp(this, 22)).apply { rightMargin = Ui.dp(this@HistoryActivity, 10); topMargin = Ui.dp(this@HistoryActivity, 2) })
+            // 날짜(연도 포함) + 오늘과 비교한 작은 표시, 아래 줄에 배·항구
+            val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            val dRow = Ui.row(this)
+            dRow.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start))))
+            dRow.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 6) })
+            titleCol.addView(dRow)
+            if (t.place().isNotBlank()) titleCol.addView(Ui.text(this, 14f, Ui.TEXT, false, t.place()))
+            head.addView(titleCol, LinearLayout.LayoutParams(0, WRAP, 1f))
             // 공개 범위 배지 (사진 왼쪽에 세로로): 그룹 (N) / 전체 / 나만
             val badges = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             val nGroups = if (Store.sharedSynced) Store.sharedGroups(t.id).size

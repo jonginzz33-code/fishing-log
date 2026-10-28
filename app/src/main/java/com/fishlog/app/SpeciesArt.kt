@@ -18,6 +18,14 @@ class SpeciesArtView(c: Context) : View(c) {
     var species: String = ""
         set(v) { if (field != v) { field = v; invalidate() } }
     var ink: Int = Color.BLACK
+    /** 그림만 연하게 (이름표는 진하게) */
+    var artAlpha: Float = 1f
+    /** 이마 이름표 띠 색 (0 = 이름표 없음) */
+    var labelBg: Int = 0
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val fillInk = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -31,7 +39,24 @@ class SpeciesArtView(c: Context) : View(c) {
         cv.save()
         cv.translate(width - 100 * s, height - 100 * s)
         cv.scale(s, s)
-        draw(cv, SpeciesArt.keyOf(species))
+        val key = SpeciesArt.keyOf(species)
+        if (artAlpha < 1f) {
+            cv.saveLayerAlpha(0f, 0f, 100f, 100f, (artAlpha * 255).toInt())
+            draw(cv, key)
+            cv.restore()
+        } else draw(cv, key)
+        // 이마 이름표 (C안: 색 띠 + 흰 글씨)
+        val name = species.trim()
+        if (labelBg != 0 && name.isNotEmpty()) {
+            val (lx, ly) = SpeciesArt.forehead(key)
+            labelPaint.textSize = if (name.length <= 3) 10f else if (name.length <= 4) 9f else 7.5f
+            val w = labelPaint.measureText(name) + 7f
+            val h = labelPaint.textSize + 4f
+            val left = (lx - w / 2).coerceIn(1f, 99f - w)
+            bandPaint.color = labelBg
+            cv.drawRoundRect(RectF(left, ly - h / 2, left + w, ly + h / 2), h / 2, h / 2, bandPaint)
+            cv.drawText(name, left + w / 2, ly + labelPaint.textSize * 0.36f, labelPaint)
+        }
         cv.restore()
     }
 
@@ -212,6 +237,15 @@ object SpeciesArt {
 
     private val NAMES = listOf("주꾸미", "갑오징어", "쭈갑", "낙지", "문어", "해삼", "소라", "골뱅이", "꽃게", "키조개", "맛조개", "조개",
         "광어", "우럭", "참돔", "노래미", "감성돔", "농어", "볼락", "학꽁치", "작은게")
+
+    /** 그림마다 이마(눈 위) 자리 (100×100 좌표) */
+    fun forehead(key: String): Pair<Float, Float> = when (key) {
+        "주꾸미" -> 50f to 26f; "갑오징어" -> 50f to 32f; "쭈갑" -> 50f to 14f; "낙지" -> 50f to 19f; "문어" -> 50f to 22f
+        "해삼" -> 60f to 46f; "소라" -> 52f to 44f; "골뱅이" -> 50f to 50f; "꽃게" -> 50f to 42f; "작은게" -> 50f to 46f
+        "키조개" -> 50f to 46f; "맛조개" -> 48f to 30f; "조개" -> 50f to 44f; "광어" -> 58f to 47f
+        "학꽁치" -> 50f to 38f; "감성돔" -> 40f to 34f
+        else -> 52f to 40f // 물고기: 눈 위 몸통
+    }
 
     /** 어종 이름 → 그림 이름 */
     fun keyOf(name: String): String {
