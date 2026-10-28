@@ -184,7 +184,10 @@ class TideView(c: Context) : View(c) {
 
     // 일출·일몰: 밤은 어둡게, 해 뜨고 지는 시각에 점선
     private var sun: Sun.Times? = null
-    private val nightP = Paint().apply { color = Color.argb(120, 4, 10, 20) }
+    private val nightP = Paint().apply { color = Color.argb(185, 3, 7, 14) }
+    private val nightTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#8C84C8"); textSize = 10 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
     private val riseLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#F2C14E"); strokeWidth = 1.2f * d; style = Paint.Style.STROKE
         pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 3 * d), 0f)
@@ -219,16 +222,22 @@ class TideView(c: Context) : View(c) {
         val range = (hi - lo).coerceAtLeast(0.1)
         val w = width.toFloat(); val h = height.toFloat()
         val left = 34 * d; val right = w - 14 * d
-        val top = 44 * d; val bottom = h - 26 * d
+        val lay = Store.tideLayers
+        val showAxis = lay and 1 != 0; val showExt = lay and 2 != 0; val showDiff = lay and 4 != 0
+        val sunOn = sun != null && lay and 8 != 0; val showNow = lay and 16 != 0
+        val top = 44 * d; val bottom = h - (if (sunOn) 42 else 26) * d
         fun x(hour: Double) = (left + (right - left) * hour / 24.0).toFloat()
         fun y(v: Double) = (top + (1 - (v - lo) / range) * (bottom - top)).toFloat()
         fun hourOf(t: Long) = (t - dy.dateMillis) / 3600_000.0
 
         // 밤 (일출 전 · 일몰 후)
-        sun?.let { s ->
+        sun?.takeIf { sunOn }?.let { s ->
             val rh = hourOf(s.rise).coerceIn(0.0, 24.0); val sh = hourOf(s.set).coerceIn(0.0, 24.0)
             if (rh > 0) canvas.drawRect(x(0.0), top - 6 * d, x(rh), bottom, nightP)
             if (sh < 24) canvas.drawRect(x(sh), top - 6 * d, x(24.0), bottom, nightP)
+            // "☾ 밤" 글씨 (구간이 넉넉할 때만)
+            if (rh >= 2.5) canvas.drawText("☾ 밤", x(rh / 2), top + 12 * d, nightTxt)
+            if (24 - sh >= 2.5) canvas.drawText("☾ 밤", x((sh + 24) / 2), top + 12 * d, nightTxt)
         }
         // 낚시한 시간
         val t = trip
@@ -238,7 +247,7 @@ class TideView(c: Context) : View(c) {
             if (e > s) canvas.drawRect(x(s), top - 6 * d, x(e), bottom, win)
         }
         // 물높이 눈금 (왼쪽 cm + 가로 점선)
-        run {
+        if (showAxis) run {
             val stepCm = niceStep(range * 100)
             var cm = Math.ceil(lo * 100 / stepCm).toInt() * stepCm
             while (cm <= hi * 100 + 0.01) {
@@ -271,7 +280,7 @@ class TideView(c: Context) : View(c) {
 
         // 만조↔간조 사이 높이 차이: "↓ 827cm" (분홍 = 빠짐, 초록 = 들어옴)
         val inDay = exts.filter { hourOf(it.time) in -6.0..30.0 }.sortedBy { it.time }
-        for (i in 0 until inDay.size - 1) {
+        if (showDiff) for (i in 0 until inDay.size - 1) {
             val a = inDay[i]; val b = inDay[i + 1]
             val mid = (a.time + b.time) / 2
             val mh = hourOf(mid)
@@ -291,7 +300,7 @@ class TideView(c: Context) : View(c) {
 
         // 지금
         val nowH = hourOf(System.currentTimeMillis())
-        if (nowH in 0.0..24.0) {
+        if (showNow && nowH in 0.0..24.0) {
             val nx = x(nowH)
             Tide.valueAt(dy, System.currentTimeMillis())?.let { nv ->
                 val ny = y(nv)
@@ -321,7 +330,7 @@ class TideView(c: Context) : View(c) {
 
         // 만조·간조 (글씨는 그래프 안쪽, 화면 밖으로 안 나가게)
         val tf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
-        exts.forEach { e ->
+        if (showExt) exts.forEach { e ->
             val hx = x(hourOf(e.time)); val hy = y(e.value)
             if (hourOf(e.time) < 0 || hourOf(e.time) > 24) return@forEach
             dot.color = Ui.TEXT
@@ -336,19 +345,25 @@ class TideView(c: Context) : View(c) {
             canvas.drawText(hLabel, lx, ly + 11 * d, hTxt)
         }
 
-        // 일출·일몰 점선 + 시각 (그래프 아래쪽 안)
-        sun?.let { s ->
+        // 일출·일몰 점선 + 시각 (시간 숫자 아래 줄: 만조·간조 글씨와 안 겹침)
+        sun?.takeIf { sunOn }?.let { s ->
             val tf2 = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
             val rx = x(hourOf(s.rise)); val sx = x(hourOf(s.set))
+            val sy = bottom + 32 * d
+            sunTxt.textAlign = Paint.Align.CENTER
             if (hourOf(s.rise) in 0.0..24.0) {
                 canvas.drawLine(rx, top - 6 * d, rx, bottom, riseLine)
-                sunTxt.color = riseLine.color; sunTxt.textAlign = Paint.Align.LEFT
-                canvas.drawText("일출 " + tf2.format(java.util.Date(s.rise)), rx + 3 * d, bottom - 4 * d, sunTxt)
+                sunTxt.color = riseLine.color
+                val t1 = "☀ 일출 " + tf2.format(java.util.Date(s.rise))
+                val hw = sunTxt.measureText(t1) / 2
+                canvas.drawText(t1, rx.coerceIn(left + hw, right - hw), sy, sunTxt)
             }
             if (hourOf(s.set) in 0.0..24.0) {
                 canvas.drawLine(sx, top - 6 * d, sx, bottom, setLine)
-                sunTxt.color = setLine.color; sunTxt.textAlign = Paint.Align.RIGHT
-                canvas.drawText("일몰 " + tf2.format(java.util.Date(s.set)), sx - 3 * d, bottom - 4 * d, sunTxt)
+                sunTxt.color = setLine.color
+                val t2 = "☾ 일몰 " + tf2.format(java.util.Date(s.set))
+                val hw = sunTxt.measureText(t2) / 2
+                canvas.drawText(t2, sx.coerceIn(left + hw, right - hw), sy, sunTxt)
             }
         }
 
@@ -359,6 +374,48 @@ class TideView(c: Context) : View(c) {
             else canvas.drawText(hh.toString(), x(hh.toDouble()), ty - 1 * d, minor)
         }
         canvas.drawText("시", (right + w) / 2 + 2 * d, ty + 11 * d, small)
+    }
+}
+
+/**
+ * 물때 그래프 위 "그래프에 보기" 체크 칩: 켜고 끄면 바로 그래프에 반영, 고른 건 저장
+ */
+object TideLayers {
+    private val ITEMS = listOf(Triple(1, "cm 눈금", Color.parseColor("#F2C14E")), Triple(2, "만조·간조", Color.parseColor("#EAF1F7")),
+        Triple(4, "높이 차 ↑↓", Color.parseColor("#F07AA0")), Triple(8, "일출·일몰·밤", Color.parseColor("#B9A6FF")),
+        Triple(16, "지금", Ui.GREEN))
+
+    fun view(c: Context, onChange: () -> Unit): View {
+        val box = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        val head = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        head.addView(Ui.text(c, 13f, Ui.TEXT, true, "그래프에 보기"), android.widget.LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        val chips = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        fun small(label: String, click: () -> Unit) = Ui.text(c, 12f, Ui.TEXT, true, label).apply {
+            gravity = android.view.Gravity.CENTER; setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 10), 0)
+            background = Ui.bg(c, Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { click() }
+        }
+        lateinit var paint: () -> Unit
+        head.addView(small("모두 보기") { Store.tideLayers = 31; paint(); onChange() }, android.widget.LinearLayout.LayoutParams(Ui.WRAP, Ui.dp(c, 30)))
+        head.addView(small("물높이만") { Store.tideLayers = 0; paint(); onChange() },
+            android.widget.LinearLayout.LayoutParams(Ui.WRAP, Ui.dp(c, 30)).apply { leftMargin = Ui.dp(c, 6) })
+        box.addView(head)
+        paint = {
+            chips.removeAllViews()
+            val lay = Store.tideLayers
+            ITEMS.forEach { (bit, label, col) ->
+                val on = lay and bit != 0
+                chips.addView(Ui.text(c, 12f, if (on) Color.parseColor("#0F1B2A") else Ui.SUB, true, (if (on) "✓ " else "□ ") + label).apply {
+                    gravity = android.view.Gravity.CENTER; setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 10), 0)
+                    background = if (on) Ui.bg(c, col, 99) else Ui.bg(c, Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener { Store.tideLayers = Store.tideLayers xor bit; paint(); onChange() }
+                }, android.widget.LinearLayout.LayoutParams(Ui.WRAP, Ui.dp(c, 32)).apply { rightMargin = Ui.dp(c, 6) })
+            }
+        }
+        paint()
+        box.addView(android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
+            android.widget.LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
+        return box
     }
 }
 

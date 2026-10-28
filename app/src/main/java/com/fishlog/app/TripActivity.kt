@@ -163,7 +163,8 @@ class TripActivity : Activity() {
         if (d != null) {
             val tv = TideView(this)
             tv.set(d, t)
-            tideCard.addView(tv, Ui.lp(this, MATCH, dp(280)))
+            tideCard.addView(TideLayers.view(this) { tv.invalidate() }, Ui.lp(this, MATCH, WRAP))
+            tideCard.addView(tv, Ui.lp(this, MATCH, dp(296)))
             tideStrength?.let { st ->
                 tideCard.addView(Ui.text(this, 14f, Ui.TEXT, true, TideDialog.strengthLine(d, st)), Ui.lp(this, MATCH, WRAP, top = 8))
                 val flow = FlowBarView(this)

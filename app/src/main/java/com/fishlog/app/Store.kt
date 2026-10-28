@@ -187,6 +187,11 @@ object Store {
         set(v) { prefs.edit().putBoolean("methodsChosen", v).apply() }
 
     /** 개인 설정: 출조 중 잠금 화면·AOD에 아이콘·마릿수·+1 버튼 보이기 */
+    /** 물때 그래프에 보일 것 (비트): 1 cm 눈금 · 2 만조·간조 · 4 높이 차 · 8 일출·일몰·밤 · 16 지금 */
+    var tideLayers: Int
+        get() = prefs.getInt("tideLayers", 31)
+        set(v) { prefs.edit().putInt("tideLayers", v).apply() }
+
     var lockScreenShow: Boolean
         get() = prefs.getBoolean("lockShow", true)
         set(v) { prefs.edit().putBoolean("lockShow", v).apply(); fireChanged() }

@@ -80,6 +80,26 @@ object TideDialog {
         return "물때 기준: ${st.name} 관측소" + (if (Store.tideStation != null) " (직접 고름)" else "") + km + " ▾"
     }
 
+    /** 제목 줄: "물때 · 바람 · 수온 · 인천송도" */
+    fun titleText(a: Activity, lat: Double?, lon: Double?): CharSequence {
+        val st = Tide.stationFor(a, lat, lon)
+        val sb = android.text.SpannableStringBuilder("물때 · 바람 · 수온")
+        if (st != null) {
+            sb.append(" · ")
+            val s0 = sb.length
+            sb.append(st.name)
+            sb.setSpan(android.text.style.ForegroundColorSpan(Ui.BLUE), s0, sb.length, 0)
+        }
+        return sb
+    }
+
+    /** 제목 아래 작은 줄: "인천송도 관측소 기준 · 내 위치에서 32km · 바꾸기 ▾" */
+    fun stationSub(a: Activity, lat: Double?, lon: Double?): String {
+        val st = Tide.stationFor(a, lat, lon) ?: return "위치 확인 중 · 눌러서 관측소 고르기 ▾"
+        val km = Tide.stationKm(st, lat, lon)?.let { String.format(Locale.KOREA, " · 내 위치에서 %.0fkm", it) } ?: ""
+        return "${st.name} 관측소 기준" + (if (Store.tideStation != null) " (직접 고름)" else "") + km + " · 바꾸기 ▾"
+    }
+
     fun show(a: Activity, lat: Double, lon: Double, time: Long, trip: Store.Trip?, onChanged: (() -> Unit)? = null) {
         fun dp(v: Int) = Ui.dp(a, v)
         var cur = dayStart(time)
@@ -102,11 +122,19 @@ object TideDialog {
         nav.addView(next, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(6) })
         nav.addView(todayBtn, LinearLayout.LayoutParams(dp(56), dp(44)).apply { leftMargin = dp(6) })
         col.addView(nav)
+        // 만조·간조 알람 · 관측소 바꾸기 (맨 위로)
+        val setRow = Ui.row(a)
+        val alarmBtn = Ui.button(a, alarmLabel()).apply { minHeight = dp(44); textSize = 13f }
+        val changeBtn = Ui.button(a, "관측소 바꾸기 · 검색").apply { minHeight = dp(44); textSize = 13f }
+        setRow.addView(alarmBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
+        setRow.addView(changeBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 8))
 
         val head = Ui.text(a, 16f, Ui.TEXT, true, "")
         col.addView(head, Ui.lp(a, MATCH, WRAP, top = 10))
         val graph = TideView(a)
-        col.addView(graph, Ui.lp(a, MATCH, dp(290), top = 8))
+        col.addView(TideLayers.view(a) { graph.invalidate() }, Ui.lp(a, MATCH, WRAP, top = 8))
+        col.addView(graph, Ui.lp(a, MATCH, dp(306), top = 8))
         // 물세기: 그날 % + 시간별 물흐름 세기
         val strength = Ui.text(a, 15f, Ui.TEXT, true, "")
         col.addView(strength, Ui.lp(a, MATCH, WRAP, top = 10))
@@ -129,21 +157,16 @@ object TideDialog {
         val src = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(src, Ui.lp(a, MATCH, WRAP, top = 12))
 
-        // ---- 설정: 물때 기준 관측소 · 만조·간조 알람 (메인에서 옮겨 옴) ----
-        col.addView(android.view.View(a).apply { setBackgroundColor(Ui.LINE) }, Ui.lp(a, MATCH, 1, top = 16))
-        val stationBtn = Ui.text(a, 14f, Ui.BLUE, true, stationLabel(a, lat, lon)).apply {
-            minHeight = dp(44); gravity = Gravity.CENTER_VERTICAL
-        }
-        col.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 8))
-        val setRow = Ui.row(a)
-        val alarmBtn = Ui.button(a, alarmLabel()).apply { minHeight = dp(44); textSize = 13f }
-        val changeBtn = Ui.button(a, "관측소 바꾸기 · 검색").apply { minHeight = dp(44); textSize = 13f }
-        setRow.addView(alarmBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
-        setRow.addView(changeBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-        col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 6))
+        // 제목: 어느 지역 물때인지 (관측소 이름을 눌러도 바꾸기)
+        val titleBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(18), dp(22), dp(4)) }
+        val titleView = Ui.text(a, 19f, Ui.TEXT, true, "").apply { text = titleText(a, lat, lon) }
+        val stationBtn = Ui.text(a, 12f, Ui.BLUE, true, stationSub(a, lat, lon))
+        titleBox.addView(titleView)
+        titleBox.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 3))
+        titleBox.isClickable = true
 
         val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("물때 · 바람 · 수온")
+            .setCustomTitle(titleBox)
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .show()
@@ -248,12 +271,13 @@ object TideDialog {
 
         val pickStation = {
             StationPicker.show(a, lat, lon) {
-                stationBtn.text = stationLabel(a, lat, lon)
+                titleView.text = titleText(a, lat, lon)
+                stationBtn.text = stationSub(a, lat, lon)
                 onChanged?.invoke()
                 load()
             }
         }
-        stationBtn.setOnClickListener { pickStation() }
+        titleBox.setOnClickListener { pickStation() }
         changeBtn.setOnClickListener { pickStation() }
         alarmBtn.setOnClickListener { pickAlarm(a) { alarmBtn.text = alarmLabel(); onChanged?.invoke() } }
 
