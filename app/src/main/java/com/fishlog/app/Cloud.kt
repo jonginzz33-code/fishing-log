@@ -682,17 +682,43 @@ object Cloud {
 
     // ---------------- 어종 목록 (관리자가 정하고 모두가 받음) ----------------
     fun loadSpecies() {
+        loadCats()
         db.collection("config").document("species").get()
             .addOnSuccessListener { d ->
                 if (!d.exists()) return@addOnSuccessListener
-                val map = Store.CATS.associateWith { c -> (d.get(c) as? List<*>)?.mapNotNull { it as? String } }
+                val map = Store.allCats().map { it.id }.associateWith { c -> (d.get(c) as? List<*>)?.mapNotNull { it as? String } }
                 Store.applyServerSpecies(map)
             }
     }
 
+    // ---------------- 낚시 종류 (관리자만 추가·수정) ----------------
+    fun loadCats(done: (() -> Unit)? = null) {
+        db.collection("config").document("cats").get()
+            .addOnSuccessListener { d ->
+                val list = (d.get("list") as? List<*>)?.mapNotNull { m ->
+                    (m as? Map<*, *>)?.let {
+                        val id = it["id"] as? String ?: return@let null
+                        Store.Cat(id, it["label"] as? String ?: "", it["short"] as? String ?: "", it["hidden"] as? Boolean ?: false)
+                    }
+                }.orEmpty().filter { it.label.isNotBlank() }
+                if (list.isNotEmpty()) Store.applyServerCats(list)
+                done?.invoke()
+            }
+            .addOnFailureListener { done?.invoke() }
+    }
+
+    fun saveCats(list: List<Store.Cat>, done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 바꿀 수 있어요")
+        db.collection("config").document("cats")
+            .set(mapOf("list" to list.map { mapOf("id" to it.id, "label" to it.label, "short" to it.short, "hidden" to it.hidden) },
+                "updated" to System.currentTimeMillis()))
+            .addOnSuccessListener { Store.applyServerCats(list); done(null) }
+            .addOnFailureListener { done(it.message ?: "저장 실패") }
+    }
+
     fun saveSpecies(done: (String?) -> Unit) {
         if (!isAdmin) return done("관리자만 바꿀 수 있어요")
-        db.collection("config").document("species").set(Store.CATS.associateWith { Store.species(it) })
+        db.collection("config").document("species").set(Store.allCats().map { it.id }.associateWith { Store.species(it) })
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "저장 실패") }
     }
@@ -710,15 +736,33 @@ object Cloud {
     }
 
     /** 특정 그룹 일정 (새 소식 확인용) */
+    fun eventOf(d: com.google.firebase.firestore.DocumentSnapshot) =
+        Event(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "?"),
+            d.getString("date") ?: "", d.getString("time") ?: "", d.getString("place") ?: "",
+            d.getString("boat") ?: "", d.getString("cat") ?: "", d.getString("memo") ?: "",
+            d.getLong("created") ?: 0L)
+
+    fun noticeOf(d: com.google.firebase.firestore.DocumentSnapshot) =
+        Notice(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "그룹장"),
+            d.getString("title") ?: "", d.getString("body") ?: "",
+            d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L)
+
+    /** 실시간: 그룹 일정·공지가 바뀌면 바로 알려줌 (앱이 켜져 있는 동안만) */
+    fun watchGroup(g: Group, onEvents: (List<Event>) -> Unit, onNotices: (List<Notice>) -> Unit): List<com.google.firebase.firestore.ListenerRegistration> {
+        val gref = db.collection("groups").document(g.id)
+        return listOf(
+            gref.collection("events").addSnapshotListener { q, _ ->
+                if (q != null) onEvents(q.documents.map { eventOf(it) }.sortedWith(compareBy({ it.date }, { it.time })))
+            },
+            gref.collection("notices").addSnapshotListener { q, _ ->
+                if (q != null) onNotices(q.documents.map { noticeOf(it) }.sortedByDescending { it.created })
+            })
+    }
+
     fun loadEventsOf(g: Group, done: (List<Event>?, String?) -> Unit) {
         db.collection("groups").document(g.id).collection("events").get()
             .addOnSuccessListener { q ->
-                done(q.documents.map { d ->
-                    Event(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "?"),
-                        d.getString("date") ?: "", d.getString("time") ?: "", d.getString("place") ?: "",
-                        d.getString("boat") ?: "", d.getString("cat") ?: "", d.getString("memo") ?: "",
-                        d.getLong("created") ?: 0L)
-                }.sortedWith(compareBy({ it.date }, { it.time })), null)
+                done(q.documents.map { eventOf(it) }.sortedWith(compareBy({ it.date }, { it.time })), null)
             }
             .addOnFailureListener { done(null, it.message ?: "일정 불러오기 실패 (보안 규칙 확인)") }
     }
@@ -750,13 +794,7 @@ object Cloud {
 
     fun loadNoticesOf(g: Group, done: (List<Notice>?, String?) -> Unit) {
         db.collection("groups").document(g.id).collection("notices").get()
-            .addOnSuccessListener { q ->
-                done(q.documents.map { d ->
-                    Notice(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "그룹장"),
-                        d.getString("title") ?: "", d.getString("body") ?: "",
-                        d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L)
-                }.sortedByDescending { it.created }, null)
-            }
+            .addOnSuccessListener { q -> done(q.documents.map { noticeOf(it) }.sortedByDescending { it.created }, null) }
             .addOnFailureListener { done(null, it.message ?: "공지 불러오기 실패 (보안 규칙 확인)") }
     }
 

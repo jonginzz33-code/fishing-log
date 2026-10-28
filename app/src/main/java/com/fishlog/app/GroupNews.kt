@@ -25,6 +25,7 @@ object GroupNews {
     @Volatile private var unseen: Map<String, List<Item>> = emptyMap()
     private val upcoming = HashMap<String, Int>()
     private val today = HashMap<String, Int>()
+    private val tomorrow = HashMap<String, Int>()
     private var loadedAt = 0L
     private var loading = false
     private val waiting = mutableListOf<() -> Unit>()
@@ -40,6 +41,44 @@ object GroupNews {
     fun total(): Int = Cloud.groups.sumOf { count(it.id) }
     fun upcoming(gid: String?): Int = gid?.let { upcoming[it] } ?: 0
     fun today(gid: String?): Int = gid?.let { today[it] } ?: 0
+    fun tomorrow(gid: String?): Int = gid?.let { tomorrow[it] } ?: 0
+    /** 안 본 새 일정 / 새 공지 수 */
+    fun newEvents(gid: String?): Int = items(gid).count { !it.isNotice }
+    fun newNotices(gid: String?): Int = items(gid).count { it.isNotice }
+    /** 공지 전체 개수 (내가 쓴 것 포함) */
+    fun notices(gid: String?): Int = gid?.let { rawNotices[it]?.size } ?: 0
+
+    // ---------------- 실시간 (앱이 켜져 있는 동안) ----------------
+    private var watching: List<com.google.firebase.firestore.ListenerRegistration> = emptyList()
+    private var watchKey = ""
+    private val liveListeners = mutableSetOf<() -> Unit>()
+
+    /** 가입한 그룹마다 일정·공지를 지켜봄. 바뀌면 onChange (메인 스레드) */
+    fun startLive(onChange: () -> Unit) {
+        liveListeners.add(onChange)
+        if (Cloud.user == null || !Cloud.isInitialized()) return
+        val key = Cloud.groups.joinToString(",") { it.id }
+        if (key == watchKey && watching.isNotEmpty()) return
+        stopWatching()
+        watchKey = key
+        watching = Cloud.groups.flatMap { g ->
+            Cloud.watchGroup(g,
+                { evs -> rawEvents[g.id] = evs; loadedAt = System.currentTimeMillis(); recompute(); fireLive() },
+                { ns -> rawNotices[g.id] = ns; loadedAt = System.currentTimeMillis(); recompute(); fireLive() })
+        }
+    }
+
+    fun stopLive(onChange: () -> Unit) {
+        liveListeners.remove(onChange)
+        if (liveListeners.isEmpty()) stopWatching()
+    }
+
+    private fun stopWatching() {
+        watching.forEach { try { it.remove() } catch (_: Exception) {} }
+        watching = emptyList(); watchKey = ""
+    }
+
+    private fun fireLive() = main.post { liveListeners.toList().forEach { it() } }
 
     private fun seenSet(gid: String): Set<String> = prefs().getStringSet("seen_$gid", emptySet()) ?: emptySet()
 
@@ -54,6 +93,7 @@ object GroupNews {
     private fun recompute() {
         val me = Cloud.uid
         val nowKey = keyFmt.format(Date())
+        val tomKey = keyFmt.format(Date(System.currentTimeMillis() + 24 * 3_600_000L))
         val out = HashMap<String, List<Item>>()
         Cloud.groups.forEach { g ->
             val seen = seenSet(g.id)
@@ -62,6 +102,7 @@ object GroupNews {
             rawEvents[g.id]?.let { evs ->
                 upcoming[g.id] = evs.count { it.date >= nowKey }
                 today[g.id] = evs.count { it.date == nowKey }
+                tomorrow[g.id] = evs.count { it.date == tomKey }
                 evs.filter { it.owner != me && it.date >= nowKey && it.created > b && it.id !in seen }.forEach { e ->
                     val day = try { showFmt.format(keyFmt.parse(e.date)!!) } catch (_: Exception) { e.date }
                     list.add(Item(g.id, "event", e.id,

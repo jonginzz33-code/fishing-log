@@ -83,9 +83,52 @@ object Store {
 
     // ---- 설정 ----
     // ---- 낚시 종류 (선상 · 해루질 · 워킹) ----
-    val CATS = listOf("boat", "night", "walk")
-    fun catLabel(c: String): String = when (c) { "boat" -> "선상낚시"; "night" -> "해루질"; "walk" -> "워킹낚시"; else -> "" }
-    fun catShort(c: String): String = when (c) { "boat" -> "선상"; "night" -> "해루질"; "walk" -> "워킹"; else -> "" }
+    // 관리자가 '낚시 종류 관리'에서 추가·이름 바꾸기·순서·숨기기 (서버 config/cats → 폰에 저장)
+    class Cat(val id: String, val label: String, val short: String, val hidden: Boolean = false)
+    private val BASE_CATS = listOf(Cat("boat", "선상낚시", "선상"), Cat("night", "해루질", "해루질"), Cat("walk", "워킹낚시", "워킹"))
+
+    /** 모든 종류 (숨긴 것 포함, 이름 찾기용) */
+    private var catsCache: Pair<String?, List<Cat>>? = null
+    fun allCats(): List<Cat> {
+        val saved = if (::prefs.isInitialized) prefs.getString("catsJson", null) else null
+        catsCache?.let { if (it.first == saved) return it.second }
+        val r = parseCats(saved)
+        catsCache = saved to r
+        return r
+    }
+
+    private fun parseCats(saved: String?): List<Cat> {
+        if (saved.isNullOrBlank()) return BASE_CATS
+        return try {
+            val a = JSONArray(saved)
+            val l = (0 until a.length()).map { i ->
+                val o = a.getJSONObject(i)
+                Cat(o.getString("id"), o.optString("label", ""), o.optString("short", ""), o.optBoolean("hidden", false))
+            }.filter { it.id.isNotBlank() && it.label.isNotBlank() }
+            if (l.isEmpty()) BASE_CATS else l
+        } catch (_: Exception) { BASE_CATS }
+    }
+
+    /** 고를 수 있는 종류 (숨긴 것 빼고, 관리자가 정한 순서) */
+    val CATS: List<String> get() = allCats().filter { !it.hidden }.map { it.id }
+
+    fun catLabel(c: String): String = allCats().firstOrNull { it.id == c }?.label ?: ""
+    fun catShort(c: String): String = allCats().firstOrNull { it.id == c }?.let { it.short.ifBlank { it.label } } ?: ""
+
+    fun catsToJson(list: List<Cat>): String {
+        val a = JSONArray()
+        list.forEach { c -> a.put(JSONObject().put("id", c.id).put("label", c.label).put("short", c.short).put("hidden", c.hidden)) }
+        return a.toString()
+    }
+
+    /** 서버에서 받은 종류 목록 저장 */
+    fun applyServerCats(list: List<Cat>) {
+        if (list.isEmpty()) return
+        val js = catsToJson(list)
+        if (prefs.getString("catsJson", null) == js) return
+        prefs.edit().putString("catsJson", js).apply()
+        fireChanged()
+    }
     private val DEFAULT_SPECIES = mapOf(
         "boat" to listOf("주꾸미", "갑오징어", "우럭", "광어", "참돔", "쭈갑"),
         "night" to listOf("낙지", "문어", "해삼", "소라", "꽃게", "키조개"),

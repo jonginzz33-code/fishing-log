@@ -62,13 +62,14 @@ class AdminActivity : Activity() {
     private fun load() {
         listBox.removeAllViews()
         listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 10))
-        var left = 4
+        var left = 5
         var err: String? = null
         fun step() { left--; if (left == 0) render(err) }
         Cloud.adminUsers { list, e -> users = list ?: emptyList(); if (list == null) err = e; step() }
         Moderation.loadBans { list, e -> bans = list ?: emptyList(); if (list == null && err == null) err = e; step() }
         Moderation.reportCounts { m -> reports = m; step() }
         Moderation.loadLimit { step() }
+        Cloud.loadCats { step() }
     }
 
     private var nickReqs: List<Cloud.NickRequest> = emptyList()
@@ -104,10 +105,71 @@ class AdminActivity : Activity() {
     private fun render(err: String?) {
         listBox.removeAllViews()
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
+        renderCatAdmin()
         renderLimit()
         renderReports()
         renderBans()
         renderUsers()
+    }
+
+    // ---------------- 낚시 종류 관리 (추가·이름·순서·숨기기) ----------------
+    private fun renderCatAdmin() {
+        section("낚시 종류 관리")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 12f, Ui.SUB, false,
+            "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요"))
+        val list = Store.allCats()
+        list.forEachIndexed { i, cat ->
+            val r = Ui.row(this)
+            r.addView(Ui.text(this, 15f, if (cat.hidden) Ui.SUB else Ui.TEXT, true,
+                cat.label + (if (cat.short.isNotBlank() && cat.short != cat.label) " (${cat.short})" else "") + (if (cat.hidden) " · 숨김" else "")),
+                LinearLayout.LayoutParams(0, WRAP, 1f))
+            fun mini(label: String, onClick: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
+                gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0)
+                background = Ui.bg(this@AdminActivity, android.graphics.Color.TRANSPARENT, 8, Ui.LINE)
+                setOnClickListener { onClick() }
+            }
+            r.addView(mini("▲") { if (i > 0) save(list.toMutableList().apply { add(i - 1, removeAt(i)) }) }, LinearLayout.LayoutParams(dp(36), dp(34)))
+            r.addView(mini("▼") { if (i < list.size - 1) save(list.toMutableList().apply { add(i + 1, removeAt(i)) }) },
+                LinearLayout.LayoutParams(dp(36), dp(34)).apply { leftMargin = dp(4) })
+            r.addView(mini("이름") { askCat(cat) { l, sh -> save(list.map { if (it.id == cat.id) Store.Cat(it.id, l, sh, it.hidden) else it }) } },
+                LinearLayout.LayoutParams(WRAP, dp(34)).apply { leftMargin = dp(4) })
+            r.addView(mini(if (cat.hidden) "보이기" else "숨기기") {
+                if (!cat.hidden && list.count { !it.hidden } <= 1) { toast("종류는 하나 이상 있어야 해요"); return@mini }
+                save(list.map { if (it.id == cat.id) Store.Cat(it.id, it.label, it.short, !it.hidden) else it })
+            }, LinearLayout.LayoutParams(WRAP, dp(34)).apply { leftMargin = dp(4) })
+            c.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        }
+        c.addView(Ui.button(this, "+ 낚시 종류 추가", true) {
+            askCat(null) { l, sh ->
+                if (list.any { it.label.replace(" ", "") == l.replace(" ", "") }) { toast("이미 있는 이름이에요"); return@askCat }
+                save(list + Store.Cat("c" + java.lang.Long.toString(System.currentTimeMillis(), 36), l, sh))
+            }
+        }.apply { minHeight = dp(44) }, Ui.lp(this, MATCH, WRAP, top = 12))
+        c.addView(Ui.text(this, 11f, Ui.SUB, false, "새 종류의 어종은 메인 메뉴 → '어종 관리 (관리자)'에서 넣어 주세요"), Ui.lp(this, MATCH, WRAP, top = 6))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    private fun save(list: List<Store.Cat>) {
+        Cloud.saveCats(list) { e -> toast(e ?: "낚시 종류를 저장했어요"); render(null) }
+    }
+
+    /** 이름 · 짧은 이름 (예: 원투 낚시 / 원투) */
+    private fun askCat(old: Store.Cat?, done: (String, String) -> Unit) {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
+        val name = EditText(this).apply { hint = "이름 (예: 원투 낚시)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(); setText(old?.label ?: "") }
+        val short = EditText(this).apply { hint = "짧은 이름 (예: 원투, 비우면 자동)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(); setText(old?.short ?: "") }
+        col.addView(name); col.addView(short)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(if (old == null) "낚시 종류 추가" else "이름 바꾸기")
+            .setView(col)
+            .setPositiveButton("저장") { _, _ ->
+                val l = name.text.toString().trim()
+                if (l.isEmpty()) { toast("이름을 적어 주세요"); return@setPositiveButton }
+                val sh = short.text.toString().trim().ifBlank { l.replace("낚시", "").trim().ifBlank { l } }
+                done(l, sh)
+            }
+            .setNegativeButton("취소", null).show()
     }
 
     // ---------------- 신고 누적 기준 ----------------

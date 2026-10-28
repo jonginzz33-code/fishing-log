@@ -110,7 +110,7 @@ object BiteMemo {
         card.addView(r)
         val night = p.dayPct < 50
         val col = if (night) VIOLET else GOLD
-        card.addView(Ui.text(c, 12f, col, true, (if (night) "☾ " else "☀ ") + "많이 문 때: ${p.label} (${p.count}마리)").apply {
+        card.addView(Ui.text(c, 12f, col, true, (if (night) "☾ " else "☀ ") + "가장 많이 잡힌 때: ${p.label} (${p.count}마리)").apply {
             setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
             background = Ui.bg(c, Color.argb(50, Color.red(col), Color.green(col), Color.blue(col)), 8)
         }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
