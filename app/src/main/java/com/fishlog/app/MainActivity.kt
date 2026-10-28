@@ -116,6 +116,25 @@ class MainActivity : Activity() {
     private var cloudLoaded = false
     /** 관리자가 막은 옛날 버전인지 (출조 중엔 막지 않고, 끝난 뒤에) */
     private var forceUpdate = false
+    private lateinit var chatBtn: TextView
+    private lateinit var chatBadge: TextView
+    private var chatOnline = 0L
+    private val chatListener: () -> Unit = { paintChat(); renderGroupPanel() }
+
+    /** 채팅 버튼: 접속 인원 + 안 읽은 글 수 */
+    private fun paintChat() {
+        if (!::chatBtn.isInitialized) return
+        val gold = Color.parseColor("#F2C14E")
+        chatBtn.text = android.text.SpannableStringBuilder("💬 채팅\n").apply {
+            setSpan(android.text.style.ForegroundColorSpan(gold), 0, length, 0)
+            val s0 = length; append(if (Cloud.user == null) "로그인" else if (chatOnline > 0) "접속 ${chatOnline}명" else "실시간")
+            setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
+            setSpan(android.text.style.ForegroundColorSpan(gold), s0, length, 0)
+        }
+        val n = if (Cloud.user == null) 0 else Chat.totalUnread()
+        chatBadge.text = if (n > 99) "99+" else "$n"
+        chatBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
+    }
     private var guideOpen = false
     private lateinit var versionText: TextView
 
@@ -182,6 +201,10 @@ class MainActivity : Activity() {
         Cloud.addListener(cloudListener)
         Live.addListener(liveListener)
         GroupNews.startLive(newsLive)
+        if (Cloud.user != null) {
+            Chat.start(chatListener)
+            Chat.startPresence { n -> chatOnline = n; paintChat() }
+        }
         Milestone.addListener(milestoneListener)
         if (Store.current != null) { Live.sync(); Live.watch() }
         ButtonRouter.onMessage = { showMessage(it) }
@@ -230,6 +253,8 @@ class MainActivity : Activity() {
         Live.removeListener(liveListener)
         Live.unwatch()
         GroupNews.stopLive(newsLive)
+        Chat.stop(chatListener)
+        Chat.stopPresence()
         Milestone.removeListener(milestoneListener)
         ButtonRouter.onMessage = null
         handler.removeCallbacks(ticker)
@@ -310,11 +335,27 @@ class MainActivity : Activity() {
             setLineSpacing(0f, 0.95f)
             setPadding(dp(8), dp(2), dp(8), dp(2))
         }, LinearLayout.LayoutParams(WRAP, dp(48)))
+        // 채팅 버튼: '채팅' + 작은 글씨 '접속 N명', 안 읽은 글은 빨간 숫자
+        val chatBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        chatBtn = smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }.apply {
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setLineSpacing(0f, 0.95f)
+            background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 12, Color.parseColor("#F2C14E"))
+        }
+        chatBox.addView(chatBtn, android.widget.FrameLayout.LayoutParams(WRAP, dp(48)))
+        chatBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
+            visibility = View.GONE
+        }
+        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(17), Gravity.TOP or Gravity.END).apply { topMargin = -dp(7); rightMargin = -dp(5) })
+        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+        paintChat()
         // 제목: 지도 버튼과 ?·⚙ 사이 가운데, 남는 폭에 맞춰 글자 크기 자동
         header.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
             gravity = Gravity.CENTER
             maxLines = 1
-            setAutoSizeTextTypeUniformWithConfiguration(16, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            setAutoSizeTextTypeUniformWithConfiguration(13, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6); rightMargin = dp(6) })
         // (그룹은 맨 아래 '그룹' 칸으로 옮김)
         header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
@@ -1294,7 +1335,13 @@ class MainActivity : Activity() {
         }
         pair(tripsBtn,
             gbtn("같이 낚시 중") { showMates() })
-        pair(gbtn("출조 달력 · 멤버 · 그룹 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) }, null)
+        // 그룹 채팅: 안 읽은 글이 있으면 노랑 강조 + 개수
+        val chatN = activeId?.let { Chat.unread(it) } ?: 0
+        val chatG = gbtn(if (chatN > 0) "💬 그룹 채팅 · 새 글 $chatN" else "💬 그룹 채팅") {
+            startActivity(Intent(this, ChatActivity::class.java).putExtra("room", activeId))
+        }
+        if (chatN > 0) { chatG.setTextColor(Color.parseColor("#F2C14E")); chatG.background = Ui.bg(this, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E")) }
+        pair(chatG, gbtn("달력 · 멤버 · 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) })
     }
 
     /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
@@ -1363,6 +1410,9 @@ class MainActivity : Activity() {
 
     private fun refreshAccount() {
         if (!::accountInfo.isInitialized) return
+        // 그룹이 바뀌면 그룹 채팅방도 다시 지켜봄
+        Chat.refreshRooms()
+        paintChat()
         renderGroupPanel()
         GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         val u = Cloud.user

@@ -78,6 +78,31 @@ service cloud.firestore {
       }
     }
 
+    // ---- 채팅 (전체방) · 채팅 금지 · 접속 중 ----
+    function chatOk() {
+      return notBanned() && !exists(/databases/$(database)/documents/chatMute/$(request.auth.uid));
+    }
+    function chatMsg() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string && request.resource.data.text.size() <= 500
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20
+        && request.resource.data.t is int;
+    }
+    match /chat/{mid} {
+      allow read: if signedIn();
+      allow create: if chatOk() && chatMsg();
+      allow update: if chatOk() && resource.data.uid == request.auth.uid && chatMsg();
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+    match /chatMute/{uid} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
     match /invites/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
@@ -122,6 +147,12 @@ service cloud.firestore {
         allow read: if isMember(gid);
         allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
         allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid));
+      }
+      match /chat/{mid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && chatOk() && chatMsg();
+        allow update: if isMember(gid) && chatOk() && resource.data.uid == request.auth.uid && chatMsg();
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGroupOwner(gid) || isAdmin());
       }
       match /notices/{nid} {
         allow read: if isMember(gid);
