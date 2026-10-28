@@ -1242,27 +1242,33 @@ class MainActivity : Activity() {
         val schedBtn = gbtn(schedLabel, newEv > 0) { startActivity(Intent(this, ScheduleActivity::class.java)) }
         if (tomN > 0) { schedBtn.setTextColor(Ui.BG); schedBtn.background = Ui.bg(this, Ui.GREEN, 99) }
         pair(noticeBtn, schedBtn)
-        pair(gbtn("그룹 출조 기록") { startActivity(Intent(this, GroupTripsActivity::class.java)) },
+        // 그룹 출조 기록: 새로 올라온 출조가 있으면 초록 강조 + 개수 (열면 꺼짐)
+        val newTr = GroupNews.newTrips(activeId)
+        val tripsBtn = gbtn(if (newTr > 0) "그룹 출조 기록 · 새 글 $newTr" else "그룹 출조 기록", newTr > 0) {
+            startActivity(Intent(this, GroupTripsActivity::class.java))
+        }
+        pair(tripsBtn,
             gbtn("같이 낚시 중") { showMates() })
         pair(gbtn("출조 달력 · 멤버 · 그룹 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) }, null)
     }
 
     /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
     private fun newsCard(it: GroupNews.Item): View {
-        val col = if (it.isNotice) Color.parseColor("#F2C14E") else Ui.BLUE
-        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else Color.parseColor("#06303A")
+        val isTrip = it.kind == "trip"
+        val col = if (it.isNotice) Color.parseColor("#F2C14E") else if (isTrip) Ui.GREEN else Ui.BLUE
+        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(10), dp(10))
             background = Ui.bg(this@MainActivity, Ui.CARD, 14, col)
             isClickable = true
             setOnClickListener { _ ->
-                startActivity(Intent(this@MainActivity, if (it.isNotice) NoticeActivity::class.java else ScheduleActivity::class.java))
+                startActivity(Intent(this@MainActivity, if (it.isNotice) NoticeActivity::class.java else if (isTrip) GroupTripsActivity::class.java else ScheduleActivity::class.java))
             }
         }
         val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else "일정").apply {
+        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else if (isTrip) "조과" else "일정").apply {
             setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@MainActivity, col, 6)
         })
         line.addView(Ui.text(this, 14f, Ui.TEXT, true, it.title).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },

@@ -22,6 +22,7 @@ object GroupNews {
     private val main = Handler(Looper.getMainLooper())
     private val rawEvents = HashMap<String, List<Cloud.Event>>()
     private val rawNotices = HashMap<String, List<Cloud.Notice>>()
+    private val rawTrips = HashMap<String, List<Cloud.RemoteTrip>>()
     @Volatile private var unseen: Map<String, List<Item>> = emptyMap()
     private val upcoming = HashMap<String, Int>()
     private val today = HashMap<String, Int>()
@@ -45,6 +46,8 @@ object GroupNews {
     /** 안 본 새 일정 / 새 공지 수 */
     fun newEvents(gid: String?): Int = items(gid).count { !it.isNotice }
     fun newNotices(gid: String?): Int = items(gid).count { it.isNotice }
+    /** 새로 올라온 그룹 출조 (조과 후기) */
+    fun newTrips(gid: String?): Int = items(gid).count { it.kind == "trip" }
     /** 공지 전체 개수 (내가 쓴 것 포함) */
     fun notices(gid: String?): Int = gid?.let { rawNotices[it]?.size } ?: 0
 
@@ -64,7 +67,8 @@ object GroupNews {
         watching = Cloud.groups.flatMap { g ->
             Cloud.watchGroup(g,
                 { evs -> rawEvents[g.id] = evs; loadedAt = System.currentTimeMillis(); recompute(); fireLive() },
-                { ns -> rawNotices[g.id] = ns; loadedAt = System.currentTimeMillis(); recompute(); fireLive() })
+                { ns -> rawNotices[g.id] = ns; loadedAt = System.currentTimeMillis(); recompute(); fireLive() },
+                { ts -> rawTrips[g.id] = ts; recompute(); fireLive() })
         }
     }
 
@@ -115,6 +119,14 @@ object GroupNews {
                 ns.filter { it.owner != me && maxOf(it.created, it.edited) > b && it.id !in seen }.forEach { n ->
                     list.add(Item(g.id, "notice", n.id, n.title,
                         n.ownerName + " · " + agoFmt.format(Date(maxOf(n.created, n.edited))), maxOf(n.created, n.edited)))
+                }
+            }
+            rawTrips[g.id]?.let { ts ->
+                ts.filter { it.owner != me && it.end > 0 && it.end > b && it.id !in seen }.forEach { t ->
+                    val counts = (1..2).filter { t.count(it) > 0 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
+                    list.add(Item(g.id, "trip", t.id, "${t.ownerName} · ${showFmt.format(Date(t.start))} " + counts.ifBlank { "출조" },
+                        listOfNotNull(t.place().ifBlank { null }, if (t.photoCount > 0) "사진 ${t.photoCount}장" else null).joinToString(" · ").ifBlank { "그룹 출조 기록" },
+                        t.end))
                 }
             }
             out[g.id] = list.sortedByDescending { it.time }

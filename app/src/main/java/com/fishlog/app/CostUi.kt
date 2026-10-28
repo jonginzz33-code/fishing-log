@@ -105,6 +105,15 @@ object CostUi {
             .show()
     }
 
+    /** 저장 + 이미 올린 그룹·백업에도 반영 (사진은 다시 안 올라감) */
+    fun save(t: Store.Trip, c: Store.Cost) {
+        Store.setCost(t.id, c)
+        Store.find(t.id)?.let { tt ->
+            Store.sharedGroups(tt.id).forEach { gid -> Cloud.groups.firstOrNull { it.id == gid }?.let { g -> Cloud.uploadTrip(tt, g) { } } }
+            Cloud.backupPending()
+        }
+    }
+
     /** 출조 기록 화면에서 고치기: 저장 후 백업·그룹 공유에도 반영 */
     fun edit(a: Activity, t: Store.Trip, done: () -> Unit) {
         val ed = editor(a, t.cat.ifBlank { Store.category }, Store.Cost(t.paid, t.fee, t.gear.toList()))
@@ -112,15 +121,7 @@ object CostUi {
         AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("이용료 · 준비물")
             .setView(android.widget.ScrollView(a).apply { addView(wrap) })
-            .setPositiveButton("저장") { _, _ ->
-                Store.setCost(t.id, ed.read())
-                Store.find(t.id)?.let { tt ->
-                    // 이미 올린 그룹에도 반영 (사진은 다시 안 올라감)
-                    Store.sharedGroups(tt.id).forEach { gid -> Cloud.groups.firstOrNull { it.id == gid }?.let { g -> Cloud.uploadTrip(tt, g) { } } }
-                    Cloud.backupPending()
-                }
-                done()
-            }
+            .setPositiveButton("저장") { _, _ -> save(t, ed.read()); done() }
             .setNegativeButton("취소", null)
             .show()
     }

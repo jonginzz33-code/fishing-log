@@ -274,6 +274,22 @@ object MapDialog {
         if (startPt != null) map.overlays.add(DotsOverlay(a, listOf(MapDot(startPt, Color.parseColor("#5FD39A"), "출발 지점", "출발")), false, null))
         val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }
         map.overlays.add(dots)
+        // 같이 출조 중인 그룹원 위치 (실시간)
+        val matesOv = MatesOverlay(a) { m ->
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(m.name)
+                .setMessage("${m.names.getOrElse(0) { "1번" }} ${m.c1} · ${m.names.getOrElse(1) { "2번" }} ${m.c2}\n" +
+                    (if (m.meters > 0) String.format(Locale.KOREA, "나와 약 %.0fm\n", m.meters) else "") +
+                    "마지막 갱신 " + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(m.time)))
+                .setPositiveButton("확인", null).show()
+        }
+        val matesListener: () -> Unit = { matesOv.mates = Live.mates; map.invalidate() }
+        if (live != null) {
+            matesOv.mates = Live.mates
+            map.overlays.add(matesOv)
+            Live.addListener(matesListener)
+            Live.watch()
+        }
         if (live != null) map.overlays.add(boat)
         // 출조 중이 아니면: 지도를 여는 순간부터 내 위치를 계속 보여줌
         val liveMe = if (live == null) LiveMe.attach(a, map, emptyList(), fitWith = all.toList()) else null
@@ -486,6 +502,7 @@ object MapDialog {
         dialog.setContentView(root)
         dialog.setOnDismissListener {
             handler.removeCallbacksAndMessages(null)
+            Live.removeListener(matesListener)
             if (live != null) { Tracker.live = false; sm.unregisterListener(sensorListener) }
             map.onPause(); map.onDetach()
         }
@@ -806,7 +823,7 @@ object MapDialog {
         val isLive = Store.current?.id == t.id
         val legend = distanceText(t.track.map { GeoPoint(it.lat, it.lon) }) + "\n" +
             "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 초록 = 출발 · 흰 선 이동 경로" +
-            (if (isLive) " · 배 = 지금 내 위치" else "") +
+            (if (isLive) " · 배 = 지금 내 위치 · 이름표 = 같이 출조 중인 그룹원" else "") +
             "\n위치가 있는 조과 $withLoc / ${t.catches.size} · 숫자 = 겹친 마릿수 · 점을 누르면 상세"
         if (isLive) show(a, df.format(Date(t.start)) + " 출조 중 (실시간)", emptyList(), legend, live = t, excludeId = t.id)
         else show(a, df.format(Date(t.start)) + " 출조", listOf(layerOf(t)), legend, excludeId = t.id)

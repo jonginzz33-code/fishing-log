@@ -65,6 +65,8 @@ class GroupTripsActivity : Activity() {
             if (isFinishing) return@recentTripsOf
             if (list == null) { body.removeAllViews(); body.addView(Ui.text(this, 13f, Ui.ORANGE, false, err ?: "불러오기 실패")); return@recentTripsOf }
             trips = list.sortedByDescending { it.start }
+            // 열어 봤으니 새 출조 글은 확인한 걸로
+            GroupNews.markKindSeen(g.id, "trip")
             render()
         }
     }

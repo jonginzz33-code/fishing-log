@@ -748,9 +748,15 @@ object Cloud {
             d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L)
 
     /** 실시간: 그룹 일정·공지가 바뀌면 바로 알려줌 (앱이 켜져 있는 동안만) */
-    fun watchGroup(g: Group, onEvents: (List<Event>) -> Unit, onNotices: (List<Notice>) -> Unit): List<com.google.firebase.firestore.ListenerRegistration> {
+    fun watchGroup(g: Group, onEvents: (List<Event>) -> Unit, onNotices: (List<Notice>) -> Unit,
+                   onTrips: ((List<RemoteTrip>) -> Unit)? = null): List<com.google.firebase.firestore.ListenerRegistration> {
         val gref = db.collection("groups").document(g.id)
-        return listOf(
+        val extra: List<com.google.firebase.firestore.ListenerRegistration> = if (onTrips == null) emptyList() else listOf(
+            // 최근 올라온 출조 30개 (새 글 강조용)
+            gref.collection("trips").orderBy("start", Query.Direction.DESCENDING).limit(30).addSnapshotListener { q, _ ->
+                if (q != null) onTrips(q.documents.mapNotNull { parse(it) })
+            })
+        return extra + listOf(
             gref.collection("events").addSnapshotListener { q, _ ->
                 if (q != null) onEvents(q.documents.map { eventOf(it) }.sortedWith(compareBy({ it.date }, { it.time })))
             },

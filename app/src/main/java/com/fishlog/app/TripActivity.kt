@@ -82,6 +82,44 @@ class TripActivity : Activity() {
         }
     }
 
+    private val openHours = mutableSetOf<String>()
+
+    /** 기록 한 줄: 사진 · 시각 · 어종 */
+    private fun catchRow(t: Store.Trip, c: Store.Catch): View {
+        val r = Ui.row(this).apply { setPadding(dp(6), dp(6), 0, dp(6)) }
+        val ph = t.photoOf(c)
+        if (ph != null) {
+            r.addView(ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageBitmap(Photos.thumbBitmap(this@TripActivity, ph))
+                setOnClickListener { openPhoto(t, ph) }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        } else {
+            r.addView(View(this).apply { background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 8, Ui.LINE) },
+                LinearLayout.LayoutParams(dp(40), dp(40)))
+        }
+        r.addView(Ui.text(this, 14f, Ui.TEXT, false, tf.format(Date(c.time))).apply { typeface = android.graphics.Typeface.MONOSPACE },
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(12) })
+        r.addView(View(this).apply { background = Ui.bg(this@TripActivity, Ui.SLOT[c.slot - 1], 99) },
+            LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = dp(10) })
+        r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot) + if (c.lat != null) "" else "  (위치 없음)"),
+            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        return r
+    }
+
+    /** 전체 보기: 큰 창에 모든 기록 */
+    private fun showAllCatches(t: Store.Trip) {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(8)) }
+        col.addView(Ui.text(this, 15f, Ui.TEXT, true, "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}마리"))
+        t.catches.asReversed().forEach { c -> col.addView(catchRow(t, c)) }
+        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("전체 기록")
+            .setView(ScrollView(this).apply { addView(col) })
+            .setPositiveButton("닫기", null)
+            .show()
+        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.92).toInt())
+    }
+
     private fun section(title: String) =
         root.addView(Ui.text(this, 16f, Ui.TEXT, true, title), Ui.lp(this, MATCH, WRAP, top = 22))
 
@@ -117,11 +155,19 @@ class TripActivity : Activity() {
         root.addView(stats, Ui.lp(this, MATCH, WRAP, top = 16))
 
         // 이용료 · 준비물
+        // 이용료 · 준비물: 펼친 채로 바로 고치기 (안 적었으면 같은 배·항구 지난번 것으로 미리 채움)
         section("이용료 · 준비물")
-        val costCard = Ui.card(this).apply { isClickable = true; setOnClickListener { CostUi.edit(this@TripActivity, t) { render() } } }
-        costCard.addView(Ui.text(this, 14f, Ui.TEXT, false,
-            (t.costLabel().ifBlank { "이용료 안 적음" }) + "\n" +
-                (if (t.gear.isEmpty()) "준비물 안 적음" else "준비물: " + t.gear.joinToString(", ")) + "\n✎ 눌러서 고치기").apply { setLineSpacing(0f, 1.3f) })
+        val costCard = Ui.card(this)
+        val tripCat = t.cat.ifBlank { Store.category }
+        val hasCost = t.paid != null || t.gear.isNotEmpty()
+        val ed = CostUi.editor(this, tripCat, if (hasCost) Store.Cost(t.paid, t.fee, t.gear.toList()) else Store.lastCost(t.place(), tripCat))
+        costCard.addView(ed.view)
+        val saveMsg = Ui.text(this, 12f, Ui.GREEN, false, if (hasCost) "저장됨: " + t.costLabel().ifBlank { "이용료 안 적음" } else "아직 저장 안 했어요")
+        costCard.addView(Ui.button(this, "이용료 · 준비물 저장", true) {
+            CostUi.save(t, ed.read())
+            saveMsg.text = "저장했어요" + if (Store.sharedGroups(t.id).isNotEmpty()) " · 올린 그룹에도 반영했어요" else ""
+        }.apply { minHeight = dp(46) }, Ui.lp(this, MATCH, WRAP, top = 12))
+        costCard.addView(saveMsg, Ui.lp(this, MATCH, WRAP, top = 6))
         root.addView(costCard, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 지도
@@ -220,31 +266,43 @@ class TripActivity : Activity() {
             if (un > 0) root.addView(Ui.text(this, 12f, Ui.SUB, false, "흐린 사진 ${un}장은 아직 조과에 안 붙었어요 · 눌러서 직접 지정"), Ui.lp(this, MATCH, WRAP, top = 6))
         }
 
-        // 전체 기록
-        section("전체 기록")
+        // 기록: 시간대별 요약 → 누르면 그 시간 상세 → 전체 보기
+        section("시간대별 기록")
         val list = Ui.card(this)
         if (t.catches.isEmpty()) list.addView(Ui.text(this, 14f, Ui.SUB, false, "기록이 없어요"))
-        t.catches.asReversed().forEach { c ->
-            val r = Ui.row(this).apply { setPadding(0, dp(6), 0, dp(6)) }
-            val ph = t.photoOf(c)
-            if (ph != null) {
-                r.addView(ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    setImageBitmap(Photos.thumbBitmap(this@TripActivity, ph))
-                    setOnClickListener { openPhoto(t, ph) }
-                }, LinearLayout.LayoutParams(dp(40), dp(40)))
-            } else {
-                r.addView(View(this).apply { background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 8, Ui.LINE) },
-                    LinearLayout.LayoutParams(dp(40), dp(40)))
+        val hourKey = java.text.SimpleDateFormat("yyyyMMddHH", java.util.Locale.KOREA)
+        val byHour = t.catches.groupBy { hourKey.format(Date(it.time)) }.toSortedMap()
+        val maxN = byHour.values.maxOfOrNull { it.size } ?: 0
+        byHour.forEach { (k, cs) ->
+            val hour = cs.first().time
+            val n1 = cs.count { it.slot == 1 }; val n2 = cs.count { it.slot == 2 }
+            val photos = cs.count { t.photoOf(it) != null }
+            val open = k in openHours
+            val top = cs.size == maxN && maxN > 1
+            val head = Ui.row(this).apply {
+                setPadding(dp(12), dp(10), dp(10), dp(10))
+                background = Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#0F2233"), 12, if (top) Ui.ORANGE else Ui.LINE)
+                isClickable = true
+                setOnClickListener {
+                    if (open) openHours.remove(k) else openHours.add(k)
+                    // 펼쳐도 보던 자리 그대로
+                    val sv = root.parent as? ScrollView
+                    val y = sv?.scrollY ?: 0
+                    render()
+                    sv?.post { sv.scrollTo(0, y) }
+                }
             }
-            r.addView(Ui.text(this, 14f, Ui.TEXT, false, tf.format(Date(c.time))).apply { typeface = android.graphics.Typeface.MONOSPACE },
-                LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(12) })
-            r.addView(View(this).apply { background = Ui.bg(this@TripActivity, Ui.SLOT[c.slot - 1], 99) },
-                LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = dp(10) })
-            r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot) + if (c.lat != null) "" else "  (위치 없음)"),
-                LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-            list.addView(r)
+            head.addView(Ui.text(this, 16f, Ui.TEXT, true, java.text.SimpleDateFormat("HH시", java.util.Locale.KOREA).format(Date(hour))),
+                LinearLayout.LayoutParams(dp(48), WRAP))
+            head.addView(Ui.text(this, 14f, Ui.TEXT, true, listOfNotNull(
+                if (n1 > 0) "${t.name(1)} $n1" else null, if (n2 > 0) "${t.name(2)} $n2" else null).joinToString(" · ") +
+                (if (photos > 0) "  📷 $photos" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
+            head.addView(Ui.text(this, 12f, Ui.SUB, true, if (open) "접기 ▲" else "상세 ▼"))
+            list.addView(head, Ui.lp(this, MATCH, WRAP, top = 6))
+            if (open) cs.asReversed().forEach { c -> list.addView(catchRow(t, c)) }
         }
+        if (t.catches.size > 1) list.addView(Ui.button(this, "전체 보기 (${t.catches.size}) ›") { showAllCatches(t) }.apply { minHeight = dp(42); textSize = 14f },
+            Ui.lp(this, MATCH, WRAP, top = 10))
         root.addView(list, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 동작

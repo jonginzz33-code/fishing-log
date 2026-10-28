@@ -26,7 +26,7 @@ object Live {
     private const val STALE_MS = 20 * 60_000L
 
     class Mate(val uid: String, val name: String, val names: List<String>, val c1: Int, val c2: Int,
-               val time: Long, val meters: Float)
+               val time: Long, val meters: Float, val lat: Double? = null, val lon: Double? = null)
 
     @Volatile var mates: List<Mate> = emptyList()
         private set
@@ -173,7 +173,7 @@ object Live {
             if (rng != null && (dist < 0 || dist > rng)) return@forEach
             val m = Mate(d.id, Cloud.shownName(d.id, d.getString("name") ?: "?"),
                 (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"),
-                (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), tt, dist.coerceAtLeast(0f))
+                (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), tt, dist.coerceAtLeast(0f), la, lo)
             val old = found[d.id]
             if (old == null || old.time < m.time) found[d.id] = m
         }
@@ -202,7 +202,8 @@ object Live {
         val doc = hashMapOf<String, Any>(
             "name" to Cloud.displayName, "t" to System.currentTimeMillis(), "start" to t.start, "cat" to t.cat,
             "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2))
-        // 위치는 그대로 두고 마릿수만
+        // +1 할 때 위치도 같이 (없으면 지난 위치 그대로)
+        myLocation()?.let { doc["lat"] = it.first; doc["lon"] = it.second }
         Cloud.groups.forEach { g ->
             db.collection("groups").document(g.id).collection("live").document(me)
                 .set(doc, com.google.firebase.firestore.SetOptions.merge())

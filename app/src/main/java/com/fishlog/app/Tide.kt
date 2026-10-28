@@ -381,7 +381,7 @@ object Tide {
     }
 
     /** 물때로 짐작: 7물(사리) 100%, 조금 무렵 약 40% */
-    private fun estimatePct(time: Long): Int {
+    fun estimatePct(time: Long): Int {
         val idx = mulIndex(time)
         return (70 + 30 * cos(2 * PI * (idx - 7) / 15.0)).toInt().coerceIn(30, 100)
     }

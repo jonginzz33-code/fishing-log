@@ -212,3 +212,54 @@ class BoatOverlay(ctx: Context) : Overlay() {
         c.restore()
     }
 }
+
+/**
+ * 같이 출조 중인 그룹원: 색 동그라미 + 이름표 ("홍길동 · 주꾸미 23 · 3분 전")
+ * 20분 넘게 갱신이 없으면 흐리게. 누르면 onTap
+ */
+class MatesOverlay(ctx: android.content.Context, private val onTap: (Live.Mate) -> Unit) : Overlay() {
+    var mates: List<Live.Mate> = emptyList()
+    private val d = ctx.resources.displayMetrics.density
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2.5f * d; color = Color.WHITE }
+    private val tagBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(225, 11, 26, 38) }
+    private val tagTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11.5f * d; color = Color.WHITE; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+    private val pts = HashMap<String, android.graphics.Point>()
+    private val COLORS = intArrayOf(Color.parseColor("#F07AA0"), Color.parseColor("#B9A6FF"), Color.parseColor("#5FD39A"),
+        Color.parseColor("#F2C14E"), Color.parseColor("#5BC8DF"))
+
+    private fun ago(t: Long): String {
+        val m = ((System.currentTimeMillis() - t) / 60_000L).coerceAtLeast(0)
+        return if (m < 1) "방금" else if (m < 60) "${m}분 전" else "${m / 60}시간 전"
+    }
+
+    override fun draw(c: Canvas, mapView: MapView, shadow: Boolean) {
+        if (shadow) return
+        pts.clear()
+        mates.forEachIndexed { i, m ->
+            val la = m.lat ?: return@forEachIndexed; val lo = m.lon ?: return@forEachIndexed
+            val p = mapView.projection.toPixels(GeoPoint(la, lo), null)
+            pts[m.uid] = p
+            val old = System.currentTimeMillis() - m.time > 20 * 60_000L
+            val a = if (old) 110 else 255
+            fill.color = COLORS[i % COLORS.size]; fill.alpha = a; ring.alpha = a
+            c.drawCircle(p.x.toFloat(), p.y.toFloat(), 9 * d, fill)
+            c.drawCircle(p.x.toFloat(), p.y.toFloat(), 9 * d, ring)
+            val best = if (m.c1 >= m.c2) "${m.names.getOrElse(0) { "1번" }} ${m.c1}" else "${m.names.getOrElse(1) { "2번" }} ${m.c2}"
+            val label = "${m.name} · $best · ${ago(m.time)}"
+            val w = tagTxt.measureText(label) + 12 * d
+            val x = p.x + 13 * d; val y = p.y - 11 * d
+            tagBg.alpha = if (old) 150 else 225; tagTxt.alpha = a
+            c.drawRoundRect(x, y, x + w, y + 22 * d, 11 * d, 11 * d, tagBg)
+            c.drawText(label, x + 6 * d, y + 15 * d, tagTxt)
+        }
+    }
+
+    override fun onSingleTapConfirmed(e: android.view.MotionEvent, mapView: MapView): Boolean {
+        val hit = mates.firstOrNull { m ->
+            val p = pts[m.uid] ?: return@firstOrNull false
+            Math.hypot((e.x - p.x).toDouble(), (e.y - p.y).toDouble()) < 26 * d
+        } ?: return false
+        onTap(hit); return true
+    }
+}

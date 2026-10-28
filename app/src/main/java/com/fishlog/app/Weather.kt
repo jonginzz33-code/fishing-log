@@ -309,6 +309,70 @@ object Weather {
         return null to note.ifBlank { "근처 관측소(60km 안)에 수온계가 없어 예상 수온만 보여요" }
     }
 
+    // ---------------- 주간 (7일) · Open-Meteo ----------------
+    class WeekDay(val dayStart: Long, val tmin: Double?, val tmax: Double?, val pop: Int?, val wind: Double?,
+                  val wave: Double?, val sst: Double?, val code: Int?) {
+        /** 하늘 그림 (시간별과 같은 규칙) */
+        fun skyIcon(): String = when (code) {
+            null -> ""
+            0, 1 -> "☀"; 2 -> "⛅"; 3, 45, 48 -> "☁"
+            in 71..77, 85, 86 -> "🌨"
+            else -> if (code >= 51) "🌧" else "⛅"
+        }
+    }
+
+    private var weekCache: Pair<String, Pair<Long, List<WeekDay>>>? = null
+
+    fun fetchWeek(lat: Double, lon: Double, done: (List<WeekDay>?) -> Unit) {
+        val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        weekCache?.let { (k, v) -> if (k == key && System.currentTimeMillis() - v.first < 60 * 60_000L) { done(v.second); return } }
+        Thread {
+            val r = try { loadWeek(lat, lon) } catch (_: Exception) { null }
+            main.post {
+                if (!r.isNullOrEmpty()) weekCache = key to (System.currentTimeMillis() to r)
+                done(r)
+            }
+        }.start()
+    }
+
+    private fun loadWeek(lat: Double, lon: Double): List<WeekDay> {
+        val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+            "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
+            "&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=7")
+        val dd = JSONObject(body).getJSONObject("daily")
+        val days = dd.getJSONArray("time")
+        // 바다: 최대 파고 + 하루 평균 수온 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로)
+        val waveBy = HashMap<String, Double>(); val sstBy = HashMap<String, Double>()
+        val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16)
+        for ((dla, dlo) in offsets) {
+            try {
+                val mb = get("https://marine-api.open-meteo.com/v1/marine?latitude=${lat + dla}&longitude=${lon + dlo}" +
+                    "&daily=wave_height_max&hourly=sea_surface_temperature&timezone=Asia%2FSeoul&forecast_days=7")
+                val root = JSONObject(mb)
+                root.optJSONObject("daily")?.let { d ->
+                    val t = d.getJSONArray("time"); val w = d.optJSONArray("wave_height_max")
+                    for (i in 0 until t.length()) num(w, i)?.let { waveBy[t.getString(i)] = it }
+                }
+                root.optJSONObject("hourly")?.let { h ->
+                    val t = h.getJSONArray("time"); val st = h.optJSONArray("sea_surface_temperature")
+                    val sums = HashMap<String, Pair<Double, Int>>()
+                    for (i in 0 until t.length()) num(st, i)?.let { v ->
+                        val day = t.getString(i).take(10)
+                        val p = sums[day] ?: (0.0 to 0); sums[day] = (p.first + v) to (p.second + 1)
+                    }
+                    sums.forEach { (k, p) -> sstBy[k] = p.first / p.second }
+                }
+                if (waveBy.isNotEmpty() || sstBy.isNotEmpty()) break
+            } catch (_: Exception) {}
+        }
+        return (0 until days.length()).map { i ->
+            val ds = days.getString(i)
+            WeekDay(dayFmt.parse(ds)!!.time, num(dd.optJSONArray("temperature_2m_min"), i), num(dd.optJSONArray("temperature_2m_max"), i),
+                num(dd.optJSONArray("precipitation_probability_max"), i)?.toInt(), num(dd.optJSONArray("wind_speed_10m_max"), i),
+                waveBy[ds], sstBy[ds], num(dd.optJSONArray("weather_code"), i)?.toInt())
+        }
+    }
+
     /** 풍속 등급: 0 약함, 1 주의, 2 강함 */
     fun windLevel(ms: Double): Int = when { ms < 5 -> 0; ms < 9 -> 1; else -> 2 }
     fun windLevelName(l: Int) = when (l) { 0 -> "약함"; 1 -> "주의"; else -> "강함" }

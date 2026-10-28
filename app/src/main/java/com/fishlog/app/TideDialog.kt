@@ -148,12 +148,21 @@ object TideDialog {
 
         // ---- 바람 · 파도 · 수온 ----
         col.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), Ui.lp(a, MATCH, WRAP, top = 18))
+        // [오늘 시간별] [주간 (7일)] 탭
+        val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        val hourBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        val weekBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        col.addView(hourBox, Ui.lp(a, MATCH, WRAP))
+        col.addView(weekBox, Ui.lp(a, MATCH, WRAP))
         val wxSummary = Ui.text(a, 14f, Ui.TEXT, false, "")
-        col.addView(wxSummary, Ui.lp(a, MATCH, WRAP, top = 4))
+        hourBox.addView(wxSummary, Ui.lp(a, MATCH, WRAP, top = 8))
         val wxGrid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(wxGrid, Ui.lp(a, MATCH, WRAP, top = 6))
+        hourBox.addView(wxGrid, Ui.lp(a, MATCH, WRAP, top = 6))
         val wxNote = Ui.text(a, 11f, Ui.SUB, false, "")
-        col.addView(wxNote, Ui.lp(a, MATCH, WRAP, top = 4))
+        hourBox.addView(wxNote, Ui.lp(a, MATCH, WRAP, top = 4))
+        var weekMode = false
+        var todayMeasured: Weather.Measured? = null
 
         val src = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(src, Ui.lp(a, MATCH, WRAP, top = 12))
@@ -176,6 +185,7 @@ object TideDialog {
             (a.resources.displayMetrics.heightPixels * 0.92).toInt())
 
         fun renderWeather(w: Weather.Day) {
+            if (w.dayStart == today && w.measured != null) todayMeasured = w.measured
             wxGrid.removeAllViews()
             val hrs = w.hours
             if (hrs.isEmpty()) {
@@ -317,6 +327,114 @@ object TideDialog {
             }
             Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }
         }
+
+        // ---- 주간 (7일): 날짜 · 하늘 · 기온(+수온) · 비 · 바람 · 파고 · 물때 · 물세기 ----
+        lateinit var paintTabs: () -> Unit
+        fun renderWeek(list: List<Weather.WeekDay>?) {
+            weekBox.removeAllViews()
+            if (list.isNullOrEmpty()) { weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨를 못 받았어요 (인터넷 확인)"), Ui.lp(a, MATCH, WRAP, top = 8)); return }
+            val weights = floatArrayOf(1.05f, 0.75f, 1.35f, 0.75f, 0.65f, 0.7f, 0.9f, 0.85f)
+            fun cellRow(views: List<View>, bg: android.graphics.drawable.Drawable?, padV: Int) = LinearLayout(a).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(6), dp(padV), dp(6), dp(padV)); background = bg
+                views.forEachIndexed { i, v -> addView(v, LinearLayout.LayoutParams(0, WRAP, weights[i])) }
+            }
+            weekBox.addView(cellRow(listOf("날짜", "하늘", "기온", "비", "바람", "파고", "물때", "물세기").map { Ui.text(a, 10f, Ui.SUB, false, it) }, null, 2),
+                Ui.lp(a, MATCH, WRAP, top = 8))
+            val dfmt = SimpleDateFormat("M/d", Locale.KOREA); val wfmt = SimpleDateFormat("E", Locale.KOREA)
+            fun pctColor(p: Int) = when { p >= 80 -> Ui.ORANGE; p >= 55 -> Color.parseColor("#F2C14E"); else -> Ui.SUB }
+            list.forEach { wd ->
+                val ds = dayStart(wd.dayStart)
+                val noon = ds + 12 * 3_600_000L
+                val off = Math.round((ds - today) / 86_400_000.0).toInt()
+                val dayName = when (off) { 0 -> "오늘"; 1 -> "내일"; else -> dfmt.format(Date(ds)) }
+                val sub = if (off <= 1) dfmt.format(Date(ds)) + " " + wfmt.format(Date(ds)) else wfmt.format(Date(ds))
+                val sun = Calendar.getInstance().apply { timeInMillis = ds }.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                val dcell = Ui.text(a, 13f, Ui.TEXT, true, dayName).apply {
+                    append(android.text.SpannableStringBuilder("\n" + sub).apply {
+                        setSpan(android.text.style.AbsoluteSizeSpan(10, true), 0, length, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(if (sun) Color.parseColor("#F07AA0") else Ui.SUB), 0, length, 0)
+                    })
+                }
+                val icon = wd.skyIcon()
+                val skyBg = when (icon) { "☀" -> Color.parseColor("#F2C14E"); "☁" -> Color.parseColor("#3A7FBF")
+                    "🌧", "🌨" -> Color.parseColor("#1D3F8A"); else -> Color.TRANSPARENT }
+                val skyBox = android.widget.FrameLayout(a)
+                skyBox.addView(Ui.text(a, 13f, Ui.TEXT, false, icon.ifBlank { "·" }).apply {
+                    gravity = Gravity.CENTER
+                    background = if (skyBg == Color.TRANSPARENT) null else Ui.bg(a, skyBg, 99)
+                }, android.widget.FrameLayout.LayoutParams(dp(24), dp(24), Gravity.START or Gravity.CENTER_VERTICAL))
+                // 기온 + 아래 수온 (오늘은 실측이 있으면 실측)
+                val temp = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                temp.addView(Ui.text(a, 12.5f, Ui.TEXT, true, "").apply {
+                    text = android.text.SpannableStringBuilder().apply {
+                        val s0 = length; append(wd.tmin?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-")
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.BLUE), s0, length, 0)
+                        append("/")
+                        val s1 = length; append(wd.tmax?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-")
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.ORANGE), s1, length, 0)
+                    }
+                })
+                val meas = if (off == 0) todayMeasured?.temp else null
+                val seaV = meas ?: wd.sst
+                if (seaV != null) {
+                    val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    sr.addView(Ui.text(a, 10.5f, Color.parseColor("#7FE0D0"), true, String.format(Locale.KOREA, "수온 %.0f°", seaV)))
+                    sr.addView(Ui.text(a, 8.5f, if (meas != null) Color.parseColor("#04342C") else Ui.SUB, true, if (meas != null) "실측" else "예상").apply {
+                        setPadding(dp(3), 0, dp(3), 0)
+                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.SUB)
+                    }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
+                    temp.addView(sr)
+                }
+                val popV = Ui.text(a, 12f, if ((wd.pop ?: 0) >= 50) Ui.BLUE else Ui.SUB, (wd.pop ?: 0) >= 50, wd.pop?.let { "$it%" } ?: "-")
+                val wl = wd.wind?.let { Weather.windLevel(it) }
+                val windV = Ui.text(a, 12.5f, when (wl) { 0 -> Ui.GREEN; 1 -> Color.parseColor("#F2C14E"); 2 -> Ui.ORANGE; else -> Ui.SUB }, true,
+                    wd.wind?.let { String.format(Locale.KOREA, "%.0f", it) } ?: "-")
+                val waveV = Ui.text(a, 12f, Ui.BLUE, false, wd.wave?.let { String.format(Locale.KOREA, "%.1f", it) } ?: "-")
+                // 물때 · 물세기 (먼저 달 나이로 짐작, 물때 받아오면 정확한 값으로)
+                val est = Tide.estimatePct(noon)
+                val mulV = Ui.text(a, 10.5f, Ui.TEXT, true, Tide.mulName(noon).substringBefore(" (")).apply {
+                    gravity = Gravity.CENTER; maxLines = 1; setPadding(dp(2), dp(2), dp(2), dp(2))
+                }
+                val pctV = Ui.text(a, 12.5f, pctColor(est), true, "$est%").apply { gravity = Gravity.END }
+                fun paintPct(p: Int) {
+                    pctV.text = "$p%"; pctV.setTextColor(pctColor(p))
+                    if (p >= 80) { mulV.setTextColor(Color.parseColor("#3A1A04")); mulV.background = Ui.bg(a, Ui.ORANGE, 99) }
+                    else { mulV.setTextColor(Ui.TEXT); mulV.background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE) }
+                }
+                paintPct(est)
+                Tide.fetch(a, lat, lon, noon) { day, _ ->
+                    if (day != null && dlg.isShowing) Tide.strength(a, day) { st -> if (dlg.isShowing) paintPct(st.pct) }
+                }
+                val row = cellRow(listOf(dcell, skyBox, temp, popV, windV, waveV, mulV, pctV),
+                    Ui.bg(a, Ui.CARD, 12, if (ds == cur) Ui.BLUE else 0), 8).apply {
+                    isClickable = true
+                    setOnClickListener { cur = ds; weekMode = false; paintTabs(); load() }
+                }
+                weekBox.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
+            }
+            weekBox.addView(Ui.text(a, 11f, Ui.SUB, false,
+                "줄을 누르면 그날 물때·시간별 날씨로 이동 · 바람 = 최대 풍속 m/s · 파고 = 최대 m\n" +
+                    "물세기: 주황 80% 이상(물 많이 빠짐) · 노랑 55~80% · 회색 55% 아래 · 주간 날씨·수온 예상: Open-Meteo"),
+                Ui.lp(a, MATCH, WRAP, top = 4))
+        }
+        fun tab(label: String, on: Boolean, click: () -> Unit) = Ui.text(a, 13f, if (on) Color.parseColor("#06303A") else Ui.TEXT, true, label).apply {
+            gravity = Gravity.CENTER
+            background = if (on) Ui.bg(a, Ui.BLUE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { click() }
+        }
+        paintTabs = {
+            tabRow.removeAllViews()
+            tabRow.addView(tab("시간별", !weekMode) { weekMode = false; paintTabs() }, LinearLayout.LayoutParams(0, dp(38), 1f))
+            tabRow.addView(tab("주간 (7일)", weekMode) {
+                weekMode = true; paintTabs()
+                weekBox.removeAllViews(); weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨 불러오는 중…"), Ui.lp(a, MATCH, WRAP, top = 8))
+                Weather.fetchWeek(lat, lon) { l -> if (dlg.isShowing && weekMode) renderWeek(l) }
+            }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(8) })
+            hourBox.visibility = if (weekMode) View.GONE else View.VISIBLE
+            weekBox.visibility = if (weekMode) View.VISIBLE else View.GONE
+        }
+        paintTabs()
 
         val pickStation = {
             StationPicker.show(a, lat, lon) {

@@ -84,7 +84,7 @@ class SettingsActivity : Activity() {
             }, LinearLayout.LayoutParams(0, dp(42), if (v == 0) 1.6f else 1f).apply { if (i > 0) leftMargin = dp(6) })
         }
         box.addView(rr, Ui.lp(this, MATCH, WRAP, top = 6))
-        box.addView(Ui.text(this, 12f, Ui.SUB, false, "같은 배에서도 앞뒤 끝은 50m가 넘을 수 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "기본 1km · 해루질은 500m 넘게 떨어질 때도 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
             Ui.lp(this, MATCH, WRAP, top = 4))
 
         section("닉네임")
