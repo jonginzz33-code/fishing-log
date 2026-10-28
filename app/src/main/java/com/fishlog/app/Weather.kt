@@ -39,7 +39,8 @@ object Weather {
         }
     }
 
-    class Measured(val temp: Double, val at: String, val station: String)
+    /** 실측 수온: 가장 최근 값 + 그날 시각별 값 (정시 → ℃) */
+    class Measured(val temp: Double, val at: String, val station: String, val series: Map<Long, Double> = emptyMap())
 
     class Day(
         val dayStart: Long, val hours: List<Hour>,
@@ -244,7 +245,9 @@ object Weather {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) return null to "실측 수온: 인증키가 앱에 없어요"
         var note = ""
-        for (s in Tide.stationsNear(ctx, lat, lon).take(3)) {
+        // 반경 60km 안 관측소 6곳까지 (수온계가 있는 곳을 찾을 때까지)
+        val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 60f }.take(6)
+        for (s in near) {
             val q = "/1192136/dtRecent/GetDTRecentApiService?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&obsCode=${s.code}&reqDate=$ymd&min=60&type=json&pageNo=1&numOfRows=300"
             var body: String? = null
@@ -273,6 +276,9 @@ object Weather {
                 val itemAny = (root.optJSONObject("body")?.opt("items") as? JSONObject)?.opt("item")
                 val arr = when (itemAny) { is JSONArray -> itemAny; is JSONObject -> JSONArray().put(itemAny); else -> JSONArray() }
                 var best: Pair<Double, String>? = null
+                val series = HashMap<Long, Double>()
+                val dtRe = Regex("(\\d{4})\\D?(\\d{2})\\D?(\\d{2})\\D*(\\d{1,2}):(\\d{2})")
+                val hourFmt = SimpleDateFormat("yyyyMMddHH", Locale.US).apply { timeZone = KST }
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     val t = o.optString("wtem").toDoubleOrNull() ?: continue
@@ -282,14 +288,25 @@ object Weather {
                     if (t < -3 || t > 35) continue
                     val at = o.optString("obsrvnDt")
                     if (best == null || at > best.second) best = t to at
+                    // 시각별: 정시(분 0~29)는 그 시, 30분 이후는 다음 시로
+                    dtRe.find(at)?.groupValues?.let { gv ->
+                        val ymd2 = gv[1] + gv[2] + gv[3]
+                        if (ymd2 == ymd) {
+                            var h = gv[4].toInt(); val mi = gv[5].toInt()
+                            if (mi >= 30) h += 1
+                            hourFmt.parse(ymd2 + String.format(Locale.US, "%02d", h.coerceAtMost(23)))?.time?.let { k ->
+                                if (h <= 23 && !series.containsKey(k)) series[k] = t
+                            }
+                        }
+                    }
                 }
                 if (best != null) {
                     val hm = Regex("\\d{1,2}:\\d{2}").find(best.second)?.value ?: best.second
-                    return Measured(best.first, hm, s.name) to ""
+                    return Measured(best.first, hm, s.name, series) to ""
                 }
             } catch (_: Exception) {}
         }
-        return null to note.ifBlank { "가까운 관측소에 실측 수온이 없어요" }
+        return null to note.ifBlank { "근처 관측소(60km 안)에 수온계가 없어 예상 수온만 보여요" }
     }
 
     /** 풍속 등급: 0 약함, 1 주의, 2 강함 */

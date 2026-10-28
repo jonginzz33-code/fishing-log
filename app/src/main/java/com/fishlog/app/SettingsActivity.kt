@@ -70,8 +70,22 @@ class SettingsActivity : Activity() {
         switchRow("꺼진 화면(AOD)·잠금 화면에 표시", "출조 중 주꾸미 아이콘, 마릿수, +1 버튼을 잠금 해제 없이 보여줘요",
             Store.lockScreenShow) { Store.lockScreenShow = it; if (Store.current != null) RemoteService.start(this) }
         section("알림")
-        switchRow("같이 낚시 중 친구 돌파 알림", "50m 안에서 같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
+        switchRow("같이 낚시 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
             Store.friendAlerts) { Store.friendAlerts = it }
+
+        section("같이 낚시 중 거리")
+        val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(50 to "50m", 200 to "200m", 1000 to "1km", 0 to "거리 상관없이").forEachIndexed { i, (v, l) ->
+            val on = Store.mateRange == v
+            rr.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, l).apply {
+                gravity = Gravity.CENTER; maxLines = 1
+                background = if (on) Ui.bg(this@SettingsActivity, Ui.GREEN, 99) else Ui.bg(this@SettingsActivity, Ui.CARD, 99, Ui.LINE)
+                setOnClickListener { Store.mateRange = v; Live.sync(true); render() }
+            }, LinearLayout.LayoutParams(0, dp(42), if (v == 0) 1.6f else 1f).apply { if (i > 0) leftMargin = dp(6) })
+        }
+        box.addView(rr, Ui.lp(this, MATCH, WRAP, top = 6))
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "같은 배에서도 앞뒤 끝은 50m가 넘을 수 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
+            Ui.lp(this, MATCH, WRAP, top = 4))
 
         section("닉네임")
         val card = LinearLayout(this).apply {

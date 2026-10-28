@@ -6,14 +6,22 @@ import android.os.Looper
 import com.google.firebase.firestore.FirebaseFirestore
 
 /**
- * 같이 낚시하는 그룹원 조과 (5분마다)
+ * 같이 낚시하는 그룹원 조과
+ *  - 앱 화면을 보고 있을 땐 실시간 (서버 변화를 지켜봄), 화면이 꺼져 있으면 5분마다
+ *  - 내 +1 은 10초 안에 바로 올림 (친구 폰에서 실시간으로 보이게)
+ *  - 거리 기준은 ⚙ 설정 (50m · 200m · 1km · 거리 상관없이)
  *  - 출조 중이면 내 위치·마릿수를 가입한 그룹마다 groups/{gid}/live/{uid} 에 올림
  *  - 같은 그룹 사람 중 출조 중이고 내 위치에서 50m 안에 있는 사람만 보여줌
  *  - 출조를 끝내면 내 정보는 바로 지움
  */
 object Live {
 
-    const val RANGE_M = 50f
+    /** 거리 기준 (m). null = 거리 상관없이 같은 그룹 출조 중이면 모두 */
+    fun range(): Float? = Store.mateRange.takeIf { it > 0 }?.toFloat()
+    fun rangeLabel(): String = Store.mateRange.let { if (it <= 0) "거리 상관없이" else if (it >= 1000) "${it / 1000}km 안" else "${it}m 안" }
+    /** 안 보일 때 이유 (보이면 "") */
+    @Volatile var reason: String = ""
+        private set
     const val EVERY_MS = 5 * 60_000L
     private const val STALE_MS = 20 * 60_000L
 
@@ -103,38 +111,101 @@ object Live {
             "name" to Cloud.displayName, "t" to now, "start" to t.start, "cat" to t.cat,
             "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2))
         if (loc != null) { doc["lat"] = loc.first; doc["lon"] = loc.second }
-        groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).set(doc) }
-        if (loc == null) { mates = emptyList(); fire(); return }
-
-        val found = HashMap<String, Mate>()
+        groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge()) }
+        if (watching.isNotEmpty()) return  // 화면을 보고 있으면 실시간으로 이미 받는 중
+        val gotDocs = HashMap<String, List<com.google.firebase.firestore.DocumentSnapshot>>()
         var left = groups.size
         groups.forEach { g ->
             db.collection("groups").document(g.id).collection("live").get()
-                .addOnSuccessListener { q ->
-                    q.documents.forEach { d ->
-                        if (d.id == me) return@forEach
-                        val la = d.getDouble("lat") ?: return@forEach
-                        val lo = d.getDouble("lon") ?: return@forEach
-                        val tt = d.getLong("t") ?: 0L
-                        if (now - tt > STALE_MS) return@forEach
-                        val r = FloatArray(1)
-                        Location.distanceBetween(loc.first, loc.second, la, lo, r)
-                        if (r[0] > RANGE_M) return@forEach
-                        val m = Mate(d.id, d.getString("name") ?: "?",
-                            (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"),
-                            (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), tt, r[0])
-                        val old = found[d.id]
-                        if (old == null || old.time < m.time) found[d.id] = m
-                    }
-                }
+                .addOnSuccessListener { q -> gotDocs[g.id] = q.documents }
                 .addOnCompleteListener {
                     left--
-                    if (left == 0) {
-                        mates = found.values.sortedBy { it.meters }
-                        checkCheers(mates)
-                        fire()
-                    }
+                    if (left == 0) { liveDocs.clear(); liveDocs.putAll(gotDocs); recompute() }
                 }
+        }
+    }
+
+    // ---------------- 실시간 ----------------
+    private val liveDocs = HashMap<String, List<com.google.firebase.firestore.DocumentSnapshot>>()
+    private var watching: List<com.google.firebase.firestore.ListenerRegistration> = emptyList()
+    private var watchKey = ""
+
+    /** 앱 화면을 보고 있을 때: 그룹마다 같이 낚시 중 목록을 지켜봄 */
+    fun watch() {
+        if (Store.current == null || Cloud.uid == null) { unwatch(); return }
+        val key = Cloud.groups.joinToString(",") { it.id }
+        if (key == watchKey && watching.isNotEmpty()) return
+        unwatch()
+        watchKey = key
+        watching = Cloud.groups.map { g ->
+            db.collection("groups").document(g.id).collection("live").addSnapshotListener { q, _ ->
+                if (q != null) { liveDocs[g.id] = q.documents; recompute() }
+            }
+        }
+        sync(true)
+    }
+
+    fun unwatch() {
+        watching.forEach { try { it.remove() } catch (_: Exception) {} }
+        watching = emptyList(); watchKey = ""
+    }
+
+    /** 받은 목록 → 거리·시간 조건으로 같이 낚시 중인 사람 */
+    private fun recompute() {
+        val me = Cloud.uid ?: return
+        val now = System.currentTimeMillis()
+        val loc = myLocation()
+        val rng = range()
+        val found = HashMap<String, Mate>()
+        var others = 0
+        liveDocs.values.flatten().forEach { d ->
+            if (d.id == me) return@forEach
+            val tt = d.getLong("t") ?: 0L
+            if (now - tt > STALE_MS) return@forEach
+            others++
+            val la = d.getDouble("lat"); val lo = d.getDouble("lon")
+            var dist = -1f
+            if (la != null && lo != null && loc != null) {
+                val r = FloatArray(1)
+                Location.distanceBetween(loc.first, loc.second, la, lo, r)
+                dist = r[0]
+            }
+            if (rng != null && (dist < 0 || dist > rng)) return@forEach
+            val m = Mate(d.id, Cloud.shownName(d.id, d.getString("name") ?: "?"),
+                (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"),
+                (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), tt, dist.coerceAtLeast(0f))
+            val old = found[d.id]
+            if (old == null || old.time < m.time) found[d.id] = m
+        }
+        mates = found.values.sortedBy { it.meters }
+        reason = when {
+            mates.isNotEmpty() -> ""
+            rng != null && loc == null -> "내 위치가 아직 없어요 (GPS·위치 권한 확인)"
+            others == 0 -> "지금 같이 출조 중인 그룹원이 없어요"
+            else -> "${rangeLabel()}에 같이 출조 중인 그룹원이 없어요 (⚙ 설정에서 거리 바꾸기)"
+        }
+        checkCheers(mates)
+        fire()
+    }
+
+    // ---------------- 내 +1 바로 올리기 (10초 모아서) ----------------
+    private val pushRunnable = Runnable { pushCounts() }
+    fun pushSoon() {
+        if (Cloud.uid == null || Store.current == null) return
+        main.removeCallbacks(pushRunnable)
+        main.postDelayed(pushRunnable, 10_000L)
+    }
+
+    private fun pushCounts() {
+        val me = Cloud.uid ?: return
+        val t = Store.current ?: return
+        val doc = hashMapOf<String, Any>(
+            "name" to Cloud.displayName, "t" to System.currentTimeMillis(), "start" to t.start, "cat" to t.cat,
+            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2))
+        // 위치는 그대로 두고 마릿수만
+        Cloud.groups.forEach { g ->
+            db.collection("groups").document(g.id).collection("live").document(me)
+                .set(doc, com.google.firebase.firestore.SetOptions.merge())
         }
     }
 
@@ -142,7 +213,8 @@ object Live {
     fun clear() {
         val me = Cloud.uid ?: return
         Cloud.groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).delete() }
-        mates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null
+        mates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null; reason = ""
+        unwatch(); liveDocs.clear(); main.removeCallbacks(pushRunnable)
         fire()
     }
 }

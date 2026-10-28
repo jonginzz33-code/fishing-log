@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.graphics.Color
 import android.view.Gravity
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import com.fishlog.app.Ui.MATCH
@@ -149,7 +150,7 @@ object TideDialog {
         col.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), Ui.lp(a, MATCH, WRAP, top = 18))
         val wxSummary = Ui.text(a, 14f, Ui.TEXT, false, "")
         col.addView(wxSummary, Ui.lp(a, MATCH, WRAP, top = 4))
-        val wxGrid = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val wxGrid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         col.addView(wxGrid, Ui.lp(a, MATCH, WRAP, top = 6))
         val wxNote = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(wxNote, Ui.lp(a, MATCH, WRAP, top = 4))
@@ -189,39 +190,79 @@ object TideDialog {
                 hrs.mapNotNull { it.wave }.maxOrNull()?.let { parts.add(String.format(Locale.KOREA, "파고 최대 %.1fm", it)) }
                 hrs.mapNotNull { it.sst }.takeIf { it.isNotEmpty() }?.let { parts.add(String.format(Locale.KOREA, "수온 약 %.0f℃ (예측)", it.average())) }
                 wxSummary.text = parts.joinToString(" · ")
-                // 3시간마다: 시각 / 바람 방향 화살표 / 풍속 / 파고
+                // 실측 수온 (가장 최근) 칩
+                w.measured?.let { m ->
+                    wxGrid.addView(Ui.text(a, 12f, Color.parseColor("#7FE0D0"), true,
+                        String.format(Locale.KOREA, "🌡 실측 수온 %.1f℃ · %s 관측소 %s", m.temp, m.station, m.at)).apply {
+                        setPadding(dp(10), dp(4), dp(10), dp(4))
+                        background = Ui.bg(a, Color.parseColor("#12332F"), 99, Color.parseColor("#7FE0D0"))
+                    }, LinearLayout.LayoutParams(WRAP, WRAP).apply { bottomMargin = dp(8) })
+                }
+                // 세로 목록: 3시간마다 한 줄 (시각 · 하늘 · 기온 · 바람 · 파고 · 수온 · 비)
+                val weights = floatArrayOf(0.9f, 0.8f, 0.9f, 1.7f, 1.0f, 1.3f, 0.8f)
+                fun cellRow(views: List<View>, bg: android.graphics.drawable.Drawable?, padV: Int): LinearLayout =
+                    LinearLayout(a).apply {
+                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(8), dp(padV), dp(6), dp(padV))
+                        background = bg
+                        views.forEachIndexed { i, v -> addView(v, LinearLayout.LayoutParams(0, WRAP, weights[i])) }
+                    }
+                wxGrid.addView(cellRow(listOf("시각", "하늘", "기온", "바람", "파고", "수온", "비").map { Ui.text(a, 10.5f, Ui.SUB, false, it) }, null, 2))
+                val now = System.currentTimeMillis()
                 for (h in 0 until 24 step 3) {
                     val x = w.at(h)
-                    val c = LinearLayout(a).apply {
-                        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-                        setPadding(0, dp(6), 0, dp(6))
-                        background = Ui.bg(a, Ui.CARD, 10)
-                    }
-                    c.addView(Ui.text(a, 11f, Ui.SUB, false, "${h}시").apply { gravity = Gravity.CENTER })
-                    // 하늘 (기상청)
-                    if (w.fromKma) c.addView(Ui.text(a, 15f, Ui.TEXT, false, x?.skyIcon()?.ifBlank { "·" } ?: "·").apply { gravity = Gravity.CENTER })
+                    val rowStart = w.dayStart + h * 3_600_000L
+                    val isNow = now >= rowStart && now < rowStart + 3 * 3_600_000L
+                    // 시각
+                    val tcell = Ui.text(a, 13f, Ui.TEXT, true, "${h}시").apply { if (isNow) append("\n지금") }
+                    // 하늘: 그림 뒤 색 동그라미 (☀ 노랑 · ⛅ 그대로 · ☁ 파랑 · 🌧 진한 파랑)
+                    val icon = x?.skyIcon().orEmpty()
+                    val skyBg = when (icon) { "☀" -> Color.parseColor("#F2C14E"); "☁" -> Color.parseColor("#3A7FBF")
+                        "🌧", "🌨" -> Color.parseColor("#1D3F8A"); else -> Color.TRANSPARENT }
+                    val skyBox = android.widget.FrameLayout(a)
+                    skyBox.addView(Ui.text(a, 14f, Ui.TEXT, false, icon.ifBlank { "·" }).apply {
+                        gravity = Gravity.CENTER
+                        background = if (skyBg == Color.TRANSPARENT) null else Ui.bg(a, skyBg, 99)
+                    }, android.widget.FrameLayout.LayoutParams(dp(26), dp(26), Gravity.START or Gravity.CENTER_VERTICAL))
+                    // 기온
+                    val tmp = Ui.text(a, 13f, Color.parseColor("#F2C14E"), true, x?.temp?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-")
+                    // 바람: 화살표 + 풍속 + 방향
                     val ws = x?.wind
                     val lvColor = when (ws?.let { Weather.windLevel(it) }) { 0 -> Ui.GREEN; 1 -> Color.parseColor("#F2C14E"); 2 -> Ui.ORANGE; else -> Ui.SUB }
-                    // 화살표 = 바람이 불어가는 쪽
-                    c.addView(Ui.text(a, 18f, lvColor, true, if (x?.dir != null) "↑" else "·").apply {
+                    val wind = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    wind.addView(Ui.text(a, 16f, lvColor, true, if (x?.dir != null) "↑" else "·").apply {
                         gravity = Gravity.CENTER
                         x?.dir?.let { rotation = (it.toFloat() + 180f) % 360f }
-                    })
-                    c.addView(Ui.text(a, 12f, lvColor, true, ws?.let { String.format(Locale.KOREA, "%.0f", it) } ?: "-").apply { gravity = Gravity.CENTER })
-                    c.addView(Ui.text(a, 10f, Ui.SUB, false, x?.dir?.let { LiveMe.directionName(it) } ?: "").apply { gravity = Gravity.CENTER })
-                    c.addView(Ui.text(a, 11f, Ui.BLUE, false, x?.wave?.let { String.format(Locale.KOREA, "%.1fm", it) } ?: "-").apply { gravity = Gravity.CENTER })
-                    // 기온 (기상청)
-                    if (w.fromKma) c.addView(Ui.text(a, 11f, Color.parseColor("#F2C14E"), true, x?.temp?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-").apply { gravity = Gravity.CENTER })
-                    wxGrid.addView(c, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (h > 0) leftMargin = dp(3) })
+                    }, LinearLayout.LayoutParams(dp(18), WRAP))
+                    wind.addView(Ui.text(a, 13f, lvColor, true, ws?.let { String.format(Locale.KOREA, "%.0f", it) } ?: "-"),
+                        LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
+                    wind.addView(Ui.text(a, 10.5f, Ui.SUB, false, x?.dir?.let { LiveMe.directionName(it) } ?: "").apply { maxLines = 1 },
+                        LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(4) })
+                    // 파고
+                    val wave = Ui.text(a, 12f, Ui.BLUE, false, x?.wave?.let { String.format(Locale.KOREA, "%.1fm", it) } ?: "-")
+                    // 수온: 지나간 시간은 실측(청록 꽉 찬 표시), 나머지는 예상(회색 테두리)
+                    val meas = if (rowStart <= now) w.measured?.series?.get(rowStart) else null
+                    val seaVal = meas ?: x?.sst
+                    val sea = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    sea.addView(Ui.text(a, 12.5f, Color.parseColor("#7FE0D0"), true, seaVal?.let { String.format(Locale.KOREA, "%.1f°", it) } ?: "-"))
+                    if (seaVal != null) sea.addView(Ui.text(a, 9.5f, if (meas != null) Color.parseColor("#04342C") else Ui.SUB, true,
+                        if (meas != null) "실측" else "예상").apply {
+                        setPadding(dp(5), 0, dp(5), 0)
+                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.SUB)
+                    }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(1) })
+                    // 비 확률
+                    val pop = x?.pop
+                    val popV = Ui.text(a, 12f, if ((pop ?: 0) >= 50) Ui.BLUE else Ui.SUB, (pop ?: 0) >= 50, pop?.let { "$it%" } ?: "-")
+                    val bg = Ui.bg(a, Ui.CARD, 12, if (isNow) Ui.GREEN else 0)
+                    wxGrid.addView(cellRow(listOf(tcell, skyBox, tmp, wind, wave, sea, popV), bg, 8), Ui.lp(a, MATCH, WRAP, top = 6))
                 }
             }
             val notes = mutableListOf<String>()
-            w.measured?.let { notes.add(String.format(Locale.KOREA, "실측 수온 %.1f℃ · %s 관측소 %s", it.temp, it.station, it.at)) }
             if (w.measuredNote.isNotBlank()) notes.add(w.measuredNote)
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
-                notes.add("칸 = 3시간마다 · 화살표 = 바람이 부는 쪽 · 숫자 = 풍속(m/s, 초록 약함 · 노랑 주의 · 주황 강함) · 파랑 = 파고" +
-                    if (w.fromKma) " · 맨 위 = 하늘 · 노랑 = 기온" else "")
+                notes.add("한 줄 = 3시간 · 화살표 = 바람이 부는 쪽 · 풍속 m/s (초록 약함 · 노랑 주의 · 주황 강함) · 초록 테두리 = 지금\n" +
+                    "하늘: 노랑 = 맑음 · 그대로 = 구름 조금 · 파랑 = 흐림 · 진한 파랑 = 비 · 수온: 실측 = 관측소에서 잰 값, 예상 = 예측")
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
                 if (w.seaNote.isNotBlank()) notes.add(w.seaNote)
                 notes.add(if (w.fromKma) "기온·하늘·비·바람: 기상청 단기예보 · 돌풍·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")

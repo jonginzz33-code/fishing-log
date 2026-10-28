@@ -30,30 +30,34 @@ object GroupBand {
 
     private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
 
-    /** big = 메뉴용(크게). onClick = 눌렀을 때 (null 이면 안 눌림) */
-    fun view(c: Context, big: Boolean, onClick: (() -> Unit)? = null): View? {
+    /**
+     * 종류 색으로 꽉 찬 띠. big = 크게, filled = 그룹 창 맨 위용("지금 여기에서 설정 중이에요" + 역할)
+     * onClick = 눌렀을 때 (null 이면 안 눌림)
+     */
+    fun view(c: Context, big: Boolean, onClick: (() -> Unit)? = null, filled: Boolean = false): View? {
         val g = (if (Cloud.user == null) null else Cloud.active) ?: return null
         val cat = currentCat(g)
         val col = catColor(cat)
+        val ink = catInk(cat)
         fun dp(v: Int) = Ui.dp(c, v)
         val box = LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(if (big) 12 else 10), dp(12), dp(if (big) 12 else 10))
-            background = Ui.bg(c, Color.argb(40, Color.red(col), Color.green(col), Color.blue(col)), 16, col)
+            setPadding(dp(14), dp(if (big) 14 else 10), dp(14), dp(if (big) 14 else 10))
+            background = Ui.bg(c, col, 16)
             if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
         }
-        box.addView(Ui.text(c, if (big) 22f else 18f, catInk(cat), true, catIcon(cat)).apply {
-            gravity = Gravity.CENTER
-            background = Ui.bg(c, col, 12)
-        }, LinearLayout.LayoutParams(dp(if (big) 46 else 38), dp(if (big) 46 else 38)))
+        box.addView(Ui.text(c, if (big) 30f else 22f, ink, true, catIcon(cat)).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(dp(if (big) 48 else 38), dp(if (big) 48 else 38)))
         val txt = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        txt.addView(Ui.text(c, if (big) 21f else 18f, Ui.TEXT, true, groupLabel(g)).apply { maxLines = 1 })
+        if (filled) txt.addView(Ui.text(c, 12f, ink, true, "지금 여기에서 설정 중이에요").apply { alpha = 0.8f })
+        txt.addView(Ui.text(c, if (big) 24f else 18f, ink, true, groupLabel(g)).apply { maxLines = 1 })
         val others = g.types.filter { it in Store.CATS && it != cat }
-        txt.addView(Ui.text(c, if (big) 14f else 13f, col, true,
-            Store.catLabel(cat) + (if (others.isNotEmpty()) "  (그룹 종류: " + (listOf(cat) + others).joinToString(" · ") { Store.catShort(it) } + ")" else "")),
+        val role = if (filled) (if (g.owner == Cloud.uid) " · 그룹장" else " · 그룹원") else ""
+        txt.addView(Ui.text(c, 13f, ink, true,
+            Store.catLabel(cat) + role + (if (others.isNotEmpty()) "  (그룹 종류: " + (listOf(cat) + others).joinToString(" · ") { Store.catShort(it) } + ")" else "")),
             Ui.lp(c, Ui.MATCH, Ui.WRAP, top = 2))
         box.addView(txt, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = dp(12) })
-        if (onClick != null) box.addView(Ui.text(c, 12f, Ui.SUB, true, "바꾸기 ›"))
+        if (onClick != null) box.addView(Ui.text(c, 12f, ink, true, "열기 ›"))
         return box
     }
 }
