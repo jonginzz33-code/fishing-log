@@ -355,6 +355,11 @@ object TideDialog {
                         setSpan(android.text.style.AbsoluteSizeSpan(10, true), 0, length, 0)
                         setSpan(android.text.style.ForegroundColorSpan(if (sun) Color.parseColor("#F07AA0") else Ui.SUB), 0, length, 0)
                     })
+                    // 어디 예보인지 (기상청이면 초록 작은 글씨)
+                    if (wd.src.isNotBlank()) append(android.text.SpannableStringBuilder("\n기상청").apply {
+                        setSpan(android.text.style.AbsoluteSizeSpan(9, true), 0, length, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), 0, length, 0)
+                    })
                 }
                 val icon = wd.skyIcon()
                 val skyBg = when (icon) { "☀" -> Color.parseColor("#F2C14E"); "☁" -> Color.parseColor("#3A7FBF")
@@ -390,7 +395,13 @@ object TideDialog {
                 val wl = wd.wind?.let { Weather.windLevel(it) }
                 val windV = Ui.text(a, 12.5f, when (wl) { 0 -> Ui.GREEN; 1 -> Color.parseColor("#F2C14E"); 2 -> Ui.ORANGE; else -> Ui.SUB }, true,
                     wd.wind?.let { String.format(Locale.KOREA, "%.0f", it) } ?: "-")
-                val waveV = Ui.text(a, 12f, Ui.BLUE, false, wd.wave?.let { String.format(Locale.KOREA, "%.1f", it) } ?: "-")
+                val waveV = Ui.text(a, 12f, Ui.BLUE, false, wd.wave?.let { String.format(Locale.KOREA, "%.1f", it) } ?: "-").apply {
+                    // 기상청 해상예보 범위가 있으면 아래에 작게 (예: 1.0~2.0)
+                    wd.waveRange?.let { r -> append(android.text.SpannableStringBuilder("\n" + r).apply {
+                        setSpan(android.text.style.AbsoluteSizeSpan(8, true), 0, length, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+                    }) }
+                }
                 // 물때 · 물세기 (먼저 달 나이로 짐작, 물때 받아오면 정확한 값으로)
                 val est = Tide.estimatePct(noon)
                 val mulV = Ui.text(a, 10.5f, Ui.TEXT, true, Tide.mulName(noon).substringBefore(" (")).apply {
@@ -415,8 +426,11 @@ object TideDialog {
             }
             weekBox.addView(Ui.text(a, 11f, Ui.SUB, false,
                 "줄을 누르면 그날 물때·시간별 날씨로 이동 · 바람 = 최대 풍속 m/s · 파고 = 최대 m\n" +
-                    "물세기: 주황 80% 이상(물 많이 빠짐) · 노랑 55~80% · 회색 55% 아래 · 주간 날씨·수온 예상: Open-Meteo"),
+                    "물세기: 주황 80% 이상(물 많이 빠짐) · 노랑 55~80% · 회색 55% 아래 · 수온 예상: Open-Meteo"),
                 Ui.lp(a, MATCH, WRAP, top = 4))
+            if (Weather.weekNote.isNotBlank()) weekBox.addView(Ui.text(a, 11f, Ui.SUB, false, Weather.weekNote).apply {
+                setLineSpacing(0f, 1.2f)
+            }, Ui.lp(a, MATCH, WRAP, top = 4))
         }
         fun tab(label: String, on: Boolean, click: () -> Unit) = Ui.text(a, 13f, if (on) Color.parseColor("#06303A") else Ui.TEXT, true, label).apply {
             gravity = Gravity.CENTER

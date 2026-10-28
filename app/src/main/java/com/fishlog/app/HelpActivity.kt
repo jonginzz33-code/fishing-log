@@ -38,18 +38,21 @@ class HelpActivity : Activity() {
             "• 주황 카드 = 1번 어종, 파란 카드 = 2번 어종. 카드를 누를 때마다 +1, 시각이 초 단위로 저장돼요.\n" +
             "• 카드 오른쪽 위 연필(✎)을 누르면 어종을 바꿔요. 출조 중에도, 끝난 뒤에도 돼요.\n" +
             "• 화면을 꺼도 기록돼요. 알림창의 +1 버튼으로도 기록할 수 있어요.\n" +
-            "• 출조 중엔 버튼이 빨간 '■ 출조 종료'로 바뀌어요.", R.drawable.guide_g1_start)
+            "• 출조 중엔 버튼이 빨간 '■ 출조 종료'로 바뀌어요.\n" +
+            "• 출조 중 카드 아래 '같이 낚시 중' 칸: 같이 출조한 그룹원의 마릿수가 실시간으로 나와요 (아래 두 번째 그림 ③). 끝낸 사람은 1시간 동안 '종료했어요'로 보여요.",
+            R.drawable.guide_g1_start, R.drawable.guide_g7_live)
 
         section(col, HelpPic.REMOTE, "2. 리모컨 · 갤럭시 워치",
             "• 블루투스 리모컨 버튼 2개를 '리모컨 버튼 등록'으로 1번·2번에 정해요.\n" +
             "• 진동: 1번은 짧게 1번, 2번은 짧게 2번. 버튼을 1초 길게 누르면 마지막 기록 취소.\n" +
-            "• 갤럭시 워치: '갤럭시 워치로 기록'을 켜고, 출조 중 워치의 미디어 컨트롤러(음악) 화면에서 ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번. 워치 화면에 지금 마릿수가 보여요. (워치 옆 버튼은 삼성이 막아 둬서 쓸 수 없어요)")
+            "• 갤럭시 워치: '갤럭시 워치로 기록'을 켜고, 출조 중 워치의 미디어 컨트롤러(음악) 화면에서 ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번. 워치 화면에 지금 마릿수가 보여요. (워치 옆 버튼은 삼성이 막아 둬서 쓸 수 없어요)\n" +
+            "• 워치는 연달아 빠르게 눌러도 누른 만큼 셀 수 있어요 (한 번에 3마리면 ⏮ 3번). 워치·블루투스가 늦으면 가끔 빠질 수 있으니 워치 화면 숫자로 확인하세요.")
 
         section(col, HelpPic.TIDE, "3. 물때 · 날씨 (시간별 / 주간)",
             "• '물때 보기 ›' 또는 물때 한 줄을 누르면: 물높이 그래프, 만조·간조, 일출·일몰 (국립해양조사원 예보). ◀ ▶ 또는 날짜를 눌러 다른 날을 봐요.\n" +
             "• 맨 위에서 관측소를 바꾸거나 검색(예: 무창포)하고, 만조·간조 알람(10~60분 전)을 정해요. 출조 중일 때 소리·진동으로 알려줘요.\n" +
             "• '시간별' 탭: 하늘(맑음·흐림·비), 기온, 바람, 파고, 수온이 세로 목록으로 나와요 (기상청 단기예보).\n" +
-            "• '주간 (7일)' 탭: 날마다 날씨·최고/최저 기온·바람·물때·물세기 %.\n" +
+            "• '주간 (7일)' 탭: 날마다 날씨·최고/최저 기온·바람·파고·물때·물세기 %. 하늘·기온·비·파고는 기상청(오늘~3일 뒤 단기예보, 그 뒤 중기예보)이고, 날짜 아래 초록 '기상청'으로 표시돼요. 파고 아래 작은 숫자는 기상청 해상예보 범위예요.\n" +
             "• 수온: 지난 시간은 근처 관측소의 '실측'(초록으로 강조), 앞으로는 '예상'이에요.\n" +
             "• 물세기: 오늘 조차가 사리 때의 몇 %인지. 그래프 아래 막대는 시간별 물흐름 세기 (높고 주황일수록 물살이 셈).\n" +
             "• '그래프에 보기' 칩으로 cm 눈금·만조·간조·일출·일몰·지금 표시를 켜고 꺼요 (고른 건 저장).\n" +
@@ -70,7 +73,7 @@ class HelpActivity : Activity() {
             "• 잡으면 몇 초 안에 서로 반영돼요. '3분 전'처럼 언제 바뀌었는지도 나와요.\n" +
             "• 출조를 끝낸 사람은 1시간 동안 '○○님은 출조를 종료했어요 · 시각 · 마릿수'로 보여요.\n" +
             "• 지도에도 같이 낚시 중인 사람이 이름표와 함께 보여요. 종료한 사람은 흐리게.\n" +
-            "• 친구가 어종 칭호를 넘으면 알림 (⚙에서 끌 수 있어요).", R.drawable.guide_g6_mates)
+            "• 친구가 어종 칭호를 넘으면 알림 (⚙에서 끌 수 있어요).", R.drawable.guide_g7_live, R.drawable.guide_g6_mates)
 
         section(col, HelpPic.CAL, "6. 출조 종료 · 기록 보기",
             "• 빨간 '■ 출조 종료'를 누르면 기록 화면이 열려요. 그룹에 자동으로 올라가요 (0마리면 안 올라감, 경로 숨기기 가능).\n" +
@@ -85,7 +88,7 @@ class HelpActivity : Activity() {
             "• 카드 오른쪽 위 배지: 초록 '그룹 (N)' = N개 그룹에 공유, 주황 '전체' = 전체 게시판 공개, 회색 '나만'. '그룹 (N)'을 누르면 공유 그룹을 바꿀 수 있어요.", R.drawable.guide_g5_menu)
 
         section(col, HelpPic.MAP, "8. 지도",
-            "• '지도' 버튼: 이동 경로와 고기 잡은 자리를 점으로. 겹친 점은 숫자로 묶여요.\n" +
+            "• 왼쪽 위 '지도 (그룹 · 현위치)' 버튼: 이동 경로와 고기 잡은 자리를 점으로. 겹친 점은 숫자로 묶여요.\n" +
             "• 출조 중에는 내 위치가 작은 배 모양 (뱃머리 = 가는 방향). 같이 낚시 중인 그룹원도 보여요.\n" +
             "• 지난 기록 겹치기로 내 예전 포인트와 그룹 친구 포인트를 반투명으로 봐요.\n" +
             "• 이동 거리(km·해리), 출발지에서의 직선거리, 포인트까지 '북동쪽 320m'처럼 방향·거리.\n" +
@@ -131,13 +134,14 @@ class HelpActivity : Activity() {
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
     }
 
-    private fun section(col: LinearLayout, pic: Int, title: String, body: String, image: Int = 0) {
+    private fun section(col: LinearLayout, pic: Int, title: String, body: String, image: Int = 0, image2: Int = 0) {
         val c = Ui.card(this)
         val r = Ui.row(this)
         r.addView(HelpPic(this, pic), LinearLayout.LayoutParams(dp(64), dp(64)))
         r.addView(Ui.text(this, 17f, Ui.TEXT, true, title), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
         c.addView(r)
         if (image != 0) c.addView(Guide.image(this, image), Ui.lp(this, MATCH, WRAP, top = 10))
+        if (image2 != 0) c.addView(Guide.image(this, image2), Ui.lp(this, MATCH, WRAP, top = 8))
         c.addView(Ui.text(this, 14f, Ui.TEXT, false, body).apply { setLineSpacing(0f, 1.35f) }, Ui.lp(this, MATCH, WRAP, top = 10))
         col.addView(c, Ui.lp(this, MATCH, WRAP, top = 14))
     }

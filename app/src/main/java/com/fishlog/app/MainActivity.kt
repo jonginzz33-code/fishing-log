@@ -300,11 +300,23 @@ class MainActivity : Activity() {
 
         // 상단: 왼쪽 지도·물때 버튼 + 제목
         val header = Ui.row(this)
-        header.addView(smallBtn("지도") { openMap() }, LinearLayout.LayoutParams(dp(56), dp(48)))
-        header.addView(Ui.text(this, 20f, Ui.TEXT, true, "조과기록"),
-            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
+        // 지도 버튼: 큰 글씨 '지도' + 작은 글씨 '그룹 · 현위치'
+        header.addView(smallBtn("") { openMap() }.apply {
+            text = android.text.SpannableStringBuilder("지도\n").apply {
+                val s0 = length; append("그룹 · 현위치")
+                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), s0, length, 0)
+            }
+            setLineSpacing(0f, 0.95f)
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+        }, LinearLayout.LayoutParams(WRAP, dp(48)))
+        // 제목: 지도 버튼과 ?·⚙ 사이 가운데, 남는 폭에 맞춰 글자 크기 자동
+        header.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(16, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6); rightMargin = dp(6) })
         // (그룹은 맨 아래 '그룹' 칸으로 옮김)
-        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)

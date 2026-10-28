@@ -193,6 +193,28 @@ object Weather {
     private val kmaCache = HashMap<String, Pair<Long, List<JSONObject>>>()
 
     private fun kmaForecast(lat: Double, lon: Double, ymd: String): Map<Long, Kma> {
+        val items = kmaItems(lat, lon)
+        val out = HashMap<Long, Kma>()
+        val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
+        items.filter { it.optString("fcstDate") == ymd }.forEach { o ->
+            val t = tf.parse(o.optString("fcstDate") + o.optString("fcstTime"))?.time ?: return@forEach
+            val k = out.getOrPut(t) { Kma() }
+            val v = o.optString("fcstValue")
+            when (o.optString("category")) {
+                "TMP" -> k.tmp = v.toDoubleOrNull()
+                "WSD" -> k.wsd = v.toDoubleOrNull()
+                "VEC" -> k.vec = v.toDoubleOrNull()
+                "SKY" -> k.sky = v.toIntOrNull()
+                "PTY" -> k.pty = v.toIntOrNull()
+                "POP" -> k.pop = v.toIntOrNull()
+                "WAV" -> k.wav = v.toDoubleOrNull()?.takeIf { it >= 0 && it < 30 }
+            }
+        }
+        return out
+    }
+
+    /** 단기예보 원본 (모든 날짜, 1시간 저장) */
+    private fun kmaItems(lat: Double, lon: Double): List<JSONObject> {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) throw KmaError("기상청 예보: 인증키가 앱에 없어요")
         val (nx, ny) = grid(lat, lon)
@@ -219,23 +241,7 @@ object Weather {
             kmaCache[ck] = System.currentTimeMillis() to l
             l
         }
-        val out = HashMap<Long, Kma>()
-        val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
-        items.filter { it.optString("fcstDate") == ymd }.forEach { o ->
-            val t = tf.parse(o.optString("fcstDate") + o.optString("fcstTime"))?.time ?: return@forEach
-            val k = out.getOrPut(t) { Kma() }
-            val v = o.optString("fcstValue")
-            when (o.optString("category")) {
-                "TMP" -> k.tmp = v.toDoubleOrNull()
-                "WSD" -> k.wsd = v.toDoubleOrNull()
-                "VEC" -> k.vec = v.toDoubleOrNull()
-                "SKY" -> k.sky = v.toIntOrNull()
-                "PTY" -> k.pty = v.toIntOrNull()
-                "POP" -> k.pop = v.toIntOrNull()
-                "WAV" -> k.wav = v.toDoubleOrNull()?.takeIf { it >= 0 && it < 30 }
-            }
-        }
-        return out
+        return items
     }
 
     private fun num(a: JSONArray?, i: Int): Double? = if (a == null || i >= a.length() || a.isNull(i)) null else a.optDouble(i)
@@ -310,18 +316,27 @@ object Weather {
     }
 
     // ---------------- 주간 (7일) · Open-Meteo ----------------
-    class WeekDay(val dayStart: Long, val tmin: Double?, val tmax: Double?, val pop: Int?, val wind: Double?,
-                  val wave: Double?, val sst: Double?, val code: Int?) {
+    class WeekDay(val dayStart: Long, var tmin: Double?, var tmax: Double?, var pop: Int?, var wind: Double?,
+                  var wave: Double?, val sst: Double?, var code: Int?) {
+        /** 하늘·기온·비를 어디서 받았는지: "단기" = 기상청 단기예보, "중기" = 기상청 중기예보, "" = Open-Meteo */
+        var src: String = ""
+        /** 기상청 중기 해상예보 파고 범위 (예: "1.0~2.0") */
+        var waveRange: String? = null
         /** 하늘 그림 (시간별과 같은 규칙) */
-        fun skyIcon(): String = when (code) {
-            null -> ""
-            0, 1 -> "☀"; 2 -> "⛅"; 3, 45, 48 -> "☁"
-            in 71..77, 85, 86 -> "🌨"
-            else -> if (code >= 51) "🌧" else "⛅"
+        fun skyIcon(): String {
+            val c = code
+            return when (c) {
+                null -> ""
+                0, 1 -> "☀"; 2 -> "⛅"; 3, 45, 48 -> "☁"
+                in 71..77, 85, 86 -> "🌨"
+                else -> if (c >= 51) "🌧" else "⛅"
+            }
         }
     }
 
     private var weekCache: Pair<String, Pair<Long, List<WeekDay>>>? = null
+    /** 주간 화면 아래에 보일 출처·안내 */
+    @Volatile var weekNote: String = ""
 
     fun fetchWeek(lat: Double, lon: Double, done: (List<WeekDay>?) -> Unit) {
         val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
@@ -365,12 +380,179 @@ object Weather {
                 if (waveBy.isNotEmpty() || sstBy.isNotEmpty()) break
             } catch (_: Exception) {}
         }
-        return (0 until days.length()).map { i ->
+        val list = (0 until days.length()).map { i ->
             val ds = days.getString(i)
             WeekDay(dayFmt.parse(ds)!!.time, num(dd.optJSONArray("temperature_2m_min"), i), num(dd.optJSONArray("temperature_2m_max"), i),
                 num(dd.optJSONArray("precipitation_probability_max"), i)?.toInt(), num(dd.optJSONArray("wind_speed_10m_max"), i),
                 waveBy[ds], sstBy[ds], num(dd.optJSONArray("weather_code"), i)?.toInt())
         }
+        // 기상청으로 덮어쓰기: 오늘~3일 뒤 = 단기예보, 그 뒤 = 중기예보 (못 받으면 Open-Meteo 그대로)
+        val notes = mutableListOf<String>()
+        val short = try { kmaShortWeek(lat, lon) } catch (e: Exception) { notes.add("단기예보 못 받음"); emptyMap() }
+        val (mid, midNote) = try { kmaMidWeek(lat, lon) } catch (e: Exception) { emptyMap<String, Wx>() to (e.message ?: "기상청 중기예보를 못 받았어요") }
+        list.forEach { wd ->
+            val ymd = keyFmt.format(Date(wd.dayStart))
+            val s = short[ymd]
+            val m = mid[ymd]
+            val x = if (s != null && (s.code != null || s.tmax != null)) s.also { wd.src = "단기" } else m?.also { wd.src = "중기" }
+            if (x != null) {
+                x.code?.let { wd.code = it }
+                x.pop?.let { wd.pop = it }
+                x.tmin?.let { wd.tmin = it }
+                x.tmax?.let { wd.tmax = it }
+                x.wind?.let { wd.wind = it }
+                x.wave?.let { wd.wave = it }
+                wd.waveRange = x.waveRange
+            }
+            // 단기예보에 파고가 없으면 중기 해상예보 파고라도
+            if (wd.waveRange == null && m?.wave != null && s?.wave == null) { wd.wave = m.wave; wd.waveRange = m.waveRange }
+        }
+        val sDays = list.count { it.src == "단기" }; val mDays = list.count { it.src == "중기" }
+        weekNote = buildString {
+            append("하늘·기온·비: ")
+            val parts = mutableListOf<String>()
+            if (sDays > 0) parts.add("기상청 단기예보 ${sDays}일")
+            if (mDays > 0) parts.add("기상청 중기예보 ${mDays}일")
+            if (list.size - sDays - mDays > 0) parts.add("Open-Meteo ${list.size - sDays - mDays}일")
+            append(parts.joinToString(" · "))
+            append("\n파고: 기상청 (없으면 Open-Meteo) · 바람·수온: ")
+            append(if (sDays > 0) "단기예보 기간은 기상청, 그 뒤 Open-Meteo" else "Open-Meteo")
+            if (mDays == 0 && midNote.isNotBlank()) append("\n⚠ ").append(midNote)
+            if (notes.isNotEmpty()) append("\n⚠ ").append(notes.joinToString(" · "))
+        }
+        return list
+    }
+
+    // ---------------- 기상청 주간: 단기예보(날마다 묶음) + 중기예보 ----------------
+    private class Wx { var code: Int? = null; var pop: Int? = null; var tmin: Double? = null; var tmax: Double? = null
+        var wind: Double? = null; var wave: Double? = null; var waveRange: String? = null }
+
+    /** 단기예보를 날짜별로: 낮(6~21시) 비·눈 있으면 비/눈, 아니면 정오 하늘 · 최저/최고 · 비 확률 최대 · 바람 최대 · 파고 최대 */
+    private fun kmaShortWeek(lat: Double, lon: Double): Map<String, Wx> {
+        val out = HashMap<String, Wx>()
+        val byDay = kmaItems(lat, lon).groupBy { it.optString("fcstDate") }
+        byDay.forEach { (ymd, its) ->
+            val w = Wx()
+            var sky: Int? = null; var skyDist = 99; var rain = 0
+            var tmn: Double? = null; var tmx: Double? = null; var lo: Double? = null; var hi: Double? = null
+            its.forEach { o ->
+                val h = o.optString("fcstTime").take(2).toIntOrNull() ?: return@forEach
+                val v = o.optString("fcstValue")
+                when (o.optString("category")) {
+                    "SKY" -> v.toIntOrNull()?.let { if (Math.abs(h - 12) < skyDist) { skyDist = Math.abs(h - 12); sky = it } }
+                    "PTY" -> v.toIntOrNull()?.let { p -> if (p > 0 && h in 6..21) rain = if (p == 3 || p == 7) maxOf(rain, 2) else maxOf(rain, 1) }
+                    "POP" -> v.toIntOrNull()?.let { w.pop = maxOf(w.pop ?: 0, it) }
+                    "TMN" -> tmn = v.toDoubleOrNull()
+                    "TMX" -> tmx = v.toDoubleOrNull()
+                    "TMP" -> v.toDoubleOrNull()?.let { t -> lo = minOf(lo ?: t, t); hi = maxOf(hi ?: t, t) }
+                    "WSD" -> v.toDoubleOrNull()?.let { w.wind = maxOf(w.wind ?: 0.0, it) }
+                    "WAV" -> v.toDoubleOrNull()?.takeIf { it >= 0 && it < 30 }?.let { w.wave = maxOf(w.wave ?: 0.0, it) }
+                }
+            }
+            w.code = when { rain == 2 -> 71; rain == 1 -> 61; sky == 1 -> 0; sky == 3 -> 2; sky == 4 -> 3; else -> null }
+            w.tmin = tmn ?: lo; w.tmax = tmx ?: hi
+            out[ymd] = w
+        }
+        return out
+    }
+
+    private class Reg(val id: String, val lat: Double, val lon: Double)
+    /** 중기 육상예보 구역 */
+    private val LAND = listOf(Reg("11B00000", 37.45, 126.9), Reg("11D10000", 37.75, 127.9), Reg("11D20000", 37.75, 128.9),
+        Reg("11C20000", 36.5, 126.8), Reg("11C10000", 36.7, 127.7), Reg("11F10000", 35.7, 127.0), Reg("11F20000", 34.9, 126.9),
+        Reg("11H10000", 36.3, 128.8), Reg("11H20000", 35.3, 128.4), Reg("11G00000", 33.4, 126.5))
+    /** 중기 기온 (도시) */
+    private val CITY = listOf(Reg("11B10101", 37.57, 126.98), Reg("11B20201", 37.46, 126.71), Reg("11B20601", 37.26, 127.03),
+        Reg("11D10301", 37.88, 127.73), Reg("11D20501", 37.75, 128.88), Reg("11C10301", 36.64, 127.49), Reg("11C20401", 36.35, 127.38),
+        Reg("11C20101", 36.78, 126.45), Reg("11F10201", 35.82, 127.15), Reg("11F20501", 35.16, 126.85), Reg("21F20801", 34.81, 126.39),
+        Reg("11F20401", 34.76, 127.66), Reg("11H10701", 35.87, 128.6), Reg("11H10501", 36.57, 128.73), Reg("11H20201", 35.18, 129.08),
+        Reg("11H20101", 35.54, 129.31), Reg("11H20301", 35.23, 128.68), Reg("11G00201", 33.5, 126.53))
+    /** 중기 해상예보 구역 */
+    private val SEA = listOf(Reg("12A20000", 36.8, 125.8), Reg("12A30000", 35.2, 125.6), Reg("12B10000", 34.2, 126.6),
+        Reg("12B20000", 34.6, 128.6), Reg("12C10000", 36.0, 129.7), Reg("12C20000", 37.6, 129.3), Reg("12C30000", 38.4, 128.8),
+        Reg("12B10500", 33.3, 126.5))
+    private fun nearest(list: List<Reg>, lat: Double, lon: Double): Reg =
+        list.minByOrNull { val dy = it.lat - lat; val dx = (it.lon - lon) * Math.cos(Math.toRadians(lat)); dy * dy + dx * dx }!!
+
+    /** 기상청 중기예보 하나 받기 (item 한 개) */
+    private fun midItem(op: String, regId: String, tmFc: String): JSONObject {
+        val key = BuildConfig.KHOA_KEY
+        if (key.isBlank()) throw KmaError("기상청 중기예보: 인증키가 앱에 없어요")
+        val q = "/1360000/MidFcstInfoService/$op?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
+            "&pageNo=1&numOfRows=10&dataType=JSON&regId=$regId&tmFc=$tmFc"
+        var body: String? = null
+        for (scheme in listOf("https", "http")) {
+            try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {}
+        }
+        val b = body?.trim() ?: throw KmaError("기상청 중기예보를 못 받았어요 (인터넷 확인)")
+        if (b.startsWith("<")) {
+            if (b.contains("SERVICE_KEY_IS_NOT_REGISTERED") || b.contains("SERVICE ERROR") || b.contains("ACCESS DENIED") || b.contains("Unauthorized"))
+                throw KmaError("기상청 중기예보: 공공데이터포털 '기상청_중기예보 조회서비스' 승인을 확인해 주세요 (승인 뒤 1~2시간 걸릴 수 있어요)")
+            throw KmaError("기상청 중기예보를 못 받았어요")
+        }
+        val root = JSONObject(b).let { if (it.has("response")) it.getJSONObject("response") else it }
+        val code0 = root.optJSONObject("header")?.optString("resultCode") ?: ""
+        if (code0 != "00") throw KmaError("기상청 중기예보를 못 받았어요 ($code0 ${root.optJSONObject("header")?.optString("resultMsg") ?: ""})")
+        val items = root.optJSONObject("body")?.optJSONObject("items")
+        return items?.optJSONArray("item")?.optJSONObject(0) ?: items?.optJSONObject("item") ?: throw KmaError("기상청 중기예보 내용이 비어 있어요")
+    }
+
+    private fun wfCode(s: String?): Int? = when {
+        s.isNullOrBlank() -> null
+        s.contains("눈") && !s.contains("비") -> 71
+        s.contains("비") || s.contains("소나기") -> 61
+        s.contains("흐림") -> 3
+        s.contains("구름") -> 2
+        s.contains("맑음") -> 0
+        else -> null
+    }
+    private fun worse(a: Int?, b: Int?): Int? {
+        fun rank(c: Int?) = when (c) { null -> -1; 0 -> 0; 2 -> 1; 3 -> 2; 61 -> 3; 71 -> 4; else -> 1 }
+        return if (rank(a) >= rank(b)) a else b
+    }
+    private fun dbl(o: JSONObject, k: String): Double? = if (o.has(k) && !o.isNull(k)) o.optString(k).toDoubleOrNull() else null
+
+    /** 중기예보: 발표일 + N일 (N = 3~10) → 날짜별. 두 번째 값 = 실패 이유 */
+    private fun kmaMidWeek(lat: Double, lon: Double): Pair<Map<String, Wx>, String> {
+        // 발표: 06시·18시 (발표 30분 뒤부터)
+        val c = java.util.Calendar.getInstance(KST).apply { timeInMillis = System.currentTimeMillis() - 30 * 60_000L }
+        val h = c.get(java.util.Calendar.HOUR_OF_DAY)
+        val hh = when { h >= 18 -> "1800"; h >= 6 -> "0600"; else -> { c.add(java.util.Calendar.DAY_OF_MONTH, -1); "1800" } }
+        val baseDay = keyFmt.format(c.time)
+        val tmFc = baseDay + hh
+        val base0 = keyFmt.parse(baseDay)!!.time
+        val out = HashMap<String, Wx>()
+        fun day(n: Int): Wx = out.getOrPut(keyFmt.format(Date(base0 + n * 86_400_000L + 3_600_000L))) { Wx() }
+        val errs = mutableListOf<String>()
+        try {
+            val land = midItem("getMidLandFcst", nearest(LAND, lat, lon).id, tmFc)
+            for (n in 3..10) {
+                val am = land.optString("wf${n}Am", ""); val pm = land.optString("wf${n}Pm", ""); val one = land.optString("wf$n", "")
+                val code = if (one.isNotBlank()) wfCode(one) else worse(wfCode(am), wfCode(pm))
+                val pop = listOf("rnSt${n}Am", "rnSt${n}Pm", "rnSt$n").mapNotNull { dbl(land, it)?.toInt() }.maxOrNull()
+                if (code != null || pop != null) { val w = day(n); w.code = code; w.pop = pop }
+            }
+        } catch (e: Exception) { errs.add(e.message ?: "육상예보 실패") }
+        try {
+            val ta = midItem("getMidTa", nearest(CITY, lat, lon).id, tmFc)
+            for (n in 3..10) {
+                val lo = dbl(ta, "taMin$n"); val hi = dbl(ta, "taMax$n")
+                if (lo != null || hi != null) { val w = day(n); w.tmin = lo; w.tmax = hi }
+            }
+        } catch (e: Exception) { errs.add(e.message ?: "기온 실패") }
+        try {
+            val sea = midItem("getMidSeaFcst", nearest(SEA, lat, lon).id, tmFc)
+            for (n in 3..10) {
+                val lows = listOf("wh${n}AAm", "wh${n}APm", "wh${n}A").mapNotNull { dbl(sea, it) }
+                val highs = listOf("wh${n}BAm", "wh${n}BPm", "wh${n}B").mapNotNull { dbl(sea, it) }
+                if (highs.isNotEmpty()) {
+                    val w = day(n); w.wave = highs.max()
+                    w.waveRange = String.format(Locale.KOREA, "%.1f~%.1f", lows.minOrNull() ?: highs.min(), highs.max())
+                }
+            }
+        } catch (e: Exception) { errs.add(e.message ?: "해상예보 실패") }
+        // 기온만 있고 하늘이 없는 날은 빼지 않음 (있는 값만 덮어씀)
+        return out.filterValues { it.code != null || it.tmax != null || it.wave != null } to errs.distinct().joinToString(" · ")
     }
 
     /** 풍속 등급: 0 약함, 1 주의, 2 강함 */

@@ -19,6 +19,8 @@ object ButtonRouter {
 
     private const val LONG_PRESS_MS = 800L
     private const val DEBOUNCE_MS = 350L
+    private const val WATCH_GAP_MS = 80L
+    private var watchAt = 0L
     private var lastAt = 0L
 
     fun startLearning() {
@@ -78,9 +80,10 @@ object ButtonRouter {
     /** 갤럭시 워치 음악 컨트롤러: ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번 */
     fun watch(ctx: Context, slot: Int) {
         if (!Store.watchMode || Store.current == null || learningStep != 0) return
+        // 워치는 한 번 누르면 신호도 한 번 → 연달아 눌러도 다 셈 (겹쳐 온 같은 신호만 0.08초 거름)
         val now = SystemClock.elapsedRealtime()
-        if (now - lastAt < DEBOUNCE_MS) return
-        lastAt = now
+        if (now - watchAt < WATCH_GAP_MS) return
+        watchAt = now
         val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
         onMessage?.invoke("워치 ${if (slot == 1) "⏮" else "⏭"} → ${Store.current?.name(slot) ?: "${slot}번"} ${n}마리")
