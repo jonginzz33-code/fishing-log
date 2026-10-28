@@ -62,6 +62,7 @@ class ScheduleActivity : Activity() {
         Cloud.loadEvents { list, err ->
             if (list == null) { toast(err ?: "불러오기 실패"); return@loadEvents }
             events = list
+            Cloud.active?.id?.let { gid -> GroupNews.putEvents(gid, list); GroupNews.markKindSeen(gid, "event") }
             render()
         }
     }

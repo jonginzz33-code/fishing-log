@@ -182,7 +182,26 @@ class TideView(c: Context) : View(c) {
         color = Color.parseColor("#412402"); textSize = 9.5f * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
 
-    fun set(dd: Tide.Day, t: Store.Trip?) { day = dd; trip = t; invalidate() }
+    // 일출·일몰: 밤은 어둡게, 해 뜨고 지는 시각에 점선
+    private var sun: Sun.Times? = null
+    private val nightP = Paint().apply { color = Color.argb(120, 4, 10, 20) }
+    private val riseLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#F2C14E"); strokeWidth = 1.2f * d; style = Paint.Style.STROKE
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 3 * d), 0f)
+    }
+    private val setLine = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#B9A6FF"); strokeWidth = 1.2f * d; style = Paint.Style.STROKE
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * d, 3 * d), 0f)
+    }
+    private val sunTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 9.5f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+
+    /** lat/lon 이 없으면 출조 위치 → 서해 중부 기준으로 일출·일몰 계산 */
+    fun set(dd: Tide.Day, t: Store.Trip?, lat: Double? = null, lon: Double? = null) {
+        day = dd; trip = t
+        val loc = if (lat != null && lon != null) lat to lon else t?.anyLocation()
+        sun = Sun.times(dd.dateMillis + 12 * 3_600_000L, loc?.first, loc?.second)
+        invalidate()
+    }
 
     /** 눈금 간격(cm): 범위에 맞춰 4~6칸 */
     private fun niceStep(rangeCm: Double): Int =
@@ -205,6 +224,12 @@ class TideView(c: Context) : View(c) {
         fun y(v: Double) = (top + (1 - (v - lo) / range) * (bottom - top)).toFloat()
         fun hourOf(t: Long) = (t - dy.dateMillis) / 3600_000.0
 
+        // 밤 (일출 전 · 일몰 후)
+        sun?.let { s ->
+            val rh = hourOf(s.rise).coerceIn(0.0, 24.0); val sh = hourOf(s.set).coerceIn(0.0, 24.0)
+            if (rh > 0) canvas.drawRect(x(0.0), top - 6 * d, x(rh), bottom, nightP)
+            if (sh < 24) canvas.drawRect(x(sh), top - 6 * d, x(24.0), bottom, nightP)
+        }
         // 낚시한 시간
         val t = trip
         if (t != null) {
@@ -309,6 +334,22 @@ class TideView(c: Context) : View(c) {
             val ly = if (e.high) (hy - 20 * d).coerceAtLeast(28 * d) else (hy - 22 * d)
             canvas.drawText(label, lx, ly, ext)
             canvas.drawText(hLabel, lx, ly + 11 * d, hTxt)
+        }
+
+        // 일출·일몰 점선 + 시각 (그래프 아래쪽 안)
+        sun?.let { s ->
+            val tf2 = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
+            val rx = x(hourOf(s.rise)); val sx = x(hourOf(s.set))
+            if (hourOf(s.rise) in 0.0..24.0) {
+                canvas.drawLine(rx, top - 6 * d, rx, bottom, riseLine)
+                sunTxt.color = riseLine.color; sunTxt.textAlign = Paint.Align.LEFT
+                canvas.drawText("일출 " + tf2.format(java.util.Date(s.rise)), rx + 3 * d, bottom - 4 * d, sunTxt)
+            }
+            if (hourOf(s.set) in 0.0..24.0) {
+                canvas.drawLine(sx, top - 6 * d, sx, bottom, setLine)
+                sunTxt.color = setLine.color; sunTxt.textAlign = Paint.Align.RIGHT
+                canvas.drawText("일몰 " + tf2.format(java.util.Date(s.set)), sx - 3 * d, bottom - 4 * d, sunTxt)
+            }
         }
 
         // 시간 숫자: 3시간마다 크게, 사이 매시간 작게

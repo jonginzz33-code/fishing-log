@@ -44,13 +44,13 @@ class MainActivity : Activity() {
     private lateinit var tideSub: TextView
     private var strengthAt = 0L
     private var strengthKey = ""
-    private lateinit var groupBar: LinearLayout
-    private lateinit var groupScroll: android.widget.HorizontalScrollView
+    private lateinit var tideSun: TextView
     private lateinit var adminBtn: TextView
-    private lateinit var scheduleBtn: TextView
-    private var eventsFor: String? = null
-    private var upcoming = 0
-    private var todayEvents = 0
+    // 맨 아래 그룹 칸 (새 소식 빨간 숫자)
+    private lateinit var groupBtn: TextView
+    private lateinit var groupDot: TextView
+    private lateinit var groupBox: LinearLayout
+    private var groupOpen = false
     private lateinit var updateBar: TextView
     private lateinit var message: TextView
     private lateinit var menuBtn: TextView
@@ -104,8 +104,6 @@ class MainActivity : Activity() {
     /** 로그인 전: 로그인 화면만 */
     private var gated = false
     private var nickAsked = false
-    private var adminReq = 0
-    private var adminReqAt = 0L
     private var cloudLoaded = false
 
     private fun dp(v: Int) = Ui.dp(this, v)
@@ -171,7 +169,7 @@ class MainActivity : Activity() {
         Cloud.loadSpecies()
         Tide.prune(this)
         Photos.cleanOldShareCopies(this)
-        eventsFor = null
+        GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
             Updater.check(this) { v -> if (v != null) updateBar.visibility = View.VISIBLE }
@@ -267,13 +265,8 @@ class MainActivity : Activity() {
         header.addView(smallBtn("지도") { openMap() }, LinearLayout.LayoutParams(dp(56), dp(48)))
         header.addView(Ui.text(this, 20f, Ui.TEXT, true, "조과기록"),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
-        // 가입한 그룹: 옆으로 밀어서 보고 눌러서 바꾸기
-        groupBar = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        groupScroll = android.widget.HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(groupBar)
-        }
-        header.addView(groupScroll, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8); rightMargin = dp(6) })
+        // (그룹은 맨 아래 '그룹' 칸으로 옮김)
+        header.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
@@ -304,7 +297,9 @@ class MainActivity : Activity() {
         val tideTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         tideTitle = Ui.text(this, 17f, Ui.TEXT, true, "")
         tideSub = Ui.text(this, 12f, Ui.SUB, false, "물때 불러오는 중…")
+        tideSun = Ui.text(this, 12f, Ui.SUB, false, "")
         tideTexts.addView(tideTitle); tideTexts.addView(tideSub, Ui.lp(this, MATCH, WRAP, top = 2))
+        tideTexts.addView(tideSun, Ui.lp(this, MATCH, WRAP, top = 4))
         tideCard.addView(tideTexts, LinearLayout.LayoutParams(0, WRAP, 1f))
         tideCard.addView(Ui.text(this, 13f, Ui.BG, true, "물때 보기 ›").apply {
             gravity = Gravity.CENTER
@@ -369,12 +364,28 @@ class MainActivity : Activity() {
         outerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(outerRecent, Ui.lp(this, MATCH, WRAP))
 
+        // ---- 그룹 (가로줄로 메뉴와 따로) ----
+        col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 16))
+        val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), dp(8), 0) }
+        groupBtn = Ui.button(this, "그룹 ▼") {
+            groupOpen = !groupOpen
+            renderGroupPanel()
+            if (groupOpen) GroupNews.load(false) { renderGroupPanel() }
+        }
+        gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
+        groupDot = redDot(0)
+        gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(8) })
+        col.addView(gFrame, Ui.lp(this, MATCH, WRAP, top = 8))
+        groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        col.addView(groupBox, Ui.lp(this, MATCH, WRAP))
+        col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 16))
+
         // 메뉴 ▼ : 아래 항목들을 접고 펼치기
         menuBtn = Ui.button(this, "메뉴 ▼") {
             Store.menuOpen = !Store.menuOpen
             paintMenu()
         }
-        col.addView(menuBtn, Ui.lp(this, MATCH, WRAP, top = 12))
+        col.addView(menuBtn, Ui.lp(this, MATCH, WRAP, top = 16))
         menuBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(menuBox, Ui.lp(this, MATCH, WRAP))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -384,11 +395,6 @@ class MainActivity : Activity() {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
         menuBox.addView(historyBtn, Ui.lp(this, MATCH, WRAP, top = 12))
-        scheduleBtn = Ui.button(this, "그룹 일정 확인") {
-            if (Cloud.active == null) showMessage("그룹에 가입하면 일정을 볼 수 있어요")
-            else startActivity(Intent(this, ScheduleActivity::class.java))
-        }
-        menuBox.addView(scheduleBtn, Ui.lp(this, MATCH, WRAP, top = 10))
         menuBox.addView(Ui.button(this, "전체 조황 · 포인트 도감") {
             if (Cloud.user == null) showMessage("구글 로그인을 하면 볼 수 있어요")
             else startActivity(Intent(this, BoardActivity::class.java))
@@ -852,6 +858,7 @@ class MainActivity : Activity() {
         val now = System.currentTimeMillis()
         tideTitle.text = TideDialog.dayTitle(Tide.mulName(now).substringBefore(" ("), now, mainPct, true)
         val loc = bestLocation()
+        paintSun(now, loc)
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
         val st = Tide.stationFor(this, loc.first, loc.second)
         val key = (st?.code ?: "") + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now))
@@ -872,6 +879,27 @@ class MainActivity : Activity() {
             tideSub.text = parts.joinToString(" · ").ifBlank { "눌러서 물때 보기" }
             tideSub.setTextColor(if ((stg?.pct ?: 0) >= 80) Ui.ORANGE else Ui.SUB)
         }
+    }
+
+    /** 물때 칸 셋째 줄: "☀ 일출 06:52 · ☾ 일몰 17:41" */
+    private fun paintSun(now: Long, loc: Pair<Double, Double>?) {
+        val st = Sun.times(now, loc?.first, loc?.second)
+        if (st == null) { tideSun.visibility = View.GONE; return }
+        tideSun.visibility = View.VISIBLE
+        val f = SimpleDateFormat("HH:mm", Locale.KOREA)
+        val sb = android.text.SpannableStringBuilder()
+        fun part(label: String, color: Int) {
+            val s0 = sb.length
+            sb.append(" $label ")
+            sb.setSpan(android.text.style.ForegroundColorSpan(color), s0, sb.length, 0)
+            sb.setSpan(android.text.style.BackgroundColorSpan(Color.argb(60, Color.red(color), Color.green(color), Color.blue(color))), s0, sb.length, 0)
+            sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), s0, sb.length, 0)
+        }
+        part("☀ 일출 " + f.format(Date(st.rise)), Color.parseColor("#F2C14E"))
+        sb.append("  ")
+        part("☾ 일몰 " + f.format(Date(st.set)), Color.parseColor("#B9A6FF"))
+        if (loc == null) sb.append("  (서해 중부 기준)")
+        tideSun.text = sb
     }
 
     private fun openMap() {
@@ -927,24 +955,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** 그룹 일정 버튼: 다가오는 일정 개수 + 강조 */
-    private fun refreshSchedule() {
-        val gid = Cloud.active?.id
-        if (gid == null) { eventsFor = null; return }
-        if (eventsFor != gid) {
-            eventsFor = gid
-            upcoming = 0; todayEvents = 0
-            Cloud.loadEvents { list, _ ->
-                if (Cloud.active?.id != gid || list == null) return@loadEvents
-                val today = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())
-                upcoming = list.count { it.date >= today }
-                todayEvents = list.count { it.date == today }
-                paintSchedule()
-            }
-        }
-        paintSchedule()
-    }
-
     private fun placeRecent() {
         val want = if (Store.current != null) outerRecent else innerRecent
         if (recentBox.parent !== want) {
@@ -956,18 +966,171 @@ class MainActivity : Activity() {
     private fun paintMenu() {
         if (!::menuBtn.isInitialized) return
         menuBox.visibility = if (Store.menuOpen) View.VISIBLE else View.GONE
-        val badge = when {
-            Cloud.active == null -> ""
-            todayEvents > 0 -> " · 오늘 출조!"
-            upcoming > 0 -> " · 일정 $upcoming"
-            else -> ""
-        }
-        menuBtn.text = if (Store.menuOpen) "메뉴 접기 ▲" else "메뉴 ▼$badge" + (if (adminReq > 0) " · 🔴 요청 $adminReq" else "")
+        menuBtn.text = if (Store.menuOpen) "메뉴 접기 ▲" else "메뉴 ▼"
+        menuBtn.setTextColor(Ui.TEXT); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE)
+    }
+
+    private fun divider() = View(this).apply { setBackgroundColor(Color.parseColor("#2E4256")) }
+
+    private val RED = Color.parseColor("#E8505B")
+
+    /** 빨간 숫자 동그라미 (0 이면 숨김) */
+    private fun redDot(n: Int): TextView = Ui.text(this, 11f, Color.WHITE, true, n.toString()).apply {
+        gravity = Gravity.CENTER
+        minWidth = dp(22)
+        setPadding(dp(5), 0, dp(5), 0)
+        background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
+        visibility = if (n > 0) View.VISIBLE else View.GONE
+    }
+
+    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+
+    /** 맨 아래 그룹 칸: 버튼(빨간 숫자) + 펼치면 그룹 바꾸기 · 새 소식 · 그룹 기능 */
+    private fun renderGroupPanel() {
+        if (!::groupBtn.isInitialized) return
+        val g = if (Cloud.user == null) null else Cloud.active
+        val total = GroupNews.total()
+        val todayN = GroupNews.today(g?.id)
+        groupBtn.text = (if (groupOpen) "그룹 접기 ▲" else "그룹 ▼") + (g?.let { " · " + groupLabel(it) } ?: "") +
+            (if (!groupOpen && todayN > 0) " · 오늘 출조!" else "")
         when {
-            !Store.menuOpen && todayEvents > 0 -> { menuBtn.setTextColor(Ui.BG); menuBtn.background = Ui.bg(this, Ui.GREEN, 14) }
-            !Store.menuOpen && upcoming > 0 -> { menuBtn.setTextColor(Ui.GREEN); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN) }
-            else -> { menuBtn.setTextColor(Ui.TEXT); menuBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE) }
+            total > 0 -> { groupBtn.setTextColor(Color.parseColor("#FF8A92")); groupBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, RED) }
+            todayN > 0 -> { groupBtn.setTextColor(Ui.GREEN); groupBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN) }
+            else -> { groupBtn.setTextColor(Ui.TEXT); groupBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE) }
         }
+        groupDot.text = total.toString()
+        groupDot.visibility = if (total > 0) View.VISIBLE else View.GONE
+        groupBox.visibility = if (groupOpen) View.VISIBLE else View.GONE
+        if (!groupOpen) return
+        groupBox.removeAllViews()
+        val gs = if (Cloud.user == null) emptyList() else Cloud.groups
+        if (gs.isEmpty()) {
+            groupBox.addView(Ui.text(this, 13f, Ui.SUB, false,
+                if (Cloud.user == null) "로그인하면 친구들과 그룹을 만들 수 있어요" else "아직 그룹이 없어요 · 그룹을 만들거나 초대 코드로 가입해 보세요"),
+                Ui.lp(this, MATCH, WRAP, top = 12))
+            groupBox.addView(Ui.button(this, "그룹 만들기 / 가입", true) {
+                if (Cloud.user == null) account.signIn { refreshAccount() } else account.openGroups()
+            }, Ui.lp(this, MATCH, WRAP, top = 8))
+            return
+        }
+        // 내 그룹 (눌러서 바꾸기) + 그룹마다 빨간 숫자
+        groupBox.addView(Ui.text(this, 12f, Ui.SUB, false, "내 그룹 (눌러서 바꾸기)"), Ui.lp(this, MATCH, WRAP, top = 12))
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; clipChildren = false }
+        val activeId = g?.id
+        gs.forEach { gr ->
+            val on = gr.id == activeId
+            val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), dp(8), 0) }
+            f.addView(Ui.text(this, 13f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true, (if (on) "✓ " else "") + groupLabel(gr)).apply {
+                gravity = Gravity.CENTER; maxLines = 1
+                setPadding(dp(12), 0, dp(12), 0)
+                background = if (on) Ui.bg(this@MainActivity, Ui.GREEN, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
+                setOnClickListener {
+                    if (on) return@setOnClickListener
+                    if (Store.current != null && Store.current?.catches?.isNotEmpty() == true)
+                        AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("'${gr.name}' 그룹으로 바꿀까요?")
+                            .setMessage("지금 출조는 종료할 때 바뀐 그룹에 올라가요")
+                            .setPositiveButton("바꾸기") { _, _ -> Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
+                            .setNegativeButton("취소", null)
+                            .show()
+                    else { Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
+                }
+            }, android.widget.FrameLayout.LayoutParams(WRAP, dp(36)))
+            val n = GroupNews.count(gr.id)
+            f.addView(redDot(n), android.widget.FrameLayout.LayoutParams(WRAP, dp(20), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(8) })
+            chips.addView(f, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(4) })
+        }
+        chips.addView(Ui.text(this, 13f, Ui.SUB, true, "+ 만들기·가입").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+            background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { account.openGroups() }
+        }, LinearLayout.LayoutParams(WRAP, dp(36)).apply { topMargin = dp(8) })
+        groupBox.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; addView(chips) },
+            Ui.lp(this, MATCH, WRAP, top = 2))
+
+        // 새 소식 (지금 그룹)
+        val news = GroupNews.items(activeId)
+        if (news.isNotEmpty() && g != null) {
+            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            head.addView(Ui.text(this, 15f, Ui.TEXT, true, "${groupLabel(g)} 새 소식 ${news.size}"), LinearLayout.LayoutParams(0, WRAP, 1f))
+            head.addView(Ui.text(this, 12f, Ui.TEXT, true, "모두 확인").apply {
+                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+                setOnClickListener { GroupNews.markSeen(news); renderGroupPanel() }
+            }, LinearLayout.LayoutParams(WRAP, dp(34)))
+            groupBox.addView(head, Ui.lp(this, MATCH, WRAP, top = 14))
+            news.take(8).forEach { it -> groupBox.addView(newsCard(it), Ui.lp(this, MATCH, WRAP, top = 8)) }
+            if (news.size > 8) groupBox.addView(Ui.text(this, 12f, Ui.SUB, false, "그 밖에 ${news.size - 8}개 · 모두 확인으로 정리"), Ui.lp(this, MATCH, WRAP, top = 6))
+        } else {
+            groupBox.addView(Ui.text(this, 12f, Ui.SUB, false, "새 소식이 없어요 · 새 일정·공지가 생기면 빨간 숫자로 알려줘요"), Ui.lp(this, MATCH, WRAP, top = 12))
+        }
+
+        // 그룹 기능 버튼 (두 칸씩)
+        fun gbtn(label: String, strong: Boolean = false, onClick: () -> Unit) = Ui.text(this, 13f, if (strong) Ui.GREEN else Ui.TEXT, true, label).apply {
+            gravity = Gravity.CENTER; minHeight = dp(44); setPadding(dp(6), 0, dp(6), 0)
+            background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, if (strong) Ui.GREEN else Ui.LINE)
+            setOnClickListener { onClick() }
+        }
+        fun pair(a: TextView, b: TextView?) {
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            r.addView(a, LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (b != null) r.addView(b, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            groupBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
+        val up = GroupNews.upcoming(activeId)
+        groupBox.addView(View(this), Ui.lp(this, MATCH, dp(6)))
+        pair(gbtn("그룹 출조 기록", true) { startActivity(Intent(this, GroupTripsActivity::class.java)) },
+            gbtn(if (todayN > 0) "일정 ($up) · 오늘 출조!" else if (up > 0) "일정 ($up)" else "일정") { startActivity(Intent(this, ScheduleActivity::class.java)) })
+        pair(gbtn("공지") { startActivity(Intent(this, NoticeActivity::class.java)) },
+            gbtn("같이 낚시 중") { showMates() })
+        pair(gbtn("출조 달력 · 멤버 · 그룹 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) }, null)
+    }
+
+    /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
+    private fun newsCard(it: GroupNews.Item): View {
+        val col = if (it.isNotice) Color.parseColor("#F2C14E") else Ui.BLUE
+        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else Color.parseColor("#06303A")
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(10), dp(10), dp(10))
+            background = Ui.bg(this@MainActivity, Ui.CARD, 14, col)
+            isClickable = true
+            setOnClickListener { _ ->
+                startActivity(Intent(this@MainActivity, if (it.isNotice) NoticeActivity::class.java else ScheduleActivity::class.java))
+            }
+        }
+        val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else "일정").apply {
+            setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@MainActivity, col, 6)
+        })
+        line.addView(Ui.text(this, 14f, Ui.TEXT, true, it.title).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },
+            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
+        txt.addView(line)
+        txt.addView(Ui.text(this, 11f, Ui.SUB, false, it.sub), Ui.lp(this, MATCH, WRAP, top = 3))
+        card.addView(txt, LinearLayout.LayoutParams(0, WRAP, 1f))
+        card.addView(Ui.text(this, 12f, ink, true, "확인").apply {
+            gravity = Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
+            background = Ui.bg(this@MainActivity, col, 99)
+            setOnClickListener { _ -> GroupNews.markSeen(listOf(it)); renderGroupPanel() }
+        }, LinearLayout.LayoutParams(WRAP, dp(34)).apply { leftMargin = dp(8) })
+        return card
+    }
+
+    /** 같이 낚시 중 (출조 중일 때 50m 안 그룹원) */
+    private fun showMates() {
+        if (Store.current == null) { showMessage("출조 중일 때 50m 안에서 같이 출조 중인 그룹원이 보여요"); return }
+        Live.sync(true)
+        val ms = Live.mates
+        val msg = if (ms.isEmpty()) "지금 50m 안에 같이 출조 중인 그룹원이 없어요 (5분마다 확인)"
+        else ms.joinToString("\n") { m ->
+            String.format(Locale.KOREA, "%s · %s %d · %s %d · 약 %.0fm", m.name,
+                m.names.getOrElse(0) { "1번" }, m.c1, m.names.getOrElse(1) { "2번" }, m.c2, m.meters)
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("같이 낚시 중")
+            .setMessage(msg)
+            .setPositiveButton("확인", null).show()
     }
 
     /** 워치 기록을 켰을 때: 워치 음악 화면 자동 실행 설정 안내 */
@@ -986,63 +1149,10 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun paintSchedule() {
-        paintMenu()
-        when {
-            todayEvents > 0 -> {
-                scheduleBtn.text = "그룹 일정 확인 ($upcoming) · 오늘 출조!"
-                scheduleBtn.setTextColor(Ui.BG)
-                scheduleBtn.background = Ui.bg(this, Ui.GREEN, 14)
-            }
-            upcoming > 0 -> {
-                scheduleBtn.text = "그룹 일정 확인 ($upcoming)"
-                scheduleBtn.setTextColor(Ui.GREEN)
-                scheduleBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.GREEN)
-            }
-            else -> {
-                scheduleBtn.text = "그룹 일정 확인"
-                scheduleBtn.setTextColor(Ui.TEXT)
-                scheduleBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE)
-            }
-        }
-    }
-
-    private fun renderHeaderGroups() {
-        groupBar.removeAllViews()
-        val gs = if (Cloud.user == null) emptyList() else Cloud.groups
-        if (gs.isEmpty()) { groupScroll.visibility = View.INVISIBLE; return }
-        groupScroll.visibility = View.VISIBLE
-        val activeId = Cloud.active?.id
-        var activeView: View? = null
-        gs.forEach { g ->
-            val on = g.id == activeId
-            val label = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
-            val chip = Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, label).apply {
-                gravity = Gravity.CENTER
-                maxLines = 1
-                setPadding(dp(12), 0, dp(12), 0)
-                background = if (on) Ui.bg(this@MainActivity, Ui.GREEN, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
-                setOnClickListener {
-                    if (on) startActivity(Intent(this@MainActivity, GroupActivity::class.java))
-                    else if (Store.current != null && Store.current?.catches?.isNotEmpty() == true)
-                        AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                            .setTitle("'${g.name}' 그룹으로 바꿀까요?")
-                            .setMessage("지금 출조는 종료할 때 바뀐 그룹에 올라가요")
-                            .setPositiveButton("바꾸기") { _, _ -> Cloud.setActive(g.id); showMessage("'${g.name}' 그룹으로 바꿨어요") }
-                            .setNegativeButton("취소", null)
-                            .show()
-                    else { Cloud.setActive(g.id); showMessage("'${g.name}' 그룹으로 바꿨어요") }
-                }
-            }
-            if (on) activeView = chip
-            groupBar.addView(chip, LinearLayout.LayoutParams(WRAP, dp(36)).apply { rightMargin = dp(6) })
-        }
-        activeView?.let { v -> groupScroll.post { groupScroll.smoothScrollTo((v.left - dp(8)).coerceAtLeast(0), 0) } }
-    }
-
     private fun refreshAccount() {
         if (!::accountInfo.isInitialized) return
-        renderHeaderGroups()
+        renderGroupPanel()
+        GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         val u = Cloud.user
         if (u == null) {
             accountInfo.text = "친구와 조과 공유 · 로그인하면 그룹에 올리고, 내 기록도 서버에 백업돼요"
@@ -1057,16 +1167,6 @@ class MainActivity : Activity() {
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
-        if (Cloud.isAdmin && System.currentTimeMillis() - adminReqAt > 60_000L) {
-            adminReqAt = System.currentTimeMillis()
-            Cloud.adminNickRequests { l ->
-                adminReq = l.size
-                adminBtn.text = "관리자 · 사용자 목록" + if (adminReq > 0) "  🔴 닉네임 요청 $adminReq" else ""
-                paintMenu()
-            }
-        }
-        scheduleBtn.visibility = if (Cloud.active != null) View.VISIBLE else View.GONE
-        refreshSchedule()
         renderCats()
     }
 

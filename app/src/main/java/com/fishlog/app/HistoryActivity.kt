@@ -18,6 +18,7 @@ import java.util.Locale
 class HistoryActivity : Activity() {
 
     private lateinit var summary: LinearLayout
+    private lateinit var sunBox: LinearLayout
     private lateinit var chips: LinearLayout
     private lateinit var list: LinearLayout
     private lateinit var restoreBtn: android.widget.TextView
@@ -48,6 +49,8 @@ class HistoryActivity : Activity() {
 
         summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(summary, Ui.lp(this, MATCH, WRAP, top = 16))
+        sunBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(sunBox, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 전체 보기 / 날짜별 보기
         modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -110,6 +113,10 @@ class HistoryActivity : Activity() {
                 if (i > 0) leftMargin = Ui.dp(this@HistoryActivity, 8)
             })
         }
+
+        // 어종별 낮·밤 (일출·일몰 기준)
+        sunBox.removeAllViews()
+        BiteMemo.tendencyCard(this, BiteMemo.tendencies(trips))?.let { sunBox.addView(it) }
 
         // 보기 방식
         modeRow.removeAllViews()

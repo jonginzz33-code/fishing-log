@@ -178,6 +178,17 @@ class TripActivity : Activity() {
         }
         root.addView(tideCard, Ui.lp(this, MATCH, WRAP, top = 10))
 
+        // 입질 시간 메모 (일출·일몰 기준)
+        val peaks = BiteMemo.forTrip(t, tideDay)
+        if (peaks.isNotEmpty()) {
+            section("입질 시간 메모 (일출·일몰 기준)")
+            Sun.times(t.start, t.anyLocation()?.first, t.anyLocation()?.second)?.let { s ->
+                root.addView(Ui.text(this, 12f, Ui.SUB, false, "일출 ${hm.format(Date(s.rise))} · 일몰 ${hm.format(Date(s.set))}" +
+                    (if (t.anyLocation() == null) " (서해 중부 기준)" else "")), Ui.lp(this, MATCH, WRAP, top = 4))
+            }
+            BiteMemo.tripCards(this, peaks).forEach { root.addView(it, Ui.lp(this, MATCH, WRAP, top = 8)) }
+        }
+
         // 시간대별 입질
         if (t.catches.isNotEmpty()) {
             section("시간대별 입질")

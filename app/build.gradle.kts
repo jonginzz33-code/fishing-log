@@ -12,8 +12,8 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "1.8"
+        versionCode = 20
+        versionName = "1.9"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
     }

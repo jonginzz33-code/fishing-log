@@ -552,7 +552,6 @@ object Cloud {
     fun setNick(n: String, done: (String?) -> Unit) {
         val me = uid ?: return done("로그인이 필요해요")
         validNick(n)?.let { return done(it) }
-        if (nick != null && !isAdmin) return done("닉네임은 이미 정했어요. 바꾸려면 변경 요청을 보내 주세요")
         val name = n.trim()
         val keyRef = db.collection("nicknames").document(nickKey(name))
         keyRef.get().addOnSuccessListener { k ->
@@ -707,6 +706,11 @@ object Cloud {
 
     fun loadEvents(done: (List<Event>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
+        loadEventsOf(g, done)
+    }
+
+    /** 특정 그룹 일정 (새 소식 확인용) */
+    fun loadEventsOf(g: Group, done: (List<Event>?, String?) -> Unit) {
         db.collection("groups").document(g.id).collection("events").get()
             .addOnSuccessListener { q ->
                 done(q.documents.map { d ->
@@ -736,6 +740,43 @@ object Cloud {
     fun deleteEvent(id: String, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
         db.collection("groups").document(g.id).collection("events").document(id).delete()
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "삭제 실패") }
+    }
+
+    // ---------------- 그룹 공지 (그룹장만 쓰기) ----------------
+    class Notice(val id: String, val owner: String, val ownerName: String, val title: String, val body: String,
+                 val created: Long, val edited: Long)
+
+    fun loadNoticesOf(g: Group, done: (List<Notice>?, String?) -> Unit) {
+        db.collection("groups").document(g.id).collection("notices").get()
+            .addOnSuccessListener { q ->
+                done(q.documents.map { d ->
+                    Notice(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "그룹장"),
+                        d.getString("title") ?: "", d.getString("body") ?: "",
+                        d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L)
+                }.sortedByDescending { it.created }, null)
+            }
+            .addOnFailureListener { done(null, it.message ?: "공지 불러오기 실패 (보안 규칙 확인)") }
+    }
+
+    fun saveNotice(old: Notice?, title: String, body: String, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        if (!isOwner) return done("공지는 그룹장만 쓸 수 있어요")
+        if (title.isBlank()) return done("제목을 적어 주세요")
+        val col = db.collection("groups").document(g.id).collection("notices")
+        val ref = if (old == null) col.document() else col.document(old.id)
+        val now = System.currentTimeMillis()
+        ref.set(mapOf("owner" to (old?.owner ?: me), "ownerName" to displayName, "title" to title.trim(), "body" to body.trim(),
+            "created" to (old?.created ?: now), "edited" to now))
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "공지 저장 실패 (보안 규칙 확인)") }
+    }
+
+    fun deleteNotice(id: String, done: (String?) -> Unit) {
+        val g = active ?: return done("그룹이 없어요")
+        db.collection("groups").document(g.id).collection("notices").document(id).delete()
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "삭제 실패") }
     }

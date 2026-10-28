@@ -225,7 +225,7 @@ object TideDialog {
             Tide.fetch(a, lat, lon, noon) { day, err ->
                 if (!dlg.isShowing || id != loadId) return@fetch
                 if (day == null) { info.text = err ?: "불러오기 실패"; strength.text = ""; return@fetch }
-                graph.set(day, t)
+                graph.set(day, t, lat, lon)
                 info.text = describe(day, t)
                 src.text = day.source + "\n물때 단계: 실제 그믐 시각으로 계산 (서해 7물때식)"
                 Tide.strength(a, day) { st ->

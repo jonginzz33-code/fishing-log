@@ -25,25 +25,18 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       allow create: if signedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
-        && (!('nick' in resource.data) || request.resource.data.get('nick', null) == resource.data.get('nick', null)));
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
       allow delete: if signedIn() && request.auth.uid == uid;
       match /trips/{tid} {
         allow read, write: if signedIn() && request.auth.uid == uid;
       }
     }
 
-    // ---- 닉네임 (중복 금지, 바꿀 땐 관리자 승인) ----
+    // ---- 닉네임 (중복 금지, 언제든 바꾸기) ----
     match /nicknames/{k} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
-    }
-    match /nickRequests/{u} {
-      allow read: if signedIn() && (request.auth.uid == u || isAdmin());
-      allow create: if signedIn() && request.auth.uid == u && request.resource.data.status == 'wait';
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == u && request.resource.data.status == 'wait');
-      allow delete: if signedIn() && (request.auth.uid == u || isAdmin());
     }
 
     // ---- 이용 정지 (관리자만 정지·해제) ----
@@ -129,6 +122,10 @@ service cloud.firestore {
         allow read: if isMember(gid);
         allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
         allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid));
+      }
+      match /notices/{nid} {
+        allow read: if isMember(gid);
+        allow create, update, delete: if isGroupOwner(gid);
       }
       match /events/{eid} {
         allow read: if isMember(gid);
