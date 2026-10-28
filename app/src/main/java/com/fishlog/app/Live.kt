@@ -26,10 +26,15 @@ object Live {
     private const val STALE_MS = 20 * 60_000L
 
     class Mate(val uid: String, val name: String, val names: List<String>, val c1: Int, val c2: Int,
-               val time: Long, val meters: Float, val lat: Double? = null, val lon: Double? = null)
+               val time: Long, val meters: Float, val lat: Double? = null, val lon: Double? = null,
+               val ended: Boolean = false)
 
     @Volatile var mates: List<Mate> = emptyList()
         private set
+    /** 같이 출조하다 종료한 사람 (종료 후 1시간만) */
+    @Volatile var endedMates: List<Mate> = emptyList()
+        private set
+    private const val ENDED_SHOW_MS = 60 * 60_000L
     @Volatile var updatedAt = 0L
         private set
 
@@ -109,7 +114,7 @@ object Live {
         val loc = myLocation()
         val doc = hashMapOf<String, Any>(
             "name" to Cloud.displayName, "t" to now, "start" to t.start, "cat" to t.cat,
-            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2))
+            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2), "ended" to false)
         if (loc != null) { doc["lat"] = loc.first; doc["lon"] = loc.second }
         groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge()) }
         if (watching.isNotEmpty()) return  // 화면을 보고 있으면 실시간으로 이미 받는 중
@@ -157,12 +162,14 @@ object Live {
         val loc = myLocation()
         val rng = range()
         val found = HashMap<String, Mate>()
+        val endedFound = HashMap<String, Mate>()
         var others = 0
         liveDocs.values.flatten().forEach { d ->
             if (d.id == me) return@forEach
             val tt = d.getLong("t") ?: 0L
-            if (now - tt > STALE_MS) return@forEach
-            others++
+            val isEnded = d.getBoolean("ended") == true
+            if (isEnded) { if (now - (d.getLong("endedAt") ?: tt) > ENDED_SHOW_MS) return@forEach }
+            else { if (now - tt > STALE_MS) return@forEach; others++ }
             val la = d.getDouble("lat"); val lo = d.getDouble("lon")
             var dist = -1f
             if (la != null && lo != null && loc != null) {
@@ -173,11 +180,14 @@ object Live {
             if (rng != null && (dist < 0 || dist > rng)) return@forEach
             val m = Mate(d.id, Cloud.shownName(d.id, d.getString("name") ?: "?"),
                 (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"),
-                (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), tt, dist.coerceAtLeast(0f), la, lo)
-            val old = found[d.id]
-            if (old == null || old.time < m.time) found[d.id] = m
+                (d.getLong("c1") ?: 0L).toInt(), (d.getLong("c2") ?: 0L).toInt(), if (isEnded) (d.getLong("endedAt") ?: tt) else tt,
+                dist.coerceAtLeast(0f), la, lo, isEnded)
+            val bucket = if (isEnded) endedFound else found
+            val old = bucket[d.id]
+            if (old == null || old.time < m.time) bucket[d.id] = m
         }
         mates = found.values.sortedBy { it.meters }
+        endedMates = endedFound.values.filter { it.uid !in found.keys }.sortedByDescending { it.time }
         reason = when {
             mates.isNotEmpty() -> ""
             rng != null && loc == null -> "내 위치가 아직 없어요 (GPS·위치 권한 확인)"
@@ -188,12 +198,14 @@ object Live {
         fire()
     }
 
-    // ---------------- 내 +1 바로 올리기 (10초 모아서) ----------------
-    private val pushRunnable = Runnable { pushCounts() }
+    // ---------------- 내 +1 바로 올리기 (3초 안에, 연달아 눌러도 3초마다 꼭) ----------------
+    @Volatile private var pushPending = false
+    private val pushRunnable = Runnable { pushPending = false; pushCounts() }
     fun pushSoon() {
         if (Cloud.uid == null || Store.current == null) return
-        main.removeCallbacks(pushRunnable)
-        main.postDelayed(pushRunnable, 10_000L)
+        if (pushPending) return          // 이미 3초 안에 올리기로 잡혀 있음 (그때 최신 마릿수로 올림)
+        pushPending = true
+        main.postDelayed(pushRunnable, 3_000L)
     }
 
     private fun pushCounts() {
@@ -201,7 +213,7 @@ object Live {
         val t = Store.current ?: return
         val doc = hashMapOf<String, Any>(
             "name" to Cloud.displayName, "t" to System.currentTimeMillis(), "start" to t.start, "cat" to t.cat,
-            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2))
+            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2), "ended" to false)
         // +1 할 때 위치도 같이 (없으면 지난 위치 그대로)
         myLocation()?.let { doc["lat"] = it.first; doc["lon"] = it.second }
         Cloud.groups.forEach { g ->
@@ -211,11 +223,18 @@ object Live {
     }
 
     /** 출조 종료: 내 정보 지우기 */
-    fun clear() {
+    fun clear(last: Store.Trip? = null) {
         val me = Cloud.uid ?: return
-        Cloud.groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).delete() }
-        mates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null; reason = ""
-        unwatch(); liveDocs.clear(); main.removeCallbacks(pushRunnable)
+        // 지우지 않고 '종료' 표시 + 최종 마릿수 → 같이 출조하던 사람에게 1시간 동안 "출조를 종료했어요"
+        val now = System.currentTimeMillis()
+        val doc = hashMapOf<String, Any>("ended" to true, "endedAt" to now, "t" to now, "name" to Cloud.displayName)
+        last?.let { doc["names"] = it.names.toList(); doc["c1"] = it.count(1); doc["c2"] = it.count(2) }
+        Cloud.groups.forEach { g ->
+            db.collection("groups").document(g.id).collection("live").document(me)
+                .set(doc, com.google.firebase.firestore.SetOptions.merge())
+        }
+        mates = emptyList(); endedMates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null; reason = ""
+        unwatch(); liveDocs.clear(); main.removeCallbacks(pushRunnable); pushPending = false
         fire()
     }
 }

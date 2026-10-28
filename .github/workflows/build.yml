@@ -35,6 +35,9 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk fishing-log.apk
           grep -m1 versionCode app/build.gradle.kts | grep -o '[0-9]\+' > version.txt
           cat version.txt
+          # 업데이트 창에 보여줄 '이번에 바뀐 것' (README 맨 마지막 버전 내용)
+          awk '/^## v/{buf=""} {buf=buf $0 "\n"} END{printf "%s", buf}' README.md > notes.txt
+          cat notes.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -51,4 +54,5 @@ jobs:
           files: |
             fishing-log.apk
             version.txt
+            notes.txt
           make_latest: true

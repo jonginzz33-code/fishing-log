@@ -55,7 +55,6 @@ class MainActivity : Activity() {
     private lateinit var groupBox: LinearLayout
     private var groupOpen = false
     private var groupsAt = 0L
-    private lateinit var updateBar: TextView
     private lateinit var message: TextView
     private lateinit var menuBtn: TextView
     private lateinit var menuBox: LinearLayout
@@ -115,6 +114,22 @@ class MainActivity : Activity() {
     private var gated = false
     private var nickAsked = false
     private var cloudLoaded = false
+    /** 관리자가 막은 옛날 버전인지 (출조 중엔 막지 않고, 끝난 뒤에) */
+    private var forceUpdate = false
+    private var guideOpen = false
+    private lateinit var versionText: TextView
+
+    private fun checkForced() {
+        if (!forceUpdate || isFinishing || Store.current != null || guideOpen) return
+        if (Updater.latestCode == null) Updater.check(this) { if (!isFinishing) Updater.showDialog(this, true) }
+        else Updater.showDialog(this, true)
+    }
+
+    private fun paintVersion() {
+        if (!::versionText.isInitialized) return
+        versionText.text = "버전 ${BuildConfigInfo.VERSION}" + if (Updater.latestCode != null) "  ·  새 버전 있음 (눌러서 업데이트)" else ""
+        versionText.setTextColor(if (Updater.latestCode != null) Ui.GREEN else Ui.SUB)
+    }
 
     private fun dp(v: Int) = Ui.dp(this, v)
 
@@ -181,9 +196,27 @@ class MainActivity : Activity() {
         Tide.prune(this)
         Photos.cleanOldShareCopies(this)
         GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
+        // 새 버전: 큰 창으로 알림 (한 번 켤 때마다 한 번) · 최소 버전보다 낮으면 업데이트해야 쓸 수 있음
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
-            Updater.check(this) { v -> if (v != null) updateBar.visibility = View.VISIBLE }
+            Updater.check(this) { v ->
+                if (v == null || isFinishing) return@check
+                paintVersion()
+                if (!forceUpdate && !guideOpen) Updater.showDialog(this, false)
+            }
+        }
+        // 처음 쓰는 사람: 그림 안내 한 번 (다 보면 새 버전 창)
+        if (!Store.guideSeen && !guideOpen) {
+            guideOpen = true
+            Guide.show(this) {
+                guideOpen = false
+                if (Updater.latestCode != null && !forceUpdate && !isFinishing) Updater.showDialog(this, false)
+                checkForced()
+            }
+        }
+        Cloud.loadMinVersion { min ->
+            forceUpdate = min > 0 && Updater.currentCode(this) < min
+            checkForced()
         }
         refresh()
         refreshAccount()
@@ -263,15 +296,7 @@ class MainActivity : Activity() {
     private fun buildUi(): View {
         val col = Ui.column(this)
 
-        // 새 버전 알림
-        updateBar = Ui.text(this, 14f, Ui.BG, true, "새 버전이 있어요 · 눌러서 업데이트").apply {
-            gravity = Gravity.CENTER
-            minHeight = dp(48)
-            background = Ui.bg(this@MainActivity, Ui.GREEN, 12)
-            visibility = View.GONE
-            setOnClickListener { Updater.downloadAndInstall(this@MainActivity) { msg -> text = msg } }
-        }
-        col.addView(updateBar, Ui.lp(this, MATCH, WRAP).apply { bottomMargin = dp(12) })
+        // (새 버전은 맨 위 줄 대신 큰 창으로 알려요 · Updater.showDialog)
 
         // 상단: 왼쪽 지도·물때 버튼 + 제목
         val header = Ui.row(this)
@@ -399,6 +424,9 @@ class MainActivity : Activity() {
         menuBox.addView(Ui.button(this, "⚙ 개인 설정 (닉네임 · 알림 · 같이 낚시 거리)") {
             startActivity(Intent(this, SettingsActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP))
+        menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
+            startActivity(Intent(this, HelpActivity::class.java))
+        }, Ui.lp(this, MATCH, WRAP, top = 10))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
@@ -444,7 +472,12 @@ class MainActivity : Activity() {
             startActivity(Intent(this, AdminActivity::class.java))
         }.apply { minHeight = dp(44); textSize = 14f; visibility = View.GONE }
         menuBox.addView(adminBtn, Ui.lp(this, MATCH, WRAP, top = 12))
-        menuBox.addView(Ui.text(this, 11f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}"), Ui.lp(this, MATCH, WRAP, top = 12))
+        versionText = Ui.text(this, 12f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}").apply {
+            minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
+            setOnClickListener { if (Updater.latestCode != null) { menuDialog?.dismiss(); Updater.showDialog(this@MainActivity, forceUpdate) } }
+        }
+        menuBox.addView(versionText, Ui.lp(this, MATCH, WRAP, top = 12))
+        paintVersion()
         col.addView(View(this), Ui.lp(this, MATCH, dp(24)))
         paintMenu()
 
@@ -1337,6 +1370,8 @@ class MainActivity : Activity() {
         adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         speciesBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         GroupNews.startLive(newsLive)
+        // 그룹 목록이 오면 같이 낚시 중 실시간 연결 바로 다시 붙이기
+        if (Store.current != null) Live.watch()
         renderCats()
     }
 
@@ -1348,6 +1383,14 @@ class MainActivity : Activity() {
         if (Store.current == null || Cloud.user == null || Cloud.groups.isEmpty()) { liveBox.visibility = View.GONE; return }
         liveBox.visibility = View.VISIBLE
         liveBox.addView(Ui.text(this, 12f, Ui.GREEN, true, "같이 낚시 중 (${Live.rangeLabel()}) · 실시간"))
+        // 같이 출조하다 종료한 사람 (1시간 동안만)
+        Live.endedMates.forEach { m ->
+            val c = listOf(m.names.getOrElse(0) { "1번" } to m.c1, m.names.getOrElse(1) { "2번" } to m.c2)
+                .filter { it.second > 0 }.joinToString(" · ") { "${it.first} ${it.second}" }
+            liveBox.addView(Ui.text(this, 12f, Ui.SUB, false,
+                "■ ${m.name}님은 출조를 종료했어요 · " + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(m.time)) +
+                    (if (c.isNotBlank()) " · $c" else "")), Ui.lp(this, MATCH, WRAP, top = 2))
+        }
         // 안 보일 때 이유
         if (ms.isEmpty()) {
             liveBox.addView(Ui.text(this, 12f, Ui.SUB, false, Live.reason.ifBlank { "같이 출조 중인 그룹원을 찾는 중…" }), Ui.lp(this, MATCH, WRAP, top = 2))
@@ -1406,7 +1449,10 @@ class MainActivity : Activity() {
     private fun updateStatus() {
         val t = Store.current
         val minute = System.currentTimeMillis() / 60_000L
-        if (minute != lastMinute && ::last1.isInitialized) { lastMinute = minute; last1.text = lastText(t, 1); last2.text = lastText(t, 2) }
+        if (minute != lastMinute && ::last1.isInitialized) {
+            lastMinute = minute; last1.text = lastText(t, 1); last2.text = lastText(t, 2)
+            renderLive()  // "N분 전" 1분마다 갱신
+        }
         status.text = if (t == null) {
             "대기 중 · ${Store.catLabel(Store.category)} · '출조 시작'을 누르면 기록을 시작해요"
         } else {
@@ -1444,10 +1490,13 @@ class MainActivity : Activity() {
         paintTier(1, t?.count(1) ?: 0); paintTier(2, t?.count(2) ?: 0)
         last1.text = lastText(t, 1)
         last2.text = lastText(t, 2)
-        tripBtn.text = if (t == null) "출조 시작" else "출조 종료"
+        tripBtn.text = if (t == null) "출조 시작" else "■ 출조 종료"
+        // 출조 중엔 빨간 바탕 · 흰 글씨 (실수로 안 누르게, 끝낼 때 바로 찾게)
+        if (t == null) { tripBtn.setTextColor(Ui.BG); tripBtn.background = Ui.bg(this, Ui.TEXT, 14) }
+        else { tripBtn.setTextColor(Color.WHITE); tripBtn.background = Ui.bg(this, RED, 14) }
         undoBtn.visibility = if (t == null) View.GONE else View.VISIBLE
         placeRecent()
-        if (t != null) Live.watch() else Live.unwatch()
+        if (t != null) Live.watch() else { Live.unwatch(); checkForced() }
         renderLive()
 
         recent.text = if (t == null || t.catches.isEmpty()) {

@@ -277,15 +277,15 @@ object MapDialog {
         // 같이 출조 중인 그룹원 위치 (실시간)
         val matesOv = MatesOverlay(a) { m ->
             AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle(m.name)
+                .setTitle(m.name + if (m.ended) " (출조 종료)" else "")
                 .setMessage("${m.names.getOrElse(0) { "1번" }} ${m.c1} · ${m.names.getOrElse(1) { "2번" }} ${m.c2}\n" +
                     (if (m.meters > 0) String.format(Locale.KOREA, "나와 약 %.0fm\n", m.meters) else "") +
                     "마지막 갱신 " + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(m.time)))
                 .setPositiveButton("확인", null).show()
         }
-        val matesListener: () -> Unit = { matesOv.mates = Live.mates; map.invalidate() }
+        val matesListener: () -> Unit = { matesOv.mates = Live.mates + Live.endedMates; map.invalidate() }
         if (live != null) {
-            matesOv.mates = Live.mates
+            matesOv.mates = Live.mates + Live.endedMates
             map.overlays.add(matesOv)
             Live.addListener(matesListener)
             Live.watch()

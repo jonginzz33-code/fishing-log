@@ -691,6 +691,26 @@ object Cloud {
             }
     }
 
+    // ---------------- 최소 버전 (관리자: 옛날 버전 막기) ----------------
+    /** 서버의 최소 버전 번호 (0 = 막지 않음). 인터넷이 안 되면 마지막으로 받은 값 */
+    fun loadMinVersion(done: (Long) -> Unit) {
+        val p = appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        db.collection("config").document("app").get()
+            .addOnSuccessListener { d ->
+                val v = d.getLong("minVersion") ?: 0L
+                p.edit().putLong("minVersion", v).apply()
+                done(v)
+            }
+            .addOnFailureListener { done(p.getLong("minVersion", 0L)) }
+    }
+
+    fun setMinVersion(v: Long, done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 바꿀 수 있어요")
+        db.collection("config").document("app").set(mapOf("minVersion" to v, "updated" to System.currentTimeMillis()), SetOptions.merge())
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "저장 실패") }
+    }
+
     // ---------------- 낚시 종류 (관리자만 추가·수정) ----------------
     fun loadCats(done: (() -> Unit)? = null) {
         db.collection("config").document("cats").get()

@@ -62,7 +62,7 @@ class AdminActivity : Activity() {
     private fun load() {
         listBox.removeAllViews()
         listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 10))
-        var left = 5
+        var left = 6
         var err: String? = null
         fun step() { left--; if (left == 0) render(err) }
         Cloud.adminUsers { list, e -> users = list ?: emptyList(); if (list == null) err = e; step() }
@@ -70,6 +70,7 @@ class AdminActivity : Activity() {
         Moderation.reportCounts { m -> reports = m; step() }
         Moderation.loadLimit { step() }
         Cloud.loadCats { step() }
+        Cloud.loadMinVersion { v -> minVer = v; step() }
     }
 
     private var nickReqs: List<Cloud.NickRequest> = emptyList()
@@ -105,11 +106,38 @@ class AdminActivity : Activity() {
     private fun render(err: String?) {
         listBox.removeAllViews()
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
+        renderMinVersion()
         renderCatAdmin()
         renderLimit()
         renderReports()
         renderBans()
         renderUsers()
+    }
+
+    // ---------------- 최소 버전 (옛날 버전 막기) ----------------
+    private var minVer = 0L
+    private fun renderMinVersion() {
+        section("최소 버전 (옛날 버전 막기)")
+        val c = Ui.card(this)
+        val mine = Updater.currentCode(this)
+        c.addView(Ui.text(this, 14f, Ui.TEXT, true,
+            if (minVer > 0) "지금 막는 중: 버전 번호 $minVer 보다 낮은 앱" else "지금은 막지 않아요"))
+        c.addView(Ui.text(this, 12f, Ui.SUB, false,
+            "내 앱 버전 ${BuildConfigInfo.VERSION} (번호 $mine) · 막힌 사람은 '업데이트해야 쓸 수 있어요' 창이 떠요 · 출조 중에는 막지 않고 끝난 뒤에 막아요 · 1.9.7보다 옛날 앱은 이 기능이 없어서 못 막아요"),
+            Ui.lp(this, MATCH, WRAP, top = 4))
+        val r = Ui.row(this)
+        r.addView(Ui.button(this, "내 버전보다 낮은 버전 막기", true) {
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("버전 ${BuildConfigInfo.VERSION}보다 옛날 앱을 막을까요?")
+                .setMessage("그 사람들은 업데이트해야 앱을 쓸 수 있어요. 새 버전이 GitHub에 올라간 뒤에 막아 주세요.")
+                .setPositiveButton("막기") { _, _ -> Cloud.setMinVersion(mine) { e -> toast(e ?: "막았어요"); load() } }
+                .setNegativeButton("취소", null).show()
+        }.apply { minHeight = dp(44); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1.4f))
+        r.addView(Ui.button(this, "막기 풀기") {
+            Cloud.setMinVersion(0) { e -> toast(e ?: "막기를 풀었어요"); load() }
+        }.apply { minHeight = dp(44); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        c.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 
     // ---------------- 낚시 종류 관리 (추가·이름·순서·숨기기) ----------------

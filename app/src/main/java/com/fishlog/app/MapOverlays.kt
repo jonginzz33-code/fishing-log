@@ -240,13 +240,13 @@ class MatesOverlay(ctx: android.content.Context, private val onTap: (Live.Mate) 
             val la = m.lat ?: return@forEachIndexed; val lo = m.lon ?: return@forEachIndexed
             val p = mapView.projection.toPixels(GeoPoint(la, lo), null)
             pts[m.uid] = p
-            val old = System.currentTimeMillis() - m.time > 20 * 60_000L
+            val old = m.ended || System.currentTimeMillis() - m.time > 20 * 60_000L
             val a = if (old) 110 else 255
             fill.color = COLORS[i % COLORS.size]; fill.alpha = a; ring.alpha = a
             c.drawCircle(p.x.toFloat(), p.y.toFloat(), 9 * d, fill)
             c.drawCircle(p.x.toFloat(), p.y.toFloat(), 9 * d, ring)
             val best = if (m.c1 >= m.c2) "${m.names.getOrElse(0) { "1번" }} ${m.c1}" else "${m.names.getOrElse(1) { "2번" }} ${m.c2}"
-            val label = "${m.name} · $best · ${ago(m.time)}"
+            val label = if (m.ended) "${m.name} · 종료 · $best" else "${m.name} · $best · ${ago(m.time)}"
             val w = tagTxt.measureText(label) + 12 * d
             val x = p.x + 13 * d; val y = p.y - 11 * d
             tagBg.alpha = if (old) 150 else 225; tagTxt.alpha = a

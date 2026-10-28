@@ -231,6 +231,11 @@ object Store {
         set(v) { prefs.edit().putBoolean("methodsChosen", v).apply() }
 
     /** 개인 설정: 출조 중 잠금 화면·AOD에 아이콘·마릿수·+1 버튼 보이기 */
+    /** 처음 안내(그림 설명)를 봤는지 */
+    var guideSeen: Boolean
+        get() = prefs.getBoolean("guideSeen", false)
+        set(v) { prefs.edit().putBoolean("guideSeen", v).apply() }
+
     /** 같이 낚시 중 거리 기준 (m). 0 = 거리 상관없이 같은 그룹 출조 중이면 모두 */
     var mateRange: Int
         get() = prefs.getInt("mateRange", 1000)

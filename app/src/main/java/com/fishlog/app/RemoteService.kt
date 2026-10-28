@@ -146,7 +146,7 @@ class RemoteService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        if (Store.current == null) try { Live.clear() } catch (_: Exception) {}
+        if (Store.current == null) try { Live.clear(Store.history.firstOrNull()) } catch (_: Exception) {}
         Tracker.stop()
         Store.removeListener(storeListener)
         session?.isActive = false
