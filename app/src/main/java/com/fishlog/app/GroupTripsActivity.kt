@@ -51,6 +51,7 @@ class GroupTripsActivity : Activity() {
         val gl = g?.let { if (it.name.trim().endsWith("그룹")) it.name else "${it.name} 그룹" } ?: "그룹"
         top.addView(Ui.text(this, 19f, Ui.TEXT, true, "$gl 출조 기록"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
         col.addView(top)
+        GroupBand.view(this, false)?.let { col.addView(it, Ui.lp(this, MATCH, WRAP, top = 12)) }
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 14))
         peopleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }

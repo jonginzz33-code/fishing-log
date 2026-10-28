@@ -27,6 +27,7 @@ class GroupActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var head: LinearLayout
     private lateinit var groupsBox: LinearLayout
+    private lateinit var bandBox: LinearLayout
     private lateinit var membersBox: LinearLayout
     private lateinit var calBox: LinearLayout
     private lateinit var dayBox: LinearLayout
@@ -59,6 +60,8 @@ class GroupActivity : Activity() {
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "그룹"),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         root.addView(top)
+        bandBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(bandBox, Ui.lp(this, MATCH, WRAP, top = 12))
 
         // (그룹 바꾸기는 메인 맨 아래 '그룹' 칸에서) 지금 고른 그룹만 보여줌
         groupsBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -88,6 +91,8 @@ class GroupActivity : Activity() {
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
     private fun load() {
+        bandBox.removeAllViews()
+        GroupBand.view(this, false)?.let { bandBox.addView(it) }
         renderHead()
         if (Cloud.user == null || Cloud.active == null) {
             membersBox.removeAllViews(); dayBox.removeAllViews(); calBox.removeAllViews()

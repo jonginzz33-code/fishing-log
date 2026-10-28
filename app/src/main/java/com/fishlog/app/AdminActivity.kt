@@ -120,25 +120,28 @@ class AdminActivity : Activity() {
             "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요"))
         val list = Store.allCats()
         list.forEachIndexed { i, cat ->
-            val r = Ui.row(this)
-            r.addView(Ui.text(this, 15f, if (cat.hidden) Ui.SUB else Ui.TEXT, true,
+            // 첫 줄: 이름 / 둘째 줄: ▲ ▼ 이름 숨기기 삭제
+            c.addView(Ui.text(this, 15f, if (cat.hidden) Ui.SUB else Ui.TEXT, true,
                 cat.label + (if (cat.short.isNotBlank() && cat.short != cat.label) " (${cat.short})" else "") + (if (cat.hidden) " · 숨김" else "")),
-                LinearLayout.LayoutParams(0, WRAP, 1f))
-            fun mini(label: String, onClick: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
-                gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0)
-                background = Ui.bg(this@AdminActivity, android.graphics.Color.TRANSPARENT, 8, Ui.LINE)
+                Ui.lp(this, MATCH, WRAP, top = if (i == 0) 10 else 14))
+            val r = Ui.row(this)
+            fun mini(label: String, color: Int = Ui.TEXT, onClick: () -> Unit) = Ui.text(this, 12f, color, true, label).apply {
+                gravity = Gravity.CENTER; setPadding(dp(6), 0, dp(6), 0)
+                background = Ui.bg(this@AdminActivity, android.graphics.Color.TRANSPARENT, 8, if (color == Ui.TEXT) Ui.LINE else color)
                 setOnClickListener { onClick() }
             }
-            r.addView(mini("▲") { if (i > 0) save(list.toMutableList().apply { add(i - 1, removeAt(i)) }) }, LinearLayout.LayoutParams(dp(36), dp(34)))
+            r.addView(mini("▲") { if (i > 0) save(list.toMutableList().apply { add(i - 1, removeAt(i)) }) }, LinearLayout.LayoutParams(0, dp(34), 1f))
             r.addView(mini("▼") { if (i < list.size - 1) save(list.toMutableList().apply { add(i + 1, removeAt(i)) }) },
-                LinearLayout.LayoutParams(dp(36), dp(34)).apply { leftMargin = dp(4) })
+                LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(6) })
             r.addView(mini("이름") { askCat(cat) { l, sh -> save(list.map { if (it.id == cat.id) Store.Cat(it.id, l, sh, it.hidden) else it }) } },
-                LinearLayout.LayoutParams(WRAP, dp(34)).apply { leftMargin = dp(4) })
+                LinearLayout.LayoutParams(0, dp(34), 1.2f).apply { leftMargin = dp(6) })
             r.addView(mini(if (cat.hidden) "보이기" else "숨기기") {
                 if (!cat.hidden && list.count { !it.hidden } <= 1) { toast("종류는 하나 이상 있어야 해요"); return@mini }
                 save(list.map { if (it.id == cat.id) Store.Cat(it.id, it.label, it.short, !it.hidden) else it })
-            }, LinearLayout.LayoutParams(WRAP, dp(34)).apply { leftMargin = dp(4) })
-            c.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+            }, LinearLayout.LayoutParams(0, dp(34), 1.4f).apply { leftMargin = dp(6) })
+            r.addView(mini("삭제", android.graphics.Color.parseColor("#F07AA0")) { askDelete(list, cat) },
+                LinearLayout.LayoutParams(0, dp(34), 1.2f).apply { leftMargin = dp(6) })
+            c.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
         }
         c.addView(Ui.button(this, "+ 낚시 종류 추가", true) {
             askCat(null) { l, sh ->
@@ -146,12 +149,28 @@ class AdminActivity : Activity() {
                 save(list + Store.Cat("c" + java.lang.Long.toString(System.currentTimeMillis(), 36), l, sh))
             }
         }.apply { minHeight = dp(44) }, Ui.lp(this, MATCH, WRAP, top = 12))
-        c.addView(Ui.text(this, 11f, Ui.SUB, false, "새 종류의 어종은 메인 메뉴 → '어종 관리 (관리자)'에서 넣어 주세요"), Ui.lp(this, MATCH, WRAP, top = 6))
+        c.addView(Ui.text(this, 11f, Ui.SUB, false, "새 종류의 어종은 메인 메뉴 → '어종 관리 (관리자)'에서 넣어 주세요\n" +
+            "숨기기 = 목록에서만 잠깐 빼기 (다시 보이기 가능) · 삭제 = 아예 없애기 (지난 기록엔 '(지운 종류)'로 보여요)"), Ui.lp(this, MATCH, WRAP, top = 6))
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 
     private fun save(list: List<Store.Cat>) {
         Cloud.saveCats(list) { e -> toast(e ?: "낚시 종류를 저장했어요"); render(null) }
+    }
+
+    /** 삭제: 이 종류를 쓰는 내 출조·그룹 수를 알려주고 한 번 더 확인 */
+    private fun askDelete(list: List<Store.Cat>, cat: Store.Cat) {
+        if (list.count { !it.hidden && it.id != cat.id } < 1) { toast("종류는 하나 이상 있어야 해요"); return }
+        val trips = Store.history.count { it.cat == cat.id }
+        val groups = Cloud.groups.count { cat.id in it.types }
+        val warn = listOfNotNull(if (trips > 0) "내 폰의 출조 ${trips}개가 이 종류예요" else null,
+            if (groups > 0) "이 종류를 쓰는 내 그룹이 ${groups}개 있어요" else null)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("'${cat.label}'을(를) 지울까요?")
+            .setMessage((if (warn.isEmpty()) "" else warn.joinToString("\n") + "\n\n") +
+                "지운 뒤에도 지난 기록은 남고, 종류 이름만 '(지운 종류)'로 보여요.\n잠깐 빼 두려면 '숨기기'를 쓰세요.")
+            .setPositiveButton("삭제") { _, _ -> save(list.filter { it.id != cat.id }) }
+            .setNegativeButton("취소", null).show()
     }
 
     /** 이름 · 짧은 이름 (예: 원투 낚시 / 원투) */

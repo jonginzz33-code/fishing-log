@@ -35,6 +35,7 @@ class NoticeActivity : Activity() {
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, (g?.let { groupLabel(it) } ?: "그룹") + " 공지"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
         col.addView(top)
+        GroupBand.view(this, false)?.let { col.addView(it, Ui.lp(this, MATCH, WRAP, top = 12)) }
         if (Cloud.isOwner) col.addView(Ui.button(this, "+ 공지 쓰기", true) { edit(null) }.apply { minHeight = dp(46) },
             Ui.lp(this, MATCH, WRAP, top = 12))
         box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

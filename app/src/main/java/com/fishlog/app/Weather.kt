@@ -18,6 +18,7 @@ import java.util.TimeZone
  *  - 바람(풍속·풍향·돌풍): Open-Meteo 예보 (인증키 없음) · 3달 전 ~ 15일 뒤
  *  - 파고 · 수온(예측): Open-Meteo 해양 예보 (인증키 없음) · 3달 전 ~ 7일 뒤
  *  - 수온(실측): 국립해양조사원 조위관측소 최신 관측데이터 (오늘·어제만, 공공데이터포털 활용신청 필요)
+ *  - 기온·하늘·비·바람(우선): 기상청 단기예보 (오늘 ~ 3일 뒤, 공공데이터포털 활용신청 필요)
  */
 object Weather {
 
@@ -28,14 +29,23 @@ object Weather {
     private val isoFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.US).apply { timeZone = KST }
 
     /** 한 시간: 풍속(m/s), 바람이 불어오는 방향(°), 돌풍(m/s), 파고(m), 수온 예측(℃) */
-    class Hour(val time: Long, val wind: Double?, val dir: Double?, val gust: Double?, val wave: Double?, val sst: Double?)
+    class Hour(val time: Long, val wind: Double?, val dir: Double?, val gust: Double?, val wave: Double?, val sst: Double?,
+               val temp: Double? = null, val sky: Int? = null, val pty: Int? = null, val pop: Int? = null) {
+        /** 하늘 그림: ☀ 맑음 · ⛅ 구름많음 · ☁ 흐림 · 🌧 비 · 🌨 눈 */
+        fun skyIcon(): String = when {
+            pty != null && pty > 0 -> if (pty == 3 || pty == 7) "🌨" else "🌧"
+            sky == 1 -> "☀"; sky == 3 -> "⛅"; sky == 4 -> "☁"
+            else -> ""
+        }
+    }
 
     class Measured(val temp: Double, val at: String, val station: String)
 
     class Day(
         val dayStart: Long, val hours: List<Hour>,
         val windNote: String, val seaNote: String,
-        val measured: Measured?, val measuredNote: String
+        val measured: Measured?, val measuredNote: String,
+        val kmaNote: String = "", val fromKma: Boolean = false
     ) {
         fun at(hour: Int): Hour? = hours.firstOrNull { ((it.time - dayStart) / 3_600_000L).toInt() == hour }
     }
@@ -114,10 +124,21 @@ object Weather {
             if (sea.isEmpty()) seaNote = "이 위치는 파도·수온 예보가 없어요 (육지 안쪽이거나 인터넷 확인)"
         } else seaNote = "파도·수온 예보는 3달 전부터 7일 뒤까지만 볼 수 있어요"
 
-        val times = (wind.keys + sea.keys).toSortedSet()
+        // ---- 기상청 단기예보 (오늘 ~ 3일 뒤): 기온·하늘·비·바람 ----
+        var kmaNote = ""
+        val kma: Map<Long, Kma> = if (diff in 0..3) {
+            try { kmaForecast(lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L))) }
+            catch (e: KmaError) { kmaNote = e.message ?: ""; emptyMap() }
+            catch (_: Exception) { kmaNote = "기상청 예보를 못 받았어요 (인터넷 확인)"; emptyMap() }
+        } else emptyMap()
+        if (diff > 3) kmaNote = "기상청 예보(기온·하늘)는 3일 뒤까지만 있어요"
+
+        val times = (wind.keys + sea.keys + kma.keys).toSortedSet()
         val hours = times.map { t ->
-            val w = wind[t]; val s = sea[t]
-            Hour(t, w?.first, w?.second, w?.third, s?.first, s?.second)
+            val w = wind[t]; val s = sea[t]; val k = kma[t]
+            // 바람은 기상청 값이 있으면 기상청 우선 (돌풍은 Open-Meteo)
+            Hour(t, k?.wsd ?: w?.first, k?.vec ?: w?.second, w?.third, k?.wav ?: s?.first, s?.second,
+                k?.tmp, k?.sky, k?.pty, k?.pop)
         }
 
         // ---- 수온 실측 (오늘·어제) ----
@@ -128,7 +149,92 @@ object Weather {
             measured = r.first; mNote = r.second
         } else if (diff > 0) mNote = "실측 수온은 아직 측정 전이에요 (예측만 보여요)"
         else mNote = "실측 수온은 오늘·어제만 볼 수 있어요"
-        return Day(dayStart, hours, windNote, seaNote, measured, mNote)
+        return Day(dayStart, hours, windNote, seaNote, measured, mNote, kmaNote, kma.isNotEmpty())
+    }
+
+    // ---------------- 기상청 단기예보 ----------------
+    private class Kma { var tmp: Double? = null; var wsd: Double? = null; var vec: Double? = null; var sky: Int? = null
+        var pty: Int? = null; var pop: Int? = null; var wav: Double? = null }
+    private class KmaError(msg: String) : Exception(msg)
+
+    /** 위도·경도 → 기상청 격자 (Lambert 정각원추) */
+    fun grid(lat: Double, lon: Double): Pair<Int, Int> {
+        val re = 6371.00877 / 5.0
+        val deg = Math.PI / 180.0
+        val slat1 = 30.0 * deg; val slat2 = 60.0 * deg; val olon = 126.0 * deg; val olat = 38.0 * deg
+        var sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+        sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn)
+        var sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+        sf = Math.pow(sf, sn) * Math.cos(slat1) / sn
+        var ro = Math.tan(Math.PI * 0.25 + olat * 0.5)
+        ro = re * sf / Math.pow(ro, sn)
+        var ra = Math.tan(Math.PI * 0.25 + lat * deg * 0.5)
+        ra = re * sf / Math.pow(ra, sn)
+        var theta = lon * deg - olon
+        if (theta > Math.PI) theta -= 2.0 * Math.PI
+        if (theta < -Math.PI) theta += 2.0 * Math.PI
+        theta *= sn
+        val x = Math.floor(ra * Math.sin(theta) + 43.0 + 0.5).toInt()
+        val y = Math.floor(ro - ra * Math.cos(theta) + 136.0 + 0.5).toInt()
+        return x to y
+    }
+
+    /** 가장 최근 발표 (02·05·08·11·14·17·20·23시, 발표 10분 뒤부터) */
+    private fun baseTime(now: Long): Pair<String, String> {
+        val c = java.util.Calendar.getInstance(KST).apply { timeInMillis = now - 15 * 60_000L }
+        val bases = listOf(2, 5, 8, 11, 14, 17, 20, 23)
+        val h = c.get(java.util.Calendar.HOUR_OF_DAY)
+        val b = bases.lastOrNull { it <= h }
+        if (b == null) { c.add(java.util.Calendar.DAY_OF_MONTH, -1); return keyFmt.format(c.time) to "2300" }
+        return keyFmt.format(c.time) to String.format(Locale.US, "%02d00", b)
+    }
+
+    private val kmaCache = HashMap<String, Pair<Long, List<JSONObject>>>()
+
+    private fun kmaForecast(lat: Double, lon: Double, ymd: String): Map<Long, Kma> {
+        val key = BuildConfig.KHOA_KEY
+        if (key.isBlank()) throw KmaError("기상청 예보: 인증키가 앱에 없어요")
+        val (nx, ny) = grid(lat, lon)
+        val (bd, bt) = baseTime(System.currentTimeMillis())
+        val ck = "$nx,$ny,$bd$bt"
+        val items = kmaCache[ck]?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.second ?: run {
+            val q = "/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
+                "&pageNo=1&numOfRows=1500&dataType=JSON&base_date=$bd&base_time=$bt&nx=$nx&ny=$ny"
+            var body: String? = null
+            for (scheme in listOf("https", "http")) {
+                try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {}
+            }
+            val b = body?.trim() ?: throw KmaError("기상청 예보를 못 받았어요 (인터넷 확인)")
+            if (b.startsWith("<")) {
+                if (b.contains("SERVICE_KEY_IS_NOT_REGISTERED") || b.contains("SERVICE ERROR") || b.contains("ACCESS DENIED"))
+                    throw KmaError("기상청 예보: 공공데이터포털 '기상청_단기예보' 활용신청을 확인해 주세요 (승인 뒤 1시간쯤 걸릴 수 있어요)")
+                throw KmaError("기상청 예보를 못 받았어요")
+            }
+            val root = JSONObject(b).let { if (it.has("response")) it.getJSONObject("response") else it }
+            val code0 = root.optJSONObject("header")?.optString("resultCode") ?: ""
+            if (code0 != "00") throw KmaError("기상청 예보를 못 받았어요 ($code0)")
+            val arr = root.optJSONObject("body")?.optJSONObject("items")?.optJSONArray("item") ?: JSONArray()
+            val l = (0 until arr.length()).map { arr.getJSONObject(it) }
+            kmaCache[ck] = System.currentTimeMillis() to l
+            l
+        }
+        val out = HashMap<Long, Kma>()
+        val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
+        items.filter { it.optString("fcstDate") == ymd }.forEach { o ->
+            val t = tf.parse(o.optString("fcstDate") + o.optString("fcstTime"))?.time ?: return@forEach
+            val k = out.getOrPut(t) { Kma() }
+            val v = o.optString("fcstValue")
+            when (o.optString("category")) {
+                "TMP" -> k.tmp = v.toDoubleOrNull()
+                "WSD" -> k.wsd = v.toDoubleOrNull()
+                "VEC" -> k.vec = v.toDoubleOrNull()
+                "SKY" -> k.sky = v.toIntOrNull()
+                "PTY" -> k.pty = v.toIntOrNull()
+                "POP" -> k.pop = v.toIntOrNull()
+                "WAV" -> k.wav = v.toDoubleOrNull()?.takeIf { it >= 0 && it < 30 }
+            }
+        }
+        return out
     }
 
     private fun num(a: JSONArray?, i: Int): Double? = if (a == null || i >= a.length() || a.isNull(i)) null else a.optDouble(i)

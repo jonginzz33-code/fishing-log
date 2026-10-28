@@ -112,8 +112,9 @@ object Store {
     /** 고를 수 있는 종류 (숨긴 것 빼고, 관리자가 정한 순서) */
     val CATS: List<String> get() = allCats().filter { !it.hidden }.map { it.id }
 
-    fun catLabel(c: String): String = allCats().firstOrNull { it.id == c }?.label ?: ""
-    fun catShort(c: String): String = allCats().firstOrNull { it.id == c }?.let { it.short.ifBlank { it.label } } ?: ""
+    /** 관리자가 지운 종류는 "(지운 종류)" */
+    fun catLabel(c: String): String = if (c.isBlank()) "" else allCats().firstOrNull { it.id == c }?.label ?: "(지운 종류)"
+    fun catShort(c: String): String = if (c.isBlank()) "" else allCats().firstOrNull { it.id == c }?.let { it.short.ifBlank { it.label } } ?: "(지운 종류)"
 
     fun catsToJson(list: List<Cat>): String {
         val a = JSONArray()

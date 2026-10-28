@@ -146,7 +146,7 @@ object TideDialog {
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
 
         // ---- 바람 · 파도 · 수온 ----
-        col.addView(Ui.text(a, 15f, Ui.TEXT, true, "바람 · 파도 · 수온"), Ui.lp(a, MATCH, WRAP, top = 18))
+        col.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), Ui.lp(a, MATCH, WRAP, top = 18))
         val wxSummary = Ui.text(a, 14f, Ui.TEXT, false, "")
         col.addView(wxSummary, Ui.lp(a, MATCH, WRAP, top = 4))
         val wxGrid = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
@@ -184,6 +184,8 @@ object TideDialog {
                 hrs.filter { it.wind != null }.maxByOrNull { it.wind!! }?.let {
                     parts.add(String.format(Locale.KOREA, "바람 최대 %.0fm/s (%s시)", it.wind, hFmt.format(Date(it.time)).take(2)))
                 }
+                hrs.mapNotNull { it.temp }.takeIf { it.isNotEmpty() }?.let { parts.add(0, String.format(Locale.KOREA, "기온 %.0f~%.0f℃", it.min(), it.max())) }
+                hrs.mapNotNull { it.pop }.maxOrNull()?.takeIf { it > 0 }?.let { parts.add("비 확률 최대 $it%") }
                 hrs.mapNotNull { it.wave }.maxOrNull()?.let { parts.add(String.format(Locale.KOREA, "파고 최대 %.1fm", it)) }
                 hrs.mapNotNull { it.sst }.takeIf { it.isNotEmpty() }?.let { parts.add(String.format(Locale.KOREA, "수온 약 %.0f℃ (예측)", it.average())) }
                 wxSummary.text = parts.joinToString(" · ")
@@ -196,6 +198,8 @@ object TideDialog {
                         background = Ui.bg(a, Ui.CARD, 10)
                     }
                     c.addView(Ui.text(a, 11f, Ui.SUB, false, "${h}시").apply { gravity = Gravity.CENTER })
+                    // 하늘 (기상청)
+                    if (w.fromKma) c.addView(Ui.text(a, 15f, Ui.TEXT, false, x?.skyIcon()?.ifBlank { "·" } ?: "·").apply { gravity = Gravity.CENTER })
                     val ws = x?.wind
                     val lvColor = when (ws?.let { Weather.windLevel(it) }) { 0 -> Ui.GREEN; 1 -> Color.parseColor("#F2C14E"); 2 -> Ui.ORANGE; else -> Ui.SUB }
                     // 화살표 = 바람이 불어가는 쪽
@@ -206,17 +210,21 @@ object TideDialog {
                     c.addView(Ui.text(a, 12f, lvColor, true, ws?.let { String.format(Locale.KOREA, "%.0f", it) } ?: "-").apply { gravity = Gravity.CENTER })
                     c.addView(Ui.text(a, 10f, Ui.SUB, false, x?.dir?.let { LiveMe.directionName(it) } ?: "").apply { gravity = Gravity.CENTER })
                     c.addView(Ui.text(a, 11f, Ui.BLUE, false, x?.wave?.let { String.format(Locale.KOREA, "%.1fm", it) } ?: "-").apply { gravity = Gravity.CENTER })
+                    // 기온 (기상청)
+                    if (w.fromKma) c.addView(Ui.text(a, 11f, Color.parseColor("#F2C14E"), true, x?.temp?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-").apply { gravity = Gravity.CENTER })
                     wxGrid.addView(c, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (h > 0) leftMargin = dp(3) })
                 }
             }
             val notes = mutableListOf<String>()
             w.measured?.let { notes.add(String.format(Locale.KOREA, "실측 수온 %.1f℃ · %s 관측소 %s", it.temp, it.station, it.at)) }
             if (w.measuredNote.isNotBlank()) notes.add(w.measuredNote)
+            if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
-                notes.add("칸 = 3시간마다 · 화살표 = 바람이 부는 쪽 · 숫자 = 풍속(m/s, 초록 약함 · 노랑 주의 · 주황 강함) · 파랑 = 파고")
+                notes.add("칸 = 3시간마다 · 화살표 = 바람이 부는 쪽 · 숫자 = 풍속(m/s, 초록 약함 · 노랑 주의 · 주황 강함) · 파랑 = 파고" +
+                    if (w.fromKma) " · 맨 위 = 하늘 · 노랑 = 기온" else "")
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
                 if (w.seaNote.isNotBlank()) notes.add(w.seaNote)
-                notes.add("바람·파도·수온 예측: Open-Meteo")
+                notes.add(if (w.fromKma) "기온·하늘·비·바람: 기상청 단기예보 · 돌풍·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
             }
             wxNote.text = notes.joinToString("\n")
             if (w.measured != null) wxSummary.text = wxSummary.text.toString().let { t ->

@@ -19,7 +19,7 @@ object Cloud {
 
     class Group(val id: String, val name: String, val code: String, val owner: String, val types: List<String> = emptyList(),
                 val notice: String = "") {
-        fun typesLabel(): String = types.map { Store.catLabel(it) }.filter { it.isNotBlank() }.joinToString(" · ")
+        fun typesLabel(): String = types.map { Store.catLabel(it) }.filter { it.isNotBlank() && it != "(지운 종류)" }.joinToString(" · ")
     }
 
     class RemoteCatch(val time: Long, val slot: Int, val lat: Double?, val lon: Double?)

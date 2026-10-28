@@ -87,6 +87,9 @@ class MainActivity : Activity() {
     private lateinit var historyBtn: TextView
     private lateinit var accountInfo: TextView
     private lateinit var accountBtn: TextView
+    private lateinit var bandBox: LinearLayout
+    private lateinit var scroller: ScrollView
+    private lateinit var groupFrame: View
     private lateinit var hideRouteBox: CheckBox
     private lateinit var account: AccountUi
 
@@ -372,7 +375,7 @@ class MainActivity : Activity() {
 
         // ---- 그룹 (가로줄로 메뉴와 따로) ----
         col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 20))
-        val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), dp(8), 0) }
+        val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
         groupBtn = Ui.button(this, "그룹 ▼") {
             groupOpen = !groupOpen
             renderGroupPanel()
@@ -386,8 +389,9 @@ class MainActivity : Activity() {
         }
         gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
         groupDot = redDot(0)
-        gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(8) })
+        gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
         col.addView(gFrame, Ui.lp(this, MATCH, WRAP, top = 8))
+        groupFrame = gFrame
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         col.addView(groupBox, Ui.lp(this, MATCH, WRAP))
         col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 16))
@@ -412,15 +416,14 @@ class MainActivity : Activity() {
             else startActivity(Intent(this, BoardActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP, top = 10))
 
-        // 친구 공유 카드
+        // 지금 들어와 있는 그룹 (크게) · 로그인 전엔 로그인 버튼
         val acc = Ui.card(this)
-        accountInfo = Ui.text(this, 14f)
-        accountInfo.setOnClickListener { if (Cloud.active != null) startActivity(Intent(this, GroupActivity::class.java)) }
+        accountInfo = Ui.text(this, 12f, Ui.SUB, false, "지금 들어와 있는 그룹")
+        bandBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         accountBtn = Ui.button(this, "구글 로그인") {
             when {
                 Cloud.user == null -> account.signIn { refreshAccount() }
-                Cloud.active == null -> account.openGroups()
-                else -> startActivity(Intent(this, GroupActivity::class.java))
+                else -> account.openGroups()
             }
         }.apply { minHeight = dp(44); textSize = 14f }
         hideRouteBox = CheckBox(this).apply {
@@ -431,6 +434,7 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, checked -> if (checked != Store.hideRoute) Store.hideRoute = checked }
         }
         acc.addView(accountInfo)
+        acc.addView(bandBox, Ui.lp(this, MATCH, WRAP, top = 6))
         acc.addView(accountBtn, Ui.lp(this, MATCH, WRAP, top = 10))
         acc.addView(hideRouteBox, Ui.lp(this, MATCH, WRAP, top = 4))
         menuBox.addView(acc, Ui.lp(this, MATCH, WRAP, top = 16))
@@ -449,11 +453,12 @@ class MainActivity : Activity() {
         col.addView(View(this), Ui.lp(this, MATCH, dp(24)))
         paintMenu()
 
-        return ScrollView(this).apply {
+        scroller = ScrollView(this).apply {
             setBackgroundColor(Ui.BG)
             isFillViewport = true
             addView(col)
         }
+        return scroller
     }
 
     private fun counterCard(slot: Int, color: Int, ink: Int): View {
@@ -860,19 +865,18 @@ class MainActivity : Activity() {
         shown.forEachIndexed { i, c ->
             if (i % 3 == 0) {
                 line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                catRow.addView(line, Ui.lp(this, MATCH, WRAP, top = if (i == 0) 0 else 8))
+                catRow.addView(line, Ui.lp(this, MATCH, dp(44), top = if (i == 0) 0 else 8))
             }
             val on = c == sel
             line!!.addView(Ui.text(this, 14f, if (on) Ui.BG else Ui.TEXT, true, (if (on) "✓ " else "") + Store.catLabel(c)).apply {
-                gravity = Gravity.CENTER; maxLines = 1
-                minHeight = dp(42)
+                gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
                 background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 22) else Ui.bg(this@MainActivity, Ui.CARD, 22, Ui.LINE)
                 setOnClickListener {
                     if (on) showMessage("지금 낚시 종류: ${Store.catLabel(c)}")
                     else if (Store.current != null) showMessage("출조 중에는 종류를 바꿀 수 없어요 (종료 후 변경)")
                     else { Store.category = c; showMessage("${Store.catLabel(c)}(으)로 바꿨어요") }
                 }
-            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i % 3 > 0) leftMargin = dp(8) })
+            }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i % 3 > 0) leftMargin = dp(8) })
         }
         line?.let { l -> while (l.childCount < 3) l.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
     }
@@ -1011,6 +1015,21 @@ class MainActivity : Activity() {
     private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
 
     /** 맨 아래 그룹 칸: 버튼(빨간 숫자) + 펼치면 그룹 바꾸기 · 새 소식 · 그룹 기능 */
+    /** 메뉴 안 '지금 들어와 있는 그룹' 띠 (종류가 바뀌어도 다시 그림) */
+    private fun renderBand(): View? {
+        if (!::bandBox.isInitialized) return null
+        bandBox.removeAllViews()
+        val band = GroupBand.view(this, true) { openGroupPanel() }
+        if (band != null) bandBox.addView(band)
+        return band
+    }
+
+    /** 메뉴의 '지금 그룹'을 누르면: 그룹 칸을 펼치고 그쪽으로 이동 */
+    private fun openGroupPanel() {
+        if (!groupOpen) { groupOpen = true; renderGroupPanel(); GroupNews.load(false) { if (!isFinishing) renderGroupPanel() } }
+        scroller.post { scroller.smoothScrollTo(0, (groupFrame.top - dp(12)).coerceAtLeast(0)) }
+    }
+
     /** 그룹 칸 안 '낚시 종류' 칩 (그룹에 종류가 하나면 그 하나만) */
     private fun addCatSection() {
         val cats = visibleCats()
@@ -1018,7 +1037,7 @@ class MainActivity : Activity() {
             if (cats.size <= 1) "낚시 종류 (이 그룹은 ${Store.catLabel(cats.firstOrNull() ?: Store.category)})" else "낚시 종류 (눌러서 바꾸기)"),
             Ui.lp(this, MATCH, WRAP, top = 14))
         (catRow.parent as? LinearLayout)?.removeView(catRow)
-        groupBox.addView(catRow, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6); rightMargin = dp(8) })
+        groupBox.addView(catRow, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) })
         renderCats()
     }
 
@@ -1070,7 +1089,7 @@ class MainActivity : Activity() {
                 groupBox.addView(rowL, Ui.lp(this, MATCH, WRAP, top = 2))
             }
             val on = gr.id == activeId
-            val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), dp(8), 0) }
+            val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
             f.addView(Ui.text(this, 14f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true, (if (on) "✓ " else "") + groupLabel(gr)).apply {
                 gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(dp(10), 0, dp(10), 0)
@@ -1088,16 +1107,16 @@ class MainActivity : Activity() {
                 }
             }, android.widget.FrameLayout.LayoutParams(MATCH, dp(42)))
             val n = GroupNews.count(gr.id)
-            f.addView(redDot(n), android.widget.FrameLayout.LayoutParams(WRAP, dp(20), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(8) })
-            rowL!!.addView(f, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i % 2 == 1) leftMargin = dp(4) })
+            f.addView(redDot(n), android.widget.FrameLayout.LayoutParams(WRAP, dp(20), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
+            rowL!!.addView(f, LinearLayout.LayoutParams(0, dp(50), 1f).apply { if (i % 2 == 1) leftMargin = dp(8) })
         }
-        if (gs.size % 2 == 1) rowL?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(4) })
+        if (gs.size % 2 == 1) rowL?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) })
         // 그룹 만들기·가입: 한 줄 전체 폭 (흐린 테두리)
         groupBox.addView(Ui.text(this, 13f, Ui.SUB, true, "+ 그룹 만들기 · 가입").apply {
             gravity = Gravity.CENTER; minHeight = dp(40)
             background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Color.parseColor("#2E4256"))
             setOnClickListener { account.openGroups() }
-        }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(10); rightMargin = dp(8) })
+        }, LinearLayout.LayoutParams(MATCH, dp(42)).apply { topMargin = dp(10) })
         // 낚시 종류 (그룹에 정해진 종류만)
         addCatSection()
 
@@ -1216,16 +1235,17 @@ class MainActivity : Activity() {
         renderGroupPanel()
         GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         val u = Cloud.user
-        if (u == null) {
-            accountInfo.text = "친구와 조과 공유 · 로그인하면 그룹에 올리고, 내 기록도 서버에 백업돼요"
-            accountBtn.text = "구글 로그인"
-        } else {
-            val g = Cloud.active
-            accountInfo.text = if (g == null) "${Cloud.displayName} · 아직 그룹이 없어요"
-            else "그룹 '${g.name}' · 초대 코드 ${g.code}  ›\n눌러서 멤버 · 출조 달력 보기"
-            accountInfo.background = if (g == null) null else Ui.bg(this, Color.parseColor("#1C3A4F"), 10, Ui.LINE)
-            accountInfo.setPadding(dp(12), dp(10), dp(12), dp(10))
-            accountBtn.text = if (g == null) "그룹 만들기 / 가입" else "그룹 · 친구 출조 달력"
+        val band = renderBand()
+        when {
+            u == null -> {
+                accountInfo.text = "친구와 조과 공유 · 로그인하면 그룹에 올리고, 내 기록도 서버에 백업돼요"
+                accountBtn.text = "구글 로그인"; accountBtn.visibility = View.VISIBLE
+            }
+            band == null -> {
+                accountInfo.text = "${Cloud.displayName} · 아직 그룹이 없어요"
+                accountBtn.text = "그룹 만들기 / 가입"; accountBtn.visibility = View.VISIBLE
+            }
+            else -> { accountInfo.text = "지금 들어와 있는 그룹"; accountBtn.visibility = View.GONE }
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
@@ -1316,6 +1336,7 @@ class MainActivity : Activity() {
         updateStatus()
         refreshRemote()
         renderCats()
+        renderBand()
         refreshTideRow()
         val t = Store.current
         placeText.visibility = if (t == null) View.GONE else View.VISIBLE

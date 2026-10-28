@@ -43,8 +43,8 @@ class ScheduleActivity : Activity() {
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "그룹 일정"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         col.addView(top)
-        col.addView(Ui.text(this, 14f, Ui.SUB, false, Cloud.active?.let { "'${it.name}' 그룹 · 그룹원 누구나 일정을 올리고 같이 볼 수 있어요" } ?: ""),
-            Ui.lp(this, MATCH, WRAP, top = 10))
+        GroupBand.view(this, false)?.let { col.addView(it, Ui.lp(this, MATCH, WRAP, top = 12)) }
+        col.addView(Ui.text(this, 13f, Ui.SUB, false, "그룹원 누구나 일정을 올리고 같이 볼 수 있어요"), Ui.lp(this, MATCH, WRAP, top = 8))
         col.addView(Ui.button(this, "+ 일정 올리기", true) { editEvent(null) }, Ui.lp(this, MATCH, WRAP, top = 14))
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(listBox, Ui.lp(this, MATCH, WRAP, top = 6))
