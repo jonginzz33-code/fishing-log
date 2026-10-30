@@ -76,7 +76,7 @@ object MapDialog {
     fun paidMark(cat: String, paid: Boolean?): Boolean = cat == "night" && paid == true
 
     private val dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
-    private val dayLabel = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
+    private val dayLabel = SimpleDateFormat("yyyy년 M월 d일 (E)", Locale.KOREA)
     private val hmFmt = SimpleDateFormat("HH:mm", Locale.KOREA)
 
     private fun speciesLine(items: List<MapDot>): String =
@@ -95,6 +95,23 @@ object MapDialog {
             .setView(android.widget.ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .create()
+        // 이 자리 어종별 마릿수 (많은 순)
+        val sp = items.groupingBy { it.species }.eachCount().entries.sortedByDescending { it.value }
+        if (sp.size >= 2) {
+            val box = LinearLayout(a).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(a, 14), dp(a, 10), dp(a, 14), dp(a, 10))
+                background = Ui.bg(a, Color.parseColor("#13212F"), 12, Ui.LINE)
+            }
+            box.addView(Ui.text(a, 13f, Ui.SUB, true, "이 자리 · ${sp.size}종 ${items.size}마리"))
+            sp.forEach { e ->
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                r.addView(Ui.text(a, 14f, Ui.TEXT, false, e.key), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                r.addView(Ui.text(a, 14f, Ui.ORANGE, true, "${e.value}마리"))
+                box.addView(r, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 3) })
+            }
+            col.addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 8) })
+        }
         groups.forEach { g ->
             val first = g.minByOrNull { it.time }!!
             val card = LinearLayout(a).apply {
@@ -538,7 +555,7 @@ object MapDialog {
         }
     }
 
-    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+    private fun groupLabel(g: Cloud.Group) = g.label()
 
     fun pastModeLabel(mode: String): String = when {
         mode == "mine" -> "내 기록만"

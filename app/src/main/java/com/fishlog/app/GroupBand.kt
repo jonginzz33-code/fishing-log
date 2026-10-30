@@ -28,7 +28,7 @@ object GroupBand {
         return if (types.isEmpty() || sel in types) sel else types.first()
     }
 
-    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+    private fun groupLabel(g: Cloud.Group) = g.label()
 
     /**
      * 종류 색으로 꽉 찬 띠. big = 크게, filled = 그룹 창 맨 위용("지금 여기에서 설정 중이에요" + 역할)

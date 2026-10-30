@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -227,12 +228,61 @@ class TideView(c: Context) : View(c) {
     }
     private val sunTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 9.5f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD }
 
+    // ---- 보이는 구간: 하루(0~24시) 또는 '지금' 가운데 (앞뒤 12시간, 어제·내일 물때 이어 붙임) ----
+    private var days: List<Tide.Day> = emptyList()
+    private var centerNow = false
+    private var panMs = 0L
+    private var sLat: Double? = null; private var sLon: Double? = null
+    private val resetPill = RectF()
+
     /** lat/lon 이 없으면 출조 위치 → 서해 중부 기준으로 일출·일몰 계산 */
     fun set(dd: Tide.Day, t: Store.Trip?, lat: Double? = null, lon: Double? = null) {
-        day = dd; trip = t
+        day = dd; trip = t; days = listOf(dd); centerNow = false; panMs = 0L
         val loc = if (lat != null && lon != null) lat to lon else t?.anyLocation()
-        sun = Sun.times(dd.dateMillis + 12 * 3_600_000L, loc?.first, loc?.second)
+        sLat = loc?.first; sLon = loc?.second
+        sun = Sun.times(dd.dateMillis + 12 * 3_600_000L, sLat, sLon)
         invalidate()
+    }
+
+    /** 오늘: '지금'을 가운데 고정 (prev·next = 어제·내일 물때, 없으면 있는 만큼만) */
+    fun setCentered(prev: Tide.Day?, cur: Tide.Day, next: Tide.Day?, t: Store.Trip?, lat: Double?, lon: Double?) {
+        set(cur, t, lat, lon)
+        days = listOfNotNull(prev, cur, next).sortedBy { it.dateMillis }
+        centerNow = true
+        invalidate()
+    }
+
+    private fun startMs(): Long {
+        val dy = day ?: return 0L
+        if (!centerNow) return dy.dateMillis
+        val lo = days.first().dateMillis; val hi = days.last().dateMillis
+        return (System.currentTimeMillis() - 12 * 3_600_000L + panMs).coerceIn(lo, hi)
+    }
+    private fun valueAt(t: Long): Double? = days.firstNotNullOfOrNull { Tide.valueAt(it, t) }
+
+    // 손가락으로 밀어서 앞뒤로 (가운데 고정 모드에서만)
+    private var downX = 0f; private var lastX = 0f; private var dragging = false
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (!centerNow) return super.onTouchEvent(e)
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> { downX = e.x; lastX = e.x; dragging = false; return true }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                if (!dragging && kotlin.math.abs(e.x - downX) > 8 * d) { dragging = true; parent?.requestDisallowInterceptTouchEvent(true) }
+                if (dragging) {
+                    val msPerPx = 24 * 3_600_000.0 / (width - 48 * d)
+                    panMs -= ((e.x - lastX) * msPerPx).toLong()
+                    panMs = panMs.coerceIn(-36 * 3_600_000L, 36 * 3_600_000L)
+                    lastX = e.x; invalidate()
+                }
+                return true
+            }
+            android.view.MotionEvent.ACTION_UP -> {
+                if (!dragging && panMs != 0L && resetPill.contains(e.x, e.y)) { panMs = 0L; invalidate() }
+                parent?.requestDisallowInterceptTouchEvent(false)
+                return true
+            }
+        }
+        return super.onTouchEvent(e)
     }
 
     /** 눈금 간격(cm): 범위에 맞춰 4~6칸 */
@@ -241,13 +291,18 @@ class TideView(c: Context) : View(c) {
 
     override fun onDraw(canvas: Canvas) {
         val dy = day ?: return
-        val vals = dy.values
-        val stepH = dy.stepMin / 60.0
-        val known = vals.filterNotNull()
+        val start = startMs()
+        val end = start + 24 * 3_600_000L
+        val now = System.currentTimeMillis()
+        // 구간 안을 10분마다
+        val samples = (0..144).map { i -> val tt = start + i * 600_000L; tt to valueAt(tt) }
+        val known = samples.mapNotNull { it.second }
         if (known.isEmpty()) return
-        val exts = Tide.extremes(dy)
-        val lo = minOf(known.min(), exts.minOfOrNull { it.value } ?: known.min())
-        val hi = maxOf(known.max(), exts.maxOfOrNull { it.value } ?: known.max())
+        val exts = days.flatMap { Tide.extremes(it) }.sortedBy { it.time }
+            .fold(mutableListOf<Tide.Extreme>()) { acc, e -> if (acc.none { kotlin.math.abs(it.time - e.time) < 40 * 60_000L }) acc.add(e); acc }
+        val winExts = exts.filter { it.time in start..end }
+        val lo = minOf(known.min(), winExts.minOfOrNull { it.value } ?: known.min())
+        val hi = maxOf(known.max(), winExts.maxOfOrNull { it.value } ?: known.max())
         val range = (hi - lo).coerceAtLeast(0.1)
         val w = width.toFloat(); val h = height.toFloat()
         val left = 34 * d; val right = w - 14 * d
@@ -255,27 +310,43 @@ class TideView(c: Context) : View(c) {
         val showAxis = lay and 1 != 0; val showExt = lay and 2 != 0; val showDiff = lay and 4 != 0
         val sunOn = sun != null && lay and 8 != 0; val showNow = lay and 16 != 0
         val top = 44 * d; val bottom = h - (if (sunOn) 42 else 26) * d
+        fun hourOf(t: Long) = (t - start) / 3600_000.0
         fun x(hour: Double) = (left + (right - left) * hour / 24.0).toFloat()
+        fun xt(t: Long) = x(hourOf(t))
         fun y(v: Double) = (top + (1 - (v - lo) / range) * (bottom - top)).toFloat()
-        fun hourOf(t: Long) = (t - dy.dateMillis) / 3600_000.0
 
-        // 밤 (일출 전 · 일몰 후)
-        sun?.takeIf { sunOn }?.let { s ->
-            val rh = hourOf(s.rise).coerceIn(0.0, 24.0); val sh = hourOf(s.set).coerceIn(0.0, 24.0)
-            if (rh > 0) canvas.drawRect(x(0.0), top - 6 * d, x(rh), bottom, nightP)
-            if (sh < 24) canvas.drawRect(x(sh), top - 6 * d, x(24.0), bottom, nightP)
-            // "☾ 밤" 글씨 (구간이 넉넉할 때만)
-            if (rh >= 2.5) canvas.drawText("☾ 밤", x(rh / 2), top + 12 * d, nightTxt)
-            if (24 - sh >= 2.5) canvas.drawText("☾ 밤", x((sh + 24) / 2), top + 12 * d, nightTxt)
+        // 해·밤: 구간에 걸친 날마다 일출·일몰
+        val suns = if (!sunOn) emptyList() else (-1..1).mapNotNull { k ->
+            Sun.times(start + k * 86_400_000L + 12 * 3_600_000L, sLat, sLon)
+        }
+        if (sunOn && suns.isNotEmpty()) {
+            // 밤 = 일몰 ~ 다음 일출
+            val marks = suns.flatMap { listOf(it.rise to true, it.set to false) }.sortedBy { it.first }
+            var nightStart = start
+            var inNight = marks.firstOrNull()?.second == true  // 첫 표시가 일출이면 그 전은 밤
+            marks.forEach { (tm, isRise) ->
+                if (isRise && inNight) {
+                    val a = maxOf(nightStart, start); val b = minOf(tm, end)
+                    if (b > a) {
+                        canvas.drawRect(xt(a), top - 6 * d, xt(b), bottom, nightP)
+                        if ((b - a) >= 2.5 * 3_600_000L) canvas.drawText("☾ 밤", xt((a + b) / 2), top + 12 * d, nightTxt)
+                    }
+                    inNight = false
+                } else if (!isRise) { nightStart = tm; inNight = true }
+            }
+            if (inNight && nightStart < end) {
+                val a = maxOf(nightStart, start)
+                canvas.drawRect(xt(a), top - 6 * d, xt(end), bottom, nightP)
+                if ((end - a) >= 2.5 * 3_600_000L) canvas.drawText("☾ 밤", xt((a + end) / 2), top + 12 * d, nightTxt)
+            }
         }
         // 낚시한 시간
         val t = trip
         if (t != null) {
-            val s = hourOf(t.start).coerceIn(0.0, 24.0)
-            val e = hourOf(if (t.end > 0) t.end else System.currentTimeMillis()).coerceIn(0.0, 24.0)
-            if (e > s) canvas.drawRect(x(s), top - 6 * d, x(e), bottom, win)
+            val s = maxOf(t.start, start); val e = minOf(if (t.end > 0) t.end else now, end)
+            if (e > s) canvas.drawRect(xt(s), top - 6 * d, xt(e), bottom, win)
         }
-        // 물높이 눈금 (왼쪽 cm + 가로 점선)
+        // 물높이 눈금
         if (showAxis) run {
             val stepCm = niceStep(range * 100)
             var cm = Math.ceil(lo * 100 / stepCm).toInt() * stepCm
@@ -287,11 +358,18 @@ class TideView(c: Context) : View(c) {
             }
             canvas.drawText("cm", left - 4 * d, top - 10 * d, axisTxt)
         }
-        // 1시간 세로선 (6시간마다 진하게)
-        for (hh in 0..24) canvas.drawLine(x(hh.toDouble()), top - 6 * d, x(hh.toDouble()), bottom, if (hh % 6 == 0) gridThick else gridThin)
+        // 1시간 세로선 (시계 기준 정각, 6시간마다 진하게)
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"))
+        val firstHour = ((start + 3_599_999L) / 3_600_000L) * 3_600_000L
+        val hourMarks = generateSequence(firstHour) { it + 3_600_000L }.takeWhile { it <= end }.toList()
+        hourMarks.forEach { hm ->
+            cal.timeInMillis = hm
+            val ch = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            canvas.drawLine(xt(hm), top - 6 * d, xt(hm), bottom, if (ch % 6 == 0) gridThick else gridThin)
+        }
 
-        // 부드러운 곡선 (점 사이를 2차 곡선으로 이음)
-        val pts = vals.mapIndexedNotNull { i, v -> v?.let { x(i * stepH) to y(it) } }
+        // 곡선
+        val pts = samples.mapNotNull { (tt, v) -> v?.let { xt(tt) to y(it) } }
         if (pts.size >= 2) {
             val path = Path()
             path.moveTo(pts[0].first, pts[0].second)
@@ -307,14 +385,13 @@ class TideView(c: Context) : View(c) {
             canvas.drawPath(path, line)
         }
 
-        // 만조↔간조 사이 높이 차이: "↓ 827cm" (분홍 = 빠짐, 초록 = 들어옴)
-        val inDay = exts.filter { hourOf(it.time) in -6.0..30.0 }.sortedBy { it.time }
-        if (showDiff) for (i in 0 until inDay.size - 1) {
-            val a = inDay[i]; val b = inDay[i + 1]
+        // 만조↔간조 높이 차
+        if (showDiff) for (i in 0 until exts.size - 1) {
+            val a = exts[i]; val b = exts[i + 1]
             val mid = (a.time + b.time) / 2
             val mh = hourOf(mid)
             if (mh < 0.5 || mh > 23.5) continue
-            val mv = Tide.valueAt(dy, mid) ?: continue
+            val mv = valueAt(mid) ?: continue
             val up = b.value > a.value
             val txt = (if (up) "↑ " else "↓ ") + Math.round(kotlin.math.abs(b.value - a.value) * 100) + "cm"
             val col = if (up) Ui.GREEN else Color.parseColor("#F07AA0")
@@ -327,11 +404,22 @@ class TideView(c: Context) : View(c) {
             canvas.drawText(txt, cx, cy + 3.5f * d, chipTxt)
         }
 
-        // 지금
-        val nowH = hourOf(System.currentTimeMillis())
+        // 날짜가 바뀌는 곳 (자정): 보라 점선 + 날짜
+        if (centerNow) hourMarks.forEach { hm ->
+            cal.timeInMillis = hm
+            if (cal.get(java.util.Calendar.HOUR_OF_DAY) == 0 && hm > start && hm < end) {
+                canvas.drawLine(xt(hm), top - 6 * d, xt(hm), bottom, setLine)
+                val lbl = java.text.SimpleDateFormat("M/d(E)", java.util.Locale.KOREA).format(java.util.Date(hm)) + " →"
+                sunTxt.textAlign = Paint.Align.LEFT; sunTxt.color = setLine.color
+                canvas.drawText(lbl, xt(hm) + 3 * d, bottom - 4 * d, sunTxt)
+            }
+        }
+
+        // 지금: 선 + 맨 위 "지금 08:35" + 지금 물높이
+        val nowH = hourOf(now)
         if (showNow && nowH in 0.0..24.0) {
             val nx = x(nowH)
-            Tide.valueAt(dy, System.currentTimeMillis())?.let { nv ->
+            valueAt(now)?.let { nv ->
                 val ny = y(nv)
                 canvas.drawCircle(nx, ny, 4 * d, nowHPaint)
                 canvas.drawCircle(nx, ny, 4 * d, ring)
@@ -341,66 +429,84 @@ class TideView(c: Context) : View(c) {
                 canvas.drawRoundRect(cx - tw / 2, ny - 8 * d, cx + tw / 2, ny + 8 * d, 8 * d, 8 * d, nowHPaint)
                 canvas.drawText(txt, cx, ny + 3.5f * d, nowHTxt)
             }
+            nowLine.pathEffect = null; nowLine.strokeWidth = 1.8f * d
             canvas.drawLine(nx, top - 6 * d, nx, bottom, nowLine)
-            val pw = 30 * d
+            val label = "지금 " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(now))
+            nowTxt.textSize = 11 * d
+            val pw = nowTxt.measureText(label) + 14 * d
             val px = nx.coerceIn(left + pw / 2, right - pw / 2)
-            canvas.drawRoundRect(px - pw / 2, 2 * d, px + pw / 2, 16 * d, 7 * d, 7 * d, nowPill)
-            canvas.drawText("지금", px, 13 * d, nowTxt)
+            canvas.drawRoundRect(px - pw / 2, 1 * d, px + pw / 2, 17 * d, 8 * d, 8 * d, nowPill)
+            canvas.drawText(label, px, 13 * d, nowTxt)
         }
+        // 밀어서 옮겼으면 오른쪽 위에 '지금으로'
+        if (centerNow && panMs != 0L) {
+            val lbl = "↺ 지금으로"
+            chipTxt.color = Ui.GREEN
+            val pw = chipTxt.measureText(lbl) + 14 * d
+            resetPill.set(right - pw, 1 * d, right, 18 * d)
+            chipEdge.color = Ui.GREEN
+            canvas.drawRoundRect(resetPill, 8 * d, 8 * d, chipBg)
+            canvas.drawRoundRect(resetPill, 8 * d, 8 * d, chipEdge)
+            canvas.drawText(lbl, resetPill.centerX(), 13 * d, chipTxt)
+        } else resetPill.setEmpty()
 
         // 조과 점
         t?.catches?.forEach { c ->
-            val v = Tide.valueAt(dy, c.time) ?: return@forEach
-            val cx = x(hourOf(c.time)); val cy = y(v)
-            dot.color = Ui.SLOT[c.slot - 1]
-            canvas.drawCircle(cx, cy, 4 * d, dot)
-            canvas.drawCircle(cx, cy, 4 * d, ring)
+            if (c.time !in start..end) return@forEach
+            val v = valueAt(c.time) ?: return@forEach
+            dot.color = Ui.SLOT[(c.slot - 1).coerceIn(0, Ui.SLOT.size - 1)]
+            canvas.drawCircle(xt(c.time), y(v), 4 * d, dot)
+            canvas.drawCircle(xt(c.time), y(v), 4 * d, ring)
         }
 
-        // 만조·간조 (글씨는 그래프 안쪽, 화면 밖으로 안 나가게)
+        // 만조·간조
         val tf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
-        if (showExt) exts.forEach { e ->
-            val hx = x(hourOf(e.time)); val hy = y(e.value)
-            if (hourOf(e.time) < 0 || hourOf(e.time) > 24) return@forEach
+        if (showExt) winExts.forEach { e ->
+            val hx = xt(e.time); val hy = y(e.value)
             dot.color = Ui.TEXT
             canvas.drawCircle(hx, hy, 3.5f * d, dot)
-            // 시각은 흰색, 높이는 노랑으로 두 줄
             val label = (if (e.high) "만조 " else "간조 ") + tf.format(java.util.Date(e.time))
             val hLabel = "${Math.round(e.value * 100)}cm"
             val half = ext.measureText(label) / 2
             val lx = hx.coerceIn(left + half, right - half)
-            val ly = if (e.high) (hy - 20 * d).coerceAtLeast(28 * d) else (hy - 22 * d)
+            val ly = if (e.high) (hy - 20 * d).coerceAtLeast(30 * d) else (hy - 22 * d)
             canvas.drawText(label, lx, ly, ext)
             canvas.drawText(hLabel, lx, ly + 11 * d, hTxt)
         }
 
-        // 일출·일몰 점선 + 시각 (시간 숫자 아래 줄: 만조·간조 글씨와 안 겹침)
-        sun?.takeIf { sunOn }?.let { s ->
+        // 일출·일몰 점선 + 시각
+        if (sunOn) {
             val tf2 = java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA)
-            val rx = x(hourOf(s.rise)); val sx = x(hourOf(s.set))
             val sy = bottom + 32 * d
             sunTxt.textAlign = Paint.Align.CENTER
-            if (hourOf(s.rise) in 0.0..24.0) {
-                canvas.drawLine(rx, top - 6 * d, rx, bottom, riseLine)
-                sunTxt.color = riseLine.color
-                val t1 = "☀ 일출 " + tf2.format(java.util.Date(s.rise))
-                val hw = sunTxt.measureText(t1) / 2
-                canvas.drawText(t1, rx.coerceIn(left + hw, right - hw), sy, sunTxt)
-            }
-            if (hourOf(s.set) in 0.0..24.0) {
-                canvas.drawLine(sx, top - 6 * d, sx, bottom, setLine)
-                sunTxt.color = setLine.color
-                val t2 = "☾ 일몰 " + tf2.format(java.util.Date(s.set))
-                val hw = sunTxt.measureText(t2) / 2
-                canvas.drawText(t2, sx.coerceIn(left + hw, right - hw), sy, sunTxt)
+            suns.forEach { s ->
+                if (s.rise in start..end) {
+                    val rx = xt(s.rise)
+                    canvas.drawLine(rx, top - 6 * d, rx, bottom, riseLine)
+                    sunTxt.color = riseLine.color
+                    val t1 = "☀ 일출 " + tf2.format(java.util.Date(s.rise))
+                    val hw = sunTxt.measureText(t1) / 2
+                    canvas.drawText(t1, rx.coerceIn(left + hw, right - hw), sy, sunTxt)
+                }
+                if (s.set in start..end) {
+                    val sx = xt(s.set)
+                    canvas.drawLine(sx, top - 6 * d, sx, bottom, setLine)
+                    sunTxt.color = setLine.color
+                    val t2 = "☾ 일몰 " + tf2.format(java.util.Date(s.set))
+                    val hw = sunTxt.measureText(t2) / 2
+                    canvas.drawText(t2, sx.coerceIn(left + hw, right - hw), sy, sunTxt)
+                }
             }
         }
 
         // 시간 숫자: 3시간마다 크게, 사이 매시간 작게
         val ty = bottom + 14 * d
-        for (hh in 0..24) {
-            if (hh % 3 == 0) canvas.drawText(hh.toString(), x(hh.toDouble()), ty, major)
-            else canvas.drawText(hh.toString(), x(hh.toDouble()), ty - 1 * d, minor)
+        hourMarks.forEach { hm ->
+            cal.timeInMillis = hm
+            val ch = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            val shown = if (!centerNow && hm == end) 24 else ch
+            if (ch % 3 == 0) canvas.drawText(shown.toString(), xt(hm), ty, major)
+            else canvas.drawText(shown.toString(), xt(hm), ty - 1 * d, minor)
         }
         canvas.drawText("시", (right + w) / 2 + 2 * d, ty + 11 * d, small)
     }
@@ -412,7 +518,7 @@ class TideView(c: Context) : View(c) {
 object TideLayers {
     private val ITEMS = listOf(Triple(1, "cm 눈금", Color.parseColor("#F2C14E")), Triple(2, "만조·간조", Color.parseColor("#EAF1F7")),
         Triple(4, "높이 차 ↑↓", Color.parseColor("#F07AA0")), Triple(8, "일출·일몰·밤", Color.parseColor("#B9A6FF")),
-        Triple(16, "지금", Ui.GREEN))
+        Triple(16, "지금 (오늘만)", Ui.GREEN))
 
     fun view(c: Context, onChange: () -> Unit): View {
         val box = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }

@@ -22,6 +22,7 @@ class HistoryActivity : Activity() {
     private lateinit var chips: LinearLayout
     private lateinit var list: LinearLayout
     private lateinit var selBar: LinearLayout
+    private lateinit var delBar: LinearLayout
     private var selMode = false
     private val selected = LinkedHashSet<Long>()
     private var lastShown: List<Store.Trip> = emptyList()
@@ -30,7 +31,7 @@ class HistoryActivity : Activity() {
     /** 선택 모드 위쪽 띠: 전체 선택 · N개 선택됨 · 취소 / 빠른 선택 / 선택 삭제 */
     private fun renderSelBar() {
         selBar.removeAllViews()
-        if (!selMode) { selBar.visibility = View.GONE; return }
+        if (!selMode) { selBar.visibility = View.GONE; if (::delBar.isInitialized) delBar.visibility = View.GONE; return }
         selBar.visibility = View.VISIBLE
         fun d(v: Int) = Ui.dp(this, v)
         val all = lastShown.isNotEmpty() && lastShown.all { it.id in selected }
@@ -38,40 +39,28 @@ class HistoryActivity : Activity() {
             setPadding(d(10), d(8), d(10), d(8))
             background = Ui.bg(this@HistoryActivity, android.graphics.Color.parseColor("#2A1418"), 14, SEL_RED)
         }
-        r.addView(Ui.text(this, 13f, Ui.TEXT, true, (if (all) "☑" else "☐") + " 전체 선택").apply {
+        r.addView(Ui.text(this, 15f, Ui.TEXT, true, (if (all) "☑" else "☐") + " 전체 선택 (${lastShown.size}개)").apply {
             setOnClickListener { if (all) selected.removeAll(lastShown.map { it.id }.toSet()) else selected.addAll(lastShown.map { it.id }); render() }
         })
         r.addView(Ui.text(this, 13f, android.graphics.Color.parseColor("#FF8A92"), true, "${selected.size}개 선택됨").apply {
             gravity = android.view.Gravity.CENTER
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        r.addView(Ui.text(this, 13f, Ui.SUB, false, "취소").apply { setOnClickListener { selMode = false; selected.clear(); render() } })
+        r.addView(Ui.text(this, 15f, Ui.SUB, true, "  ✕").apply { setOnClickListener { selMode = false; selected.clear(); render() } })
         selBar.addView(r)
-        val q = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        fun quick(label: String, click: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
-            gravity = android.view.Gravity.CENTER; setPadding(0, d(7), 0, d(7))
-            background = Ui.bg(this@HistoryActivity, android.graphics.Color.TRANSPARENT, 12, Ui.LINE)
-            setOnClickListener { click() }
-        }
-        val dayKey = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
-        q.addView(quick("오늘 것만") {
-            val k = dayKey.format(Date()); selected.clear(); selected.addAll(lastShown.filter { dayKey.format(Date(it.start)) == k }.map { it.id }); render()
-        }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        q.addView(quick("이 날짜 선택 ▾") {
-            val c = java.util.Calendar.getInstance()
-            android.app.DatePickerDialog(this, android.R.style.Theme_DeviceDefault_Dialog_Alert, { _, y, m, dd ->
-                val k = String.format(Locale.US, "%04d%02d%02d", y, m + 1, dd)
-                selected.addAll(lastShown.filter { dayKey.format(Date(it.start)) == k }.map { it.id }); render()
-            }, c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH)).show()
-        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = d(6) })
-        q.addView(quick("10마리 이하") {
-            selected.addAll(lastShown.filter { it.catches.size <= 10 }.map { it.id }); render()
-        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = d(6) })
-        selBar.addView(q, Ui.lp(this, MATCH, WRAP, top = 6))
-        if (selected.isNotEmpty()) selBar.addView(Ui.text(this, 15f, android.graphics.Color.WHITE, true, "🗑 선택한 ${selected.size}개 삭제").apply {
-            gravity = android.view.Gravity.CENTER; setPadding(0, d(12), 0, d(12))
-            background = Ui.bg(this@HistoryActivity, SEL_RED, 14)
-            setOnClickListener { confirmDeleteSelected() }
-        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        // 삭제 버튼은 화면 맨 아래 고정
+        delBar.removeAllViews()
+        delBar.visibility = View.VISIBLE
+        delBar.addView(Ui.text(this, 15f, android.graphics.Color.WHITE, true,
+            if (selected.isEmpty()) "지울 출조를 눌러서 고르세요" else "🗑 선택한 ${selected.size}개 삭제").apply {
+            gravity = android.view.Gravity.CENTER; setPadding(0, d(13), 0, d(13))
+            background = Ui.bg(this@HistoryActivity, if (selected.isEmpty()) Ui.LINE else SEL_RED, 14)
+            setOnClickListener { if (selected.isNotEmpty()) confirmDeleteSelected() }
+        }, LinearLayout.LayoutParams(MATCH, WRAP))
+    }
+
+    @Deprecated("back")
+    override fun onBackPressed() {
+        if (selMode) { selMode = false; selected.clear(); render() } else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     private fun confirmDeleteSelected() {
@@ -112,12 +101,6 @@ class HistoryActivity : Activity() {
             LinearLayout.LayoutParams(WRAP, WRAP))
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "지난 출조"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 14) })
-        // 여러 개 골라서 한 번에 지우기
-        top.addView(Ui.text(this, 13f, Ui.TEXT, true, "☑ 선택").apply {
-            setPadding(Ui.dp(this@HistoryActivity, 12), Ui.dp(this@HistoryActivity, 6), Ui.dp(this@HistoryActivity, 12), Ui.dp(this@HistoryActivity, 6))
-            background = Ui.bg(this@HistoryActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
-            setOnClickListener { selMode = !selMode; selected.clear(); render() }
-        })
         col.addView(top)
         selBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(selBar, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -152,7 +135,17 @@ class HistoryActivity : Activity() {
             "로그인하면 출조 기록이 자동으로 서버에 백업돼요. 폰을 바꾸면 같은 구글 계정으로 로그인하고 복원을 누르세요. (사진 원본은 폰에만 저장)"),
             Ui.lp(this, MATCH, WRAP, top = 8))
 
-        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
+        // 목록 + 맨 아래 고정 삭제 띠 (선택 모드에서만)
+        delBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(Ui.dp(this@HistoryActivity, 16), Ui.dp(this@HistoryActivity, 8), Ui.dp(this@HistoryActivity, 16), Ui.dp(this@HistoryActivity, 12))
+            setBackgroundColor(Ui.BG)
+        }
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG)
+            addView(ScrollView(this@HistoryActivity).apply { isFillViewport = true; addView(col) }, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            addView(delBar, LinearLayout.LayoutParams(MATCH, WRAP))
+        })
     }
 
     private var synced = false
@@ -257,6 +250,13 @@ class HistoryActivity : Activity() {
                 setOnClickListener {
                     if (selMode) { if (!selected.remove(t.id)) selected.add(t.id); render() }
                     else startActivity(Intent(this@HistoryActivity, TripActivity::class.java).putExtra("id", t.id))
+                }
+                // 꾹 누르면 선택 모드 (누른 카드는 바로 선택)
+                setOnLongClickListener {
+                    if (!selMode) { selMode = true; selected.clear() }
+                    selected.add(t.id)
+                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    render(); true
                 }
             }
             val head = Ui.row(this).apply { gravity = android.view.Gravity.TOP }

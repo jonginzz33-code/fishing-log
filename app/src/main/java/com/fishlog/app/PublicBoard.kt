@@ -211,7 +211,19 @@ object PublicBoard {
     }
 
     /** 공개 내리기 (내 것 또는 관리자) */
+    fun clearCache() = cache.clear()
+
     fun unpublish(id: String, localTripId: Long?, done: (String?) -> Unit) {
+        // 운영자가 남의 글을 내리면: 휴지통에 보관 + 올린 사람에게 알림
+        val owner = id.substringBefore("_")
+        if (owner.isNotBlank() && owner != Cloud.uid) {
+            Trash.backup(db.collection("public").document(id), owner, "public", "", listOf("photos")) { unpublishNow(id, localTripId, done) }
+            return
+        }
+        unpublishNow(id, localTripId, done)
+    }
+
+    private fun unpublishNow(id: String, localTripId: Long?, done: (String?) -> Unit) {
         val ref = db.collection("public").document(id)
         ref.collection("photos").get().addOnCompleteListener { q ->
             q.result?.documents?.forEach { it.reference.delete() }

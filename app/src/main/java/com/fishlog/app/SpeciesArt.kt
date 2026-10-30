@@ -19,7 +19,7 @@ class SpeciesArtView(c: Context) : View(c) {
         set(v) { if (field != v) { field = v; invalidate() } }
     var ink: Int = Color.BLACK
     /** 그림만 연하게 (이름표는 진하게) */
-    var artAlpha: Float = 1f
+    var artAlpha: Float = 0.45f
     /** 이마 이름표 띠 색 (0 = 이름표 없음) */
     var labelBg: Int = 0
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -32,7 +32,8 @@ class SpeciesArtView(c: Context) : View(c) {
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
     private val cheek = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F07AA0"); alpha = 215 }
 
-    init { alpha = 0.45f; isClickable = false }
+    // 그림 연하기는 artAlpha 로 (이름표는 진하게 보이도록 뷰 자체는 불투명)
+    init { isClickable = false }
 
     override fun onDraw(cv: Canvas) {
         val s = minOf(width, height) / 100f

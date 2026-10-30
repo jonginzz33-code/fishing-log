@@ -23,6 +23,9 @@ object Chat {
 
     const val ALL = "all"
     private const val KEEP_MS = 3 * 24 * 3_600_000L
+    /** 그룹 채팅방은 최대 한 달 */
+    const val GROUP_KEEP_MS = 30L * 24 * 3_600_000L
+    private fun keepOf(room: String) = if (room == ALL) KEEP_MS else GROUP_KEEP_MS
     private const val LIMIT = 80L
 
     class Msg(val id: String, val room: String, val uid: String, val name: String, val text: String,
@@ -55,9 +58,8 @@ object Chat {
         if (k == key && regs.isNotEmpty()) { onChange(); return }
         stopAll()
         key = k
-        val since = System.currentTimeMillis() - KEEP_MS
         regs = rooms().map { r ->
-            ref(r).whereGreaterThan("t", since).orderBy("t", Query.Direction.DESCENDING).limit(LIMIT)
+            ref(r).whereGreaterThan("t", System.currentTimeMillis() - keepOf(r)).orderBy("t", Query.Direction.DESCENDING).limit(LIMIT)
                 .addSnapshotListener { q, _ ->
                     if (q == null) return@addSnapshotListener
                     latest[r] = q.documents.map { d ->
@@ -161,6 +163,30 @@ object Chat {
         val s = e.message ?: ""
         return if (s.contains("PERMISSION_DENIED", true))
             "보낼 수 없어요 (채팅 금지 상태이거나, 보안 규칙이 아직 바뀌지 않았어요)" else s.ifBlank { "보내기 실패 (인터넷 확인)" }
+    }
+
+    /** 관리자: 전체 채팅방만 초기화 (그룹방·1:1 문의방은 그대로) */
+    fun resetAll(done: (String?) -> Unit) {
+        if (!Cloud.isAdmin) return done("운영자만 할 수 있어요")
+        wipe(ref(ALL), done)
+    }
+
+    /** 그룹장: 그룹 채팅방 비우기 */
+    fun clearGroup(gid: String, done: (String?) -> Unit) = wipe(ref(gid), done)
+
+    /** 그룹장이 열면: 한 달 지난 그룹 채팅 지우기 */
+    fun purgeOld(gid: String) {
+        ref(gid).whereLessThan("t", System.currentTimeMillis() - GROUP_KEEP_MS).limit(300).get()
+            .addOnSuccessListener { q -> q.documents.forEach { it.reference.delete() } }
+    }
+
+    private fun wipe(col: com.google.firebase.firestore.CollectionReference, done: (String?) -> Unit) {
+        col.limit(400).get().addOnSuccessListener { q ->
+            if (q.isEmpty) { done(null); return@addOnSuccessListener }
+            val b = db.batch(); q.documents.forEach { b.delete(it.reference) }
+            b.commit().addOnSuccessListener { if (q.size() < 400) done(null) else wipe(col, done) }
+                .addOnFailureListener { done(it.message ?: "지우기 실패") }
+        }.addOnFailureListener { done(it.message ?: "지우기 실패") }
     }
 
     // ---------------- 관리자: 채팅 금지 · 실제 닉네임 ----------------

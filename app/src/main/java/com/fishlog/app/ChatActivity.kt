@@ -132,7 +132,7 @@ class ChatActivity : Activity() {
     }
 
     private fun groupOf(r: String) = Cloud.groups.firstOrNull { it.id == r }
-    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+    private fun groupLabel(g: Cloud.Group) = g.label()
 
     private fun renderAll() { renderTabs(); renderBanner(); renderName(); lastCount = -1; renderList() }
 
@@ -170,7 +170,21 @@ class ChatActivity : Activity() {
         } else {
             box.background = Ui.bg(this, Color.parseColor("#16352A"), 12, Ui.GREEN)
             box.addView(Ui.text(this, 14f, Ui.GREEN, true, "${groupLabel(g)} 채팅방"))
-            box.addView(Ui.text(this, 11f, Color.parseColor("#9FE1CB"), false, "그룹원만 볼 수 있어요 · 알림 없음"))
+            box.addView(Ui.text(this, 11f, Color.parseColor("#9FE1CB"), false, "그룹원만 볼 수 있어요 · 알림 없음 · 최근 한 달 보관"))
+            // 그룹장만: 그룹 채팅방 비우기
+            if (g.owner == Cloud.uid) {
+                Chat.purgeOld(g.id)
+                box.addView(Ui.text(this, 12f, Color.parseColor("#FF8A92"), true, "🗑 그룹 채팅방 비우기 (그룹장)").apply {
+                    setPadding(0, dp(6), 0, 0)
+                    setOnClickListener {
+                        AlertDialog.Builder(this@ChatActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("${groupLabel(g)} 채팅방을 비울까요?")
+                            .setMessage("이 그룹 채팅방의 글을 모두 지워요. 되돌릴 수 없어요.")
+                            .setPositiveButton("비우기") { _, _ -> Chat.clearGroup(g.id) { err -> toast(err ?: "그룹 채팅방을 비웠어요") } }
+                            .setNegativeButton("취소", null).show()
+                    }
+                })
+            }
         }
         banner.addView(box)
         if (Cloud.isAdmin) banner.addView(Ui.text(this, 11f, YELLOW, true, "운영자 보기 · 실제 닉네임 표시 (나만 보여요)"), Ui.lp(this, MATCH, WRAP, top = 4))
@@ -221,13 +235,19 @@ class ChatActivity : Activity() {
         }
         val today = dayKey.format(Date())
         val owner = groupOf(room)?.owner
-        msgs.forEach { m -> list.addView(bubble(m, today, owner), Ui.lp(this, MATCH, WRAP, top = 8)) }
+        // 같은 사람이 10초 안에 이어 쓴 글은 이름·시간 없이 붙임
+        var prev: Chat.Msg? = null
+        msgs.forEach { m ->
+            val cont = prev?.let { p -> p.uid == m.uid && m.time - p.time in 0..10_000L } ?: false
+            list.addView(bubble(m, today, owner, cont), Ui.lp(this, MATCH, WRAP, top = if (cont) 3 else 10))
+            prev = m
+        }
         if (lastCount < 0 || msgs.size > lastCount && (atBottom || msgs.lastOrNull()?.mine == true)) scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
         lastCount = msgs.size
         Chat.markSeen(room)
     }
 
-    private fun bubble(m: Chat.Msg, today: String, owner: String?): View {
+    private fun bubble(m: Chat.Msg, today: String, owner: String?, cont: Boolean = false): View {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (m.mine) Gravity.END else Gravity.START
@@ -252,7 +272,11 @@ class ChatActivity : Activity() {
         }
         head.append(" · ").append(time)
         if (m.edited > 0) head.append(" (수정됨)")
-        col.addView(Ui.text(this, 11f, Ui.SUB, false, "").apply { text = head })
+        // 이름 줄: 내 글은 오른쪽 (말풍선과 같은 쪽)
+        if (!cont) col.addView(Ui.text(this, 11f, Ui.SUB, false, "").apply {
+            text = head
+            gravity = if (m.mine) Gravity.END else Gravity.START
+        }, LinearLayout.LayoutParams(WRAP, WRAP))
         val masked = m.text.count { it == '*' }
         col.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8))
@@ -261,7 +285,7 @@ class ChatActivity : Activity() {
             background = if (m.mine) Ui.bg(this@ChatActivity, Ui.BLUE, 14) else Ui.bg(this@ChatActivity, Color.parseColor("#1E3247"), 14)
             setTextIsSelectable(false)
             setOnLongClickListener { menu(m); true }
-        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(2) })
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
         if (Cloud.isAdmin && masked >= 2 && !m.mine)
             col.addView(Ui.text(this, 10.5f, Color.parseColor("#FF8A92"), false, "욕설 가림 · 꾹 눌러서 삭제·채팅 금지"))
         return col
@@ -279,7 +303,7 @@ class ChatActivity : Activity() {
                     toast(err ?: "차단했어요. '차단 목록'에서 풀 수 있어요"); renderList()
                 }
             })
-            if (Cloud.isAdmin || (room != Chat.ALL && groupOwner)) items.add("글 삭제" to { confirmDelete(m) })
+            if (Cloud.isAdmin || (room != Chat.ALL && groupOwner) || (room == Chat.ALL && Cloud.can("chatMod"))) items.add("글 삭제" to { confirmDelete(m) })
             if (Cloud.isAdmin) {
                 if (m.uid in muted) items.add("채팅 금지 풀기" to {
                     Chat.unmute(m.uid) { err -> toast(err ?: "채팅 금지를 풀었어요"); Chat.mutedUids { muted = it; renderList() } }

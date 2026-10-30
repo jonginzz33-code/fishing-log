@@ -71,6 +71,15 @@ class DotsOverlay(
             art.drawArt(c, top[0].key, cl.x - rad * 0.33f, cl.y, rad * 1.15f, ink)
             art.drawArt(c, top[1].key, cl.x + rad * 0.38f, cl.y + rad * 0.05f, rad * 1.0f, ink)
         } else art.drawArt(c, top[0].key, cl.x, cl.y, rad * 1.5f, ink)
+        // 이마 이름표 (카드와 같은 C안): 가장 많이 잡힌 어종, 주황 자리 빨강 띠 · 하늘 자리 청록 띠
+        val topName = top[0].key
+        tagTxt.textSize = (if (topName.length <= 3) 9.5f else 8.5f) * d
+        val lw = tagTxt.measureText(topName) + 8 * d
+        val ly = cl.y - rad * 0.42f
+        area.color = if (Color.blue(bg) > 180) Color.parseColor("#0B6E86") else Color.parseColor("#E8505B")
+        c.drawRoundRect(cl.x - lw / 2, ly - 7 * d, cl.x + lw / 2, ly + 6 * d, 6.5f * d, 6.5f * d, area)
+        tagTxt.color = Color.WHITE
+        c.drawText(topName, cl.x, ly + 3.2f * d, tagTxt)
         // 마릿수 (오른쪽 위 검은 동그라미)
         val br = 9 * d + (if (n >= 100) 3 * d else if (n >= 10) 1.5f * d else 0f)
         val bx = cl.x + rad * 0.75f; val by = cl.y - rad * 0.75f
@@ -78,6 +87,18 @@ class DotsOverlay(
         num.textSize = 11 * d
         c.drawText(n.toString(), bx, by - (num.descent() + num.ascent()) / 2, num)
         num.textSize = 13 * d
+        // 여러 어종이 겹친 자리: 아래에 한 줄 요약 '주꾸미 외 N종' (누르면 상세)
+        var below = rad + 2 * d
+        if (top.size >= 2) {
+            val s = "${top[0].key} 외 ${top.size - 1}종"
+            tagTxt.textSize = 10 * d
+            val w = tagTxt.measureText(s) + 10 * d
+            area.color = Color.parseColor("#0B1A26")
+            c.drawRoundRect(cl.x - w / 2, cl.y + below, cl.x + w / 2, cl.y + below + 14 * d, 7 * d, 7 * d, area)
+            tagTxt.color = Color.WHITE
+            c.drawText(s, cl.x, cl.y + below + 10.5f * d, tagTxt)
+            below += 16 * d
+        }
         // 친구·게시판: 이름표
         if (src != 0) {
             val names = cl.items.filter { it.src == src }.map { it.who }.distinct()
@@ -85,9 +106,9 @@ class DotsOverlay(
             tagTxt.textSize = 10 * d
             val w = tagTxt.measureText(label) + 10 * d
             area.color = if (src == 1) PINK else PURPLE
-            c.drawRoundRect(cl.x - w / 2, cl.y + rad + 2 * d, cl.x + w / 2, cl.y + rad + 16 * d, 7 * d, 7 * d, area)
+            c.drawRoundRect(cl.x - w / 2, cl.y + below, cl.x + w / 2, cl.y + below + 14 * d, 7 * d, 7 * d, area)
             tagTxt.color = Color.parseColor(if (src == 1) "#4B1528" else "#26215C")
-            c.drawText(label, cl.x, cl.y + rad + 12.5f * d, tagTxt)
+            c.drawText(label, cl.x, cl.y + below + 10.5f * d, tagTxt)
         }
     }
 

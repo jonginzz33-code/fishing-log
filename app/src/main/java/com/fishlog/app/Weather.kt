@@ -44,6 +44,44 @@ object Weather {
         }
     }
 
+    // ---------------- 서버에 그날 날씨 저장 (못 받을 때 대비) ----------------
+    private fun wxDoc(lat: Double, lon: Double, ymd: String) = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        .collection("wx").document(String.format(Locale.US, "%.2f_%.2f_%s", lat, lon, ymd))
+
+    /** 시각 → 저장된 한 시간 (없거나 로그인 전이면 빈 값, 3초 넘으면 포기) */
+    private fun loadSaved(lat: Double, lon: Double, ymd: String): Map<Long, Hour> {
+        if (Cloud.user == null) return emptyMap()
+        return try {
+            val d = com.google.android.gms.tasks.Tasks.await(wxDoc(lat, lon, ymd).get(), 3, java.util.concurrent.TimeUnit.SECONDS)
+            val o = JSONObject(d.getString("h") ?: return emptyMap())
+            fun dd(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optDouble(k) else null
+            fun ii(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optInt(k) else null
+            o.keys().asSequence().mapNotNull { k ->
+                val t = k.toLongOrNull() ?: return@mapNotNull null
+                val j = o.getJSONObject(k)
+                t to Hour(t, dd(j, "w"), dd(j, "d"), dd(j, "g"), dd(j, "wv"), dd(j, "s"), dd(j, "t"), ii(j, "sk"), ii(j, "pt"), ii(j, "p"),
+                    dd(j, "pd"), dd(j, "wd"), j.optBoolean("th", false), ii(j, "c"))
+            }.toMap()
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    /** 받은 값을 서버에 합쳐 저장 (지난 시간 값이 사라지지 않게) */
+    private fun saveDay(lat: Double, lon: Double, ymd: String, hours: List<Hour>) {
+        if (Cloud.user == null || hours.isEmpty()) return
+        try {
+            val o = JSONObject()
+            hours.forEach { h ->
+                val j = JSONObject()
+                fun put(k: String, v: Any?) { if (v != null) j.put(k, v) }
+                put("w", h.wind); put("d", h.dir); put("g", h.gust); put("wv", h.wave); put("s", h.sst); put("t", h.temp)
+                put("sk", h.sky); put("pt", h.pty); put("p", h.pop); put("pd", h.period); put("wd", h.waveDir); put("c", h.wcode)
+                if (h.thunder) j.put("th", true)
+                if (j.length() > 0) o.put(h.time.toString(), j)
+            }
+            wxDoc(lat, lon, ymd).set(mapOf("h" to o.toString(), "t" to System.currentTimeMillis()))
+        } catch (_: Exception) {}
+    }
+
     /** 10노트 ≈ 5.14m/s, 20노트 ≈ 10.3m/s */
     const val KT10 = 5.14
     const val KT20 = 10.29
@@ -119,11 +157,12 @@ object Weather {
         // ---- 바람 ----
         val wind = HashMap<Long, Triple<Double?, Double?, Double?>>()
         val wcodes = HashMap<Long, Int>()
+        val omTemp = HashMap<Long, Double>(); val omPop = HashMap<Long, Int>()
         var windNote = ""
         if (diff in -90..15) {
             try {
                 val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-                    "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code&wind_speed_unit=ms" +
+                    "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m,precipitation_probability&wind_speed_unit=ms" +
                     "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
                 val h = JSONObject(body).getJSONObject("hourly")
                 val t = h.getJSONArray("time")
@@ -132,6 +171,8 @@ object Weather {
                     val ms = isoFmt.parse(t.getString(i))?.time ?: continue
                     wind[ms] = Triple(num(ws, i), num(wd, i), num(wg, i))
                     num(h.optJSONArray("weather_code"), i)?.let { wcodes[ms] = it.toInt() }
+                    num(h.optJSONArray("temperature_2m"), i)?.let { omTemp[ms] = it }
+                    num(h.optJSONArray("precipitation_probability"), i)?.let { omPop[ms] = it.toInt() }
                 }
             } catch (_: Exception) { windNote = "바람 정보를 못 받았어요 (인터넷 확인)" }
         } else windNote = "바람은 3달 전부터 15일 뒤까지만 볼 수 있어요"
@@ -180,15 +221,25 @@ object Weather {
         // 낙뢰: 기상청 초단기예보 (앞으로 6시간)
         val lightning: Set<Long> = if (diff == 0) try { kmaLightning(lat, lon) } catch (_: Exception) { emptySet() } else emptySet()
 
-        val times = (wind.keys + sea.keys + kma.keys).toSortedSet()
+        // 서버에 저장해 둔 그날 값 (최신 값을 못 받은 칸은 이걸로 채움)
+        val saved = loadSaved(lat, lon, ymd)
+        val times = (wind.keys + sea.keys + kma.keys + saved.keys).toSortedSet()
+        var fromSaved = 0
         val hours = times.map { t ->
-            val w = wind[t]; val s = sea[t]; val k = kma[t]; val pd = seaPd[t]
+            val w = wind[t]; val s = sea[t]; val k = kma[t]; val pd = seaPd[t]; val sv = saved[t]
             val kw = k?.wav?.takeIf { it > 0.0 } ?: seaWave[t]
             // 바람은 기상청 값이 있으면 기상청 우선 (돌풍은 Open-Meteo), 파고는 기상청 → 바다 칸 기상청 → Open-Meteo
-            Hour(t, k?.wsd ?: w?.first, k?.vec ?: w?.second, w?.third, kw ?: s?.first, s?.second,
-                k?.tmp, k?.sky, k?.pty, k?.pop, pd?.first, pd?.second,
-                lightning.any { it in t until t + 3 * 3_600_000L }, wcodes[t])
+            // 기온·비: 기상청 → Open-Meteo(지난 날 포함) → 서버에 저장해 둔 값
+            val h = Hour(t, k?.wsd ?: w?.first ?: sv?.wind, k?.vec ?: w?.second ?: sv?.dir, w?.third ?: sv?.gust,
+                kw ?: s?.first ?: sv?.wave, s?.second ?: sv?.sst,
+                k?.tmp ?: omTemp[t] ?: sv?.temp, k?.sky ?: sv?.sky, k?.pty ?: sv?.pty, k?.pop ?: omPop[t] ?: sv?.pop,
+                pd?.first ?: sv?.period, pd?.second ?: sv?.waveDir,
+                lightning.any { it in t until t + 3 * 3_600_000L } || sv?.thunder == true, wcodes[t] ?: sv?.wcode)
+            if (sv != null && (w == null || (k == null && omTemp[t] == null))) fromSaved++
+            h
         }
+        saveDay(lat, lon, ymd, hours)
+        if (fromSaved > 0 && kmaNote.isBlank()) kmaNote = "일부 시간은 최신 값을 못 받아 저장해 둔 값으로 보여요"
 
         // ---- 수온 실측 (오늘·어제) ----
         var measured: Measured? = null
@@ -241,7 +292,17 @@ object Weather {
     private val kmaCache = HashMap<String, Pair<Long, List<JSONObject>>>()
 
     private fun kmaForecast(lat: Double, lon: Double, ymd: String): Map<Long, Kma> {
-        val items = kmaItems(lat, lon)
+        val latest = kmaItems(lat, lon)
+        // 오늘: 이미 지난 시간은 최신 예보에 없어서, 어젯밤 23시 발표 예보로 채움 (0시~지금)
+        val items = if (ymd == keyFmt.format(Date())) {
+            val early = try {
+                val (nx, ny) = grid(lat, lon)
+                val y = keyFmt.format(Date(System.currentTimeMillis() - 86_400_000L))
+                kmaItemsAt(nx, ny, y to "2300")
+            } catch (_: Exception) { emptyList() }
+            val have = latest.map { it.optString("category") + it.optString("fcstDate") + it.optString("fcstTime") }.toHashSet()
+            latest + early.filter { (it.optString("category") + it.optString("fcstDate") + it.optString("fcstTime")) !in have }
+        } else latest
         val out = HashMap<Long, Kma>()
         val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
         items.filter { it.optString("fcstDate") == ymd }.forEach { o ->
@@ -304,10 +365,10 @@ object Weather {
             .mapNotNull { tf.parse(it.optString("fcstDate") + it.optString("fcstTime"))?.time }.toSet()
     }
 
-    private fun kmaItemsAt(nx: Int, ny: Int): List<JSONObject> {
+    private fun kmaItemsAt(nx: Int, ny: Int, base: Pair<String, String>? = null): List<JSONObject> {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) throw KmaError("기상청 예보: 인증키가 앱에 없어요")
-        val (bd, bt) = baseTime(System.currentTimeMillis())
+        val (bd, bt) = base ?: baseTime(System.currentTimeMillis())
         val ck = "$nx,$ny,$bd$bt"
         val items = kmaCache[ck]?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.second ?: run {
             val q = "/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +

@@ -76,6 +76,9 @@ class GroupActivity : Activity() {
         root.addView(calBox, Ui.lp(this, MATCH, WRAP, top = 10))
         dayBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(dayBox, Ui.lp(this, MATCH, WRAP, top = 6))
+        // 맨 아래: 그룹 탈퇴 (그룹원만, 빨갛게 강조)
+        leaveBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(leaveBox, Ui.lp(this, MATCH, WRAP, top = 28))
 
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(root) })
     }
@@ -146,8 +149,48 @@ class GroupActivity : Activity() {
         }
     }
 
+    private lateinit var leaveBox: LinearLayout
+    private val PICK_IMG = 7301
+
+    private fun renderLeave() {
+        leaveBox.removeAllViews()
+        val g = Cloud.active ?: return
+        if (g.owner == Cloud.uid) return
+        leaveBox.addView(Ui.text(this, 15f, Color.WHITE, true, "그룹 탈퇴 · ${g.label()}").apply {
+            gravity = android.view.Gravity.CENTER; setPadding(0, dp(14), 0, dp(14))
+            background = Ui.bg(this@GroupActivity, Color.parseColor("#B3262F"), 14)
+            setOnClickListener {
+                AlertDialog.Builder(this@GroupActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("'${g.label()}'에서 탈퇴할까요?")
+                    .setMessage("그룹 채팅에 탈퇴 알림이 남고, 이 그룹의 공지·일정·출조 기록을 더 볼 수 없어요. 내 폰 기록은 그대로예요.\n다시 들어오려면 초대 코드가 필요해요.")
+                    .setPositiveButton("탈퇴") { _, _ -> Cloud.leaveGroup(g) { err -> toast(err ?: "탈퇴했어요"); load() } }
+                    .setNegativeButton("취소", null).show()
+            }
+        }, LinearLayout.LayoutParams(MATCH, WRAP))
+        leaveBox.addView(Ui.text(this, 11f, Ui.SUB, false, "탈퇴하면 그룹에 알림이 가요"), Ui.lp(this, MATCH, WRAP, top = 4))
+    }
+
+    @Deprecated("result")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_IMG || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        val g = Cloud.active ?: return
+        try {
+            val src = contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) } ?: return
+            val side = minOf(src.width, src.height)
+            val sq = android.graphics.Bitmap.createBitmap(src, (src.width - side) / 2, (src.height - side) / 2, side, side)
+            val small = android.graphics.Bitmap.createScaledBitmap(sq, 320, 320, true)
+            val bos = java.io.ByteArrayOutputStream()
+            small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bos)
+            val b64 = android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+            Cloud.setGroupImage(g.id, b64) { err -> toast(err ?: "대표 이미지를 바꿨어요"); renderHead() }
+        } catch (e: Exception) { toast("사진을 못 읽었어요") }
+    }
+
     private fun renderHead() {
         renderGroups()
+        renderLeave()
         head.removeAllViews()
         val g = Cloud.active
         val card = Ui.card(this)
@@ -159,8 +202,38 @@ class GroupActivity : Activity() {
             head.addView(card)
             return
         }
+        // 대표 이미지 (그룹장: 올리기·바꾸기·지우기)
+        val imgRow = Ui.row(this)
+        val img = android.widget.ImageView(this).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            background = Ui.bg(this@GroupActivity, Color.parseColor("#1C3A4F"), 16); clipToOutline = true
+        }
+        imgRow.addView(img, LinearLayout.LayoutParams(dp(64), dp(64)))
+        Cloud.groupImage(g.id) { b64 ->
+            if (b64 != null) try {
+                val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                img.setImageBitmap(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+            } catch (_: Exception) {}
+        }
+        if (Cloud.isOwner) {
+            val ib = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            ib.addView(Ui.button(this, "🖼 대표 이미지 올리기 · 바꾸기") {
+                @Suppress("DEPRECATION")
+                startActivityForResult(android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).setType("image/*"), PICK_IMG)
+            }.apply { minHeight = dp(38); textSize = 12f })
+            ib.addView(Ui.button(this, "대표 이미지 지우기") {
+                Cloud.setGroupImage(g.id, null) { err -> toast(err ?: "지웠어요"); renderHead() }
+            }.apply { minHeight = dp(34); textSize = 12f }, Ui.lp(this, MATCH, WRAP, top = 4))
+            imgRow.addView(ib, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+        } else imgRow.addView(Ui.text(this, 12f, Ui.SUB, false, "그룹 대표 이미지"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+        card.addView(imgRow, Ui.lp(this, MATCH, WRAP, top = 0))
         val nameRow = Ui.row(this)
-        nameRow.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name), LinearLayout.LayoutParams(0, WRAP, 1f))
+        nameRow.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name).apply {
+            append(android.text.SpannableStringBuilder("  (${g.tag})").apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(14, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+            })
+        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { topMargin = dp(8) })
         if (Cloud.isOwner) {
             nameRow.addView(Ui.button(this, "✎ 이름") { askRename(g.name) }.apply { minHeight = dp(40); textSize = 13f },
                 LinearLayout.LayoutParams(WRAP, WRAP))

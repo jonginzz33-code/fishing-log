@@ -119,6 +119,11 @@ class MainActivity : Activity() {
     private lateinit var chatBtn: TextView
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
+    private lateinit var inqBadge: TextView
+    private fun paintInquiry() {
+        if (!::inqBadge.isInitialized || Cloud.user == null) return
+        Inquiry.unread { n -> if (!isFinishing) { inqBadge.text = "$n"; inqBadge.visibility = if (n > 0) View.VISIBLE else View.GONE } }
+    }
     private val chatListener: () -> Unit = { paintChat(); renderGroupPanel() }
 
     /** 채팅 버튼: 접속 인원 + 안 읽은 글 수 */
@@ -184,8 +189,14 @@ class MainActivity : Activity() {
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
     }
 
+    private var consentOpen = false
     override fun onResume() {
         super.onResume()
+        // 처음 한 번: 위치·개인정보 동의 (동의해야 사용)
+        if (!Consent.ok(this)) {
+            if (!consentOpen) { consentOpen = true; Consent.show(this) { consentOpen = false; recreate() } }
+            return
+        }
         if (crashShown || gated) return
         // 관리자가 이용 정지한 계정·폰이면 막는 화면만
         if (Moderation.bannedCached) { crashShown = true; Moderation.showBlockedScreen(this); return }
@@ -201,6 +212,7 @@ class MainActivity : Activity() {
         Cloud.addListener(cloudListener)
         Live.addListener(liveListener)
         GroupNews.startLive(newsLive)
+        paintInquiry()
         if (Cloud.user != null) {
             Chat.start(chatListener)
             Chat.startPresence { n -> chatOnline = n; paintChat() }
@@ -213,6 +225,8 @@ class MainActivity : Activity() {
         if (!cloudLoaded && Cloud.user != null) {
             cloudLoaded = true
             Cloud.refresh()
+            Cloud.loadMyPerms()
+            Trash.checkNotices(this)
             Cloud.backupPending()
             Cloud.flushDeletes()
         }
@@ -343,7 +357,8 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(2), dp(8), dp(2))
         }, LinearLayout.LayoutParams(WRAP, dp(48)))
         // 채팅 버튼: '채팅' + 작은 글씨 '접속 N명', 안 읽은 글은 빨간 숫자
-        val chatBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        // 빨간 숫자가 잘리지 않게: 위·오른쪽에 여유 칸을 두고 그 안에 숫자를 그림
+        val chatBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
         chatBtn = smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }.apply {
             setPadding(dp(8), dp(2), dp(8), dp(2))
             setLineSpacing(0f, 0.95f)
@@ -355,21 +370,32 @@ class MainActivity : Activity() {
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
             visibility = View.GONE
         }
-        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(17), Gravity.TOP or Gravity.END).apply { topMargin = -dp(7); rightMargin = -dp(5) })
-        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6); rightMargin = dp(6) })
+        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(9); rightMargin = -dp(7) })
+        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6); rightMargin = dp(2) })
         paintChat()
-        // (그룹은 맨 아래 '그룹' 칸으로 옮김)
-        header.addView(Ui.text(this, 18f, Ui.TEXT, true, "?").apply {
+        // 1:1 문의 (나와 운영자만): 채팅 옆 ✉, 안 읽은 답장은 빨간 점
+        val inqBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
+        inqBox.addView(Ui.text(this, 17f, Ui.TEXT, true, "✉").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
-            setOnClickListener { startActivity(Intent(this@MainActivity, HelpActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dp(40), dp(40)))
+            setOnClickListener {
+                if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
+                else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
+            }
+        }, android.widget.FrameLayout.LayoutParams(dp(40), dp(40)))
+        inqBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
+        }
+        inqBox.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(9); rightMargin = -dp(7) })
+        header.addView(inqBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(2) })
+        // (✉ 문의가 들어가서 '?' 설명서는 ☰ 메뉴의 '사용 설명서'로)
         // 개인 설정 (톱니바퀴)
         header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(6) })
+        }, LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(2) })
         col.addView(header)
 
         // 낚시 종류 칩은 맨 아래 '그룹' 칸 안에서 고름 (renderGroupPanel)
@@ -471,6 +497,12 @@ class MainActivity : Activity() {
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }
         bottomRow.addView(menuBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8); topMargin = dp(8) })
+        // 총관리자(나)에게만: 관리자 메뉴
+        adminMenuBtn = Ui.button(this, "🛠 관리자") { openAdminMenu() }.apply {
+            setTextColor(Color.parseColor("#F2C14E")); background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 14, Color.parseColor("#F2C14E"))
+            visibility = View.GONE
+        }
+        bottomRow.addView(adminMenuBtn, LinearLayout.LayoutParams(0, WRAP, 0.9f).apply { leftMargin = dp(8); topMargin = dp(8) })
         col.addView(bottomRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
         // 메뉴 창 안에 들어갈 내용 (창을 열 때 붙임)
@@ -484,6 +516,10 @@ class MainActivity : Activity() {
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
+        menuBox.addView(Ui.button(this, "📦 나만의 재고표 (준비물 · 봉돌 수량)") { Inventory.show(this) }, Ui.lp(this, MATCH, WRAP, top = 10))
+        menuBox.addView(Ui.button(this, "🗑 휴지통 (남이 지운 내 조과 · 30일)") {
+            if (Cloud.user == null) showMessage("구글 로그인이 필요해요") else Trash.show(this)
+        }, Ui.lp(this, MATCH, WRAP, top = 10))
         historyBtn = Ui.button(this, "지난 출조 · 내 기록 보관함") {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
@@ -778,7 +814,7 @@ class MainActivity : Activity() {
             val canShare = Cloud.user != null && t.catches.isNotEmpty()
             val groups = if (Cloud.user != null) Cloud.groups else emptyList()
             val catName = Store.catLabel(t.cat.ifBlank { Store.category })
-            fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+            fun groupLabel(g: Cloud.Group) = g.label()
             val allBox = CheckBox(this).apply {
                 text = "가입한 그룹 전체에 올리기 (" + groups.joinToString(", ") { groupLabel(it) } + ")"
                 setTextColor(Ui.TEXT); textSize = 14f
@@ -1092,7 +1128,7 @@ class MainActivity : Activity() {
         visibility = if (n > 0) View.VISIBLE else View.GONE
     }
 
-    private fun groupLabel(g: Cloud.Group) = if (g.name.trim().endsWith("그룹")) g.name else "${g.name} 그룹"
+    private fun groupLabel(g: Cloud.Group) = g.label()
 
     /** 맨 아래 그룹 칸: 버튼(빨간 숫자) + 펼치면 그룹 바꾸기 · 새 소식 · 그룹 기능 */
     /** 메뉴 안 '지금 들어와 있는 그룹' 띠 (종류가 바뀌어도 다시 그림) */
@@ -1165,6 +1201,30 @@ class MainActivity : Activity() {
             groupsAt = System.currentTimeMillis()
             Cloud.refresh { GroupNews.load(true) { if (!isFinishing) renderGroupPanel() } }
         } else GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
+    }
+
+    private lateinit var adminMenuBtn: TextView
+
+    /** 총관리자 메뉴 */
+    private fun openAdminMenu() {
+        if (!Cloud.isAdmin) return
+        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화")
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🛠 관리자 메뉴")
+            .setItems(items.toTypedArray()) { _, i ->
+                when (i) {
+                    0 -> startActivity(Intent(this, InquiryActivity::class.java))
+                    1 -> startActivity(Intent(this, AdminActivity::class.java))
+                    2 -> speciesBtn.performClick()
+                    3 -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("전체 채팅방을 초기화할까요?")
+                        .setMessage("전체 채팅방 글만 모두 지워요. 그룹 채팅방과 1:1 문의방은 그대로예요. 되돌릴 수 없어요.")
+                        .setPositiveButton("초기화") { _, _ -> Chat.resetAll { err -> showMessage(err ?: "전체 채팅방을 초기화했어요") } }
+                        .setNegativeButton("취소", null).show()
+                    else -> {}
+                }
+            }
+            .setNegativeButton("닫기", null).show()
     }
 
     private fun openMenuDialog() {
@@ -1434,8 +1494,10 @@ class MainActivity : Activity() {
             else -> { accountInfo.text = "지금 들어와 있는 그룹"; accountBtn.visibility = View.GONE }
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
-        adminBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
-        speciesBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        // 관리자 기능은 '🛠 관리자' 메뉴로 (일반 메뉴는 모두 같게)
+        adminBtn.visibility = View.GONE
+        speciesBtn.visibility = View.GONE
+        if (::adminMenuBtn.isInitialized) adminMenuBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         GroupNews.startLive(newsLive)
         // 그룹 목록이 오면 같이 낚시 중 실시간 연결 바로 다시 붙이기
         if (Store.current != null) Live.watch()

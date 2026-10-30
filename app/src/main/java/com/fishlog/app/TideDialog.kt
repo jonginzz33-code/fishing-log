@@ -134,6 +134,7 @@ object TideDialog {
         val head = Ui.text(a, 16f, Ui.TEXT, true, "")
         col.addView(head, Ui.lp(a, MATCH, WRAP, top = 10))
         val graph = TideView(a)
+
         col.addView(TideLayers.view(a) { graph.invalidate() }, Ui.lp(a, MATCH, WRAP, top = 8))
         col.addView(graph, Ui.lp(a, MATCH, dp(306), top = 8))
         // 물세기: 그날 % + 시간별 물흐름 세기
@@ -183,6 +184,9 @@ object TideDialog {
         // 상세 페이지처럼 화면을 거의 꽉 채우게
         dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
             (a.resources.displayMetrics.heightPixels * 0.92).toInt())
+        // 1분마다 다시 그림 ('지금' 선·시각)
+        val tick = object : Runnable { override fun run() { if (dlg.isShowing) { graph.invalidate(); graph.postDelayed(this, 60_000L) } } }
+        graph.postDelayed(tick, 60_000L)
 
         fun renderWeather(w: Weather.Day) {
             if (w.dayStart == today && w.measured != null) todayMeasured = w.measured
@@ -224,7 +228,15 @@ object TideDialog {
                     val rowStart = w.dayStart + h * 3_600_000L
                     val isNow = now >= rowStart && now < rowStart + 3 * 3_600_000L
                     // 시각
-                    val tcell = Ui.text(a, 13f, Ui.TEXT, true, "${h}시").apply { if (isNow) append("\n지금") }
+                    val isPast = rowStart + 3 * 3_600_000L <= now
+                    val tcell = Ui.text(a, 13f, Ui.TEXT, true, "${h}시").apply {
+                        if (isNow) append("\n지금")
+                        // 지나간 시간: 예보가 아니라 그때 값(기록)
+                        else if (isPast) append(android.text.SpannableStringBuilder("\n기록").apply {
+                            setSpan(android.text.style.AbsoluteSizeSpan(9, true), 0, length, 0)
+                            setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+                        })
+                    }
                     // 하늘: 그림 뒤 색 동그라미 (☀ 노랑 · ⛅ 그대로 · ☁ 파랑 · 🌧 진한 파랑)
                     val icon = x?.skyIcon().orEmpty()
                     val skyBg = Weather.iconBg(icon)
@@ -325,6 +337,13 @@ object TideDialog {
                 if (!dlg.isShowing || id != loadId) return@fetch
                 if (day == null) { info.text = err ?: "불러오기 실패"; strength.text = ""; return@fetch }
                 graph.set(day, t, lat, lon)
+                // 오늘: '지금'을 가운데 고정 (어제·내일 물때를 이어 붙임)
+                if (cur == today) {
+                    var prev: Tide.Day? = null; var next: Tide.Day? = null; var got = 0
+                    fun done() { if (++got == 2 && dlg.isShowing && id == loadId) graph.setCentered(prev, day, next, t, lat, lon) }
+                    Tide.fetch(a, lat, lon, noon - 86_400_000L) { d2, _ -> prev = d2; done() }
+                    Tide.fetch(a, lat, lon, noon + 86_400_000L) { d2, _ -> next = d2; done() }
+                }
                 info.text = describe(day, t)
                 src.text = day.source + "\n물때 단계: 실제 그믐 시각으로 계산 (서해 7물때식)"
                 Tide.strength(a, day) { st ->

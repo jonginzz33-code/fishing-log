@@ -75,9 +75,9 @@ class AccountUi(private val a: Activity) {
         if (Cloud.user == null) { signIn { openGroups() }; return }
         val gs = Cloud.groups
         val items = mutableListOf<String>()
-        gs.forEach { g -> items.add((if (g.id == Cloud.active?.id) "✓ " else "    ") + "${g.name}  (코드 ${g.code})") }
+        gs.forEach { g -> items.add((if (g.id == Cloud.active?.id) "✓ " else "    ") + "${g.label()}  · 초대 코드 ${g.code}") }
         val base = items.size
-        items.add("＋ 새 그룹 만들기")
+        items.add(if (Cloud.can("group")) "＋ 새 그룹 만들기" else "＋ 새 그룹 만들기 (운영자 허용 필요)")
         items.add("＋ 초대 코드로 가입")
         if (Cloud.active != null) {
             items.add("그룹 초대 코드 보내기")
@@ -90,6 +90,10 @@ class AccountUi(private val a: Activity) {
             .setItems(items.toTypedArray()) { _, which ->
                 when {
                     which < base -> { Cloud.setActive(gs[which].id); toast("'${gs[which].name}' 선택") }
+                    items[which].startsWith("＋ 새") && !Cloud.can("group") ->
+                        AlertDialog.Builder(a, theme).setTitle("그룹 만들기는 허용된 사람만 할 수 있어요")
+                            .setMessage("운영자에게 '그룹 만들기' 권한을 요청해 주세요.\n메인 맨 위 ✉ 1:1 문의로 보낼 수 있어요.\n\n초대 코드가 있으면 '초대 코드로 가입'은 누구나 할 수 있어요.")
+                            .setPositiveButton("확인", null).show()
                     items[which].startsWith("＋ 새") -> askText("새 그룹 이름", "예: 낚시 모임") { name ->
                         askTypes("어떤 낚시 그룹인가요? (여러 개 선택 가능)", emptyList()) { types ->
                             Cloud.createGroup(name, types) { err -> toast(err ?: "그룹을 만들었어요. 초대 코드: ${Cloud.active?.code}") }

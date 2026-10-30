@@ -49,6 +49,66 @@ class BoardActivity : Activity() {
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
 
     private fun dp(v: Int) = Ui.dp(this, v)
+
+    // ---- 꾹 눌러서 여러 개 선택 (내 글만, 운영자는 모든 글) ----
+    private lateinit var delBar: LinearLayout
+    private var selMode = false
+    private val selected = LinkedHashSet<String>()
+    private var selectable: List<PublicBoard.PTrip> = emptyList()
+    private val SEL_RED = android.graphics.Color.parseColor("#E8505B")
+    private fun canSelect(t: PublicBoard.PTrip) = Cloud.isAdmin || t.owner == Cloud.uid
+
+    private fun selHeader(): View {
+        val all = selectable.isNotEmpty() && selectable.all { it.id in selected }
+        val r = Ui.row(this).apply {
+            setPadding(dp(10), dp(9), dp(10), dp(9))
+            background = Ui.bg(this@BoardActivity, android.graphics.Color.parseColor("#2A1418"), 14, SEL_RED)
+        }
+        r.addView(Ui.text(this, 15f, Ui.TEXT, true, (if (all) "☑" else "☐") + " 전체 선택 (${selectable.size}개)").apply {
+            setOnClickListener { if (all) selected.clear() else selected.addAll(selectable.map { it.id }); render() }
+        })
+        r.addView(Ui.text(this, 13f, android.graphics.Color.parseColor("#FF8A92"), true, "${selected.size}개 선택됨").apply {
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        r.addView(Ui.text(this, 15f, Ui.SUB, true, "  ✕").apply { setOnClickListener { endSel() } })
+        return r
+    }
+
+    private fun paintDelBar() {
+        delBar.removeAllViews()
+        if (!selMode) { delBar.visibility = View.GONE; return }
+        delBar.visibility = View.VISIBLE
+        delBar.addView(Ui.text(this, 15f, android.graphics.Color.WHITE, true,
+            if (selected.isEmpty()) "내릴 글을 눌러서 고르세요" else "🗑 선택한 ${selected.size}개 내리기").apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(13), 0, dp(13))
+            background = Ui.bg(this@BoardActivity, if (selected.isEmpty()) Ui.LINE else SEL_RED, 14)
+            setOnClickListener { if (selected.isNotEmpty()) confirmRemoveSelected() }
+        }, LinearLayout.LayoutParams(MATCH, WRAP))
+    }
+
+    private fun endSel() { selMode = false; selected.clear(); render() }
+
+    @Deprecated("back")
+    override fun onBackPressed() { if (selMode) endSel() else @Suppress("DEPRECATION") super.onBackPressed() }
+
+    private fun confirmRemoveSelected() {
+        val ts = all.filter { it.id in selected }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("${ts.size}개 공개 출조를 내릴까요?")
+            .setMessage("전체 게시판과 포인트 도감 계산에서 빠져요. 각자의 폰 기록과 그룹 공유는 그대로예요.")
+            .setPositiveButton("${ts.size}개 내리기") { _, _ ->
+                var left = ts.size; var fail = 0
+                ts.forEach { t ->
+                    val local = if (t.owner == Cloud.uid) t.id.substringAfter("_").toLongOrNull() else null
+                    PublicBoard.unpublish(t.id, local) { err ->
+                        if (err != null) fail++ else all = all.filter { it.id != t.id }
+                        left--
+                        if (left == 0) { toast(if (fail == 0) "${ts.size}개를 내렸어요" else "${fail}개는 못 내렸어요"); endSel() }
+                    }
+                }
+            }
+            .setNegativeButton("취소", null).show()
+    }
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,13 +135,24 @@ class BoardActivity : Activity() {
 
         tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(this, MATCH, WRAP, top = 10))
+        // 종류 칩: 글자가 줄바꿈되지 않게 가로로 밀어서 보기
         catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        col.addView(catRow, Ui.lp(this, MATCH, WRAP, top = 10))
+        col.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(catRow) },
+            Ui.lp(this, MATCH, WRAP, top = 10))
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 8))
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(listBox, Ui.lp(this, MATCH, WRAP, top = 6))
-        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
+        // 맨 아래 고정 띠 (꾹 눌러 선택할 때만)
+        delBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(dp(16), dp(8), dp(16), dp(12)); setBackgroundColor(Ui.BG)
+        }
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG)
+            addView(ScrollView(this@BoardActivity).apply { isFillViewport = true; addView(col) }, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            addView(delBar, LinearLayout.LayoutParams(MATCH, WRAP))
+        })
         renderControls()
         load()
     }
@@ -128,7 +199,7 @@ class BoardActivity : Activity() {
         (listOf("") + Store.CATS).forEachIndexed { i, c ->
             catRow.addView(pill(if (c == "") "전체" else Store.catShort(c), cat == c, 13f) {
                 cat = c; species = null; renderControls(); render()
-            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(6) })
+            }.apply { maxLines = 1 }, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) })
         }
         periodRow.removeAllViews()
         listOf("최근 1개월", "3개월", "전체 기간").forEachIndexed { i, s ->
@@ -287,17 +358,37 @@ class BoardActivity : Activity() {
         listBox.addView(Ui.button(this, if (listOpen) "최근 공개 출조 접기 ▲" else "최근 공개 출조 ${list.size}개 보기 ▼") {
             listOpen = !listOpen; render()
         }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 18))
-        if (!listOpen) return
+        if (!listOpen) { paintDelBar(); return }
+        selectable = list.filter { canSelect(it) }
+        selected.retainAll(selectable.map { it.id }.toSet())
+        if (selMode) listBox.addView(selHeader(), Ui.lp(this, MATCH, WRAP, top = 10))
+        paintDelBar()
         list.forEach { t ->
+            val picked = t.id in selected
             val c = Ui.card(this).apply {
                 isClickable = true
-                setOnClickListener { tripDetail(t) }
-                if (Cloud.isAdmin || t.owner == Cloud.uid) {
+                if (selMode && picked) background = Ui.bg(this@BoardActivity, Ui.CARD, 14, SEL_RED)
+                if (selMode && !canSelect(t)) alpha = 0.5f
+                setOnClickListener {
+                    if (selMode) { if (canSelect(t)) { if (!selected.remove(t.id)) selected.add(t.id); render() } }
+                    else tripDetail(t)
+                }
+                // 꾹 누르면: 내 글(운영자는 모든 글)은 선택 모드, 남의 글은 지금처럼 차단 메뉴(tripDetail 안)
+                if (canSelect(t)) {
                     isLongClickable = true
-                    setOnLongClickListener { askRemove(t); true }
+                    setOnLongClickListener {
+                        if (!selMode) { selMode = true; selected.clear() }
+                        selected.add(t.id)
+                        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        render(); true
+                    }
                 }
             }
             val r = Ui.row(this)
+            if (selMode && canSelect(t)) r.addView(Ui.text(this, 14f, android.graphics.Color.WHITE, true, if (picked) "✓" else "").apply {
+                gravity = Gravity.CENTER
+                background = if (picked) Ui.bg(this@BoardActivity, SEL_RED, 6) else Ui.bg(this@BoardActivity, android.graphics.Color.TRANSPARENT, 6, Ui.SUB)
+            }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(10) })
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
                 (if (t.cat.isNotBlank()) " · " + Store.catShort(t.cat) else "") + " · " +
                 Tide.mulName(t.start).substringBefore(" ·")), LinearLayout.LayoutParams(0, WRAP, 1f))

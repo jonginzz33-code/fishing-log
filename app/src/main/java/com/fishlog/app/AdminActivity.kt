@@ -62,7 +62,7 @@ class AdminActivity : Activity() {
     private fun load() {
         listBox.removeAllViews()
         listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 10))
-        var left = 6
+        var left = 7
         var err: String? = null
         fun step() { left--; if (left == 0) render(err) }
         Cloud.adminUsers { list, e -> users = list ?: emptyList(); if (list == null) err = e; step() }
@@ -71,7 +71,9 @@ class AdminActivity : Activity() {
         Moderation.loadLimit { step() }
         Cloud.loadCats { step() }
         Cloud.loadMinVersion { v -> minVer = v; step() }
+        Cloud.allPerms { m -> perms = m; step() }
     }
+    private var perms: Map<String, Set<String>> = emptyMap()
 
     private var nickReqs: List<Cloud.NickRequest> = emptyList()
 
@@ -394,6 +396,25 @@ class AdminActivity : Activity() {
             }
             c.addView(Ui.text(this, 12f, if (dev.isBlank()) Ui.SUB else Ui.BLUE, false,
                 if (dev.isBlank()) "기기: 아직 모름 (v1.6 이상으로 접속하면 표시)" else "기기: $dev"), Ui.lp(this, MATCH, WRAP, top = 2))
+            // 권한 체크박스 (기본 모두 꺼짐, 운영자가 켜고 끔)
+            if (u.uid != Cloud.uid) {
+                val pr = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(6), dp(10), dp(6)); background = Ui.bg(this@AdminActivity, android.graphics.Color.parseColor("#0F2233"), 10) }
+                pr.addView(Ui.text(this, 12f, Ui.SUB, true, "권한"))
+                Cloud.PERMS.forEach { (key, label) ->
+                    pr.addView(android.widget.CheckBox(this).apply {
+                        text = label; setTextColor(Ui.TEXT); textSize = 14f
+                        buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
+                        isChecked = key in (perms[u.uid] ?: emptySet())
+                        setOnCheckedChangeListener { _, on ->
+                            Cloud.setPerm(u.uid, key, on) { e ->
+                                if (e != null) android.widget.Toast.makeText(this@AdminActivity, e, android.widget.Toast.LENGTH_LONG).show()
+                                else perms = perms + (u.uid to ((perms[u.uid] ?: emptySet()).let { if (on) it + key else it - key }))
+                            }
+                        }
+                    })
+                }
+                c.addView(pr, Ui.lp(this, MATCH, WRAP, top = 8))
+            }
             if (u.uid != Cloud.uid) {
                 if (bans.any { it.uid == u.uid }) c.addView(Ui.text(this, 13f, Ui.ORANGE, true, "정지됨 · 위 '정지 관리'에서 해제"), Ui.lp(this, MATCH, WRAP, top = 6))
                 else c.addView(Ui.button(this, "이용 정지") { askBan(u.uid) }.apply { minHeight = dp(40); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))

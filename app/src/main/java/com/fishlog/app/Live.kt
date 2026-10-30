@@ -105,6 +105,7 @@ object Live {
     /** 올리고 받아오기. force=false 면 5분이 안 지났을 땐 건너뜀 */
     fun sync(force: Boolean = false) {
         val me = Cloud.uid ?: return
+        if (Cloud.isInitialized() && !Consent.shareLive(Cloud.appContext)) return
         val t = Store.current ?: return
         val groups = Cloud.groups
         if (groups.isEmpty()) return
@@ -210,6 +211,7 @@ object Live {
 
     private fun pushCounts() {
         val me = Cloud.uid ?: return
+        if (Cloud.isInitialized() && !Consent.shareLive(Cloud.appContext)) return
         val t = Store.current ?: return
         val doc = hashMapOf<String, Any>(
             "name" to Cloud.displayName, "t" to System.currentTimeMillis(), "start" to t.start, "cat" to t.cat,

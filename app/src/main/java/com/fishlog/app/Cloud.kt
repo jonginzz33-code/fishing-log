@@ -20,6 +20,10 @@ object Cloud {
     class Group(val id: String, val name: String, val code: String, val owner: String, val types: List<String> = emptyList(),
                 val notice: String = "") {
         fun typesLabel(): String = types.map { Store.catLabel(it) }.filter { it.isNotBlank() && it != "(지운 종류)" }.joinToString(" · ")
+        /** 같은 이름 그룹 구분용 3자리 (영문·숫자, 그룹마다 고정) */
+        val tag: String get() = id.uppercase().filter { it in 'A'..'Z' || it in '0'..'9' }.take(3)
+        /** "해루질 그룹 (AK1)" */
+        fun label(): String = (if (name.trim().endsWith("그룹")) name else "$name 그룹") + " ($tag)"
     }
 
     class RemoteCatch(val time: Long, val slot: Int, val lat: Double?, val lon: Double?)
@@ -328,6 +332,17 @@ object Cloud {
     }
 
     private fun deleteTripIn(gid: String, docId: String, done: (String?) -> Unit) {
+        val ref0 = db.collection("groups").document(gid).collection("trips").document(docId)
+        // 남의 글(그룹장이 내리는 경우): 지우기 전에 휴지통에 보관 + 올린 사람에게 알림
+        val owner = docId.substringBefore("_")
+        if (owner.isNotBlank() && owner != uid) {
+            Trash.backup(ref0, owner, "group", gid, listOf("detail", "photos")) { deleteTripInNow(gid, docId, done) }
+            return
+        }
+        deleteTripInNow(gid, docId, done)
+    }
+
+    private fun deleteTripInNow(gid: String, docId: String, done: (String?) -> Unit) {
         val ref = db.collection("groups").document(gid).collection("trips").document(docId)
         ref.collection("detail").document("track").delete()
         ref.collection("photos").get().addOnCompleteListener { a ->
@@ -514,6 +529,65 @@ object Cloud {
     }
 
     /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */
+    // ---------------- 그룹 탈퇴 (그룹원 스스로) ----------------
+    /** 그룹에 탈퇴 알림(그룹 채팅에 한 줄)을 남기고 나감. 그룹장은 먼저 그룹장을 넘겨야 함 */
+    fun leaveGroup(g: Group, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        if (g.owner == me) return done("그룹장은 탈퇴할 수 없어요. 먼저 그룹장을 넘겨주거나 그룹을 지워 주세요")
+        val gref = db.collection("groups").document(g.id)
+        gref.collection("chat").document().set(mapOf("uid" to me, "name" to displayName,
+            "text" to "📢 ${displayName}님이 그룹을 탈퇴했어요", "t" to System.currentTimeMillis()))
+            .addOnCompleteListener {
+                gref.collection("members").document(me).delete()
+                gref.update("members", FieldValue.arrayRemove(me))
+                    .addOnSuccessListener {
+                        db.collection("users").document(me).set(mapOf("groups" to FieldValue.arrayRemove(g.id),
+                            "active" to (groups.firstOrNull { it.id != g.id }?.id ?: "")), SetOptions.merge())
+                            .addOnCompleteListener { activeId = groups.firstOrNull { it.id != g.id }?.id; refresh(done) }
+                    }
+                    .addOnFailureListener { done(it.message ?: "탈퇴 실패 (보안 규칙 확인)") }
+            }
+    }
+
+    // ---------------- 사용자 권한 (관리자가 체크박스로 켜고 끔, 기본 모두 꺼짐) ----------------
+    /** 권한 이름 → 설명 */
+    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)")
+    @Volatile var myPerms: Set<String> = emptySet()
+    fun can(p: String) = isAdmin || p in myPerms
+    fun loadMyPerms(done: (() -> Unit)? = null) {
+        val me = uid ?: return
+        db.collection("users").document(me).get().addOnSuccessListener { d ->
+            @Suppress("UNCHECKED_CAST")
+            myPerms = ((d.get("perms") as? Map<String, Any?>) ?: emptyMap()).filterValues { it == true }.keys
+            done?.invoke()
+        }
+    }
+    fun setPerm(target: String, perm: String, on: Boolean, done: (String?) -> Unit) {
+        if (!isAdmin) return done("운영자만 바꿀 수 있어요")
+        db.collection("users").document(target).set(mapOf("perms" to mapOf(perm to on)), SetOptions.merge())
+            .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "저장 실패") }
+    }
+    fun allPerms(done: (Map<String, Set<String>>) -> Unit) {
+        db.collection("users").get().addOnSuccessListener { q ->
+            @Suppress("UNCHECKED_CAST")
+            done(q.documents.associate { d -> d.id to ((d.get("perms") as? Map<String, Any?>) ?: emptyMap()).filterValues { it == true }.keys })
+        }.addOnFailureListener { done(emptyMap()) }
+    }
+
+    // ---------------- 그룹 대표 이미지 (groups/{gid}/meta/img, 그룹장만 바꿈) ----------------
+    private val imgCache = HashMap<String, String?>()
+    fun groupImage(gid: String, done: (String?) -> Unit) {
+        if (imgCache.containsKey(gid)) return done(imgCache[gid])
+        db.collection("groups").document(gid).collection("meta").document("img").get()
+            .addOnSuccessListener { d -> val s = d.getString("data"); imgCache[gid] = s; done(s) }
+            .addOnFailureListener { done(null) }
+    }
+    fun setGroupImage(gid: String, b64: String?, done: (String?) -> Unit) {
+        val ref = db.collection("groups").document(gid).collection("meta").document("img")
+        val task = if (b64 == null) ref.delete() else ref.set(mapOf("data" to b64, "t" to System.currentTimeMillis()))
+        task.addOnSuccessListener { imgCache[gid] = b64; done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
+    }
+
     fun kickMember(memberUid: String, removeTrips: Boolean, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
         if (memberUid == uid) return done("자기 자신은 내보낼 수 없어요")
@@ -993,6 +1067,7 @@ object Cloud {
     // ---- 그룹 출조 목록 잠깐 저장 (3분) ----
     private val tripsCache = HashMap<String, Pair<Long, List<RemoteTrip>>>()
     fun invalidateTrips(gid: String) { tripsCache.remove(gid) }
+    fun invalidateAll() { tripsCache.clear() }
 
     /** 그룹의 최근 출조 목록 */
     fun recentTrips(done: (List<RemoteTrip>?, String?) -> Unit) {
