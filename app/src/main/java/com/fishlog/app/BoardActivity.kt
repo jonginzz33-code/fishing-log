@@ -414,6 +414,10 @@ class BoardActivity : Activity() {
             c.addView(pr, Ui.lp(this, MATCH, WRAP, top = 4))
             val reg = regionOf(t)
             if (reg.isNotBlank()) c.addView(Ui.text(this, 12f, Ui.SUB, false, reg), Ui.lp(this, MATCH, WRAP, top = 2))
+            // 대표 조과 사진: 카드 오른쪽 (누르면 크게)
+            if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
+                MainPhoto.showBig(this, "public/${t.id}/photos/main", t.mthumb, "${t.nick} · ${dayFmt.format(Date(t.start))}")
+            }
             listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
         }
     }

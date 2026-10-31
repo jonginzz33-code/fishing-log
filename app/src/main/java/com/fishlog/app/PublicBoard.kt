@@ -65,7 +65,9 @@ object PublicBoard {
         /** 해루질 유료 자리 (금액·준비물은 안 올라감) */
         val paid: Boolean = false,
         /** 올린 사람이 보이게 고른 그룹 이름 · 작은 그룹 이미지 (없으면 "") */
-        val gname: String = "", val gimg: String = ""
+        val gname: String = "", val gimg: String = "",
+        /** 대표 조과 사진 (작은 사진 base64) */
+        val mthumb: String = ""
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -208,6 +210,8 @@ object PublicBoard {
             )
             // 전체 조황엔 유료 여부만 (금액·준비물은 안 올림)
             if (t.paid == true) doc["paid"] = true
+            // 대표 조과 사진 (작은 사진은 글 안에, 큰 사진은 photos/main)
+            MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
             // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
             Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
                 doc["gname"] = g.title
@@ -219,6 +223,7 @@ object PublicBoard {
                     Store.setPublic(t.id, true, exact)
                     // 작은 사진만 (이미 올린 건 건너뜀, 사진을 빼고 올리면 예전 사진은 지움)
                     Cloud.uploadPhotos(ref, t, "public", limit = if (withPhotos) 8 else 0, withBig = false)
+                    if (t.main() != null) MainPhoto.push(t)
                     cache.clear()
                     done(null)
                 }
@@ -324,7 +329,7 @@ object PublicBoard {
                             },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
-                            d.getString("gname") ?: "", d.getString("gimg") ?: "")
+                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "")
                     } catch (_: Exception) { null }
                 }, null)
             }

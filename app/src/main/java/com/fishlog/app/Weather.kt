@@ -585,6 +585,22 @@ object Weather {
     }
 
     private var weekCache: Pair<String, Pair<Long, List<WeekDay>>>? = null
+
+    /**
+     * 예상 수온 보정값: 그날 실측 − 예상 (같은 시각끼리 평균).
+     * 예상(Open-Meteo)은 먼 바다 값이라 얕은 연안 실측과 3~5° 차이 날 수 있음
+     */
+    fun sstOffset(d: Day): Double? {
+        val m = d.measured ?: return null
+        val diffs = d.hours.mapNotNull { h -> val mv = m.series[h.time]; val sv = h.sst; if (mv != null && sv != null) mv - sv else null }
+        if (diffs.isNotEmpty()) return diffs.average()
+        // 시각이 안 맞으면: 가장 최근 실측 − 가장 가까운 시각 예상
+        val near = d.hours.filter { it.sst != null }.minByOrNull { kotlin.math.abs(it.time - (m.series.keys.maxOrNull() ?: System.currentTimeMillis())) }
+        return near?.sst?.let { m.temp - it }
+    }
+
+    /** 새로고침: 기억해 둔 값 모두 버리기 (서버 저장값은 그대로) */
+    fun clearCache() { cache.clear(); kmaCache.clear(); weekCache = null }
     /** 주간 화면 아래에 보일 출처·안내 */
     @Volatile var weekNote: String = ""
 

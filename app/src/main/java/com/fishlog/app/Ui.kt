@@ -106,6 +106,32 @@ object Ui {
         setPadding(dp(c, 20), dp(c, 24), dp(c, 20), dp(c, 32))
     }
 
+    /**
+     * 카드 오른쪽에 대표 조과 사진 붙이기: 카드 안 내용을 왼쪽 칸으로 옮기고 오른쪽에 사진 (84dp)
+     * more = 다른 사진 수 (+N 표시)
+     */
+    fun withRightPhoto(c: Context, card: LinearLayout, bmp: android.graphics.Bitmap?, more: Int = 0, onClick: (() -> Unit)? = null) {
+        if (bmp == null) return
+        val kids = (0 until card.childCount).map { card.getChildAt(it) to (card.getChildAt(it).layoutParams) }
+        card.removeAllViews()
+        val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val left = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        kids.forEach { (v, lp) -> left.addView(v, lp ?: LinearLayout.LayoutParams(MATCH, WRAP)) }
+        row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
+        val f = android.widget.FrameLayout(c)
+        f.addView(android.widget.ImageView(c).apply {
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+            background = bg(c, Color.parseColor("#0F2233"), 12)
+            setImageBitmap(bmp)
+            if (onClick != null) setOnClickListener { onClick() }
+        }, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+        if (more > 0) f.addView(text(c, 10f, Color.WHITE, true, "+$more").apply {
+            setPadding(dp(c, 5), 0, dp(c, 5), 0); background = bg(c, Color.argb(140, 0, 0, 0), 8)
+        }, android.widget.FrameLayout.LayoutParams(WRAP, WRAP, android.view.Gravity.BOTTOM or android.view.Gravity.END).apply { rightMargin = dp(c, 4); bottomMargin = dp(c, 4) })
+        row.addView(f, LinearLayout.LayoutParams(dp(c, 84), dp(c, 84)).apply { leftMargin = dp(c, 10) })
+        card.addView(row, LinearLayout.LayoutParams(MATCH, WRAP))
+    }
+
     fun row(c: Context): LinearLayout = LinearLayout(c).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -215,6 +241,9 @@ class TideView(c: Context) : View(c) {
     // 일출·일몰: 밤은 어둡게, 해 뜨고 지는 시각에 점선
     private var sun: Sun.Times? = null
     private val nightP = Paint().apply { color = Color.argb(185, 3, 7, 14) }
+    /** 낮(일출~일몰)은 밝게 */
+    private val dayP = Paint().apply { color = Color.argb(70, 232, 241, 247) }
+    private val dayTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F2C14E"); textAlign = Paint.Align.CENTER; isFakeBoldText = true }
     private val nightTxt = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#8C84C8"); textSize = 10 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
@@ -322,6 +351,15 @@ class TideView(c: Context) : View(c) {
         if (sunOn && suns.isNotEmpty()) {
             // 밤 = 일몰 ~ 다음 일출
             val marks = suns.flatMap { listOf(it.rise to true, it.set to false) }.sortedBy { it.first }
+            // 낮 = 일출 ~ 일몰 (밝게)
+            dayTxt.textSize = nightTxt.textSize
+            suns.forEach { sd ->
+                val a = maxOf(sd.rise, start); val b = minOf(sd.set, end)
+                if (b > a) {
+                    canvas.drawRect(xt(a), top - 6 * d, xt(b), bottom, dayP)
+                    if ((b - a) >= 2.5 * 3_600_000L) canvas.drawText("☀ 낮", xt((a + b) / 2), top + 12 * d, dayTxt)
+                }
+            }
             var nightStart = start
             var inNight = marks.firstOrNull()?.second == true  // 첫 표시가 일출이면 그 전은 밤
             marks.forEach { (tm, isRise) ->

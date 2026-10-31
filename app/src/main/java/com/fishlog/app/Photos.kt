@@ -92,6 +92,32 @@ object Photos {
         return Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
     }
 
+    /** 서버에 올릴 사진: WebP (같은 화질에 JPEG보다 25~35% 작음) · 사진 속 정보(EXIF)는 안 들어감 */
+    fun webpBytes(b: Bitmap, maxSide: Int, quality: Int): ByteArray {
+        val s = maxSide.toFloat() / max(b.width, b.height)
+        val sc = if (s < 1f) Bitmap.createScaledBitmap(b, (b.width * s).toInt().coerceAtLeast(1), (b.height * s).toInt().coerceAtLeast(1), true) else b
+        val bos = java.io.ByteArrayOutputStream()
+        @Suppress("DEPRECATION")
+        val fmt = if (android.os.Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+        sc.compress(fmt, quality, bos)
+        return bos.toByteArray()
+    }
+
+    /** 목록용 작은 사진 (긴 쪽 320px · 보통 10~20KB) */
+    fun smallUpload(ctx: Context, p: Store.Photo): ByteArray? = try {
+        val src = file(ctx, thumbName(p.file)).takeIf { it.exists() } ?: file(ctx, p.file)
+        BitmapFactory.decodeFile(src.absolutePath)?.let { webpBytes(it, 320, 60) }
+    } catch (_: Exception) { null }
+
+    /** 크게 볼 사진 (긴 쪽 1080px · 화질 60 · 보통 60~150KB) */
+    fun bigUpload(ctx: Context, p: Store.Photo): ByteArray? = try {
+        val src = file(ctx, p.file)
+        if (!src.exists()) null else BitmapFactory.decodeFile(src.absolutePath)?.let { b ->
+            val out = webpBytes(b, 1080, 60)
+            if (out.size > 500_000) webpBytes(b, 1080, 45) else out
+        }
+    } catch (_: Exception) { null }
+
     private fun saveJpeg(b: Bitmap, f: File, quality: Int) {
         FileOutputStream(f).use { b.compress(Bitmap.CompressFormat.JPEG, quality, it) }
     }

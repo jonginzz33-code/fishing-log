@@ -62,6 +62,57 @@ object Trash {
         }.addOnFailureListener { done(null) }
     }
 
+    // ---------------- 내가 직접 지운 내 조과 (폰에 30일 보관) ----------------
+    class Mine(val id: Long, val label: String, val time: Long, val json: String, val gids: Set<String>, val pub: Boolean) {
+        val daysLeft get() = maxOf(0L, (time + KEEP_MS - System.currentTimeMillis() + 86_399_999L) / 86_400_000L)
+    }
+    private fun minePrefs() = Cloud.appContext.getSharedPreferences("my_trash", android.content.Context.MODE_PRIVATE)
+
+    /** 지우기 전에: 출조 기록 통째로 + 올렸던 그룹·게시판 기억 */
+    fun keepMine(trips: List<Store.Trip>) {
+        val e = minePrefs().edit()
+        val now = System.currentTimeMillis()
+        trips.forEach { t ->
+            val o = org.json.JSONObject().put("trip", Store.tripToJson(t)).put("t", now).put("pub", t.pub)
+                .put("gids", org.json.JSONArray().apply { Store.sharedGroups(t.id).forEach { put(it) } })
+                .put("label", df.format(Date(t.start)) + " 출조 · " + t.line())
+            e.putString(t.id.toString(), o.toString())
+        }
+        e.apply()
+    }
+
+    fun mine(): List<Mine> {
+        val now = System.currentTimeMillis()
+        val p = minePrefs()
+        val out = ArrayList<Mine>()
+        p.all.forEach { (k, v) ->
+            try {
+                val o = org.json.JSONObject(v as String)
+                val t = o.getLong("t")
+                if (now - t > KEEP_MS) { p.edit().remove(k).apply(); return@forEach }   // 30일 지나면 자동으로 버림
+                val g = o.optJSONArray("gids")
+                out.add(Mine(k.toLong(), o.optString("label"), t, o.getJSONObject("trip").toString(),
+                    (0 until (g?.length() ?: 0)).map { g!!.getString(it) }.toSet(), o.optBoolean("pub")))
+            } catch (_: Exception) { p.edit().remove(k).apply() }
+        }
+        return out.sortedByDescending { it.time }
+    }
+
+    /** 복구: 폰 기록 되살리고, 올렸던 그룹에 다시 올리고, 게시판이었으면 다시 공개 */
+    fun restoreMine(a: Activity, m: Mine, done: (String) -> Unit) {
+        val t = try { Store.tripFromJson(org.json.JSONObject(m.json)) } catch (_: Exception) { return done("복구 실패: 기록을 못 읽었어요") }
+        t.uploaded = false; t.backedUp = false; t.pub = false
+        Store.mergeRestored(listOf(t))
+        minePrefs().edit().remove(m.id.toString()).apply()
+        Cloud.backupPending()
+        val gs = Cloud.groups.filter { it.id in m.gids }
+        gs.forEach { g -> Cloud.uploadTrip(t, g) { e -> if (e == null) Store.addShared(t.id, g.id) } }
+        if (m.pub) PublicBoard.publishFlow(a, t) { e -> if (e != null) Toast.makeText(a, "게시판 다시 공개: $e", Toast.LENGTH_LONG).show() }
+        done("복구했어요" + (if (gs.isNotEmpty()) " · 그룹 ${gs.size}곳에 다시 올려요" else "") + (if (m.pub) " · 전체 게시판에도 다시 공개해요" else ""))
+    }
+
+    fun purgeMine(m: Mine) { minePrefs().edit().remove(m.id.toString()).apply() }
+
     fun list(done: (List<Item>?, String?) -> Unit) {
         val me = Cloud.uid ?: return done(null, "로그인이 필요해요")
         db.collection("trash").whereEqualTo("owner", me).get()
@@ -133,7 +184,11 @@ object Trash {
     fun show(a: Activity) {
         fun dp(v: Int) = Ui.dp(a, v)
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(6), dp(16), dp(6)) }
-        col.addView(Ui.text(a, 12f, Ui.SUB, false, "다른 사람(운영자·그룹장)이 지운 내 조과예요. 30일 안에 복구할 수 있고, 지나면 자동으로 버려져요."))
+        col.addView(Ui.text(a, 12f, Ui.SUB, false, "지운 조과는 30일 동안 여기 있어요. 복구하면 출조 기록·그룹·전체 게시판까지 원래대로, 30일이 지나면 자동으로 버려져요."))
+        // 내가 지운 것 (폰에 보관)
+        val mineBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(mineBox, Ui.lp(a, MATCH, WRAP, top = 8))
+        col.addView(Ui.text(a, 14f, Ui.TEXT, true, "다른 사람(운영자·그룹장)이 지운 내 조과"), Ui.lp(a, MATCH, WRAP, top = 14))
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         col.addView(box, Ui.lp(a, MATCH, WRAP, top = 8))
         val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
@@ -141,6 +196,32 @@ object Trash {
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .create()
+        lateinit var drawMine: () -> Unit
+        drawMine = {
+            mineBox.removeAllViews()
+            val ms = mine()
+            mineBox.addView(Ui.text(a, 14f, Ui.TEXT, true, "내가 지운 조과 (${ms.size})"))
+            if (ms.isEmpty()) mineBox.addView(Ui.text(a, 13f, Ui.SUB, false, "없어요"), Ui.lp(a, MATCH, WRAP, top = 4))
+            ms.forEach { m ->
+                val c = Ui.card(a)
+                c.addView(Ui.text(a, 14f, Ui.TEXT, true, m.label))
+                c.addView(Ui.text(a, 12f, Ui.SUB, false, "${df.format(Date(m.time))}에 지움 · ${m.daysLeft}일 남음" +
+                    (if (m.gids.isNotEmpty()) " · 그룹 ${m.gids.size}곳" else "") + (if (m.pub) " · 전체 게시판" else "")), Ui.lp(a, MATCH, WRAP, top = 2))
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                r.addView(Ui.button(a, "복구", true) {
+                    restoreMine(a, m) { msg -> Toast.makeText(a, msg, Toast.LENGTH_LONG).show(); drawMine() }
+                }.apply { minHeight = dp(40) }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.button(a, "영구 삭제") {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setMessage("완전히 버릴까요? 되돌릴 수 없어요")
+                        .setPositiveButton("영구 삭제") { _, _ -> purgeMine(m); drawMine() }
+                        .setNegativeButton("취소", null).show()
+                }.apply { minHeight = dp(40); setTextColor(android.graphics.Color.parseColor("#FF8A92")) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+                c.addView(r, Ui.lp(a, MATCH, WRAP, top = 8))
+                mineBox.addView(c, Ui.lp(a, MATCH, WRAP, top = 8))
+            }
+        }
+        drawMine()
         fun load() {
             box.removeAllViews()
             box.addView(Ui.text(a, 13f, Ui.SUB, false, "불러오는 중…"))
@@ -148,7 +229,7 @@ object Trash {
                 if (!dlg.isShowing) return@list
                 box.removeAllViews()
                 if (items == null) { box.addView(Ui.text(a, 13f, Ui.ORANGE, false, err ?: "실패")); return@list }
-                if (items.isEmpty()) { box.addView(Ui.text(a, 14f, Ui.SUB, false, "휴지통이 비어 있어요")); return@list }
+                if (items.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, "없어요")); return@list }
                 items.forEach { it ->
                     val c = Ui.card(a)
                     c.addView(Ui.text(a, 14f, Ui.TEXT, true, it.label))

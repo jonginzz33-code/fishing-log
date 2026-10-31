@@ -77,9 +77,16 @@ class QuickButtons(
         }, LinearLayout.LayoutParams(0, dp(54), 2f).apply { if (used > 0) leftMargin = dp(8) })
         used += 2
         fill()
-        if (list.isNotEmpty()) box.addView(Ui.text(a, 12f, Ui.SUB, true, "⚙ 퀵 버튼 관리 (크기·색·순서·삭제)").apply {
-            setPadding(0, dp(8), 0, dp(2)); setOnClickListener { manage() }
-        })
+        // 설명문처럼 안 보이게: 하늘색 테두리 버튼
+        if (list.isNotEmpty()) box.addView(Ui.text(a, 14f, Color.parseColor("#9FE0F2"), true, "⚙ 퀵 버튼 관리").apply {
+            append(android.text.SpannableStringBuilder("  크기 · 색 · 순서 · 삭제").apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(11, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#7FBFD2")), 0, length, 0)
+            })
+            gravity = Gravity.CENTER; minHeight = dp(44)
+            background = Ui.bg(a, Color.parseColor("#10303E"), 99, Color.parseColor("#5BC8DF"))
+            setOnClickListener { manage() }
+        }, Ui.lp(a, MATCH, WRAP, top = 10))
     }
 
     private fun card(q: Store.Quick): View {

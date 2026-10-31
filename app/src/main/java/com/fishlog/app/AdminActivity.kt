@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -18,7 +19,13 @@ import java.util.Locale
 /** 관리자 전용: 신고 누적 기준 · 신고 누적 목록 · 정지 관리 · 사용자 목록 */
 class AdminActivity : Activity() {
 
+    /** 지금 채우는 칸 (section 이 바꿈) */
     private lateinit var listBox: LinearLayout
+    private lateinit var rootBox: LinearLayout
+    /** 펼친 항목 (처음엔 모두 접힘) */
+    private val openSecs = HashSet<String>()
+    private val openUsers = HashSet<String>()
+    private var userQuery = ""
     private val fmt = SimpleDateFormat("yyyy.M.d HH:mm", Locale.KOREA)
     private val dfmt = SimpleDateFormat("yy.M.d", Locale.KOREA)
     private fun dp(v: Int) = Ui.dp(this, v)
@@ -39,8 +46,9 @@ class AdminActivity : Activity() {
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "관리자"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         col.addView(top)
         col.addView(Ui.button(this, "새로고침") { load() }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 12))
-        listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(listBox, Ui.lp(this, MATCH, WRAP, top = 6))
+        rootBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        listBox = rootBox
+        col.addView(rootBox, Ui.lp(this, MATCH, WRAP, top = 6))
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
         load()
     }
@@ -56,8 +64,35 @@ class AdminActivity : Activity() {
         }
     }
 
-    private fun section(title: String) =
-        listBox.addView(Ui.text(this, 17f, Ui.TEXT, true, title), Ui.lp(this, MATCH, WRAP, top = 22))
+    /** 커튼바: 제목 + 한 줄 요약, 누르면 아래 내용 펼치기·접기 */
+    private fun section(title: String, summary: String = "") {
+        val key = title.substringBefore(" (")
+        val open = key in openSecs
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = if (open) View.VISIBLE else View.GONE }
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = Ui.bg(this@AdminActivity, Ui.CARD, 12, if (open) Ui.GREEN else 0)
+        }
+        val tv = Ui.text(this, 16f, Ui.TEXT, true, title)
+        if (summary.isNotBlank()) tv.append(android.text.SpannableStringBuilder("  · $summary").apply {
+            setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
+            setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+        })
+        head.addView(tv, LinearLayout.LayoutParams(0, WRAP, 1f))
+        val arrow = Ui.text(this, 15f, if (open) Ui.GREEN else Ui.SUB, true, if (open) "▴" else "▾")
+        head.addView(arrow)
+        head.setOnClickListener {
+            val now = body.visibility != View.VISIBLE
+            body.visibility = if (now) View.VISIBLE else View.GONE
+            if (now) openSecs.add(key) else openSecs.remove(key)
+            arrow.text = if (now) "▴" else "▾"; arrow.setTextColor(if (now) Ui.GREEN else Ui.SUB)
+            head.background = Ui.bg(this, Ui.CARD, 12, if (now) Ui.GREEN else 0)
+        }
+        rootBox.addView(head, Ui.lp(this, MATCH, WRAP, top = 8))
+        rootBox.addView(body, Ui.lp(this, MATCH, WRAP))
+        listBox = body
+    }
 
     private fun load() {
         listBox.removeAllViews()
@@ -106,7 +141,8 @@ class AdminActivity : Activity() {
     private fun nameOf(uid: String): String = users.firstOrNull { it.uid == uid }?.name ?: bans.firstOrNull { it.uid == uid }?.name ?: "알 수 없음"
 
     private fun render(err: String?) {
-        listBox.removeAllViews()
+        rootBox.removeAllViews()
+        listBox = rootBox
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
         renderMinVersion()
         renderCatAdmin()
@@ -119,7 +155,7 @@ class AdminActivity : Activity() {
     // ---------------- 최소 버전 (옛날 버전 막기) ----------------
     private var minVer = 0L
     private fun renderMinVersion() {
-        section("최소 버전 (옛날 버전 막기)")
+        section("최소 버전 (옛날 버전 막기)", if (minVer > 0) "번호 $minVer 보다 낮은 앱 막는 중" else "막지 않음")
         val c = Ui.card(this)
         val mine = Updater.currentCode(this)
         c.addView(Ui.text(this, 14f, Ui.TEXT, true,
@@ -144,7 +180,7 @@ class AdminActivity : Activity() {
 
     // ---------------- 낚시 종류 관리 (추가·이름·순서·숨기기) ----------------
     private fun renderCatAdmin() {
-        section("낚시 종류 관리")
+        section("낚시 종류 관리", "${Store.allCats().size}개")
         val c = Ui.card(this)
         c.addView(Ui.text(this, 12f, Ui.SUB, false,
             "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요"))
@@ -223,7 +259,7 @@ class AdminActivity : Activity() {
 
     // ---------------- 신고 누적 기준 ----------------
     private fun renderLimit() {
-        section("신고 누적 기준")
+        section("신고 누적 기준", "${Moderation.reportLimit}명 이상")
         val c = Ui.card(this)
         c.addView(Ui.text(this, 13f, Ui.SUB, false,
             "여기 적은 수 이상의 사람이 차단하면, 그 사람 글이 모든 사용자의 조황·포인트 계산에서 빠져요"))
@@ -363,22 +399,48 @@ class AdminActivity : Activity() {
 
     // ---------------- 사용자 목록 ----------------
     private fun renderUsers() {
-        section("사용자 (${users.size})")
         val day = System.currentTimeMillis() - 24 * 3600_000L
         val week = System.currentTimeMillis() - 7 * 24 * 3600_000L
+        section("사용자 (${users.size})", "오늘 ${users.count { it.lastSeen > day }} · 7일 ${users.count { it.lastSeen > week }}")
         val sum = Ui.row(this)
         sum.addView(Ui.stat(this, "전체", "${users.size}명"), LinearLayout.LayoutParams(0, WRAP, 1f))
         sum.addView(Ui.stat(this, "오늘", "${users.count { it.lastSeen > day }}명"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         sum.addView(Ui.stat(this, "7일", "${users.count { it.lastSeen > week }}명"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         listBox.addView(sum, Ui.lp(this, MATCH, WRAP, top = 10))
-        users.forEach { u ->
+        // 이름·이메일 찾기
+        val usersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        listBox.addView(EditText(this).apply {
+            hint = "🔍 이름 · 닉네임 · 이메일 찾기"; setText(userQuery); setSingleLine()
+            setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); textSize = 14f
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(x: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(x: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) { userQuery = e?.toString()?.trim() ?: ""; drawUsers(usersBox) }
+            })
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        listBox.addView(usersBox, Ui.lp(this, MATCH, WRAP))
+        drawUsers(usersBox)
+    }
+
+    /** 사용자: 한 사람 한 줄, 누르면 상세·권한·정지 */
+    private fun drawUsers(box: LinearLayout) {
+        box.removeAllViews()
+        val day = System.currentTimeMillis() - 24 * 3600_000L
+        val q = userQuery.lowercase()
+        users.filter { u -> q.isBlank() || listOf(u.nick ?: "", u.realName, u.email).any { it.lowercase().contains(q) } }.forEach { u ->
             val c = Ui.card(this)
-            val r = Ui.row(this)
+            val open = u.uid in openUsers
+            val r = Ui.row(this).apply {
+                isClickable = true
+                setOnClickListener { if (u.uid in openUsers) openUsers.remove(u.uid) else openUsers.add(u.uid); drawUsers(box) }
+            }
             // 관리자만: 닉네임 + 실명
             r.addView(Ui.text(this, 16f, Ui.TEXT, true, (u.nick ?: "(닉네임 없음)") +
                 (if (u.realName.isNotBlank()) "  ·  ${u.realName}" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
             r.addView(Ui.text(this, 13f, if (u.lastSeen > day) Ui.GREEN else Ui.SUB, true, ago(u.lastSeen)))
+            r.addView(Ui.text(this, 14f, if (open) Ui.GREEN else Ui.SUB, true, if (open) "  ▾" else "  ▸"))
             c.addView(r)
+            if (!open) { box.addView(c, Ui.lp(this, MATCH, WRAP, top = 6)); return@forEach }
             if (u.email.isNotBlank()) c.addView(Ui.text(this, 13f, Ui.SUB, false, u.email), Ui.lp(this, MATCH, WRAP, top = 2))
             val info = buildString {
                 if (u.lastSeen > 0) append("마지막 접속 ").append(fmt.format(Date(u.lastSeen)))
@@ -419,7 +481,7 @@ class AdminActivity : Activity() {
                 if (bans.any { it.uid == u.uid }) c.addView(Ui.text(this, 13f, Ui.ORANGE, true, "정지됨 · 위 '정지 관리'에서 해제"), Ui.lp(this, MATCH, WRAP, top = 6))
                 else c.addView(Ui.button(this, "이용 정지") { askBan(u.uid) }.apply { minHeight = dp(40); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
             }
-            listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+            box.addView(c, Ui.lp(this, MATCH, WRAP, top = 6))
         }
     }
 }

@@ -530,23 +530,25 @@ class MainActivity : Activity() {
 
         // ---- 맨 아래: [그룹] [메뉴] 두 버튼 → 누르면 물때 보기 같은 큰 창 ----
         col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 20))
-        val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
+        // 세 줄: 그룹 · 메뉴 · 관리자 페이지 (한 줄에 하나씩)
+        val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
-        groupBtn = Ui.button(this, "그룹") { openGroupDialog() }.apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        groupBtn = Ui.button(this, "그룹") { openGroupDialog() }.apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; textSize = 16f }
         gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
         groupDot = redDot(0)
         gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
-        bottomRow.addView(gFrame, LinearLayout.LayoutParams(0, WRAP, 1.4f))
+        bottomRow.addView(gFrame, LinearLayout.LayoutParams(MATCH, WRAP))
         groupFrame = gFrame
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }
-        bottomRow.addView(menuBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8); topMargin = dp(8) })
-        // 총관리자(나)에게만: 관리자 메뉴
-        adminMenuBtn = Ui.button(this, "🛠 관리자") { openAdminMenu() }.apply {
+        menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }.apply { textSize = 16f }
+        bottomRow.addView(menuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
+        // 총관리자(나)에게만: 관리자 페이지
+        adminMenuBtn = Ui.button(this, "🛠 관리자 페이지") { openAdminMenu() }.apply {
+            textSize = 16f
             setTextColor(Color.parseColor("#F2C14E")); background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 14, Color.parseColor("#F2C14E"))
             visibility = View.GONE
         }
-        bottomRow.addView(adminMenuBtn, LinearLayout.LayoutParams(0, WRAP, 0.9f).apply { leftMargin = dp(8); topMargin = dp(8) })
+        bottomRow.addView(adminMenuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         col.addView(bottomRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
         // 메뉴 창 안에 들어갈 내용 (창을 열 때 붙임)
@@ -856,6 +858,42 @@ class MainActivity : Activity() {
         } else {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), 0) }
             box.addView(Ui.text(this, 15f, Ui.TEXT, false, t.line(unit = "마리")))
+            // 📸 대표 조과 사진 (찍기 · 앨범 · 나중에)
+            val mp = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.GREEN)
+            }
+            val prev = android.widget.ImageView(this).apply {
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+                background = Ui.bg(this@MainActivity, Color.parseColor("#0F2233"), 10, Ui.GREEN)
+            }
+            val prevTxt = Ui.text(this, 11f, Ui.GREEN, true, "📷\n사진 넣기").apply { gravity = Gravity.CENTER }
+            val pf = android.widget.FrameLayout(this)
+            pf.addView(prevTxt, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+            pf.addView(prev, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+            mp.addView(pf, LinearLayout.LayoutParams(dp(72), dp(72)))
+            fun paintPrev() {
+                val p = Store.current?.main()
+                val b = p?.let { Photos.thumbBitmap(this, it) }
+                prev.setImageBitmap(b); prev.visibility = if (b != null) View.VISIBLE else View.GONE
+            }
+            mainPrevPaint = { paintPrev() }
+            paintPrev()
+            val mcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            mcol.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "📸 대표 조과 사진"))
+            mcol.addView(Ui.text(this, 11f, Ui.SUB, false, "오늘 조과를 한 장으로 · 목록·게시판 오른쪽에 크게 보여요"), Ui.lp(this, MATCH, WRAP, top = 2))
+            val mbtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            fun mbtn(label: String, click: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
+                gravity = Gravity.CENTER; setPadding(dp(10), dp(5), dp(10), dp(5))
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { click() }
+            }
+            mbtns.addView(mbtn("📷 찍기") { MainPhoto.camera(this, t.id) })
+            mbtns.addView(mbtn("🖼 앨범") { MainPhoto.album(this, t.id) }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+            mbtns.addView(Ui.text(this, 12f, Ui.SUB, false, "  나중에 출조 기록에서도 돼요"))
+            mcol.addView(mbtns, Ui.lp(this, MATCH, WRAP, top = 6))
+            mp.addView(mcol, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+            pf.setOnClickListener { MainPhoto.album(this, t.id) }
+            box.addView(mp, Ui.lp(this, MATCH, WRAP, top = 10))
             val canShare = Cloud.user != null && t.catches.isNotEmpty()
             val groups = if (Cloud.user != null) Cloud.groups else emptyList()
             val catName = Store.catLabel(t.cat.ifBlank { Store.category })
@@ -1287,6 +1325,16 @@ class MainActivity : Activity() {
         }
     }
 
+    /** 출조 완료 창의 대표 사진 미리보기 다시 그리기 */
+    private var mainPrevPaint: (() -> Unit)? = null
+
+    @Deprecated("old api")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        MainPhoto.onResult(this, requestCode, resultCode, data) { mainPrevPaint?.invoke() }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 2) {
@@ -1629,7 +1677,7 @@ class MainActivity : Activity() {
             startActivity(Intent(this, ChatActivity::class.java).putExtra("room", activeId))
         }
         if (chatN > 0) { chatG.setTextColor(Color.parseColor("#F2C14E")); chatG.background = Ui.bg(this, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E")) }
-        pair(chatG, gbtn("달력 · 멤버 · 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) })
+        pair(chatG, gbtn("달력 · 멤버 · 그룹 관리 · 초대") { startActivity(Intent(this, GroupActivity::class.java)) }.apply { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP) })
         // 그룹 탈퇴 (그룹원만, 빨갛게)
         if (g != null && g.owner != Cloud.uid) {
             groupBox.addView(Ui.text(this, 14f, Color.WHITE, true).apply {

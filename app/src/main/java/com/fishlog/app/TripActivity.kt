@@ -320,6 +320,31 @@ class TripActivity : Activity() {
             root.addView(bc, Ui.lp(this, MATCH, WRAP, top = 10))
         }
 
+        // 대표 조과 사진: 바꾸기(찍기·앨범) · 이 출조 사진 중 고르기 · 빼기
+        section("📸 대표 조과 사진")
+        val mr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val mainP = t.main()
+        val mb = mainP?.let { Photos.thumbBitmap(this, it) }
+        mr.addView(ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+            background = Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#0F2233"), 12, Ui.LINE)
+            if (mb != null) setImageBitmap(mb)
+            if (mainP != null) setOnClickListener { openPhoto(t, mainP) }
+        }, LinearLayout.LayoutParams(dp(110), dp(110)))
+        val mbc = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun mbt(label: String, col: Int = Ui.TEXT, click: () -> Unit) = mbc.addView(Ui.button(this, label) { click() }.apply {
+            minHeight = dp(36); textSize = 12.5f; setTextColor(col)
+        }, Ui.lp(this, MATCH, WRAP, top = 4))
+        mbt(if (mainP == null) "📷 찍어서 넣기" else "📷 다시 찍기") { MainPhoto.camera(this, t.id) }
+        mbt("🖼 앨범에서 고르기") { MainPhoto.album(this, t.id) }
+        if (t.photos.isNotEmpty()) mbt("⭐ 이 출조 사진 중에서 고르기") { pickMainFromTrip(t) }
+        if (mainP != null) mbt("🗑 대표 사진 빼기", android.graphics.Color.parseColor("#FF8A92")) {
+            Store.setMainPhoto(t.id, ""); Store.find(t.id)?.let { MainPhoto.push(it) }
+        }
+        mr.addView(mbc, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+        root.addView(mr, Ui.lp(this, MATCH, WRAP, top = 8))
+        root.addView(Ui.text(this, 11f, Ui.SUB, false, "지난 출조·그룹 출조 기록·전체 조황 카드 오른쪽에 크게 보여요"), Ui.lp(this, MATCH, WRAP, top = 4))
+
         // 사진
         section("사진 ${t.photos.size}장")
         root.addView(Ui.button(this, "사진 추가 (촬영 시각으로 자동 매칭)") { pickPhotos() }, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -435,6 +460,25 @@ class TripActivity : Activity() {
         return out
     }
 
+    /** 이 출조 사진 중에서 대표 고르기 */
+    private fun pickMainFromTrip(t: Store.Trip) {
+        val ps = t.photos.toList()
+        val grid = GridLayout(this).apply { columnCount = 3; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("대표 사진 고르기").setView(ScrollView(this).apply { addView(grid) }).setNegativeButton("취소", null).create()
+        val w = (resources.displayMetrics.widthPixels - dp(80)) / 3
+        ps.forEach { p ->
+            grid.addView(ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                Photos.thumbBitmap(this@TripActivity, p)?.let { setImageBitmap(it) }
+                setPadding(dp(2), dp(2), dp(2), dp(2))
+                if (p.file == t.mainPhoto) background = Ui.bg(this@TripActivity, Ui.GREEN, 4)
+                setOnClickListener { Store.setMainPhoto(t.id, p.file); Store.find(t.id)?.let { MainPhoto.push(it) }; dlg.dismiss() }
+            }, GridLayout.LayoutParams().apply { width = w; height = w })
+        }
+        dlg.show()
+    }
+
     // ---------------- 사진 ----------------
     private fun pickPhotos() {
         // 안드로이드 기본 사진 선택 화면: 체크박스로 톡톡 눌러 여러 장 (최대 30장)
@@ -465,6 +509,7 @@ class TripActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (MainPhoto.onResult(this, requestCode, resultCode, data) { render() }) return
         if (requestCode != 10 || resultCode != RESULT_OK || data == null) return
         val uris = mutableListOf<Uri>()
         data.clipData?.let { cd -> for (k in 0 until cd.itemCount) uris.add(cd.getItemAt(k).uri) }
@@ -611,8 +656,12 @@ class TripActivity : Activity() {
     private fun askDelete(t: Store.Trip) {
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("이 출조 기록을 삭제할까요?")
-            .setMessage("폰에서만 지워져요 (그룹·백업에 올라간 건 그대로)")
-            .setPositiveButton("삭제") { _, _ -> Store.deleteTrip(t.id); finish() }
+            .setMessage("내 폰 · 서버 백업 · 올린 그룹 · 전체 게시판에서 같이 지워져요.\n휴지통(☰ 메뉴 → 🗑 휴지통)에 30일 보관돼서 그 안에는 복구할 수 있어요.")
+            .setPositiveButton("삭제") { _, _ ->
+                if (Cloud.user != null) Cloud.deleteTripsEverywhere(listOf(t)) { err -> if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show() }
+                else { Trash.keepMine(listOf(t)); Store.deleteTrip(t.id) }
+                finish()
+            }
             .setNegativeButton("취소", null)
             .show()
     }

@@ -39,8 +39,11 @@ object Store {
         /** 꼭 필요한 물건 */
         val gear: MutableList<String> = mutableListOf(),
         /** 그 출조 시간대 날씨 (완료 때 저장, Weather.snapshot) */
-        var wx: String = ""
+        var wx: String = "",
+        /** 대표 조과 사진 (photos 안의 파일 이름, "" = 없음) */
+        var mainPhoto: String = ""
     ) {
+        fun main(): Photo? = photos.firstOrNull { it.file == mainPhoto }
         fun costLabel(): String = Store.costLabel(paid, fee)
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
@@ -392,6 +395,13 @@ object Store {
         return true
     }
 
+    /** 대표 조과 사진 정하기 ("" = 빼기) */
+    fun setMainPhoto(tripId: Long, file: String) {
+        val t = find(tripId) ?: return
+        t.mainPhoto = file; t.uploaded = false; t.backedUp = false
+        changed()
+    }
+
     /** 출조 기록에 그날 날씨 넣기 */
     fun setWx(tripId: Long, wx: String) {
         val t = find(tripId) ?: return
@@ -456,7 +466,7 @@ object Store {
     }
 
     fun removePhoto(tripId: Long, p: Photo) {
-        find(tripId)?.photos?.remove(p)
+        find(tripId)?.let { t -> t.photos.remove(p); if (t.mainPhoto == p.file) t.mainPhoto = "" }
         changed()
     }
 
@@ -578,6 +588,7 @@ object Store {
         if (t.fee > 0) o.put("fee", t.fee)
         if (t.gear.isNotEmpty()) o.put("gear", JSONArray().apply { t.gear.forEach { put(it) } })
         if (t.wx.isNotBlank()) o.put("wx", t.wx)
+        if (t.mainPhoto.isNotBlank()) o.put("mp", t.mainPhoto)
         o.put("names", JSONArray().apply { t.names.forEach { put(it) } })
         val arr = JSONArray()
         t.catches.forEach {
@@ -625,7 +636,7 @@ object Store {
             o.optBoolean("pub", false), o.optString("pp", ""),
             if (o.has("paid")) o.getBoolean("paid") else null, o.optInt("fee", 0),
             o.optJSONArray("gear")?.let { g -> (0 until g.length()).map { g.getString(it) }.toMutableList() } ?: mutableListOf(),
-            o.optString("wx", ""))
+            o.optString("wx", ""), o.optString("mp", ""))
     }
 
     private fun saveCurrent() {

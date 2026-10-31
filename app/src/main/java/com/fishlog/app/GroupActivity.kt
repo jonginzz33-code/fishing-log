@@ -550,6 +550,9 @@ class GroupActivity : Activity() {
             // 이용료·준비물 (그룹원만 봄)
             val cost = listOfNotNull(t.costLabel().ifBlank { null }, if (t.gear.isNotEmpty()) "준비물: " + t.gear.joinToString(", ") else null)
             if (cost.isNotEmpty()) card.addView(Ui.text(this, 12f, Ui.SUB, false, cost.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 2))
+            if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, card, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
+                Cloud.active?.let { g -> MainPhoto.showBig(this, "groups/${g.id}/trips/${t.id}/photosBig/main", t.mthumb, "${t.ownerName} · ${t.line()}") }
+            }
             dayBox.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
     }

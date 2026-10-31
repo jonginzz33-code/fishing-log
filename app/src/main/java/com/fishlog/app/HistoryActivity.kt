@@ -68,11 +68,11 @@ class HistoryActivity : Activity() {
         if (trips.isEmpty()) return
         android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${trips.size}개 출조를 지울까요?")
-            .setMessage("내 폰 · 서버 백업 · 올린 모든 그룹(사진 포함) · 전체 게시판에서 같이 지워져요. 되돌릴 수 없어요.")
+            .setMessage("내 폰 · 서버 백업 · 올린 모든 그룹(사진 포함) · 전체 게시판에서 같이 지워져요.\n휴지통(☰ 메뉴 → 🗑 휴지통)에 30일 보관돼서 그 안에는 복구할 수 있어요.")
             .setPositiveButton("${trips.size}개 삭제") { _, _ ->
                 if (Cloud.user != null) Cloud.deleteTripsEverywhere(trips) { err ->
                     if (!isFinishing) android.widget.Toast.makeText(this, err ?: "${trips.size}개를 모두 지웠어요", android.widget.Toast.LENGTH_LONG).show()
-                } else trips.forEach { Store.deleteTrip(it.id) }
+                } else { Trash.keepMine(trips); trips.forEach { Store.deleteTrip(it.id) } }
                 selMode = false; selected.clear(); render()
             }
             .setNegativeButton("취소", null).show()
@@ -294,6 +294,8 @@ class HistoryActivity : Activity() {
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))
             stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+            // 대표 조과 사진: 카드 오른쪽
+            t.main()?.let { mp -> Ui.withRightPhoto(this, card, Photos.thumbBitmap(this, mp), t.photos.size - 1) }
             list.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         restoreBtn.visibility = View.VISIBLE

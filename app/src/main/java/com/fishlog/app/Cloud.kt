@@ -47,7 +47,9 @@ object Cloud {
         val catches: List<RemoteCatch>, val track: List<Store.Pt>,
         val boat: String = "", val port: String = "", val photoCount: Int = 0, val cat: String = "",
         val hasTrack: Boolean = false, val center: Pair<Double, Double>? = null,
-        val paid: Boolean? = null, val fee: Int = 0, val gear: List<String> = emptyList()
+        val paid: Boolean? = null, val fee: Int = 0, val gear: List<String> = emptyList(),
+        /** 대표 조과 사진 (작은 사진 base64, 없으면 "") */
+        val mthumb: String = ""
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
@@ -56,7 +58,7 @@ object Cloud {
         fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb)
         /** "유료 5만원" / "무료" / "" */
         fun costLabel(): String = Store.costLabel(paid, fee)
     }
@@ -238,6 +240,8 @@ object Cloud {
         t.paid?.let { doc["paid"] = it }
         if (t.fee > 0) doc["fee"] = t.fee
         if (t.gear.isNotEmpty()) doc["gear"] = t.gear.toList()
+        // 대표 조과 사진 (목록용 작은 사진은 문서 안에)
+        MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
         val tripRef = db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
         tripRef.set(doc)
             .addOnSuccessListener {
@@ -246,6 +250,7 @@ object Cloud {
                 Store.markUploaded(t.id)
                 Store.addShared(t.id, g.id)
                 uploadPhotos(tripRef, t, g.id)
+                if (t.main() != null) MainPhoto.push(t)
                 invalidateTrips(g.id)
                 done(null)
             }
@@ -288,20 +293,21 @@ object Cloud {
                     }
                     return@forEach
                 }
-                val thumb = Photos.file(appContext, Photos.thumbName(p.file))
-                if (!thumb.exists() || thumb.length() >= 700_000) return@forEach
+                // 작은 사진: WebP 320px (사진 속 정보 없음)
+                val small = Photos.smallUpload(appContext, p) ?: return@forEach
+                if (small.size >= 700_000) return@forEach
                 val m = hashMapOf<String, Any>("owner" to id, "t" to p.time,
-                    "data" to android.util.Base64.encodeToString(thumb.readBytes(), android.util.Base64.NO_WRAP))
+                    "data" to android.util.Base64.encodeToString(small, android.util.Base64.NO_WRAP))
                 p.catchTime?.let { m["catchT"] = it }
                 tripRef.collection("photos").document(docId).set(m)
                     .addOnSuccessListener { Store.photoUpAdd(key, t.id, p.file, sig) }
                 if (withBig) {
-                    val big = Photos.shareFile(appContext, p)
-                    if (big != null && big.length() < 720_000) {
+                    // 크게 볼 사진: WebP 1080px 화질 60
+                    val big = Photos.bigUpload(appContext, p)
+                    if (big != null && big.size < 720_000) {
                         tripRef.collection("photosBig").document(docId).set(mapOf("owner" to id,
-                            "data" to android.util.Base64.encodeToString(big.readBytes(), android.util.Base64.NO_WRAP)))
+                            "data" to android.util.Base64.encodeToString(big, android.util.Base64.NO_WRAP)))
                     }
-                    big?.delete()
                 }
             }
         }.start()
@@ -564,7 +570,7 @@ object Cloud {
 
     // ---------------- 사용자 권한 (관리자가 체크박스로 켜고 끔, 기본 모두 꺼짐) ----------------
     /** 권한 이름 → 설명 */
-    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)")
+    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)", "wx" to "날씨 새로고침 (물때 창)")
     @Volatile var myPerms: Set<String> = emptySet()
     fun can(p: String) = isAdmin || p in myPerms
     fun loadMyPerms(done: (() -> Unit)? = null) {
@@ -962,6 +968,8 @@ object Cloud {
 
     fun deleteTripsEverywhere(trips: List<Store.Trip>, done: (String?) -> Unit) {
         if (trips.isEmpty()) return done(null)
+        // 내가 지운 것도 휴지통(폰)에 30일 보관 → 복구 가능
+        try { Trash.keepMine(trips) } catch (_: Exception) {}
         val p = pending()
         trips.forEach { t -> p.add("${t.id}|${if (t.pub) 1 else 0}") }
         savePending(p)
@@ -1049,7 +1057,8 @@ object Cloud {
             d.getString("boat") ?: "", d.getString("port") ?: "", (d.getLong("photoCount") ?: 0L).toInt(), d.getString("cat") ?: "",
             d.getBoolean("hasTrack") == true, if (cla != null && clo != null) cla to clo else null,
             d.getBoolean("paid"), (d.getLong("fee") ?: 0L).toInt(),
-            (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList())
+            (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
+            d.getString("mthumb") ?: "")
     } catch (e: Exception) { null }
 
     private fun parsePts(list: List<Map<String, Any?>>?): List<Store.Pt> = list?.mapNotNull {

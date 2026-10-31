@@ -148,7 +148,19 @@ object TideDialog {
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
 
         // ---- 바람 · 파도 · 수온 ----
-        col.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), Ui.lp(a, MATCH, WRAP, top = 18))
+        // 제목 + (관리자·권한 받은 사람만) 새로고침: 기억해 둔 값 무시하고 지금 바로 다시 받기
+        var reloadWx: () -> Unit = {}
+        val wxHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        wxHead.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (Cloud.can("wx")) wxHead.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 새로고침").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+            background = Ui.bg(a, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
+            setOnClickListener {
+                android.widget.Toast.makeText(a, "날씨를 지금 다시 받는 중…", android.widget.Toast.LENGTH_SHORT).show()
+                reloadWx()
+            }
+        }, LinearLayout.LayoutParams(WRAP, dp(32)))
+        col.addView(wxHead, Ui.lp(a, MATCH, WRAP, top = 18))
         // [오늘 시간별] [주간 (7일)] 탭
         val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
@@ -164,6 +176,8 @@ object TideDialog {
         hourBox.addView(wxNote, Ui.lp(a, MATCH, WRAP, top = 4))
         var weekMode = false
         var todayMeasured: Weather.Measured? = null
+        /** 오늘 (실측 − 예상) 수온 차이: 주간 예상 수온 보정용 */
+        var todaySstOff: Double? = null
 
         val src = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(src, Ui.lp(a, MATCH, WRAP, top = 12))
@@ -189,6 +203,8 @@ object TideDialog {
         graph.postDelayed(tick, 60_000L)
 
         fun renderWeather(w: Weather.Day) {
+            val sstOff = Weather.sstOffset(w)
+            if (w.dayStart == today && sstOff != null) todaySstOff = sstOff
             if (w.dayStart == today && w.measured != null) todayMeasured = w.measured
             wxGrid.removeAllViews()
             val hrs = w.hours
@@ -281,13 +297,16 @@ object TideDialog {
                     x?.period?.let { wave.addView(Ui.text(a, 9.5f, Ui.SUB, false, String.format(Locale.KOREA, "주기 %.1fs", it))) }
                     // 수온: 지나간 시간은 실측(청록 꽉 찬 표시), 나머지는 예상(회색 테두리)
                     val meas = if (rowStart <= now) w.measured?.series?.get(rowStart) else null
-                    val seaVal = meas ?: x?.sst
+                    // 실측이 없는 시간: 예상에 그날 (실측 − 예상) 차이를 더한 보정값
+                    val corr = if (meas == null && x?.sst != null && sstOff != null) x.sst + sstOff else null
+                    val seaVal = meas ?: corr ?: x?.sst
                     val sea = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                     sea.addView(Ui.text(a, 12.5f, Color.parseColor("#7FE0D0"), true, seaVal?.let { String.format(Locale.KOREA, "%.1f°", it) } ?: "-"))
-                    if (seaVal != null) sea.addView(Ui.text(a, 9.5f, if (meas != null) Color.parseColor("#04342C") else Ui.SUB, true,
-                        if (meas != null) "실측" else "예상").apply {
+                    if (seaVal != null) sea.addView(Ui.text(a, 9.5f, if (meas != null) Color.parseColor("#04342C") else if (corr != null) Color.parseColor("#7FE0D0") else Ui.SUB, true,
+                        if (meas != null) "실측" else if (corr != null) "보정" else "예상").apply {
                         setPadding(dp(5), 0, dp(5), 0)
-                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.SUB)
+                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99)
+                            else Ui.bg(a, Color.TRANSPARENT, 99, if (corr != null) Color.parseColor("#7FE0D0") else Ui.SUB)
                     }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(1) })
                     // 비 확률
                     val pop = x?.pop
@@ -303,7 +322,8 @@ object TideDialog {
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
                 notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 약함 · 노랑 주의 · 주황 10노트↑ · 빨강 20노트↑) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
-                    "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값, 예상 = 예측")
+                    "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값, 보정 = 예상에 그날 실측 차이를 더한 값, 예상 = 예측(먼 바다 기준)")
+                if (sstOff != null) notes.add(String.format(Locale.KOREA, "수온 보정: 오늘 실측이 예상보다 %+.1f° 라서 실측이 없는 시간은 그만큼 보정했어요 (예상은 먼 바다 값이라 연안과 차이 나요)", sstOff))
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
                 if (w.seaNote.isNotBlank() && notes.none { it.endsWith(w.seaNote) }) notes.add(w.seaNote)
                 notes.add(if (w.fromKma) "기온·하늘·비·바람·파고: 기상청 단기예보 (내 칸이 육지면 가까운 바다 칸) · 낙뢰: 기상청 초단기예보 · 돌풍·파도 주기·파향·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
@@ -418,13 +438,16 @@ object TideDialog {
                     }
                 })
                 val meas = if (off == 0) todayMeasured?.temp else null
-                val seaV = meas ?: wd.sst
+                val wcorr = if (meas == null && wd.sst != null && todaySstOff != null) wd.sst + todaySstOff!! else null
+                val seaV = meas ?: wcorr ?: wd.sst
                 if (seaV != null) {
                     val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                     sr.addView(Ui.text(a, 10.5f, Color.parseColor("#7FE0D0"), true, String.format(Locale.KOREA, "수온 %.0f°", seaV)))
-                    sr.addView(Ui.text(a, 8.5f, if (meas != null) Color.parseColor("#04342C") else Ui.SUB, true, if (meas != null) "실측" else "예상").apply {
+                    sr.addView(Ui.text(a, 8.5f, if (meas != null) Color.parseColor("#04342C") else if (wcorr != null) Color.parseColor("#7FE0D0") else Ui.SUB, true,
+                        if (meas != null) "실측" else if (wcorr != null) "보정" else "예상").apply {
                         setPadding(dp(3), 0, dp(3), 0)
-                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.SUB)
+                        background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99)
+                            else Ui.bg(a, Color.TRANSPARENT, 99, if (wcorr != null) Color.parseColor("#7FE0D0") else Ui.SUB)
                     }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
                     temp.addView(sr)
                 }
@@ -486,6 +509,11 @@ object TideDialog {
             weekBox.visibility = if (weekMode) View.VISIBLE else View.GONE
         }
         paintTabs()
+        reloadWx = {
+            Weather.clearCache()
+            load()
+            if (weekMode) Weather.fetchWeek(lat, lon) { l -> if (dlg.isShowing && weekMode) renderWeek(l) }
+        }
 
         val pickStation = {
             StationPicker.show(a, lat, lon) {
