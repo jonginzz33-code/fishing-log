@@ -82,43 +82,44 @@ object Inventory {
         }
 
         lateinit var render: () -> Unit
-        fun row(it: Item, parent: MutableList<Item>, sub: Boolean): LinearLayout {
+        fun row(item: Item, parent: MutableList<Item>, sub: Boolean): LinearLayout {
             val r = LinearLayout(a).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(if (sub) 22 else 10), dp(8), dp(6), dp(8))
                 background = Ui.bg(a, if (sub) Color.parseColor("#0F2233") else Ui.CARD, 12)
                 isClickable = true
-                setOnClickListener { if (!sub) { it.open = !it.open; render() } }
+                setOnClickListener { if (!sub) { item.open = !item.open; render() } }
                 setOnLongClickListener {
                     val opts = if (sub) arrayOf("수정", "삭제") else arrayOf("수정", "세부 항목 추가", "삭제")
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(it.name)
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(item.name)
                         .setItems(opts) { _, i ->
                             when (opts[i]) {
-                                "수정" -> edit("수정", it) { n, q, m -> it.name = n; it.qty = q; it.note = m; save(a, list); render() }
-                                "세부 항목 추가" -> edit("'${it.name}' 세부 항목", null) { n, q, m -> it.subs.add(Item(n, q, m)); it.open = true; save(a, list); render() }
+                                "수정" -> edit("수정", item) { n, q, m -> item.name = n; item.qty = q; item.note = m; save(a, list); render() }
+                                "세부 항목 추가" -> edit("'${item.name}' 세부 항목", null) { n, q, m -> item.subs.add(Item(n, q, m)); item.open = true; save(a, list); render() }
                                 "삭제" -> AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                                    .setMessage("'${it.name}'을(를) 지울까요?" + if (it.subs.isNotEmpty()) " (세부 항목도 같이)" else "")
-                                    .setPositiveButton("삭제") { _, _ -> parent.remove(it); save(a, list); render() }
+                                    .setMessage("'${item.name}'을(를) 지울까요?" + if (item.subs.isNotEmpty()) " (세부 항목도 같이)" else "")
+                                    .setPositiveButton("삭제") { _, _ -> parent.remove(item); save(a, list); render() }
                                     .setNegativeButton("취소", null).show()
+                                else -> {}
                             }
                         }.show()
                     true
                 }
             }
-            val name = (if (!sub && it.subs.isNotEmpty()) (if (it.open) "▾ " else "▸ ") else if (sub) "· " else "") + it.name
+            val name = (if (!sub && item.subs.isNotEmpty()) (if (item.open) "▾ " else "▸ ") else if (sub) "· " else "") + item.name
             val tcol = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
             tcol.addView(Ui.text(a, if (sub) 13.5f else 15f, Ui.TEXT, !sub, name))
-            if (it.note.isNotBlank()) tcol.addView(Ui.text(a, 11.5f, Ui.SUB, false, it.note))
+            if (item.note.isNotBlank()) tcol.addView(Ui.text(a, 11.5f, Ui.SUB, false, item.note))
             r.addView(tcol, LinearLayout.LayoutParams(0, WRAP, 1f))
-            val total = if (!sub && it.subs.isNotEmpty()) it.subs.sumOf { s -> s.qty } else it.qty
+            val total = if (!sub && item.subs.isNotEmpty()) item.subs.sumOf { s -> s.qty } else item.qty
             fun pm(label: String, d: Int) = Ui.text(a, 16f, Ui.TEXT, true, label).apply {
                 gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
-                setOnClickListener { _ -> it.qty = maxOf(0, it.qty + d); save(a, list); render() }
+                setOnClickListener { _ -> item.qty = maxOf(0, item.qty + d); save(a, list); render() }
             }
-            if (sub || it.subs.isEmpty()) r.addView(pm("−", -1), LinearLayout.LayoutParams(dp(32), dp(32)))
+            if (sub || item.subs.isEmpty()) r.addView(pm("−", -1), LinearLayout.LayoutParams(dp(32), dp(32)))
             r.addView(Ui.text(a, 15f, if (total == 0) Color.parseColor("#FF8A92") else Ui.ORANGE, true, "$total").apply { gravity = Gravity.CENTER },
                 LinearLayout.LayoutParams(dp(44), WRAP))
-            if (sub || it.subs.isEmpty()) r.addView(pm("＋", 1), LinearLayout.LayoutParams(dp(32), dp(32)))
+            if (sub || item.subs.isEmpty()) r.addView(pm("＋", 1), LinearLayout.LayoutParams(dp(32), dp(32)))
             return r
         }
 
