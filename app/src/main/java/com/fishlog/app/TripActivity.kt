@@ -100,7 +100,7 @@ class TripActivity : Activity() {
         }
         r.addView(Ui.text(this, 14f, Ui.TEXT, false, tf.format(Date(c.time))).apply { typeface = android.graphics.Typeface.MONOSPACE },
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(12) })
-        r.addView(View(this).apply { background = Ui.bg(this@TripActivity, Ui.SLOT[c.slot - 1], 99) },
+        r.addView(View(this).apply { background = Ui.bg(this@TripActivity, (if (c.slot in 1..Ui.SLOT.size) Ui.SLOT[c.slot - 1] else Store.slotColor(c.slot)), 99) },
             LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = dp(10) })
         r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot) + if (c.lat != null) "" else "  (위치 없음)"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
@@ -110,7 +110,7 @@ class TripActivity : Activity() {
     /** 전체 보기: 큰 창에 모든 기록 */
     private fun showAllCatches(t: Store.Trip) {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(8)) }
-        col.addView(Ui.text(this, 15f, Ui.TEXT, true, "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}마리"))
+        col.addView(Ui.text(this, 15f, Ui.TEXT, true, "${t.line()} · 총 ${t.catches.size}마리"))
         t.catches.asReversed().forEach { c -> col.addView(catchRow(t, c)) }
         val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("전체 기록")
@@ -154,6 +154,15 @@ class TripActivity : Activity() {
         stats.addView(Ui.stat(this, t.name(1), t.count(1).toString(), Ui.ORANGE), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         stats.addView(Ui.stat(this, t.name(2), t.count(2).toString(), Ui.BLUE), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         root.addView(stats, Ui.lp(this, MATCH, WRAP, top = 16))
+        // 퀵 버튼(3번 이상)으로 잡은 어종
+        val extra = t.slots().filter { it >= 3 && t.count(it) > 0 }
+        extra.chunked(3).forEach { ch ->
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            ch.forEachIndexed { i, sl -> r.addView(Ui.stat(this, t.name(sl), t.count(sl).toString(), Store.slotColor(sl)),
+                LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) }) }
+            repeat(3 - ch.size) { r.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
+            root.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
 
         // 이용료 · 준비물
         // 이용료 · 준비물: 펼친 채로 바로 고치기 (안 적었으면 같은 배·항구 지난번 것으로 미리 채움)
@@ -276,7 +285,7 @@ class TripActivity : Activity() {
         val maxN = byHour.values.maxOfOrNull { it.size } ?: 0
         byHour.forEach { (k, cs) ->
             val hour = cs.first().time
-            val n1 = cs.count { it.slot == 1 }; val n2 = cs.count { it.slot == 2 }
+            val perSlot = cs.groupingBy { it.slot }.eachCount().toSortedMap()
             val photos = cs.count { t.photoOf(it) != null }
             val open = k in openHours
             val top = cs.size == maxN && maxN > 1
@@ -295,8 +304,7 @@ class TripActivity : Activity() {
             }
             head.addView(Ui.text(this, 16f, Ui.TEXT, true, java.text.SimpleDateFormat("HH시", java.util.Locale.KOREA).format(Date(hour))),
                 LinearLayout.LayoutParams(dp(48), WRAP))
-            head.addView(Ui.text(this, 14f, Ui.TEXT, true, listOfNotNull(
-                if (n1 > 0) "${t.name(1)} $n1" else null, if (n2 > 0) "${t.name(2)} $n2" else null).joinToString(" · ") +
+            head.addView(Ui.text(this, 14f, Ui.TEXT, true, perSlot.entries.joinToString(" · ") { "${t.name(it.key)} ${it.value}" } +
                 (if (photos > 0) "  📷 $photos" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
             head.addView(Ui.text(this, 12f, Ui.SUB, true, if (open) "접기 ▲" else "상세 ▼"))
             list.addView(head, Ui.lp(this, MATCH, WRAP, top = 6))
@@ -338,6 +346,7 @@ class TripActivity : Activity() {
         names.addView(Ui.button(this, "${t.name(1)} 이름") { askRename(t, 1) }, LinearLayout.LayoutParams(0, WRAP, 1f))
         names.addView(Ui.button(this, "${t.name(2)} 이름") { askRename(t, 2) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         root.addView(names, Ui.lp(this, MATCH, WRAP, top = 8))
+        extra.forEach { sl -> root.addView(Ui.button(this, "${t.name(sl)} 이름") { askRename(t, sl) }, Ui.lp(this, MATCH, WRAP, top = 8)) }
         if (t.end > 0) root.addView(Ui.button(this, "이 출조 삭제") { askDelete(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 

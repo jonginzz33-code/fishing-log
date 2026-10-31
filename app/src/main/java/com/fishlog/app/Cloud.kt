@@ -23,7 +23,17 @@ object Cloud {
         /** 같은 이름 그룹 구분용 3자리 (영문·숫자, 그룹마다 고정) */
         val tag: String get() = id.uppercase().filter { it in 'A'..'Z' || it in '0'..'9' }.take(3)
         /** "해루질 그룹 (AK1)" */
-        fun label(): String = (if (name.trim().endsWith("그룹")) name else "$name 그룹") + " ($tag)"
+        fun label(): String = "$title $tag"
+        /** "해루질 그룹" */
+        val title: String get() = if (name.trim().endsWith("그룹")) name else "$name 그룹"
+        /** "해루질 그룹 AK1" — 번호는 작고 흐리게 */
+        fun styled(): CharSequence = android.text.SpannableStringBuilder(title).also { sb ->
+            val st = sb.length; sb.append("  ").append(tag)
+            sb.setSpan(android.text.style.RelativeSizeSpan(0.6f), st, sb.length, 0)
+            sb.setSpan(object : android.text.style.CharacterStyle() {
+                override fun updateDrawState(tp: android.text.TextPaint) { tp.color = (tp.color and 0x00FFFFFF) or 0x73000000 }
+            }, st, sb.length, 0)
+        }
     }
 
     class RemoteCatch(val time: Long, val slot: Int, val lat: Double?, val lon: Double?)
@@ -41,6 +51,9 @@ object Cloud {
     ) {
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
+        fun slots(): List<Int> = ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().sorted()
+        fun shownSlots(): List<Int> = slots().filter { it <= 2 || count(it) > 0 }
+        fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
             boat, port, photoCount, cat, hasTrack, center, paid, fee, gear)
@@ -585,7 +598,7 @@ object Cloud {
     fun setGroupImage(gid: String, b64: String?, done: (String?) -> Unit) {
         val ref = db.collection("groups").document(gid).collection("meta").document("img")
         val task = if (b64 == null) ref.delete() else ref.set(mapOf("data" to b64, "t" to System.currentTimeMillis()))
-        task.addOnSuccessListener { imgCache[gid] = b64; done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
+        task.addOnSuccessListener { imgCache[gid] = b64; GroupIcon.put(gid, b64); done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
     }
 
     fun kickMember(memberUid: String, removeTrips: Boolean, done: (String?) -> Unit) {

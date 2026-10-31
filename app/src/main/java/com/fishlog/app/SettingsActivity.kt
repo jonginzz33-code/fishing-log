@@ -66,6 +66,7 @@ class SettingsActivity : Activity() {
 
     private fun render() {
         box.removeAllViews()
+        renderNick()
         section("화면 표시")
         switchRow("꺼진 화면(AOD)·잠금 화면에 표시", "출조 중 주꾸미 아이콘, 마릿수, +1 버튼을 잠금 해제 없이 보여줘요",
             Store.lockScreenShow) { Store.lockScreenShow = it; if (Store.current != null) RemoteService.start(this) }
@@ -92,7 +93,10 @@ class SettingsActivity : Activity() {
         box.addView(rr, Ui.lp(this, MATCH, WRAP, top = 6))
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "기본 1km · 해루질은 500m 넘게 떨어질 때도 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
             Ui.lp(this, MATCH, WRAP, top = 4))
+    }
 
+    /** 닉네임 (개인 설정 맨 위) */
+    private fun renderNick() {
         section("닉네임")
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

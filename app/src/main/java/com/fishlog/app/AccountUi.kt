@@ -75,7 +75,7 @@ class AccountUi(private val a: Activity) {
         if (Cloud.user == null) { signIn { openGroups() }; return }
         val gs = Cloud.groups
         val items = mutableListOf<String>()
-        gs.forEach { g -> items.add((if (g.id == Cloud.active?.id) "✓ " else "    ") + "${g.label()}  · 초대 코드 ${g.code}") }
+        gs.forEach { g -> items.add((if (g.id == Cloud.active?.id) "✓ " else "    ") + "${g.title}  · 초대 코드 ${g.code}") }
         val base = items.size
         items.add(if (Cloud.can("group")) "＋ 새 그룹 만들기" else "＋ 새 그룹 만들기 (운영자 허용 필요)")
         items.add("＋ 초대 코드로 가입")
@@ -161,11 +161,11 @@ class AccountUi(private val a: Activity) {
         Cloud.uploadTrip(t) { err -> if (err != null) toast("올리기 실패: $err") else if (!quiet) toast("그룹에 올렸어요") }
     }
 
-    /** 가입한 그룹 전체에 올리기 */
-    fun uploadAll(t: Store.Trip) {
-        val gs = Cloud.groups
+    /** 고른 그룹들에 올리기 (기본: 가입한 그룹 전체) */
+    fun uploadAll(t: Store.Trip, only: List<Cloud.Group>? = null) {
+        val gs = only ?: Cloud.groups
         if (Cloud.user == null || gs.isEmpty()) { toast("로그인하고 그룹에 가입하면 올릴 수 있어요"); return }
-        toast("가입한 그룹 ${gs.size}곳에 올리는 중…")
+        toast("그룹 ${gs.size}곳에 올리는 중…")
         var left = gs.size
         val fails = mutableListOf<String>()
         gs.forEach { g ->
@@ -261,7 +261,7 @@ class AccountUi(private val a: Activity) {
         val sb = StringBuilder("함께한 ${group.size}명 · 합계 ${total}마리\n")
         group.forEachIndexed { i, t ->
             val dot = arrayOf("노랑", "분홍", "하늘", "보라", "초록", "주황")[i % 6]
-            sb.append("${i + 1}위 ${t.ownerName}($dot) ${t.catches.size}마리 — ${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)}\n")
+            sb.append("${i + 1}위 ${t.ownerName}($dot) ${t.catches.size}마리 — ${t.line()}\n")
         }
         // 가장 입질이 몰린 1시간
         val times = group.flatMap { t -> t.catches.map { it.time } }.sorted()

@@ -28,8 +28,6 @@ object GroupBand {
         return if (types.isEmpty() || sel in types) sel else types.first()
     }
 
-    private fun groupLabel(g: Cloud.Group) = g.label()
-
     /**
      * 종류 색으로 꽉 찬 띠. big = 크게, filled = 그룹 창 맨 위용("지금 여기에서 설정 중이에요" + 역할)
      * onClick = 눌렀을 때 (null 이면 안 눌림)
@@ -46,15 +44,23 @@ object GroupBand {
             background = Ui.bg(c, col, 16)
             if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
         }
-        box.addView(Ui.text(c, if (big) 30f else 22f, ink, true, catIcon(cat)).apply { gravity = Gravity.CENTER },
-            LinearLayout.LayoutParams(dp(if (big) 48 else 38), dp(if (big) 48 else 38)))
+        // 그룹 대표 이미지 (없으면 종류 그림)
+        val sz = if (big) 56 else 42
+        box.addView(GroupIcon.view(c, g, sz, catIcon(cat)), LinearLayout.LayoutParams(dp(sz), dp(sz)))
         val txt = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         if (filled) txt.addView(Ui.text(c, 12f, ink, true, "지금 여기에서 설정 중이에요").apply { alpha = 0.8f })
-        txt.addView(Ui.text(c, if (big) 24f else 18f, ink, true, groupLabel(g)).apply { maxLines = 1 })
+        // 이름 (번호는 작고 흐리게) + 내가 그룹장이면 👑 그룹장 (그룹원은 표시 없음)
+        val nameRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        nameRow.addView(Ui.text(c, if (big) 24f else 18f, ink, true).apply {
+            text = g.styled(); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP))
+        if (g.owner == Cloud.uid) nameRow.addView(Ui.text(c, 11f, Color.parseColor("#FFD66B"), true, "👑 그룹장").apply {
+            setPadding(dp(8), dp(2), dp(8), dp(2)); background = Ui.bg(c, ink, 99)
+        }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { leftMargin = dp(8) })
+        txt.addView(nameRow)
         val others = g.types.filter { it in Store.CATS && it != cat }
-        val role = if (filled) (if (g.owner == Cloud.uid) " · 그룹장" else " · 그룹원") else ""
         txt.addView(Ui.text(c, 13f, ink, true,
-            Store.catLabel(cat) + role + (if (others.isNotEmpty()) "  (그룹 종류: " + (listOf(cat) + others).joinToString(" · ") { Store.catShort(it) } + ")" else "")),
+            Store.catLabel(cat) + (if (others.isNotEmpty()) "  (그룹 종류: " + (listOf(cat) + others).joinToString(" · ") { Store.catShort(it) } + ")" else "")),
             Ui.lp(c, Ui.MATCH, Ui.WRAP, top = 2))
         box.addView(txt, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = dp(12) })
         if (onClick != null) box.addView(Ui.text(c, 12f, ink, true, "열기 ›"))

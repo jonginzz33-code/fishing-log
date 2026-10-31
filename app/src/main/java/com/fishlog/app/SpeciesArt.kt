@@ -26,6 +26,9 @@ class SpeciesArtView(c: Context) : View(c) {
         color = Color.WHITE; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
     private val bandPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val imgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    /** 그림판 그림 연하기 (1 = 그대로) */
+    var imageAlpha: Float = 0.92f
 
     private val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val fillInk = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -41,7 +44,14 @@ class SpeciesArtView(c: Context) : View(c) {
         cv.translate(width - 100 * s, height - 100 * s)
         cv.scale(s, s)
         val key = SpeciesArt.keyOf(species)
-        if (artAlpha < 1f) {
+        val bmp = SpeciesArt.bitmap(context, species)
+        var imgTop: RectF? = null
+        if (bmp != null) {
+            // 그림판 그림 (색 그대로, 살짝만 연하게)
+            imgTop = SpeciesArt.fitRect(bmp, 2f, 2f, 98f, 98f, bottomRight = true)
+            imgPaint.alpha = (imageAlpha * 255).toInt()
+            cv.drawBitmap(bmp, null, imgTop, imgPaint)
+        } else if (artAlpha < 1f) {
             cv.saveLayerAlpha(0f, 0f, 100f, 100f, (artAlpha * 255).toInt())
             draw(cv, key)
             cv.restore()
@@ -49,7 +59,7 @@ class SpeciesArtView(c: Context) : View(c) {
         // 이마 이름표 (C안: 색 띠 + 흰 글씨)
         val name = species.trim()
         if (labelBg != 0 && name.isNotEmpty()) {
-            val (lx, ly) = SpeciesArt.forehead(key)
+            val (lx, ly) = imgTop?.let { r -> SpeciesArt.imageForehead(context, species, r) } ?: SpeciesArt.forehead(key)
             labelPaint.textSize = if (name.length <= 3) 10f else if (name.length <= 4) 9f else 7.5f
             val w = labelPaint.measureText(name) + 7f
             val h = labelPaint.textSize + 4f
@@ -65,6 +75,11 @@ class SpeciesArtView(c: Context) : View(c) {
     fun drawArt(cv: Canvas, name: String, cx: Float, cy: Float, size: Float, inkColor: Int) {
         ink = inkColor
         val s = size / 100f
+        val bmp = SpeciesArt.bitmap(context, name)
+        if (bmp != null) {
+            cv.drawBitmap(bmp, null, SpeciesArt.fitRect(bmp, cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2), imgPaint.apply { alpha = 255 })
+            return
+        }
         cv.save(); cv.translate(cx - size / 2, cy - size / 2); cv.scale(s, s)
         draw(cv, SpeciesArt.keyOf(name))
         cv.restore()
@@ -234,6 +249,91 @@ class SpeciesArtView(c: Context) : View(c) {
 
 object SpeciesArt {
     private val cache = HashMap<String, Path>()
+
+    // ---------------- 그림판 그림 (어종별로 오린 그림) ----------------
+    /** 그림 이름 → (파일, 이마 자리 x·y 비율) */
+    private val IMG = mapOf(
+        "주꾸미" to Triple("sp_jukkumi", 0.5f, 0.17f), "문어" to Triple("sp_muneo", 0.5f, 0.16f), "낙지" to Triple("sp_nakji", 0.5f, 0.14f),
+        "갑오징어" to Triple("sp_gabo", 0.5f, 0.24f), "오징어" to Triple("sp_ojingeo", 0.48f, 0.3f), "한치" to Triple("sp_hanchi", 0.6f, 0.3f),
+        "군소" to Triple("sp_gunso", 0.45f, 0.38f), "우럭" to Triple("sp_ureok", 0.6f, 0.3f), "광어" to Triple("sp_gwangeo", 0.4f, 0.3f),
+        "참돔" to Triple("sp_chamdom", 0.35f, 0.3f), "노래미" to Triple("sp_noraemi", 0.3f, 0.3f), "볼락" to Triple("sp_bollak", 0.3f, 0.3f),
+        "감성돔" to Triple("sp_gamseong", 0.3f, 0.3f), "농어" to Triple("sp_nongeo", 0.3f, 0.3f), "삼치" to Triple("sp_samchi", 0.3f, 0.3f),
+        "학꽁치" to Triple("sp_hakkong", 0.35f, 0.2f), "쥐치" to Triple("sp_jwichi", 0.35f, 0.3f), "전갱이" to Triple("sp_jeongaeng", 0.35f, 0.3f),
+        "쏨뱅이" to Triple("sp_ssom", 0.35f, 0.3f), "복어" to Triple("sp_bogeo", 0.35f, 0.25f), "맛조개" to Triple("sp_matjogae", 0.35f, 0.2f),
+        "조개" to Triple("sp_gaejogae", 0.5f, 0.3f), "백합" to Triple("sp_baekhap", 0.5f, 0.3f), "피조개" to Triple("sp_pijogae", 0.5f, 0.3f),
+        "꽃게" to Triple("sp_kkotge", 0.5f, 0.3f), "작은게" to Triple("sp_smallcrab", 0.5f, 0.35f), "소라" to Triple("sp_sora", 0.45f, 0.35f),
+        "해마" to Triple("sp_haema", 0.6f, 0.15f), "대하" to Triple("sp_daeha", 0.35f, 0.3f), "불가사리" to Triple("sp_bulgasari", 0.5f, 0.35f),
+        "성게" to Triple("sp_seongge", 0.5f, 0.3f), "멍게" to Triple("sp_meongge", 0.4f, 0.25f)
+    )
+    private val bmpCache = HashMap<String, android.graphics.Bitmap?>()
+
+    /** 어종 이름 → 그림판 그림 이름 ("" = 없음, 손그림 사용) */
+    fun imgKeyOf(name: String): String {
+        val n = name.replace(" ", "")
+        return when {
+            n.contains("쭈갑") -> ""
+            n.contains("쭈꾸미") || n.contains("주꾸미") -> "주꾸미"
+            n.contains("갑오징어") || n.contains("갑오") -> "갑오징어"
+            n.contains("한치") -> "한치"
+            n.contains("오징어") || n.contains("무늬") -> "오징어"
+            n.contains("낙지") -> "낙지"
+            n.contains("문어") -> "문어"
+            n.contains("군소") -> "군소"
+            n.contains("맛") && n.contains("조개") -> "맛조개"
+            n.contains("백합") || n.contains("대합") -> "백합"
+            n.contains("피조개") || n.contains("가리비") || n.contains("새조개") -> "피조개"
+            n.contains("키조개") -> ""
+            n.contains("조개") || n.contains("바지락") || n.contains("동죽") || n.contains("홍합") -> "조개"
+            n.contains("박하지") || n.contains("민꽃게") || n.contains("돌게") || n.contains("칠게") || n.contains("방게") ||
+                n.contains("농게") || n.contains("달랑게") || n.contains("깨다시") -> "작은게"
+            n.contains("꽃게") || n.contains("대게") || n.contains("홍게") || (n.endsWith("게") && !n.contains("성게") && !n.contains("멍게")) -> "꽃게"
+            n.contains("성게") -> "성게"
+            n.contains("멍게") || n.contains("우렁쉥이") -> "멍게"
+            n.contains("소라") || n.contains("골뱅이") || n.contains("고둥") || n.contains("고동") || n.contains("뿔소라") -> "소라"
+            n.contains("해마") -> "해마"
+            n.contains("새우") || n.contains("대하") -> "대하"
+            n.contains("불가사리") -> "불가사리"
+            n.contains("광어") || n.contains("도다리") || n.contains("가자미") || n.contains("넙치") -> "광어"
+            n.contains("쏨뱅이") -> "쏨뱅이"
+            n.contains("우럭") || n.contains("조피볼락") -> "우럭"
+            n.contains("볼락") -> "볼락"
+            n.contains("감성돔") -> "감성돔"
+            n.contains("돔") -> "참돔"
+            n.contains("노래미") || n.contains("놀래미") -> "노래미"
+            n.contains("농어") -> "농어"
+            n.contains("삼치") || n.contains("고등어") -> "삼치"
+            n.contains("꽁치") -> "학꽁치"
+            n.contains("쥐치") -> "쥐치"
+            n.contains("전갱이") || n.contains("전어") -> "전갱이"
+            n.contains("복어") || n.contains("복쟁이") -> "복어"
+            else -> ""
+        }
+    }
+
+    fun bitmap(c: Context, name: String): android.graphics.Bitmap? {
+        val k = imgKeyOf(name); if (k.isEmpty()) return null
+        if (bmpCache.containsKey(k)) return bmpCache[k]
+        val file = IMG[k]?.first ?: return null
+        val id = c.resources.getIdentifier(file, "drawable", c.packageName)
+        val b = if (id == 0) null else try { android.graphics.BitmapFactory.decodeResource(c.resources, id) } catch (_: Exception) { null }
+        bmpCache[k] = b
+        return b
+    }
+
+    /** 비율 유지해서 칸 안에 맞춘 자리 (bottomRight = 오른쪽 아래로 붙임, 아니면 가운데) */
+    fun fitRect(b: android.graphics.Bitmap, l: Float, t: Float, r: Float, btm: Float, bottomRight: Boolean = false): RectF {
+        val w = r - l; val h = btm - t
+        val sc = minOf(w / b.width, h / b.height)
+        val dw = b.width * sc; val dh = b.height * sc
+        return if (bottomRight) RectF(r - dw, btm - dh, r, btm)
+        else RectF(l + (w - dw) / 2, t + (h - dh) / 2, l + (w + dw) / 2, t + (h + dh) / 2)
+    }
+
+    /** 그림판 그림의 이마 자리 */
+    fun imageForehead(c: Context, name: String, rect: RectF): Pair<Float, Float> {
+        val (_, fx, fy) = IMG[imgKeyOf(name)] ?: return rect.centerX() to rect.top + rect.height() * 0.25f
+        return (rect.left + rect.width() * fx) to (rect.top + rect.height() * fy)
+    }
     fun path(d: String): Path = cache.getOrPut(d) { PathParser.createPathFromPathData(d) }
 
     private val NAMES = listOf("주꾸미", "갑오징어", "쭈갑", "낙지", "문어", "해삼", "소라", "골뱅이", "꽃게", "키조개", "맛조개", "조개",

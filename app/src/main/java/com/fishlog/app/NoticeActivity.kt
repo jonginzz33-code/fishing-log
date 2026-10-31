@@ -45,7 +45,7 @@ class NoticeActivity : Activity() {
 
     override fun onResume() { super.onResume(); load() }
 
-    private fun groupLabel(g: Cloud.Group) = g.label()
+    private fun groupLabel(g: Cloud.Group) = g.title
 
     private fun load() {
         val g = Cloud.active ?: run { box.removeAllViews(); box.addView(Ui.text(this, 14f, Ui.SUB, false, "그룹에 가입하면 공지를 볼 수 있어요")); return }

@@ -20,7 +20,7 @@ object Store {
         val id: Long,
         val start: Long,
         var end: Long,
-        val names: Array<String>,
+        var names: Array<String>,
         val catches: MutableList<Catch>,
         val track: MutableList<Pt> = mutableListOf(),
         var uploaded: Boolean = false,
@@ -41,7 +41,16 @@ object Store {
     ) {
         fun costLabel(): String = Store.costLabel(paid, fee)
         fun count(slot: Int) = catches.count { it.slot == slot }
-        fun name(slot: Int) = names[slot - 1]
+        fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
+        /** 이 출조의 버튼 번호들 (1·2 + 퀵 버튼 3번 이상) */
+        fun slots(): List<Int> = ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().sorted()
+        /** 잡은 어종만 (1·2번은 0마리여도) */
+        fun shownSlots(): List<Int> = slots().filter { it <= 2 || count(it) > 0 }
+        /** "주꾸미 10 · 갑오징어 49 · 낙지 3" */
+        fun line(sep: String = " · ", unit: String = ""): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}$unit" }
+        fun ensureSlot(slot: Int, label: String) {
+            if (slot > names.size) names = Array(slot) { i -> names.getOrElse(i) { if (i == slot - 1) label else "${i + 1}번" } }
+        }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun photoOf(c: Catch): Photo? = photos.firstOrNull { it.catchTime == c.time }
         /** 위치가 있는 첫 지점 (물때 조회용) */
@@ -214,9 +223,40 @@ object Store {
         if (n !in l) { l.add(n); setSpecies(cat, l) }
     }
 
+    // ---- 퀵 버튼 (3번 이상, 종류마다 따로) · 리모컨은 1·2번만 ----
+    /** size: 0 작게, 1 보통, 2 크게 · color: 색 번호 */
+    class Quick(val slot: Int, var name: String, var size: Int = 1, var color: Int = 0)
+    val QUICK_COLORS = listOf("#7C6BD6", "#4CAF7A", "#C9A43A", "#B5567E", "#3F8FD6", "#D9604A", "#5A8F8A", "#8A6A4F")
+
+    fun quick(cat: String = category): MutableList<Quick> = try {
+        val a = JSONArray(prefs.getString("qb_$cat", "[]"))
+        (0 until a.length()).map { i -> val o = a.getJSONObject(i); Quick(o.getInt("s"), o.optString("n"), o.optInt("z", 1), o.optInt("c", 0)) }.toMutableList()
+    } catch (_: Exception) { mutableListOf() }
+
+    fun saveQuick(list: List<Quick>, cat: String = category) {
+        val a = JSONArray(); list.forEach { a.put(JSONObject().put("s", it.slot).put("n", it.name).put("z", it.size).put("c", it.color)) }
+        prefs.edit().putString("qb_$cat", a.toString()).apply()
+        changed(false)
+    }
+
+    /** 새 퀵 버튼 번호 (지운 번호는 다시 안 씀 → 예전 기록과 안 섞임) */
+    fun newQuickSlot(cat: String = category): Int {
+        val used = (quick(cat).map { it.slot } + listOf(2)).maxOrNull() ?: 2
+        val n = maxOf(prefs.getInt("qb_next_$cat", 3), used + 1, (current?.names?.size ?: 2) + 1)
+        prefs.edit().putInt("qb_next_$cat", n + 1).apply()
+        return n
+    }
+
+    /** 버튼 색 (1 주황 · 2 하늘 · 3번 이상은 고른 색) */
+    fun slotColor(slot: Int): Int = when (slot) {
+        1 -> android.graphics.Color.parseColor("#F28C38"); 2 -> android.graphics.Color.parseColor("#5BC8DF")
+        else -> android.graphics.Color.parseColor(QUICK_COLORS[(quick().firstOrNull { it.slot == slot }?.color ?: (slot - 3)).mod(QUICK_COLORS.size)])
+    }
+
     /** 다음 출조에 쓸 버튼 이름 (종류마다 따로 기억) */
     fun defaultName(slot: Int, cat: String = category): String =
-        prefs.getString("name${slot}_$cat", null)
+        (if (slot >= 3) quick(cat).firstOrNull { it.slot == slot }?.name else null)
+            ?: prefs.getString("name${slot}_$cat", null)
             ?: (if (cat == "boat") prefs.getString("name$slot", null) else null)
             ?: species(cat).getOrNull(slot - 1) ?: "${slot}번"
 
@@ -309,7 +349,8 @@ object Store {
     fun startTrip(boat: String = "", port: String = "") {
         if (current != null) return
         val now = System.currentTimeMillis()
-        current = Trip(now, now, 0L, arrayOf(defaultName(1), defaultName(2)), mutableListOf(),
+        val maxSlot = maxOf(2, quick().maxOfOrNull { it.slot } ?: 2)
+        current = Trip(now, now, 0L, Array(maxSlot) { defaultName(it + 1) }, mutableListOf(),
             boat = boat.trim(), port = port.trim(), cat = category)
         remember("boats", boat.trim()); remember("ports", port.trim())
         // 폰이 기억하던 예전 위치(2분보다 오래된 것)는 출발 지점으로 쓰지 않음 → GPS가 새로 잡은 첫 위치가 출발 지점
@@ -330,11 +371,23 @@ object Store {
         val t = current ?: return 0
         val now = System.currentTimeMillis()
         val loc = Tracker.recent(now)
+        t.ensureSlot(slot, defaultName(slot))
         t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude))
         changed(false)
         Milestone.onCount(slot, t.count(slot))
         try { Live.pushSoon() } catch (_: Exception) {}
         return t.count(slot)
+    }
+
+    /** 그 버튼의 마지막 기록 하나 지우기 (퀵 버튼 꾹 누르기) */
+    fun removeLastOf(slot: Int): Boolean {
+        val t = current ?: return false
+        val i = t.catches.indexOfLast { it.slot == slot }
+        if (i < 0) return false
+        t.catches.removeAt(i)
+        changed(false)
+        try { Live.pushSoon() } catch (_: Exception) {}
+        return true
     }
 
     fun undoLast(): Int {
@@ -355,13 +408,15 @@ object Store {
     fun rename(slot: Int, name: String) {
         val v = name.ifBlank { "${slot}번" }
         prefs.edit().putString("name${slot}_$category", v).apply()
-        current?.names?.set(slot - 1, v)
+        if (slot >= 3) quick().let { l -> l.firstOrNull { it.slot == slot }?.let { q -> q.name = v; saveQuick(l) } }
+        current?.let { it.ensureSlot(slot, v); it.names[slot - 1] = v }
         changed(false)
     }
 
     fun renameInTrip(tripId: Long, slot: Int, name: String) {
         val t = find(tripId) ?: return
         if (t === current) { rename(slot, name); return }
+        t.ensureSlot(slot, name)
         t.names[slot - 1] = name.ifBlank { "${slot}번" }
         t.uploaded = false; t.backedUp = false
         changed()
@@ -508,7 +563,7 @@ object Store {
         t.paid?.let { o.put("paid", it) }
         if (t.fee > 0) o.put("fee", t.fee)
         if (t.gear.isNotEmpty()) o.put("gear", JSONArray().apply { t.gear.forEach { put(it) } })
-        o.put("names", JSONArray().put(t.names[0]).put(t.names[1]))
+        o.put("names", JSONArray().apply { t.names.forEach { put(it) } })
         val arr = JSONArray()
         t.catches.forEach {
             val c = JSONArray().put(it.time).put(it.slot)
@@ -550,7 +605,7 @@ object Store {
             }
         }
         return Trip(o.getLong("id"), o.getLong("start"), o.optLong("end", 0L),
-            arrayOf(n.getString(0), n.getString(1)), list, track, o.optBoolean("up", false),
+            Array(maxOf(2, n.length())) { i -> n.optString(i, "${i + 1}번") }, list, track, o.optBoolean("up", false),
             o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""),
             o.optBoolean("pub", false), o.optString("pp", ""),
             if (o.has("paid")) o.getBoolean("paid") else null, o.optInt("fee", 0),
@@ -691,8 +746,7 @@ object Store {
         sb.append("[조과기록] ").append(df.format(java.util.Date(t.start)))
         if (t.end > 0) sb.append(" ~ ").append(df.format(java.util.Date(t.end)).substring(11))
         if (t.place().isNotBlank()) sb.append("\n").append(t.place())
-        sb.append("\n").append(t.name(1)).append(" ").append(t.count(1))
-            .append(" / ").append(t.name(2)).append(" ").append(t.count(2)).append("\n\n")
+        sb.append("\n").append(t.line(" / ")).append("\n\n")
         t.catches.forEach { sb.append(df.format(java.util.Date(it.time)).substring(11)).append("  ").append(t.name(it.slot)).append("\n") }
         return sb.toString()
     }

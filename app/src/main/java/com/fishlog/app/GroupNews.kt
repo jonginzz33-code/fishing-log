@@ -123,7 +123,7 @@ object GroupNews {
             }
             rawTrips[g.id]?.let { ts ->
                 ts.filter { it.owner != me && it.end > 0 && it.end > b && it.id !in seen }.forEach { t ->
-                    val counts = (1..2).filter { t.count(it) > 0 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
+                    val counts = t.slots().filter { t.count(it) > 0 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
                     list.add(Item(g.id, "trip", t.id, "${t.ownerName} · ${showFmt.format(Date(t.start))} " + counts.ifBlank { "출조" },
                         listOfNotNull(t.place().ifBlank { null }, if (t.photoCount > 0) "사진 ${t.photoCount}장" else null).joinToString(" · ").ifBlank { "그룹 출조 기록" },
                         t.end))

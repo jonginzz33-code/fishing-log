@@ -132,7 +132,7 @@ class ChatActivity : Activity() {
     }
 
     private fun groupOf(r: String) = Cloud.groups.firstOrNull { it.id == r }
-    private fun groupLabel(g: Cloud.Group) = g.label()
+    private fun groupLabel(g: Cloud.Group) = g.title
 
     private fun renderAll() { renderTabs(); renderBanner(); renderName(); lastCount = -1; renderList() }
 
@@ -143,7 +143,9 @@ class ChatActivity : Activity() {
             val label = if (r == Chat.ALL) "전체" else groupOf(r)?.let { groupLabel(it) } ?: "그룹"
             val n = if (on) 0 else Chat.unread(r)
             val box = android.widget.FrameLayout(this).apply { setPadding(0, dp(6), dp(6), 0); clipChildren = false; clipToPadding = false }
-            box.addView(Ui.text(this, 13f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true, (if (on && r != Chat.ALL) "🚤 " else "") + label).apply {
+            val gr = if (r == Chat.ALL) null else groupOf(r)
+            box.addView(Ui.text(this, 13f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true).apply {
+                text = if (gr == null) label else android.text.SpannableStringBuilder(GroupIcon.prefix(this@ChatActivity, gr, 20, "🚤")).append(label)
                 setPadding(dp(13), dp(7), dp(13), dp(7))
                 background = if (on) Ui.bg(this@ChatActivity, Ui.GREEN, 99) else Ui.bg(this@ChatActivity, Color.TRANSPARENT, 99, Ui.LINE)
                 setOnClickListener { if (room != r) { Chat.markSeen(room); room = r; renderAll() } }

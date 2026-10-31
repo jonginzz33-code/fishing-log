@@ -67,7 +67,8 @@ object PublicBoard {
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
-        fun speciesLine(): String = (1..2).filter { count(it) > 0 }.joinToString(" · ") { "${name(it)} ${count(it)}" }
+        fun speciesLine(): String = ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().sorted()
+            .filter { count(it) > 0 }.joinToString(" · ") { "${name(it)} ${count(it)}" }
         fun anyCell(): Cell? = catches.firstNotNullOfOrNull { it.cell }
         val exact: Boolean get() = prec == "exact"
         /** 어종 + 낚시 종류 (같은 어종도 종류가 다르면 따로 집계) */

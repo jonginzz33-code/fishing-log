@@ -156,12 +156,12 @@ class GroupActivity : Activity() {
         leaveBox.removeAllViews()
         val g = Cloud.active ?: return
         if (g.owner == Cloud.uid) return
-        leaveBox.addView(Ui.text(this, 15f, Color.WHITE, true, "그룹 탈퇴 · ${g.label()}").apply {
+        leaveBox.addView(Ui.text(this, 15f, Color.WHITE, true, "그룹 탈퇴 · ${g.title}").apply {
             gravity = android.view.Gravity.CENTER; setPadding(0, dp(14), 0, dp(14))
             background = Ui.bg(this@GroupActivity, Color.parseColor("#B3262F"), 14)
             setOnClickListener {
                 AlertDialog.Builder(this@GroupActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("'${g.label()}'에서 탈퇴할까요?")
+                    .setTitle("'${g.title}'에서 탈퇴할까요?")
                     .setMessage("그룹 채팅에 탈퇴 알림이 남고, 이 그룹의 공지·일정·출조 기록을 더 볼 수 없어요. 내 폰 기록은 그대로예요.\n다시 들어오려면 초대 코드가 필요해요.")
                     .setPositiveButton("탈퇴") { _, _ -> Cloud.leaveGroup(g) { err -> toast(err ?: "탈퇴했어요"); load() } }
                     .setNegativeButton("취소", null).show()
@@ -229,9 +229,9 @@ class GroupActivity : Activity() {
         card.addView(imgRow, Ui.lp(this, MATCH, WRAP, top = 0))
         val nameRow = Ui.row(this)
         nameRow.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name).apply {
-            append(android.text.SpannableStringBuilder("  (${g.tag})").apply {
-                setSpan(android.text.style.AbsoluteSizeSpan(14, true), 0, length, 0)
-                setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+            append(android.text.SpannableStringBuilder("  ${g.tag}").apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#5A7486")), 0, length, 0)
             })
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { topMargin = dp(8) })
         if (Cloud.isOwner) {
@@ -545,8 +545,8 @@ class GroupActivity : Activity() {
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             card.addView(r)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
-                "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
-            stampRow(this, listOf(t.name(1), t.name(2)), listOf(t.count(1), t.count(2)))?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+                "${t.line()} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
+            stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             // 이용료·준비물 (그룹원만 봄)
             val cost = listOfNotNull(t.costLabel().ifBlank { null }, if (t.gear.isNotEmpty()) "준비물: " + t.gear.joinToString(", ") else null)
             if (cost.isNotEmpty()) card.addView(Ui.text(this, 12f, Ui.SUB, false, cost.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 2))

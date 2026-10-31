@@ -54,6 +54,8 @@ class MainActivity : Activity() {
     private lateinit var groupDot: TextView
     private lateinit var groupBox: LinearLayout
     private var groupOpen = false
+    /** 그룹 창 '현재 그룹 변경' 펼침 */
+    private var groupSwitchOpen = false
     private var groupsAt = 0L
     private lateinit var message: TextView
     private lateinit var menuBtn: TextView
@@ -64,6 +66,7 @@ class MainActivity : Activity() {
     private lateinit var catRow: LinearLayout
     private lateinit var methodBox: LinearLayout
     private var methodsOpen = false
+    private var quick: QuickButtons? = null
     private lateinit var card1: android.widget.FrameLayout
     private lateinit var card2: android.widget.FrameLayout
     private lateinit var tier1: TextView
@@ -120,6 +123,18 @@ class MainActivity : Activity() {
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
     private lateinit var inqBadge: TextView
+    private lateinit var headIcon: android.widget.FrameLayout
+    private lateinit var headGroupName: TextView
+    /** 맨 위 제목 왼쪽: 지금 그룹 대표 이미지 + 그룹 이름 */
+    private fun paintHeadGroup() {
+        if (!::headIcon.isInitialized) return
+        headIcon.removeAllViews()
+        val g = if (Cloud.user == null) null else Cloud.active
+        if (g == null) { headIcon.visibility = View.GONE; headGroupName.visibility = View.GONE; return }
+        headIcon.visibility = View.VISIBLE
+        headIcon.addView(GroupIcon.view(this, g, 36, GroupBand.catIcon(GroupBand.currentCat(g))), android.widget.FrameLayout.LayoutParams(dp(36), dp(36)))
+        headGroupName.text = g.title; headGroupName.visibility = View.VISIBLE
+    }
     private fun paintInquiry() {
         if (!::inqBadge.isInitialized || Cloud.user == null) return
         Inquiry.unread { n -> if (!isFinishing) { inqBadge.text = "$n"; inqBadge.visibility = if (n > 0) View.VISIBLE else View.GONE } }
@@ -341,11 +356,21 @@ class MainActivity : Activity() {
         // 상단: 왼쪽 지도·물때 버튼 + 제목
         val header = Ui.row(this)
         // 제목: 맨 왼쪽, 남는 폭에 맞춰 글자 크기 자동 (지도·채팅·?·⚙는 오른쪽)
-        header.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
+        // 왼쪽: 지금 그룹 대표 이미지(누르면 그룹 창) + 작은 그룹 이름 + 제목
+        headIcon = android.widget.FrameLayout(this).apply { setOnClickListener { openGroupPanel() } }
+        header.addView(headIcon, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+        val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
+        headGroupName = Ui.text(this, 10f, Ui.GREEN, true, "").apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; visibility = View.GONE
+            setOnClickListener { openGroupPanel() }
+        }
+        titleCol.addView(headGroupName)
+        titleCol.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             maxLines = 1
-            setAutoSizeTextTypeUniformWithConfiguration(13, 32, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
-        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(6) })
+            setAutoSizeTextTypeUniformWithConfiguration(13, 30, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        header.addView(titleCol, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
         // 지도 버튼: 큰 글씨 '지도' + 작은 글씨 '그룹 · 현위치'
         header.addView(smallBtn("") { openMap() }.apply {
             text = android.text.SpannableStringBuilder("지도\n").apply {
@@ -371,18 +396,23 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(9); rightMargin = -dp(7) })
-        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6); rightMargin = dp(2) })
+        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(4); rightMargin = dp(0) })
         paintChat()
         // 1:1 문의 (나와 운영자만): 채팅 옆 ✉, 안 읽은 답장은 빨간 점
         val inqBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
-        inqBox.addView(Ui.text(this, 17f, Ui.TEXT, true, "✉").apply {
-            gravity = Gravity.CENTER
-            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
-            setOnClickListener {
-                if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
-                else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
+        // 1:1 문의: 지도·채팅과 같은 글자 버튼 ('문의' + 작은 '관리자 1:1'), 답장 오면 빨간 숫자
+        val purple = Color.parseColor("#CFC8FF")
+        inqBox.addView(smallBtn("") {
+            if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
+            else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
+        }.apply {
+            text = android.text.SpannableStringBuilder("문의\n").apply {
+                val s0 = length; append("관리자 1:1")
+                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
             }
-        }, android.widget.FrameLayout.LayoutParams(dp(40), dp(40)))
+            setTextColor(purple); setLineSpacing(0f, 0.95f); setPadding(dp(8), dp(2), dp(8), dp(2))
+            background = Ui.bg(this@MainActivity, Color.parseColor("#1E1A3A"), 12, Color.parseColor("#7C6BD6"))
+        }, android.widget.FrameLayout.LayoutParams(WRAP, dp(48)))
         inqBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
@@ -395,8 +425,9 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dp(38), dp(38)).apply { leftMargin = dp(2) })
+        }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { leftMargin = dp(2) })
         col.addView(header)
+        paintHeadGroup()
 
         // 낚시 종류 칩은 맨 아래 '그룹' 칸 안에서 고름 (renderGroupPanel)
         catRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -452,6 +483,19 @@ class MainActivity : Activity() {
         row.addView(View(this), Ui.lp(this, dp(12), 1))
         row.addView(counterCard(2, Ui.BLUE, Color.parseColor("#04222A")), Ui.lp(this, 0, dp(285), 1f))
         col.addView(row, Ui.lp(this, MATCH, WRAP, top = 14))
+        // 퀵 버튼 (3번 이상, 개수 제한 없음 · 터치로만)
+        val quickBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(quickBox, Ui.lp(this, MATCH, WRAP, top = 0))
+        quick = QuickButtons(this, quickBox, { showMessage(it) }) { title, done ->
+            val cat = Store.category
+            val list = Store.species(cat)
+            val tail = if (Cloud.isAdmin) listOf("+ 새 어종 추가") else listOf("목록에 없는 어종은 관리자에게 요청")
+            BigList.show(this, title, list, tail) { i, label ->
+                if (i < list.size) done(label)
+                else if (Cloud.isAdmin) askNewSpecies(cat) { name -> done(name) }
+                else showMessage("어종 추가는 관리자만 할 수 있어요")
+            }
+        }
         // 같이 낚시 중인 그룹원 (50m 안, 5분마다)
         liveBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -679,7 +723,8 @@ class MainActivity : Activity() {
     }
 
     /** 돌파하는 순간: 금색 띠 + 색종이 (2~3초) */
-    private val milestoneListener: (Int, Int, Int) -> Unit = { slot, count, tier ->
+    private val milestoneListener: (Int, Int, Int) -> Unit = lambda@{ slot, count, tier ->
+        if (slot > 2) { showMessage("${Store.current?.name(slot) ?: ""} ${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"); return@lambda }
         val banner = if (slot == 1) banner1 else banner2
         val conf = if (slot == 1) confetti1 else confetti2
         banner.text = "${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"
@@ -810,38 +855,81 @@ class MainActivity : Activity() {
             askPlace(null)
         } else {
             val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), 0) }
-            box.addView(Ui.text(this, 15f, Ui.TEXT, false, "${t.name(1)} ${t.count(1)}마리 · ${t.name(2)} ${t.count(2)}마리"))
+            box.addView(Ui.text(this, 15f, Ui.TEXT, false, t.line(unit = "마리")))
             val canShare = Cloud.user != null && t.catches.isNotEmpty()
             val groups = if (Cloud.user != null) Cloud.groups else emptyList()
             val catName = Store.catLabel(t.cat.ifBlank { Store.category })
-            fun groupLabel(g: Cloud.Group) = g.label()
-            val allBox = CheckBox(this).apply {
-                text = "가입한 그룹 전체에 올리기 (" + groups.joinToString(", ") { groupLabel(it) } + ")"
-                setTextColor(Ui.TEXT); textSize = 14f
-                buttonTintList = ColorStateList.valueOf(Ui.BLUE)
-                isChecked = false
-                visibility = if (canShare && groups.size > 1) View.VISIBLE else View.GONE
+            // 올릴 그룹 고르기 (지금 그룹만 기본 체크)
+            val picks = LinkedHashMap<String, CheckBox>()
+            var pubRef: CheckBox? = null
+            fun titleText0(): String {
+                val chosen = groups.filter { picks[it.id]?.isChecked == true }
+                val where = when {
+                    Cloud.user == null || groups.isEmpty() -> "그룹 없음 · $catName · 내 폰에만 저장"
+                    chosen.isEmpty() -> "그룹에 안 올림 · $catName"
+                    chosen.size == 1 -> "${chosen[0].title} · $catName"
+                    else -> "그룹 ${chosen.size}곳 · $catName"
+                }
+                return "출조를 종료할까요? ($where)"
             }
-            box.addView(allBox, Ui.lp(this, MATCH, WRAP, top = 10))
+            val sumView = Ui.text(this, 12f, Ui.SUB, false, "")
+            var titleRef: TextView? = null
+            fun refreshSum() {
+                val n = picks.values.count { it.isChecked }
+                val pub = pubRef?.isChecked == true && pubRef?.visibility == View.VISIBLE
+                sumView.text = when {
+                    !canShare -> ""
+                    n == 0 && !pub -> "그룹에 안 올리고 내 폰에만 저장해요"
+                    else -> (if (n > 0) "${n}개 그룹" else "") + (if (n > 0 && pub) " + " else "") + (if (pub) "전체 게시판" else "") + "에 올려요"
+                }
+            }
+            if (canShare && groups.isNotEmpty()) {
+                val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                head.addView(Ui.text(this, 14f, Ui.TEXT, true, "올릴 그룹 고르기"), LinearLayout.LayoutParams(0, WRAP, 1f))
+                val allBtn = Ui.text(this, 12f, Ui.GREEN, true, "☐ 전체 선택").apply {
+                    setPadding(dp(10), dp(4), dp(10), dp(4)); background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Color.parseColor("#2F6B52"))
+                }
+                head.addView(allBtn)
+                box.addView(head, Ui.lp(this, MATCH, WRAP, top = 12))
+                val list = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(2), dp(8), dp(2))
+                    background = Ui.bg(this@MainActivity, Ui.CARD, 12)
+                }
+                fun syncAll() { allBtn.text = if (picks.values.all { it.isChecked }) "☑ 전체 선택" else "☐ 전체 선택" }
+                groups.forEach { g ->
+                    val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
+                    val cb = CheckBox(this).apply {
+                        buttonTintList = ColorStateList.valueOf(Ui.BLUE); isChecked = g.id == Cloud.active?.id
+                        setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0() }
+                    }
+                    picks[g.id] = cb
+                    r.addView(cb)
+                    r.addView(GroupIcon.view(this, g, 28, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(28), dp(28)))
+                    r.addView(Ui.text(this, 14f, Ui.TEXT, true).apply { text = g.styled() }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+                    if (g.id == Cloud.active?.id) r.addView(Ui.text(this, 11f, Ui.GREEN, false, "지금 그룹"))
+                    r.setOnClickListener { cb.isChecked = !cb.isChecked }
+                    list.addView(r)
+                }
+                allBtn.setOnClickListener { val all = !picks.values.all { it.isChecked }; picks.values.forEach { it.isChecked = all } }
+                syncAll()
+                box.addView(list, Ui.lp(this, MATCH, WRAP, top = 6))
+            }
             val pubBox = CheckBox(this).apply {
                 text = "전체 게시판에도 공개 (위치는 다음 창에서 정확/대략 선택, 경로·배 이름은 안 올라감)"
                 setTextColor(Ui.TEXT); textSize = 14f
                 buttonTintList = ColorStateList.valueOf(Ui.BLUE)
                 isChecked = canShare
                 visibility = if (canShare) View.VISIBLE else View.GONE
+                setOnCheckedChangeListener { _, _ -> refreshSum() }
             }
-            box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 4))
+            pubRef = pubBox
+            box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 8))
+            box.addView(sumView, Ui.lp(this, MATCH, WRAP, top = 4))
+            refreshSum()
             // (이용료·꼭 필요한 물건은 출조 기록 화면에서 적어요)
-            fun titleText(): String {
-                val where = when {
-                    Cloud.user == null || Cloud.active == null -> "그룹 없음 · $catName · 내 폰에만 저장"
-                    allBox.isChecked -> "가입한 그룹 전체 · $catName"
-                    else -> "${groupLabel(Cloud.active!!)} · $catName"
-                }
-                return "출조를 종료할까요? ($where)"
-            }
             // 제목이 길어도 잘리지 않게 직접 만든 제목
-            val titleView = Ui.text(this, 19f, Ui.TEXT, true, titleText()).apply { setPadding(dp(22), dp(20), dp(22), dp(4)) }
+            val titleView = Ui.text(this, 19f, Ui.TEXT, true, titleText0()).apply { setPadding(dp(22), dp(20), dp(22), dp(4)) }
+            titleRef = titleView
             val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setCustomTitle(titleView)
                 .setView(ScrollView(this).apply { addView(box) })
@@ -850,8 +938,8 @@ class MainActivity : Activity() {
                     RemoteService.stop(this)
                     if (ended != null && Cloud.user != null) {
                         if (ended.catches.isNotEmpty()) {
-                            if (allBox.isChecked && groups.size > 1) account.uploadAll(ended)
-                            else if (Cloud.active != null) account.upload(ended)
+                            val chosen = groups.filter { picks[it.id]?.isChecked == true }
+                            if (chosen.isNotEmpty()) account.uploadAll(ended, chosen)
                         }
                         Cloud.backupPending()
                     }
@@ -860,7 +948,6 @@ class MainActivity : Activity() {
                 }
                 .setNegativeButton("계속", null)
                 .create()
-            allBox.setOnCheckedChangeListener { _, _ -> titleView.text = titleText() }
             dlg.show()
         }
     }
@@ -1128,7 +1215,7 @@ class MainActivity : Activity() {
         visibility = if (n > 0) View.VISIBLE else View.GONE
     }
 
-    private fun groupLabel(g: Cloud.Group) = g.label()
+    private fun groupLabel(g: Cloud.Group) = g.title
 
     /** 맨 아래 그룹 칸: 버튼(빨간 숫자) + 펼치면 그룹 바꾸기 · 새 소식 · 그룹 기능 */
     /** 메뉴 안 '지금 들어와 있는 그룹' 띠 (종류가 바뀌어도 다시 그림) */
@@ -1154,7 +1241,7 @@ class MainActivity : Activity() {
         val t = Store.current ?: run { allDialog?.dismiss(); return }
         box.removeAllViews()
         box.addView(Ui.text(this, 16f, Ui.TEXT, true,
-            "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}마리"))
+            "${t.line()} · 총 ${t.catches.size}마리"))
         val list = t.catches.asReversed()
         list.forEachIndexed { i, c ->
             val nth = t.catches.subList(0, t.catches.size - i).count { it.slot == c.slot }
@@ -1165,7 +1252,7 @@ class MainActivity : Activity() {
             }
             r.addView(Ui.text(this, 14f, Color.parseColor("#CFE0EA"), false, timeFmt.format(Date(c.time))).apply { typeface = Typeface.MONOSPACE },
                 LinearLayout.LayoutParams(WRAP, WRAP))
-            r.addView(View(this).apply { background = Ui.bg(this@MainActivity, Ui.SLOT[c.slot - 1], 99) },
+            r.addView(View(this).apply { background = Ui.bg(this@MainActivity, if (c.slot in 1..Ui.SLOT.size) Ui.SLOT[c.slot - 1] else Store.slotColor(c.slot), 99) },
                 LinearLayout.LayoutParams(dp(10), dp(10)).apply { leftMargin = dp(12) })
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, t.name(c.slot)), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
             r.addView(Ui.text(this, 13f, Ui.SUB, false, "${nth}번째"))
@@ -1193,7 +1280,7 @@ class MainActivity : Activity() {
 
     private fun openGroupDialog() {
         if (groupDialog?.isShowing == true) return
-        groupOpen = true
+        groupOpen = true; groupSwitchOpen = false
         renderGroupPanel()
         groupDialog = bigDialog("그룹", groupBox) { groupOpen = false; groupDialog = null; renderGroupPanel() }
         // 열 때 그룹 목록·새 소식 다시 받기 (30초에 한 번)
@@ -1272,6 +1359,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderGroupPanel() {
+        paintHeadGroup()
         if (!::groupBtn.isInitialized) return
         val g = if (Cloud.user == null) null else Cloud.active
         val total = GroupNews.total()
@@ -1279,7 +1367,8 @@ class MainActivity : Activity() {
         val tomN = GroupNews.tomorrow(g?.id)
         // 강조: 안 본 새 글(빨강) → 내일 출조(초록) · 확인한 일정은 강조 없음
         val sched = when { tomN > 0 -> " · 내일 출조!"; todayN > 0 -> " · 오늘 출조"; else -> "" }
-        val base = if (g == null) "👥 그룹" else GroupBand.catIcon(GroupBand.currentCat(g)) + " " + groupLabel(g)
+        val base: CharSequence = if (g == null) "👥 그룹"
+            else android.text.SpannableStringBuilder(GroupIcon.prefix(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g)))).append(g.styled())
         groupBtn.text = android.text.SpannableStringBuilder(base).apply {
             if (sched.isNotEmpty()) {
                 val s0 = length; append(sched)
@@ -1309,19 +1398,42 @@ class MainActivity : Activity() {
             }, Ui.lp(this, MATCH, WRAP, top = 8))
             return
         }
-        // 내 그룹 (눌러서 바꾸기) + 그룹마다 빨간 숫자
-        groupBox.addView(Ui.text(this, 12f, Ui.SUB, false, "내 그룹 (눌러서 바꾸기)"), Ui.lp(this, MATCH, WRAP, top = 12))
+        // 현재 그룹 변경: 눌러서 펼치기·접기 (그룹마다 빨간 숫자)
+        val newsAll = gs.sumOf { GroupNews.count(it.id) }
+        val sw = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(4), dp(14), dp(if (groupSwitchOpen) 12 else 4))
+            background = Ui.bg(this@MainActivity, Ui.CARD, 16, if (groupSwitchOpen) Ui.GREEN else Ui.LINE)
+        }
+        val swHead = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(44)
+            setOnClickListener { groupSwitchOpen = !groupSwitchOpen; renderGroupPanel() }
+        }
+        swHead.addView(Ui.text(this, 15f, Ui.TEXT, true, "🔄 현재 그룹 변경").apply {
+            append(android.text.SpannableStringBuilder("  · 내 그룹 ${gs.size}개").apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+            })
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (!groupSwitchOpen && newsAll > 0) swHead.addView(redDot(newsAll), LinearLayout.LayoutParams(WRAP, dp(20)).apply { rightMargin = dp(8) })
+        swHead.addView(Ui.text(this, 16f, if (groupSwitchOpen) Ui.GREEN else Ui.SUB, true, if (groupSwitchOpen) "▴" else "▾"))
+        sw.addView(swHead)
+        groupBox.addView(sw, Ui.lp(this, MATCH, WRAP, top = 12))
+        if (groupSwitchOpen) {
+        val switchBox = sw
         // 가입한 그룹 모두: 두 칸씩 여러 줄 (옆으로 밀지 않아도 다 보이게)
         val activeId = g?.id
         var rowL: LinearLayout? = null
         gs.forEachIndexed { i, gr ->
             if (i % 2 == 0) {
                 rowL = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
-                groupBox.addView(rowL, Ui.lp(this, MATCH, WRAP, top = 2))
+                switchBox.addView(rowL, Ui.lp(this, MATCH, WRAP, top = 2))
             }
             val on = gr.id == activeId
             val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
-            f.addView(Ui.text(this, 14f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true, (if (on) "✓ " else "") + groupLabel(gr)).apply {
+            f.addView(Ui.text(this, 14f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true).apply {
+                text = android.text.SpannableStringBuilder().append(if (on) "✓ " else "")
+                    .append(GroupIcon.prefix(this@MainActivity, gr, 22, GroupBand.catIcon(GroupBand.currentCat(gr))))
+                    .append(gr.styled()).append(if (gr.owner == Cloud.uid) " 👑" else "")
                 gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(dp(10), 0, dp(10), 0)
                 background = if (on) Ui.bg(this@MainActivity, Ui.GREEN, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
@@ -1331,10 +1443,10 @@ class MainActivity : Activity() {
                         AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                             .setTitle("'${gr.name}' 그룹으로 바꿀까요?")
                             .setMessage("지금 출조는 종료할 때 바뀐 그룹에 올라가요")
-                            .setPositiveButton("바꾸기") { _, _ -> Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
+                            .setPositiveButton("바꾸기") { _, _ -> groupSwitchOpen = false; Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
                             .setNegativeButton("취소", null)
                             .show()
-                    else { Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
+                    else { groupSwitchOpen = false; Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
                 }
             }, android.widget.FrameLayout.LayoutParams(MATCH, dp(42)))
             val n = GroupNews.count(gr.id)
@@ -1343,11 +1455,12 @@ class MainActivity : Activity() {
         }
         if (gs.size % 2 == 1) rowL?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) })
         // 그룹 만들기·가입: 한 줄 전체 폭 (흐린 테두리)
-        groupBox.addView(Ui.text(this, 13f, Ui.SUB, true, "+ 그룹 만들기 · 가입").apply {
+        switchBox.addView(Ui.text(this, 13f, Ui.SUB, true, "+ 그룹 만들기 · 가입").apply {
             gravity = Gravity.CENTER; minHeight = dp(40)
             background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Color.parseColor("#2E4256"))
             setOnClickListener { account.openGroups() }
         }, LinearLayout.LayoutParams(MATCH, dp(42)).apply { topMargin = dp(10) })
+        }
         // 낚시 종류 (그룹에 정해진 종류만)
         addCatSection()
 
@@ -1407,6 +1520,21 @@ class MainActivity : Activity() {
         }
         if (chatN > 0) { chatG.setTextColor(Color.parseColor("#F2C14E")); chatG.background = Ui.bg(this, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E")) }
         pair(chatG, gbtn("달력 · 멤버 · 관리·초대") { startActivity(Intent(this, GroupActivity::class.java)) })
+        // 그룹 탈퇴 (그룹원만, 빨갛게)
+        if (g != null && g.owner != Cloud.uid) {
+            groupBox.addView(Ui.text(this, 14f, Color.WHITE, true).apply {
+                text = android.text.SpannableStringBuilder("그룹 탈퇴 · ").append(g.styled())
+                gravity = Gravity.CENTER; minHeight = dp(46)
+                background = Ui.bg(this@MainActivity, Color.parseColor("#B3262F"), 99)
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("'${g.title}'에서 탈퇴할까요?")
+                        .setMessage("그룹 채팅에 탈퇴 알림이 남고, 이 그룹의 공지·일정·출조 기록을 더 볼 수 없어요. 내 폰 기록은 그대로예요.\n다시 들어오려면 초대 코드가 필요해요.")
+                        .setPositiveButton("탈퇴") { _, _ -> Cloud.leaveGroup(g) { err -> showMessage(err ?: "탈퇴했어요"); renderGroupPanel() } }
+                        .setNegativeButton("취소", null).show()
+                }
+            }, Ui.lp(this, MATCH, WRAP, top = 18))
+        }
     }
 
     /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
@@ -1619,6 +1747,7 @@ class MainActivity : Activity() {
         paintTier(1, t?.count(1) ?: 0); paintTier(2, t?.count(2) ?: 0)
         last1.text = lastText(t, 1)
         last2.text = lastText(t, 2)
+        quick?.render()
         tripBtn.text = if (t == null) "출조 시작" else "■ 출조 종료"
         // 출조 중엔 빨간 바탕 · 흰 글씨 (실수로 안 누르게, 끝낼 때 바로 찾게)
         if (t == null) { tripBtn.setTextColor(Ui.BG); tripBtn.background = Ui.bg(this, Ui.TEXT, 14) }

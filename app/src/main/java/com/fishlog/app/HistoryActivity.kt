@@ -102,9 +102,6 @@ class HistoryActivity : Activity() {
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "지난 출조"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 14) })
         col.addView(top)
-        selBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(selBar, Ui.lp(this, MATCH, WRAP, top = 10))
-
         summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(summary, Ui.lp(this, MATCH, WRAP, top = 16))
         sunBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -125,6 +122,9 @@ class HistoryActivity : Activity() {
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
             Ui.lp(this, MATCH, WRAP, top = 14))
+        // 선택 모드 줄: 목록 바로 위 (체크하는 곳 가까이)
+        selBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(selBar, Ui.lp(this, MATCH, WRAP, top = 10))
 
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(list, Ui.lp(this, MATCH, WRAP, top = 6))
@@ -218,7 +218,7 @@ class HistoryActivity : Activity() {
 
         // 목록 (월별)
         list.removeAllViews()
-        val shown = trips.filter { t -> filter == null || (t.name(1) == filter && t.count(1) > 0) || (t.name(2) == filter && t.count(2) > 0) }
+        val shown = trips.filter { t -> filter == null || t.slots().any { s -> t.name(s) == filter && t.count(s) > 0 } }
             .filter { t ->
                 if (!byDate) true
                 else if (cal.wholeMonth || cal.selectedDay == null) ymFmt.format(Date(t.start)) == cal.monthKey()
@@ -286,14 +286,14 @@ class HistoryActivity : Activity() {
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = Ui.dp(this@HistoryActivity, 6) })
             card.addView(head)
             card.addView(Ui.text(this, 14f, Ui.TEXT, false,
-                "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
+                "${t.line()} · 총 ${t.catches.size}"), Ui.lp(this, MATCH, WRAP, top = 4))
             val tags = mutableListOf("${dur / 60}시간 ${dur % 60}분")
             if (t.cat.isNotBlank()) tags.add(0, Store.catShort(t.cat))
             if (t.costLabel().isNotBlank()) tags.add(t.costLabel())
             if (t.pub && t.pubPrec.isNotBlank()) tags.add(if (t.pubPrec == "exact") "위치 정확 공개" else "위치 대략 공개")
             if (t.backedUp) tags.add("백업됨")
             card.addView(Ui.text(this, 12f, Ui.SUB, false, tags.joinToString(" · ")), Ui.lp(this, MATCH, WRAP, top = 4))
-            stampRow(this, listOf(t.name(1), t.name(2)), listOf(t.count(1), t.count(2)))?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+            stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { card.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             list.addView(card, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         restoreBtn.visibility = View.VISIBLE
@@ -345,8 +345,8 @@ class HistoryActivity : Activity() {
                 Ui.lp(this, MATCH, WRAP, top = 10))
             list.forEach { si ->
                 val r = Ui.row(this).apply { minimumHeight = Ui.dp(this@HistoryActivity, 44) }
-                r.addView(Ui.text(this, 15f, android.graphics.Color.parseColor("#8FE3B8"), true, "●"), LinearLayout.LayoutParams(WRAP, WRAP))
-                r.addView(Ui.text(this, 15f, Ui.TEXT, false, si.group.name), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 10) })
+                r.addView(GroupIcon.view(this, si.group, 30, GroupBand.catIcon(GroupBand.currentCat(si.group))), LinearLayout.LayoutParams(Ui.dp(this, 30), Ui.dp(this, 30)))
+                r.addView(Ui.text(this, 15f, Ui.TEXT, false).apply { text = si.group.styled() }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 10) })
                 if (si.updated > 0) r.addView(Ui.text(this, 12f, Ui.SUB, false, shareFmt.format(Date(si.updated)) + " 공유"))
                 col.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
             }
@@ -362,7 +362,7 @@ class HistoryActivity : Activity() {
         box.addView(Ui.text(this, 13f, Ui.SUB, false, "체크한 그룹에 올라가고, 체크를 뺀 그룹에서는 내 출조가 지워져요 (내 폰 기록은 그대로)"))
         val checks = gs.map { g ->
             android.widget.CheckBox(this).apply {
-                text = g.name
+                text = android.text.SpannableStringBuilder(GroupIcon.prefix(this@HistoryActivity, g, 24, GroupBand.catIcon(GroupBand.currentCat(g)))).append(g.styled())
                 setTextColor(Ui.TEXT); textSize = 16f
                 buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
                 minHeight = Ui.dp(this@HistoryActivity, 48)

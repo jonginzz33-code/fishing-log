@@ -116,7 +116,7 @@ class GroupTripsActivity : Activity() {
         }
         // 어종별 합계
         val totals = LinkedHashMap<String, Int>()
-        list.forEach { t -> for (s in 1..2) { val n = t.count(s); if (n > 0) totals[t.name(s)] = (totals[t.name(s)] ?: 0) + n } }
+        list.forEach { t -> for (s in t.slots()) { val n = t.count(s); if (n > 0) totals[t.name(s)] = (totals[t.name(s)] ?: 0) + n } }
         val sorted = totals.entries.sortedByDescending { it.value }
         val stat = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         fun statBox(label: String, value: String) = LinearLayout(this).apply {
@@ -153,7 +153,7 @@ class GroupTripsActivity : Activity() {
                 card.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, Ui.lp(this, MATCH, WRAP, top = 6))
             }
             val per = HashMap<String, Int>()
-            list.forEach { t -> for (s in 1..2) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }
+            list.forEach { t -> for (s in t.slots()) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }
             val nameOf = owners.toMap()
             per.entries.filter { it.value > 0 }.sortedByDescending { it.value }.take(5).forEachIndexed { i, e ->
                 val r = Ui.row(this)
@@ -178,11 +178,11 @@ class GroupTripsActivity : Activity() {
             c.addView(r)
             c.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = Ui.dp(this@GroupTripsActivity, 2) })
             val endText = if (t.end > 0) hm.format(Date(t.end)) else "출조 중"
-            val counts = (1..2).filter { t.count(it) > 0 || it == 1 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
+            val counts = t.slots().filter { t.count(it) > 0 || it == 1 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
             c.addView(Ui.text(this, 13f, Color.parseColor("#B8C7D4"), false,
                 "$counts · ${Tide.mulName(t.start).substringBefore(" (")} · ${hm.format(Date(t.start))}~$endText" +
                     (if (t.photoCount > 0) " · 사진 ${t.photoCount}" else "")), Ui.lp(this, MATCH, WRAP, top = 3))
-            stampRow(this, listOf(t.name(1), t.name(2)), listOf(t.count(1), t.count(2)))?.let { c.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+            stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { c.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             body.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         if (list.size > 150) body.addView(Ui.text(this, 12f, Ui.SUB, false, "최근 150개까지 보여요"), Ui.lp(this, MATCH, WRAP, top = 8))

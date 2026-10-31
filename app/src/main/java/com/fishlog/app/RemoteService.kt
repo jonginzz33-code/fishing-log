@@ -307,7 +307,7 @@ class RemoteService : Service() {
 
     private fun buildNotification(): Notification {
         val t = Store.current
-        val counts = if (t == null) "출조 준비" else "${t.name(1)} ${t.count(1)} · ${t.name(2)} ${t.count(2)} · 총 ${t.catches.size}"
+        val counts = if (t == null) "출조 준비" else "${t.line()} · 총 ${t.catches.size}"
         val sub = listOfNotNull("출조 중", t?.place()?.takeIf { it.isNotBlank() }, if (Tracker.running) "위치 기록 중" else null).joinToString(" · ")
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),

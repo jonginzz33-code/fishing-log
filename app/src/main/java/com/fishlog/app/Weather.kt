@@ -182,7 +182,10 @@ object Weather {
         val seaPd = HashMap<Long, Pair<Double?, Double?>>() // 주기(s), 파향(°)
         var seaNote = ""
         if (diff in -90..7) {
-            val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16, -0.08 to -0.08)
+            // 가까운 칸부터, 그래도 파고가 없으면 서해 쪽 열린 바다까지 (최대 약 60km)
+            val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16, -0.08 to -0.08,
+                0.0 to -0.25, -0.1 to -0.3, 0.0 to -0.4, -0.15 to -0.45, -0.25 to -0.5, 0.0 to -0.6, -0.3 to -0.65)
+            var firstSst: HashMap<Long, Double?>? = null
             for ((dla, dlo) in offsets) {
                 try {
                     val body = get("https://marine-api.open-meteo.com/v1/marine?latitude=${lat + dla}&longitude=${lon + dlo}" +
@@ -190,18 +193,30 @@ object Weather {
                     val h = JSONObject(body).getJSONObject("hourly")
                     val t = h.getJSONArray("time")
                     val wv = h.optJSONArray("wave_height"); val st = h.optJSONArray("sea_surface_temperature")
-                    var ok = 0
+                    var okW = 0; var okS = 0
+                    val tmpSea = HashMap<Long, Pair<Double?, Double?>>(); val tmpPd = HashMap<Long, Pair<Double?, Double?>>()
                     for (i in 0 until t.length()) {
                         val ms = isoFmt.parse(t.getString(i))?.time ?: continue
                         val w = num(wv, i); val s = num(st, i)
-                        if (w != null || s != null) ok++
-                        sea[ms] = w to s
-                        seaPd[ms] = num(h.optJSONArray("wave_period"), i) to num(h.optJSONArray("wave_direction"), i)
+                        if (w != null) okW++
+                        if (s != null) okS++
+                        tmpSea[ms] = w to s
+                        tmpPd[ms] = num(h.optJSONArray("wave_period"), i) to num(h.optJSONArray("wave_direction"), i)
                     }
-                    if (ok >= 6) break else { sea.clear(); seaPd.clear() }
+                    // 수온은 가장 가까운 칸 값을 쓰고, 파고만 더 먼 바다에서
+                    if (okS >= 6 && firstSst == null) firstSst = HashMap(tmpSea.mapValues { it.value.second })
+                    if (okW >= 6) {
+                        tmpSea.forEach { (k, v) -> sea[k] = v.first to (firstSst?.get(k) ?: v.second) }
+                        seaPd.putAll(tmpPd)
+                        val km = Math.round(Math.hypot(dla * 111.0, dlo * 111.0 * Math.cos(Math.toRadians(lat))))
+                        if (km >= 10) seaNote = "파고: 가까운 바다 칸이 비어서 약 ${km}km 떨어진 앞바다 예보예요"
+                        break
+                    }
                 } catch (_: Exception) {}
             }
+            if (sea.isEmpty()) firstSst?.forEach { (k, v) -> sea[k] = null to v }
             if (sea.isEmpty()) seaNote = "이 위치는 파도·수온 예보가 없어요 (육지 안쪽이거나 인터넷 확인)"
+            else if (sea.values.none { it.first != null } && seaNote.isBlank()) seaNote = "근처 바다(약 60km 안)에 파고 예보가 없어요"
         } else seaNote = "파도·수온 예보는 3달 전부터 7일 뒤까지만 볼 수 있어요"
 
         // ---- 기상청 단기예보 (오늘 ~ 3일 뒤): 기온·하늘·비·바람 ----
@@ -217,6 +232,8 @@ object Weather {
         var seaWave: Map<Long, Double> = emptyMap()
         if (diff in 0..3 && kma.isNotEmpty() && kma.values.none { (it.wav ?: 0.0) > 0.0 }) {
             seaWave = try { kmaSeaWave(lat, lon, ymd) } catch (_: Exception) { emptyMap() }
+            val km = seaKm(lat, lon)
+            if (seaWave.isNotEmpty() && km != null && km >= 10) seaNote = "파고: 내 자리 칸이 육지·갯벌이라 약 ${km}km 떨어진 앞바다 기상청 값이에요"
         }
         // 낙뢰: 기상청 초단기예보 (앞으로 6시간)
         val lightning: Set<Long> = if (diff == 0) try { kmaLightning(lat, lon) } catch (_: Exception) { emptySet() } else emptySet()
@@ -327,6 +344,9 @@ object Weather {
 
     /** 바다 칸 찾기: 내 칸 둘레를 가까운 순서로 (최대 12칸) 파고가 있는 칸 */
     private val seaGrid = HashMap<String, Pair<Int, Int>?>()
+    private val seaGridKm = HashMap<String, Int>()
+    /** 내 칸에서 파고를 가져온 바다 칸까지 거리(km) */
+    fun seaKm(lat: Double, lon: Double): Int? { val (nx, ny) = grid(lat, lon); return seaGridKm["$nx,$ny"] }
     private fun kmaSeaWave(lat: Double, lon: Double, ymd: String): Map<Long, Double> {
         val (nx, ny) = grid(lat, lon)
         val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
@@ -336,11 +356,13 @@ object Weather {
         val ck = "$nx,$ny"
         seaGrid[ck]?.let { g -> return waves(kmaItemsAt(g.first, g.second)) }
         if (seaGrid.containsKey(ck)) return emptyMap()
-        val cand = (-3..3).flatMap { dx -> (-3..3).map { dy -> dx to dy } }.filter { it != 0 to 0 }
+        // 가까운 12칸 → 그래도 없으면 서쪽(서해 열린 바다) 쪽으로 약 40km 까지
+        val near = (-3..3).flatMap { dx -> (-3..3).map { dy -> dx to dy } }.filter { it != 0 to 0 }
             .sortedBy { it.first * it.first + it.second * it.second }.take(12)
-        for ((dx, dy) in cand) {
+        val west = (4..8).flatMap { d -> listOf(-d to 0, -d to -2, -d to 2, -d to -4) } + listOf(0 to -6, 0 to 6, 2 to -6, -2 to -8)
+        for ((dx, dy) in (near + west).distinct()) {
             val w = try { waves(kmaItemsAt(nx + dx, ny + dy)) } catch (_: Exception) { continue }
-            if (w.isNotEmpty()) { seaGrid[ck] = (nx + dx) to (ny + dy); return w }
+            if (w.isNotEmpty()) { seaGrid[ck] = (nx + dx) to (ny + dy); seaGridKm[ck] = Math.round(Math.hypot(dx * 5.0, dy * 5.0)).toInt(); return w }
         }
         seaGrid[ck] = null
         return emptyMap()
@@ -415,7 +437,7 @@ object Weather {
                 // 활용신청 안 된 키는 XML 오류로 옴
                 note = if (b.contains("SERVICE_KEY_IS_NOT_REGISTERED") || b.contains("SERVICE ERROR") || b.contains("ACCESS DENIED"))
                     "실측 수온: 공공데이터포털에서 '조위관측소 최신 관측데이터' 활용신청이 필요해요"
-                else "실측 수온을 못 받았어요"
+                else "실측 수온을 못 받았어요 (${s.name} 응답 오류)"
                 if (note.contains("활용신청")) return null to note
                 continue
             }
@@ -425,7 +447,8 @@ object Weather {
                 if (code0 != "00") {
                     val msg = root.optJSONObject("header")?.optString("resultMsg") ?: ""
                     note = if (code0 == "30" || code0 == "20" || msg.contains("KEY")) "실측 수온: 공공데이터포털에서 '조위관측소 최신 관측데이터' 활용신청이 필요해요"
-                        else "실측 수온을 못 받았어요 ($code0)"
+                        else if (code0.isBlank()) "실측 수온을 못 받았어요 (${s.name} 응답 없음)"
+                        else "실측 수온을 못 받았어요 (${s.name} · 코드 $code0${if (msg.isNotBlank()) " $msg" else ""})"
                     if (note.contains("활용신청")) return null to note
                     continue
                 }
@@ -512,7 +535,8 @@ object Weather {
         val days = dd.getJSONArray("time")
         // 바다: 최대 파고 + 하루 평균 수온 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로)
         val waveBy = HashMap<String, Double>(); val sstBy = HashMap<String, Double>()
-        val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16)
+        val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16,
+            0.0 to -0.25, -0.1 to -0.3, 0.0 to -0.4, -0.15 to -0.45, -0.25 to -0.5, 0.0 to -0.6)
         for ((dla, dlo) in offsets) {
             try {
                 val mb = get("https://marine-api.open-meteo.com/v1/marine?latitude=${lat + dla}&longitude=${lon + dlo}" +
@@ -529,9 +553,9 @@ object Weather {
                         val day = t.getString(i).take(10)
                         val p = sums[day] ?: (0.0 to 0); sums[day] = (p.first + v) to (p.second + 1)
                     }
-                    sums.forEach { (k, p) -> sstBy[k] = p.first / p.second }
+                    if (sstBy.isEmpty()) sums.forEach { (k, p) -> sstBy[k] = p.first / p.second }
                 }
-                if (waveBy.isNotEmpty() || sstBy.isNotEmpty()) break
+                if (waveBy.isNotEmpty()) break
             } catch (_: Exception) {}
         }
         val list = (0 until days.length()).map { i ->

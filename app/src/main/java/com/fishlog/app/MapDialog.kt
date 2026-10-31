@@ -44,6 +44,10 @@ object MapDialog {
     private var configured = false
 
     val SLOT_COLORS = intArrayOf(Color.parseColor("#F28C38"), Color.parseColor("#5BC8DF"))
+
+    /** 버튼 색: 1·2번은 지도 색, 3번 이상은 퀵 버튼 색 */
+
+    fun slotCol(slot: Int): Int = if (slot in 1..SLOT_COLORS.size) SLOT_COLORS[slot - 1] else Store.slotColor(slot)
     val FRIEND_COLORS = intArrayOf(
         Color.parseColor("#F2C14E"), Color.parseColor("#F07AA0"), Color.parseColor("#B9A6FF"),
         Color.parseColor("#5FD39A"), Color.parseColor("#FF7B5C"), Color.parseColor("#9ADBFF")
@@ -555,7 +559,7 @@ object MapDialog {
         }
     }
 
-    private fun groupLabel(g: Cloud.Group) = g.label()
+    private fun groupLabel(g: Cloud.Group) = g.title
 
     fun pastModeLabel(mode: String): String = when {
         mode == "mine" -> "내 기록만"
@@ -571,7 +575,7 @@ object MapDialog {
         val mine = Store.history.filter { it.id != excludeId }.take(150).flatMap { t ->
             val mul = Tide.mulName(t.start).substringBefore(" (")
             t.catches.filter { it.lat != null && it.lon != null }.map {
-                MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
+                MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                     "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
                     it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0)
             }
@@ -584,7 +588,7 @@ object MapDialog {
                     val mul = Tide.mulName(t.start).substringBefore(" (")
                     t.catches.mapNotNull { c ->
                         val cell = c.cell ?: return@mapNotNull null
-                        MapDot(GeoPoint(cell.lat, cell.lon), SLOT_COLORS[(c.slot - 1).coerceIn(0, 1)],
+                        MapDot(GeoPoint(cell.lat, cell.lon), slotCol(c.slot),
                             "${t.nick} · ${df.format(Date(c.time))} · ${t.name(c.slot)} · $mul", "${t.nick} ${t.name(c.slot)}",
                             c.time, t.nick, t.name(c.slot), false, 2, if (t.exact) 0.0 else cell.r)
                     }
@@ -606,7 +610,7 @@ object MapDialog {
                     val friends = friendsTrips.flatMap { t ->
                         val mul = Tide.mulName(t.start).substringBefore(" (")
                         t.catches.filter { it.lat != null && it.lon != null }.map {
-                            MapDot(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[(it.slot - 1).coerceIn(0, 1)],
+                            MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                                 "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
                                 it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1)
                         }
@@ -828,7 +832,7 @@ object MapDialog {
         val df = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
         val track = t.track.map { GeoPoint(it.lat, it.lon) }
         val catches = t.catches.filter { it.lat != null && it.lon != null }.map {
-            MapCatch(GeoPoint(it.lat!!, it.lon!!), SLOT_COLORS[it.slot - 1],
+            MapCatch(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                 df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid))
         }
         return MapLayer(trackColor, track, catches)

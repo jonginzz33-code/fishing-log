@@ -23,7 +23,7 @@ object BiteMemo {
     fun forTrip(t: Store.Trip, day: Tide.Day?): List<Peak> {
         val loc = locOf(t)
         val out = mutableListOf<Peak>()
-        for (slot in 1..2) {
+        for (slot in t.slots()) {
             val cs = t.catches.filter { it.slot == slot }.sortedBy { it.time }
             if (cs.size < 3) continue
             var best = 0; var bi = 0; var bj = 0
@@ -56,7 +56,7 @@ object BiteMemo {
         val map = LinkedHashMap<String, Acc>()
         history.forEach { t ->
             val loc = locOf(t)
-            for (slot in 1..2) {
+            for (slot in t.slots()) {
                 val cs = t.catches.filter { it.slot == slot }
                 if (cs.isEmpty()) continue
                 val acc = map.getOrPut(t.name(slot)) { Acc() }

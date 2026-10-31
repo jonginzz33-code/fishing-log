@@ -423,7 +423,7 @@ class BoardActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(6)) }
         val cs = t.catches.sortedBy { it.time }
         // 지도: 잡은 자리 (정확 = 어종 색 점, 대략 = 원) + 지금 내 위치 + 길 안내
-        val spots = spotDots(cs.map { t to it }) { _, c -> MapDialog.SLOT_COLORS[(c.slot - 1).coerceIn(0, 1)] }
+        val spots = spotDots(cs.map { t to it }) { _, c -> MapDialog.slotCol(c.slot) }
         var embedded: MapDialog.Embedded? = null
         if (spots.isNotEmpty()) {
             val radii = HashMap<MapDot, Double>().apply { spots.forEach { put(it.dot, it.radius) } }

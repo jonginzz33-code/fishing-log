@@ -454,7 +454,7 @@ class TideView(c: Context) : View(c) {
         t?.catches?.forEach { c ->
             if (c.time !in start..end) return@forEach
             val v = valueAt(c.time) ?: return@forEach
-            dot.color = Ui.SLOT[(c.slot - 1).coerceIn(0, Ui.SLOT.size - 1)]
+            dot.color = if (c.slot in 1..Ui.SLOT.size) Ui.SLOT[c.slot - 1] else Store.slotColor(c.slot)
             canvas.drawCircle(xt(c.time), y(v), 4 * d, dot)
             canvas.drawCircle(xt(c.time), y(v), 4 * d, ring)
         }
