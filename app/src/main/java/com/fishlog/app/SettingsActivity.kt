@@ -75,8 +75,13 @@ class SettingsActivity : Activity() {
             Store.friendAlerts) { Store.friendAlerts = it }
 
         section("개인정보 · 위치")
-        switchRow("같이 출조 중 위치·마릿수 공유", "끄면 다른 그룹원에게 내 출조가 실시간으로 보이지 않아요",
-            Consent.shareLive(this)) { Consent.setShareLive(this, it) }
+        // 누구에게 알릴지·위치 공유는 출조 시작 창에서 (여기엔 앱 전체 위치 스위치 하나만)
+        switchRow("📍 이 앱에서 내 위치 사용", "끄면 경로·조과 위치·지도 내 위치·위치 공유 모두 안 써요",
+            Store.appLoc) { on ->
+            Store.appLoc = on
+            if (!on) { Tracker.forget(); Live.sync(true) }
+            else if (Store.current != null) RemoteService.start(this)
+        }
         box.addView(Ui.button(this, "🔒 위치·개인정보 이용 동의 내용 보기") { Consent.show(this, readOnly = true) { render() } }
             .apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
 

@@ -447,7 +447,11 @@ class TideView(c: Context) : View(c) {
             cal.timeInMillis = hm
             if (cal.get(java.util.Calendar.HOUR_OF_DAY) == 0 && hm > start && hm < end) {
                 canvas.drawLine(xt(hm), top - 6 * d, xt(hm), bottom, setLine)
-                val lbl = java.text.SimpleDateFormat("M/d(E)", java.util.Locale.KOREA).format(java.util.Date(hm)) + " →"
+                // 이 날부터 기준이 다른 예측이면 '여기부터 예측'
+                val predicted = day?.stationCode != null && days.firstOrNull { it.dateMillis == hm }?.stationCode == null &&
+                    days.any { it.dateMillis == hm }
+                val lbl = java.text.SimpleDateFormat("M/d(E)", java.util.Locale.KOREA).format(java.util.Date(hm)) + " →" +
+                    if (predicted) " 여기부터 예측" else ""
                 sunTxt.textAlign = Paint.Align.LEFT; sunTxt.color = setLine.color
                 canvas.drawText(lbl, xt(hm) + 3 * d, bottom - 4 * d, sunTxt)
             }
@@ -503,7 +507,7 @@ class TideView(c: Context) : View(c) {
             val hx = xt(e.time); val hy = y(e.value)
             dot.color = Ui.TEXT
             canvas.drawCircle(hx, hy, 3.5f * d, dot)
-            val label = (if (e.high) "만조 " else "간조 ") + tf.format(java.util.Date(e.time))
+            val label = (if (e.high) "만조 " else "간조 ") + tf.format(java.util.Date(e.time)) + if (e.est) " 추정" else ""
             val hLabel = "${Math.round(e.value * 100)}cm"
             val half = ext.measureText(label) / 2
             val lx = hx.coerceIn(left + half, right - half)

@@ -296,6 +296,11 @@ object Store {
             else -> null
         }
         set(v) { prefs.edit().apply { if (v == null) remove("liveGroups") else putStringSet("liveGroups", v) }.apply() }
+    /** 이 앱에서 내 위치 사용 (끄면 경로·조과 위치·지도 내 위치·위치 공유 모두 안 씀) */
+    var appLoc: Boolean
+        get() = try { prefs.getBoolean("appLoc", true) } catch (_: Exception) { true }
+        set(v) { prefs.edit().putBoolean("appLoc", v).apply() }
+
     /** 내 출조 알릴 때 위치(지도)도 보여 주기 — 끄면 '출조 중'·마릿수만 */
     var liveLoc: Boolean
         get() = prefs.getBoolean("liveLoc", true)

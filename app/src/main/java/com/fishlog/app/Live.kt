@@ -166,7 +166,7 @@ object Live {
 
     /** 위치 공유를 켰을 때만 위치를 올림 (끄면 서버에 있던 위치도 지움) */
     private fun putLoc(doc: HashMap<String, Any>, loc: Pair<Double, Double>?) {
-        if (!Store.liveLoc) { doc["lat"] = com.google.firebase.firestore.FieldValue.delete(); doc["lon"] = com.google.firebase.firestore.FieldValue.delete(); return }
+        if (!Store.liveLoc || !Store.appLoc) { doc["lat"] = com.google.firebase.firestore.FieldValue.delete(); doc["lon"] = com.google.firebase.firestore.FieldValue.delete(); return }
         if (loc != null) { doc["lat"] = loc.first; doc["lon"] = loc.second }
     }
 

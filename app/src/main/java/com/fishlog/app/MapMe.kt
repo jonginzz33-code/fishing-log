@@ -97,6 +97,7 @@ class LiveMe(private val a: Activity, private val map: MapView, val me: MyLocOve
     @SuppressLint("MissingPermission")
     fun start() {
         if (running) return
+        if (!Store.appLoc) { status("앱에서 내 위치 사용이 꺼져 있어요 (⚙ 개인 설정에서 켜기)"); return }
         if (!Tracker.hasPermission(a)) { status("내 위치를 보려면 위치 권한을 허용해 주세요 (눌러서 허용)"); return }
         val m = a.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         lm = m

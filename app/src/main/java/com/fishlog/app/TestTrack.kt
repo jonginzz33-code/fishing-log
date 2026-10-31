@@ -51,6 +51,7 @@ object TestTrack {
     @SuppressLint("MissingPermission")
     fun start(c: Context): String? {
         if (on) return null
+        if (!Store.appLoc) return "앱에서 내 위치 사용이 꺼져 있어요 (⚙ 개인 설정에서 켜기)"
         if (!Tracker.hasPermission(c)) return "위치 권한을 허용해 주세요"
         val m = c.applicationContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val gpsOn = try { m.isProviderEnabled(LocationManager.GPS_PROVIDER) } catch (_: Exception) { false }

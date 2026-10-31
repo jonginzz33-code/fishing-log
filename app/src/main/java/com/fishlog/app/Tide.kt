@@ -93,8 +93,8 @@ object Tide {
         return "$name · $kind (음력 ${d}일 무렵)"
     }
 
-    /** 만조/간조. value 단위는 m */
-    class Extreme(val time: Long, val high: Boolean, val value: Double)
+    /** 만조/간조. value 단위는 m · est = 빠진 걸 앞뒤로 추정해서 채운 것 */
+    class Extreme(val time: Long, val high: Boolean, val value: Double, val est: Boolean = false)
 
     /**
      * 하루 조위. values[i] = 0시 + i*stepMin 분의 높이(m)
@@ -160,12 +160,93 @@ object Tide {
     private fun khoaDay(ctx: Context, code: String, ymd: String): List<Extreme>? {
         val prefs = ctx.getSharedPreferences("tide", Context.MODE_PRIVATE)
         val cacheKey = "${code}_$ymd"
-        prefs.getString(cacheKey, null)?.let { s ->
-            try {
-                val a = JSONArray(s)
-                return (0 until a.length()).map { val e = a.getJSONArray(it); Extreme(e.getLong(0), e.getBoolean(1), e.getDouble(2)) }
-            } catch (_: Exception) {}
+        val force = System.currentTimeMillis() < forceUntil
+        // ① 폰에 저장된 것 (빠진 게 없을 때만)
+        if (!force) prefs.getString(cacheKey, null)?.let { s -> fromJson(s)?.takeIf { complete(it, ymd) }?.let { return it } }
+        // 빠진 채로 받은 건 폰·서버에 저장 안 하고, 앱이 켜져 있는 동안만 12시간 기억 (계속 다시 부르지 않게)
+        if (!force) partial[cacheKey]?.let { (at, l) -> if (System.currentTimeMillis() - at < SERVER_FRESH_MS) return l }
+        // ② 서버에 저장된 것 (12시간 안에 받은 것, 빠진 게 없을 때만)
+        var server: List<Extreme>? = null
+        if (!force) serverGet(cacheKey, ymd)?.let { (at, list) ->
+            server = list
+            if (System.currentTimeMillis() - at < SERVER_FRESH_MS) {
+                prefs.edit().putString(cacheKey, toJson(list)).apply()
+                return list
+            }
         }
+        // ③ 국립해양조사원에서 받기 (서버 것이 오래됐으면 새로 받아 서버도 갱신)
+        val fresh = khoaApi(code, ymd)
+        if (fresh != null && fresh.isNotEmpty()) {
+            if (complete(fresh, ymd)) {
+                prefs.edit().putString(cacheKey, toJson(fresh)).apply()
+                serverPut(cacheKey, fresh)
+            } else {
+                partial[cacheKey] = System.currentTimeMillis() to fresh
+                lastError = "국립해양조사원 응답에 만조·간조가 빠져 있어 추정으로 채웠어요"
+            }
+            return fresh
+        }
+        // 받기 실패: 서버의 예전 것이라도
+        server?.let { return it }
+        return fresh
+    }
+
+    /** 관리자 '↻ 새로고침': 이 시각까지는 폰·서버 저장 값을 무시하고 새로 받음 */
+    @Volatile var forceUntil = 0L
+    private val partial = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<Extreme>>>()
+    private const val SERVER_FRESH_MS = 12 * 3600_000L   // 하루 두 번
+
+    private fun toJson(list: List<Extreme>): String {
+        val a = JSONArray()
+        list.forEach { a.put(JSONArray().put(it.time).put(it.high).put(it.value)) }
+        return a.toString()
+    }
+    private fun fromJson(s: String): List<Extreme>? = try {
+        val a = JSONArray(s)
+        (0 until a.length()).map { val e = a.getJSONArray(it); Extreme(e.getLong(0), e.getBoolean(1), e.getDouble(2)) }
+    } catch (_: Exception) { null }
+
+    /**
+     * 하루치가 빠짐없는지: 3개 이상 · 만조·간조가 번갈아 · 간격 9시간 안 · 첫 것은 0시부터, 마지막 것은 24시까지 7시간 안
+     *  (조차가 아주 작은 곳(동해 등)은 하루 한 번인 날도 있어서 검사 안 함)
+     */
+    private fun complete(list: List<Extreme>, ymd: String? = null): Boolean {
+        if (list.isEmpty()) return false
+        if (list.maxOf { it.value } - list.minOf { it.value } < 0.6) return true
+        if (list.size < 3) return false
+        for (i in 1 until list.size) {
+            if (list[i].high == list[i - 1].high) return false
+            if (list[i].time - list[i - 1].time > 9 * 3600_000L) return false
+        }
+        if (ymd != null) {
+            val start = keyFmt.parse(ymd)?.time ?: return true
+            if (list.first().time - start > 7 * 3600_000L) return false
+            if (start + 24 * 3600_000L - list.last().time > 7 * 3600_000L) return false
+        }
+        return true
+    }
+
+    // ---- 서버 저장 (tide/{관측소_날짜}) : 모든 사용자가 같이 씀 ----
+    private fun serverGet(id: String, ymd: String): Pair<Long, List<Extreme>>? {
+        if (Cloud.uid == null) return null
+        if (Looper.myLooper() == Looper.getMainLooper()) return null   // 화면 스레드에서는 기다리지 않음
+        return try {
+            val d = com.google.android.gms.tasks.Tasks.await(
+                com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("tide").document(id).get(), 6, java.util.concurrent.TimeUnit.SECONDS)
+            val list = d.getString("ext")?.let { fromJson(it) }?.takeIf { complete(it, ymd) } ?: return null
+            (d.getLong("at") ?: 0L) to list
+        } catch (_: Exception) { null }
+    }
+    private fun serverPut(id: String, list: List<Extreme>) {
+        if (Cloud.uid == null) return
+        try {
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("tide").document(id)
+                .set(mapOf("ext" to toJson(list), "at" to System.currentTimeMillis(), "by" to (Cloud.uid ?: "")))
+        } catch (_: Exception) {}
+    }
+
+    /** 국립해양조사원 API 한 번 부르기 (저장은 안 함) */
+    private fun khoaApi(code: String, ymd: String): List<Extreme>? {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) { lastError = "인증키가 앱에 없음 (GitHub 비밀값 KHOA_KEY 확인)"; return null }
         val q = "/1192136/tideFcstHghLw/GetTideFcstHghLwApiService" +
@@ -206,18 +287,46 @@ object Tide {
                 val high = o.optString("extrSe") == "1" || o.optString("extrSe") == "3"
                 Extreme(t, high, o.getDouble("predcTdlvVl") / 100.0)
             }.sortedBy { it.time }
-            if (list.isNotEmpty()) {
-                val a = JSONArray()
-                list.forEach { a.put(JSONArray().put(it.time).put(it.high).put(it.value)) }
-                prefs.edit().putString(cacheKey, a.toString()).apply()
-            } else {
-                lastError = "이 관측소($code)는 예보가 비어 있음"
-            }
+            if (list.isEmpty()) lastError = "이 관측소($code)는 예보가 비어 있음"
             list
         } catch (e: Exception) {
             lastError = "응답 읽기 실패: ${e.message?.take(60)}"
             null
         }
+    }
+
+    /**
+     * 빠진 만조·간조 채우기 (추정): 같은 종류가 연달아 오거나 간격이 9시간 넘으면
+     * 그 사이에 반대 종류를 넣음 (시각 = 가운데쯤, 높이 = 가까운 같은 종류 평균)
+     */
+    private fun repair(list: List<Extreme>): List<Extreme> {
+        if (list.size < 2) return list
+        if (list.maxOf { it.value } - list.minOf { it.value } < 0.6) return list
+        val out = mutableListOf(list[0])
+        for (i in 1 until list.size) {
+            val a = out.last(); val b = list[i]
+            var gap = b.time - a.time
+            var prev = a
+            // 반대 종류가 와야 하는데 같은 종류 → 하나 넣기 / 간격이 너무 길면 두 개(반대·같은) 넣기
+            val need = when {
+                a.high == b.high -> 1 + ((gap - 12.4 * 3600_000L) / (12.4 * 3600_000L)).toInt().coerceAtLeast(0) * 2
+                gap > 9 * 3600_000L -> 2 * ((gap + 3 * 3600_000L) / (12.4 * 3600_000L)).toInt().coerceAtLeast(1)
+                else -> 0
+            }
+            if (need > 0) {
+                val step = gap / (need + 1)
+                for (k in 1..need) {
+                    val high = !prev.high
+                    val same = list.filter { it.high == high && !it.est }
+                    val near = same.sortedBy { kotlin.math.abs(it.time - (a.time + step * k)) }.take(2)
+                    val v = if (near.isNotEmpty()) near.map { it.value }.average() else prev.value + (if (high) 2.0 else -2.0)
+                    val e = Extreme(a.time + step * k, high, v, est = true)
+                    out.add(e); prev = e
+                }
+            }
+            out.add(b)
+        }
+        return out
     }
 
     /** 만조·간조 사이를 코사인 곡선으로 이어서 10분 간격 조위 만들기 */
@@ -245,10 +354,13 @@ object Tide {
         for (s in near) {
             val today = khoaDay(ctx, s.code, ymd) ?: continue
             if (today.isEmpty()) continue
-            val all = (khoaDay(ctx, s.code, prev).orEmpty() + today + khoaDay(ctx, s.code, next).orEmpty())
-                .distinctBy { it.time }.sortedBy { it.time }
+            val all = repair((khoaDay(ctx, s.code, prev).orEmpty() + today + khoaDay(ctx, s.code, next).orEmpty())
+                .distinctBy { it.time }.sortedBy { it.time })
+            // 오늘 만조·간조 목록도 채운 것 포함 (추정 표시)
+            val dayEnd = dayStart + 24 * 3600_000L
+            val todayFixed = all.filter { it.time in dayStart until dayEnd }.ifEmpty { today }
             val km = dist(lat, lon, s.lat, s.lon) / 1000f
-            return Day(dayStart, curve(dayStart, all), 10, today,
+            return Day(dayStart, curve(dayStart, all), 10, todayFixed,
                 String.format(Locale.KOREA, "국립해양조사원 %s 관측소 기준 (%.0fkm%s)", s.name, km, if (chosen != null) " · 직접 고름" else ""),
                 s.code)
         }
@@ -272,6 +384,19 @@ object Tide {
             } catch (_: Exception) {}
         }
         return null
+    }
+
+    /**
+     * 기준이 다른 하루(예: 국립해양조사원 옆에 붙는 Open-Meteo 예측)를 기준 날 높이에 맞춤
+     *  - Open-Meteo 는 평균 해수면이 0 이라 관측소 값(바닥부터)과 수 m 차이 → 평균 높이를 같게 옮김
+     */
+    fun align(ref: Day, other: Day?): Day? {
+        if (other == null || ref.stationCode == null || other.stationCode != null) return other
+        val a = ref.values.filterNotNull(); val b = other.values.filterNotNull()
+        if (a.isEmpty() || b.isEmpty()) return other
+        val shift = a.average() - b.average()
+        return Day(other.dateMillis, other.values.map { it?.plus(shift) }, other.stepMin, null,
+            "예측(Open-Meteo, 관측소 높이에 맞춤)", null)
     }
 
     /** 화면 안 띄우고 바로 받아오기 (알람 확인용, 백그라운드 스레드에서 호출) */

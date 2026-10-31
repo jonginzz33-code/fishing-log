@@ -40,11 +40,20 @@ object Tracker {
 
     private const val RECENT_MS = 10 * 60_000L
 
-    fun hasPermission(ctx: Context) =
+    /** 위치를 써도 되는지 = 폰 권한 허용 + 앱 설정 '이 앱에서 내 위치 사용' 켜짐 */
+    fun hasPermission(ctx: Context) = granted(ctx) && Store.appLoc
+
+    /** 폰 위치 권한만 (앱 설정과 상관없이) */
+    fun granted(ctx: Context) =
         ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    fun recent(now: Long): Location? = last?.takeIf { now - it.time < RECENT_MS }
+    /** 폰 위치(GPS)가 켜져 있는지 */
+    fun gpsOn(ctx: Context): Boolean = try {
+        (ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager).isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+    } catch (_: Exception) { false }
+
+    fun recent(now: Long): Location? = if (!Store.appLoc) null else last?.takeIf { now - it.time < RECENT_MS }
 
     private fun desiredInterval(): Long = when {
         live -> 3_000L
@@ -130,6 +139,9 @@ object Tracker {
         running = true
         request()
     }
+
+    /** 앱 설정에서 '내 위치 사용'을 껐을 때: 기억하던 위치도 지움 */
+    fun forget() { stop(); last = null }
 
     fun stop() {
         try { lm?.removeUpdates(listener) } catch (_: Exception) {}

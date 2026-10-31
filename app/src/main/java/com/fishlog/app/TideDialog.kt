@@ -132,7 +132,22 @@ object TideDialog {
         col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 8))
 
         val head = Ui.text(a, 16f, Ui.TEXT, true, "")
-        col.addView(head, Ui.lp(a, MATCH, WRAP, top = 10))
+        // 관리자(나)에게만: 물때 새로고침 (폰·서버에 저장된 물때 무시하고 국립해양조사원에서 바로 다시 받아 서버도 덮어씀)
+        var reloadTide: () -> Unit = {}
+        if (Cloud.isAdmin) {
+            val hr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            hr.addView(head, LinearLayout.LayoutParams(0, WRAP, 1f))
+            hr.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 물때 새로고침").apply {
+                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+                background = Ui.bg(a, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
+                setOnClickListener {
+                    android.widget.Toast.makeText(a, "물때를 지금 다시 받는 중… (서버에도 저장)", android.widget.Toast.LENGTH_SHORT).show()
+                    Tide.forceUntil = System.currentTimeMillis() + 20_000L
+                    reloadTide()
+                }
+            }, LinearLayout.LayoutParams(WRAP, dp(32)).apply { leftMargin = dp(6) })
+            col.addView(hr, Ui.lp(a, MATCH, WRAP, top = 10))
+        } else col.addView(head, Ui.lp(a, MATCH, WRAP, top = 10))
         val graph = TideView(a)
 
         col.addView(TideLayers.view(a) { graph.invalidate() }, Ui.lp(a, MATCH, WRAP, top = 8))
@@ -368,7 +383,7 @@ object TideDialog {
                 // 오늘: '지금'을 가운데 고정 (어제·내일 물때를 이어 붙임)
                 if (cur == today) {
                     var prev: Tide.Day? = null; var next: Tide.Day? = null; var got = 0
-                    fun done() { if (++got == 2 && dlg.isShowing && id == loadId) graph.setCentered(prev, day, next, t, lat, lon) }
+                    fun done() { if (++got == 2 && dlg.isShowing && id == loadId) graph.setCentered(Tide.align(day, prev), day, Tide.align(day, next), t, lat, lon) }
                     Tide.fetch(a, lat, lon, noon - 86_400_000L) { d2, _ -> prev = d2; done() }
                     Tide.fetch(a, lat, lon, noon + 86_400_000L) { d2, _ -> next = d2; done() }
                 }
@@ -543,6 +558,7 @@ object TideDialog {
                 load()
             }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
         }
+        reloadTide = { load() }
         load()
     }
 
@@ -567,7 +583,7 @@ object TideDialog {
         val sb = StringBuilder()
         Tide.extremes(day).forEach { e ->
             sb.append(if (e.high) "만조 " else "간조 ").append(tf.format(Date(e.time)))
-                .append(String.format(Locale.KOREA, " (%.0fcm)", e.value * 100)).append("   ")
+                .append(String.format(Locale.KOREA, " (%.0fcm%s)", e.value * 100, if (e.est) " 추정" else "")).append("   ")
         }
         if (trip != null && trip.catches.isNotEmpty()) {
             var up1 = 0; var up2 = 0; var dn1 = 0; var dn2 = 0

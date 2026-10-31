@@ -213,6 +213,7 @@ class MainActivity : Activity() {
             return
         }
         paintBoardSub(); paintNowBtn()
+        resumeAfterLoc()
         if (crashShown || gated) return
         // 관리자가 이용 정지한 계정·폰이면 막는 화면만
         if (Moderation.bannedCached) { crashShown = true; Moderation.showBlockedScreen(this); return }
@@ -1131,10 +1132,56 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun startTrip(boat: String, port: String) {
-        if (!Tracker.hasPermission(this)) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 2)
+    /** 켜러 갔다 돌아오면 이어서 할 일 (출조 시작 · 위치 공유 켜기) */
+    private var afterLoc: (() -> Unit)? = null
+
+    /**
+     * 위치가 꺼져 있으면 '📍 위치가 꺼져 있어요' 창: 앱 위치 사용 · 폰 GPS · 위치 권한 중 꺼진 것만 차례로 켜러 가기
+     *  ok = 다 켜져 있거나 켜고 돌아왔을 때 · skip = '위치 없이 …' 눌렀을 때
+     */
+    private fun checkLocation(skipLabel: String, ok: () -> Unit, skip: () -> Unit) {
+        val appOn = Store.appLoc; val gps = Tracker.gpsOn(this); val perm = Tracker.granted(this)
+        if (appOn && gps && perm) { ok(); return }
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(4), dp(20), dp(4)) }
+        box.addView(Ui.text(this, 13f, Ui.SUB, false, "출조 경로 · 조과 위치 · 위치 공유를 하려면 아래가 켜져 있어야 해요."))
+        listOf("❶ 이 앱에서 내 위치 사용" to appOn, "❷ 폰 위치(GPS)" to gps, "❸ 위치 권한 (앱 허용)" to perm).forEach { (l, on) ->
+            val r = Ui.row(this).apply { setPadding(dp(12), dp(9), dp(12), dp(9)); background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Ui.LINE) }
+            r.addView(Ui.text(this, 13f, Ui.TEXT, false, l), LinearLayout.LayoutParams(0, WRAP, 1f))
+            r.addView(Ui.text(this, 13f, if (on) Ui.GREEN else Color.parseColor("#FF8A92"), true, if (on) "켜짐" else "꺼짐"))
+            box.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
         }
+        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("📍 위치가 꺼져 있어요")
+            .setView(box)
+            .setPositiveButton("켜러 가기") { _, _ ->
+                afterLoc = ok
+                when {
+                    !appOn -> { showMessage("'📍 이 앱에서 내 위치 사용'을 켜고 돌아오세요"); startActivity(Intent(this, SettingsActivity::class.java)) }
+                    !gps -> { showMessage("위치(GPS)를 켜고 돌아오세요"); try { startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)) } catch (_: Exception) {} }
+                    else -> requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 2)
+                }
+            }
+            .setNeutralButton(skipLabel) { _, _ -> afterLoc = null; skip() }
+            .setNegativeButton("취소") { _, _ -> afterLoc = null }
+            .show()
+        dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.let { b -> b.setTextColor(Ui.GREEN); b.isAllCaps = false }
+    }
+
+    /** 켜러 갔다가 돌아왔을 때: 다 켜졌으면 이어서, 아직 꺼진 게 있으면 다시 안내 */
+    private fun resumeAfterLoc() {
+        val next = afterLoc ?: return
+        afterLoc = null
+        if (Store.appLoc && Tracker.gpsOn(this) && Tracker.granted(this)) next()
+        else window.decorView.postDelayed({ if (!isFinishing) checkLocation("위치 없이 계속", next) { next() } }, 300)
+    }
+
+    private fun startTrip(boat: String, port: String) {
+        if (Store.current != null) return
+        checkLocation("위치 없이 출조 시작", { startTripNow(boat, port) }) { startTripNow(boat, port) }
+    }
+
+    private fun startTripNow(boat: String, port: String) {
+        if (Store.current != null) return
         Live.sharedGid = Cloud.active?.id
         Store.startTrip(boat, port)
         RemoteService.start(this)
@@ -1417,6 +1464,7 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 2) {
+            if (afterLoc != null) { resumeAfterLoc(); return }
             if (Tracker.hasPermission(this)) {
                 if (Store.current != null) RemoteService.start(this)
             } else {
@@ -1604,7 +1652,8 @@ class MainActivity : Activity() {
      *  🔒 알리지 않기 / 그룹에 알리기 (가입한 그룹 하나씩 체크) / 🌊 전체 사용자에게 공유하기
      */
     private fun liveScopeViews(box: LinearLayout, redraw: () -> Unit) {
-        val scope = Store.liveScope
+        // 처음 동의 때 '같이 출조 중 공유'를 안 했으면 알리지 않기로 보임 (여기서 고르면 동의한 것으로)
+        val scope = if (!Consent.shareLive(this)) "none" else Store.liveScope
         fun option(key: String, title: String, sub: String?): LinearLayout {
             val on = scope == key
             val o = LinearLayout(this).apply {
@@ -1613,6 +1662,7 @@ class MainActivity : Activity() {
                 isClickable = true
                 setOnClickListener {
                     if (key == "groups" && Store.liveGroups == null) Store.liveGroups = Live.checkedGroupIds()
+                    if (key != "none") Consent.setShareLive(this@MainActivity, true)
                     Store.liveScope = key; redraw()
                 }
             }
@@ -1659,10 +1709,14 @@ class MainActivity : Activity() {
         option("public", "🌊 전체 사용자에게 공유하기", "앱 쓰는 모든 사람 · 전체 게시판 맨 위에 보여요 (이름은 게시판처럼 익명/닉네임, 위치는 동네 이름만) · 내 그룹 모두에도 보여요")
         // 📍 위치 공유하기 (알릴 때만)
         if (scope != "none") {
-            val on = Store.liveLoc
+            val on = Store.liveLoc && Store.appLoc
             val r = Ui.row(this).apply {
                 setPadding(dp(4), dp(10), 0, dp(2)); isClickable = true
-                setOnClickListener { Store.liveLoc = !Store.liveLoc; redraw() }
+                setOnClickListener {
+                    if (on) { Store.liveLoc = false; redraw() }
+                    // 켤 때 위치가 꺼져 있으면 안내 → 켜고 돌아오면 체크
+                    else checkLocation("위치 없이 마릿수만 공유", { Store.liveLoc = true; redraw() }) { Store.liveLoc = false; redraw() }
+                }
             }
             r.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.SUB, true, if (on) "✓" else "").apply {
                 gravity = Gravity.CENTER
@@ -1683,8 +1737,8 @@ class MainActivity : Activity() {
         val t = Store.current
         if (t == null || Cloud.user == null || Cloud.groups.isEmpty()) { liveChip.visibility = View.GONE; return }
         liveChip.visibility = View.VISIBLE
-        val none = Store.liveScope == "none" || (Store.liveScope == "groups" && Live.shareGroups().isEmpty())
-        liveChip.text = when (Store.liveScope) {
+        val none = !Consent.shareLive(this) || Store.liveScope == "none" || (Store.liveScope == "groups" && Live.shareGroups().isEmpty())
+        liveChip.text = when (if (!Consent.shareLive(this)) "none" else Store.liveScope) {
             "none" -> "🔒 내 출조 알리지 않는 중 ▾"
             "public" -> "🌊 전체 사용자에게 공유 중 ▾"
             else -> Live.shareGroups().let { gs ->
