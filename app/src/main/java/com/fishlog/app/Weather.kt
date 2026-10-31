@@ -107,7 +107,8 @@ object Weather {
      * done(null) = 위치가 없거나 못 받음
      */
     fun snapshot(ctx: Context, t: Store.Trip, done: (String?) -> Unit) {
-        val loc = t.anyLocation() ?: return done(null)
+        // 출조 위치가 없으면(GPS가 안 잡힌 출조) 폰이 마지막으로 알던 위치 → 직접 고른 물때 관측소 위치로
+        val loc = t.anyLocation() ?: fallbackLoc(ctx) ?: return done(null)
         val end = if (t.end > 0) t.end else System.currentTimeMillis()
         val from = t.start - 3_600_000L; val to = end + 3_600_000L
         val days = generateSequence(dayStartOf(from)) { it + 86_400_000L }.takeWhile { it <= to }.toList().take(3)
@@ -131,6 +132,19 @@ object Weather {
                 }
             }
         }
+    }
+
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun fallbackLoc(ctx: Context): Pair<Double, Double>? {
+        Tracker.last?.let { return it.latitude to it.longitude }
+        if (Tracker.hasPermission(ctx)) {
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            for (p in listOf(android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER)) {
+                try { lm.getLastKnownLocation(p)?.let { if (System.currentTimeMillis() - it.time < 12 * 3600_000L) return it.latitude to it.longitude } } catch (_: Exception) {}
+            }
+        }
+        Store.tideStation?.let { code -> Tide.stations(ctx).firstOrNull { it.code == code }?.let { return it.lat to it.lon } }
+        return null
     }
 
     /** 받은 값을 서버에 합쳐 저장 (지난 시간 값이 사라지지 않게) */

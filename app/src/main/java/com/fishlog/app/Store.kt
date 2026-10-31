@@ -487,6 +487,8 @@ object Store {
         val t = find(tripId) ?: return
         t.wx = wx; t.backedUp = false
         changed()
+        // 이미 그룹 · 게시판에 올렸으면 그 글에도 날씨 넣기
+        try { Cloud.pushWx(t) } catch (_: Exception) {}
     }
 
     fun undoLast(): Int {

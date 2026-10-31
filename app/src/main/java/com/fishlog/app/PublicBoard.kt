@@ -67,7 +67,9 @@ object PublicBoard {
         /** 올린 사람이 보이게 고른 그룹 이름 · 작은 그룹 이미지 (없으면 "") */
         val gname: String = "", val gimg: String = "",
         /** 대표 조과 사진 (작은 사진 base64) · 사진 목록에서 대표 사진 문서 이름 */
-        val mthumb: String = "", val mainId: String = ""
+        val mthumb: String = "", val mainId: String = "",
+        /** 그때 날씨 */
+        val wx: String = ""
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -213,6 +215,7 @@ object PublicBoard {
             // 대표 조과 사진 (작은 사진은 글 안에, 큰 사진은 photos/main)
             MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
             t.main()?.let { doc["mainId"] = MainPhoto.docId(it) }
+            if (t.wx.isNotBlank()) doc["wx"] = t.wx
             // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
             Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
                 doc["gname"] = g.title
@@ -333,7 +336,7 @@ object PublicBoard {
                             },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
-                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "")
+                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "")
                     } catch (_: Exception) { null }
                 }.sortedByDescending { it.start }, null)
         }

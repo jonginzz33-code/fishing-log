@@ -144,7 +144,6 @@ class TripActivity : Activity() {
         val snap = if (t.wx.isNotBlank()) Weather.snapFromJson(t.wx) else null
         if (snap == null) {
             if (t.end <= 0) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "출조를 완료하면 그 시간대 날씨가 여기에 저장돼요")); return }
-            if (t.anyLocation() == null) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "위치 기록이 없어서 날씨를 저장하지 못했어요")); return }
             card.addView(Ui.text(this, 13f, Ui.SUB, false, if (wxAsked) "날씨를 못 받았어요 (인터넷 확인)" else "그날 날씨 불러오는 중… (한 번만 받아서 기록에 저장해요)"))
             if (!wxAsked) {
                 wxAsked = true

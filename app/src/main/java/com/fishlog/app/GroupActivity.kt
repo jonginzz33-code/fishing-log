@@ -560,6 +560,7 @@ class GroupActivity : Activity() {
     private fun openTrip(t: Cloud.RemoteTrip) {
         val items = mutableListOf("함께한 출조 지도·순위")
         if (t.photoCount > 0) items.add("사진 보기 (${t.photoCount}장)")
+        if (t.wx.isNotBlank()) items.add("🌡 그때 날씨")
         val mine = t.owner == Cloud.uid
         if (mine) items.add("그룹에서 내리기")
         else if (Cloud.isOwner) items.add("그룹에서 내리기 (그룹장)")
@@ -570,6 +571,7 @@ class GroupActivity : Activity() {
                 when {
                     items[i].startsWith("함께한") -> account.showTogether(t)
                     items[i].startsWith("사진") -> account.showPhotos(t)
+                    items[i].startsWith("🌡") -> WxView.showDialog(this, "${t.ownerName} 그때 날씨", t.wx, t.start, t.end)
                     items[i].startsWith("그룹에서") -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                         .setTitle(if (mine) "이 출조를 그룹에서 내릴까요?" else "${t.ownerName}님의 이 출조를 그룹에서 내릴까요?")
                         .setMessage(if (mine) "친구들 화면에서 사라지고, 내 폰 기록은 그대로예요"

@@ -1037,9 +1037,12 @@ class MainActivity : Activity() {
                     background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
                     setOnClickListener { click(); drawOpts() }
                 }
+                // 높이는 글자에 맞춰 (최소 40) — 고정 높이면 글자를 크게 쓴 폰에서 테두리가 잘림
                 fun two(a: View, b: View) = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    addView(a, LinearLayout.LayoutParams(0, dp(38), 1f)); addView(b, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(6) })
+                    (a as? TextView)?.apply { minHeight = dp(40); setPadding(paddingLeft, dp(7), paddingRight, dp(7)) }
+                    (b as? TextView)?.apply { minHeight = dp(40); setPadding(paddingLeft, dp(7), paddingRight, dp(7)) }
+                    addView(a, LinearLayout.LayoutParams(0, WRAP, 1f)); addView(b, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
                 }
                 val anon = Store.nick == "" || Cloud.nick == null
                 opts.addView(Ui.text(this, 13f, orange, true, "게시판에 보일 이름"))

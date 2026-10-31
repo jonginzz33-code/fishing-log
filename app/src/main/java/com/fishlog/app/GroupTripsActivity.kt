@@ -310,6 +310,7 @@ class GroupTripsActivity : Activity() {
     private fun openTrip(t: Cloud.RemoteTrip) {
         val items = mutableListOf("함께한 출조 지도·순위")
         if (t.photoCount > 0) items.add("사진 보기 (${t.photoCount}장)")
+        if (t.wx.isNotBlank()) items.add("🌡 그때 날씨")
         val mine = t.owner == Cloud.uid
         // 내 글: 내 출조 기록 열어서 수정 (폰에 기록이 있을 때) · 고친 뒤 다시 올리면 그룹에도 반영
         val local = if (mine) t.id.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
@@ -323,6 +324,7 @@ class GroupTripsActivity : Activity() {
                 when {
                     items[i].startsWith("함께한") -> account.showTogether(t)
                     items[i].startsWith("사진") -> account.showPhotos(t)
+                    items[i].startsWith("🌡") -> WxView.showDialog(this, "${t.ownerName} · ${dayFmt.format(Date(t.start))} 그때 날씨", t.wx, t.start, t.end)
                     items[i].startsWith("✎") -> local?.let { startActivity(Intent(this, TripActivity::class.java).putExtra("id", it.id)) }
                     else -> confirmRemove(listOf(t))
                 }

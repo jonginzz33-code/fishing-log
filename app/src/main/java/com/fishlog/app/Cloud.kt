@@ -51,7 +51,9 @@ object Cloud {
         /** 대표 조과 사진 (작은 사진 base64, 없으면 "") */
         val mthumb: String = "",
         /** 대표 사진의 큰 사진 문서 이름 (photosBig/{mainId}), 예전 글은 "" → photosBig/main */
-        val mainId: String = ""
+        val mainId: String = "",
+        /** 그때 날씨 (출조 기록에 저장된 값, 없으면 "") */
+        val wx: String = ""
     ) {
         fun bigMainPath(gid: String) = "groups/$gid/trips/$id/photosBig/" + mainId.ifBlank { "main" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -61,7 +63,7 @@ object Cloud {
         fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx)
         /** "유료 5만원" / "무료" / "" */
         fun costLabel(): String = Store.costLabel(paid, fee)
     }
@@ -247,6 +249,8 @@ object Cloud {
         MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
         // 큰 대표 사진은 사진 목록의 큰 사진(photosBig/{이름})을 그대로 씀 → 따로 한 번 더 저장 안 함
         t.main()?.let { doc["mainId"] = MainPhoto.docId(it) }
+        // 그때 날씨 (기온·바람·파고·수온) — 그룹 기록에서도 보이게
+        if (t.wx.isNotBlank()) doc["wx"] = t.wx
         val tripRef = db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
         tripRef.set(doc)
             .addOnSuccessListener {
@@ -1079,7 +1083,7 @@ object Cloud {
             d.getBoolean("hasTrack") == true, if (cla != null && clo != null) cla to clo else null,
             d.getBoolean("paid"), (d.getLong("fee") ?: 0L).toInt(),
             (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-            d.getString("mthumb") ?: "", d.getString("mainId") ?: "")
+            d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "")
     } catch (e: Exception) { null }
 
     private fun parsePts(list: List<Map<String, Any?>>?): List<Store.Pt> = list?.mapNotNull {
@@ -1186,6 +1190,19 @@ object Cloud {
                     merge(delta.filter { it.id !in ids })
                 }
         }
+    }
+
+    /** 출조를 끝낸 뒤 날씨를 받았으면: 이미 올린 그룹 글 · 게시판 글에도 넣기 */
+    fun pushWx(t: Store.Trip) {
+        val me = uid ?: return
+        if (t.wx.isBlank()) return
+        val now = System.currentTimeMillis()
+        Store.sharedGroups(t.id).forEach { gid ->
+            db.collection("groups").document(gid).collection("trips").document("${me}_${t.id}")
+                .update(mapOf("wx" to t.wx, "updated" to now))
+        }
+        if (t.pub) db.collection("public").document(PublicBoard.docIdOf(me, t.id)).update(mapOf("wx" to t.wx, "upd" to now))
+        invalidateAll(); PublicBoard.clearCache()
     }
 
     /** 지운 글 번호 남기기 (다른 폰이 새 글 받을 때 같이 받아서 바로 지움) */

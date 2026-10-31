@@ -33,7 +33,8 @@ object Ui {
     fun bg(c: Context, color: Int, radius: Int, stroke: Int = 0): GradientDrawable =
         GradientDrawable().apply {
             setColor(color)
-            cornerRadius = dp(c, radius).toFloat()
+            // 테두리만 있는 둥근 버튼: 둥근 정도를 버튼 높이보다 크게 주면 아래 테두리가 잘려 보이는 폰이 있음 → 17 로 맞춤 (높이 34 이상이면 양끝이 둥글게)
+            cornerRadius = dp(c, if (stroke != 0 && radius > 17) 17 else radius).toFloat()
             if (stroke != 0) setStroke(dp(c, 1), stroke)
         }
 

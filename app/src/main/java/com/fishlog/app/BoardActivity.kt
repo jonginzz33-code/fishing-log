@@ -547,6 +547,8 @@ class BoardActivity : Activity() {
         // 동네 이름을 처음 찾는 중이면, 찾은 뒤 다시 씀
         t.anyCell()?.let { c -> if (Area.cached(this, c.lat, c.lon) == null) Area.fetch(this, c.lat, c.lon) { paintInfo() } }
         box.addView(info, Ui.lp(this, MATCH, WRAP, top = 10))
+        // 그때 날씨 (기온 · 하늘 · 바람 · 파고 · 수온) — 누르면 시간별
+        if (t.wx.isNotBlank()) WxView.curtain(this, t.wx, t.start, t.end)?.let { box.addView(it, Ui.lp(this, MATCH, WRAP, top = 10)) }
         // ⏱ 시각별: 한 시간씩 커튼바 (눌러서 펼치기 · 지금 시간대만 처음부터 펼침)
         if (cs.isNotEmpty()) {
             box.addView(Ui.text(this, 14f, Ui.TEXT, true, "⏱ 시각별 기록"), Ui.lp(this, MATCH, WRAP, top = 14))
