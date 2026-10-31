@@ -1398,6 +1398,7 @@ class MainActivity : Activity() {
             }, Ui.lp(this, MATCH, WRAP, top = 8))
             return
         }
+        val activeId = g?.id
         // 현재 그룹 변경: 눌러서 펼치기·접기 (그룹마다 빨간 숫자)
         val newsAll = gs.sumOf { GroupNews.count(it.id) }
         val sw = LinearLayout(this).apply {
@@ -1421,7 +1422,6 @@ class MainActivity : Activity() {
         if (groupSwitchOpen) {
         val switchBox = sw
         // 가입한 그룹 모두: 두 칸씩 여러 줄 (옆으로 밀지 않아도 다 보이게)
-        val activeId = g?.id
         var rowL: LinearLayout? = null
         gs.forEachIndexed { i, gr ->
             if (i % 2 == 0) {
