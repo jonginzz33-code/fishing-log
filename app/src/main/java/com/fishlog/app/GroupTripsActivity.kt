@@ -184,7 +184,7 @@ class GroupTripsActivity : Activity() {
                     (if (t.photoCount > 0) " · 사진 ${t.photoCount}" else "")), Ui.lp(this, MATCH, WRAP, top = 3))
             stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { c.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
-                Cloud.active?.let { g -> MainPhoto.showBig(this, "groups/${g.id}/trips/${t.id}/photosBig/main", t.mthumb, "${t.ownerName} · ${t.line()}") }
+                Cloud.active?.let { g -> MainPhoto.showBig(this, t.bigMainPath(g.id), t.mthumb, "${t.ownerName} · ${t.line()}") }
             }
             body.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
         }

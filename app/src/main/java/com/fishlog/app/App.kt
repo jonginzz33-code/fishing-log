@@ -3,7 +3,7 @@ package com.fishlog.app
 import android.app.Application
 import android.util.Log
 
-object BuildConfigInfo { const val VERSION = "2.5" }
+object BuildConfigInfo { const val VERSION = "2.7" }
 
 /** 앱이 죽으면 원인을 저장해 두고, 다음 실행 때 화면에 보여준다 */
 class App : Application() {

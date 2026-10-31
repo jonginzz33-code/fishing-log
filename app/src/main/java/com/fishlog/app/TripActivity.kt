@@ -251,7 +251,7 @@ class TripActivity : Activity() {
         root.addView(m, Ui.lp(this, MATCH, dp(240), top = 10))
         m.onResume()
         root.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "주황 ${t.name(1)} · 하늘 ${t.name(2)} · 흰 선 이동 경로 · 지도를 누르면 크게 보기"), Ui.lp(this, MATCH, WRAP, top = 6))
+            "주황 ${t.name(1)} · 하늘 ${t.name(2)} · 분홍 선 이동 경로 · 지도를 누르면 크게 보기"), Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 머문 곳
         val stays = stays(t)
@@ -339,7 +339,7 @@ class TripActivity : Activity() {
         mbt("🖼 앨범에서 고르기") { MainPhoto.album(this, t.id) }
         if (t.photos.isNotEmpty()) mbt("⭐ 이 출조 사진 중에서 고르기") { pickMainFromTrip(t) }
         if (mainP != null) mbt("🗑 대표 사진 빼기", android.graphics.Color.parseColor("#FF8A92")) {
-            Store.setMainPhoto(t.id, ""); Store.find(t.id)?.let { MainPhoto.push(it) }
+            MainPhoto.setMain(this@TripActivity, t.id, "")
         }
         mr.addView(mbc, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
         root.addView(mr, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -473,7 +473,7 @@ class TripActivity : Activity() {
                 Photos.thumbBitmap(this@TripActivity, p)?.let { setImageBitmap(it) }
                 setPadding(dp(2), dp(2), dp(2), dp(2))
                 if (p.file == t.mainPhoto) background = Ui.bg(this@TripActivity, Ui.GREEN, 4)
-                setOnClickListener { Store.setMainPhoto(t.id, p.file); Store.find(t.id)?.let { MainPhoto.push(it) }; dlg.dismiss() }
+                setOnClickListener { MainPhoto.setMain(this@TripActivity, t.id, p.file); dlg.dismiss() }
             }, GridLayout.LayoutParams().apply { width = w; height = w })
         }
         dlg.show()

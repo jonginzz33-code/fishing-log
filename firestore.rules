@@ -146,6 +146,12 @@ service cloud.firestore {
         && request.resource.data.gid == resource.data.gid;
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
     }
+    // ---- 전체 사용자에게 '지금 출조 중' 공유 (본인만 쓰기, 정확한 위치 없음) ----
+    match /publicLive/{uid} {
+      allow read: if signedIn();
+      allow create, update: if notBanned() && request.auth.uid == uid && request.resource.data.owner == uid;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
     match /public/{pid} {
       allow read: if signedIn();
       allow create: if notBanned() && request.resource.data.owner == request.auth.uid;

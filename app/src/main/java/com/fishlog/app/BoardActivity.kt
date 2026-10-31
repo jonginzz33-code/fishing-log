@@ -278,10 +278,18 @@ class BoardActivity : Activity() {
     // ---------------- 최근 조황 ----------------
     private fun regionOf(t: PublicBoard.PTrip): String {
         val c = t.anyCell() ?: return ""
-        return Tide.stationsNear(this, c.lat, c.lon).firstOrNull()?.name?.let { "$it 부근" } ?: ""
+        // 실제 동네 이름 (처음 보는 곳은 뒤에서 찾고, 찾으면 목록 다시 그림)
+        return Area.name(this, c.lat, c.lon) { areaFound() }.ifBlank { return "" } + " 부근"
     }
 
     private var listOpen = false
+    private var areaPending = false
+    /** 동네 이름을 새로 찾았으면 잠깐 모았다가 한 번만 다시 그림 */
+    private fun areaFound() {
+        if (areaPending || isFinishing) return
+        areaPending = true
+        listBox.postDelayed({ areaPending = false; if (!isFinishing && !selMode) render() }, 800)
+    }
 
     /** 조과 하나 → 지도 점. 정확 공개면 그 자리, 아니면 칸 가운데 (radius = 원 크기, 0 = 원 없음) */
     private class SpotDot(val dot: MapDot, val radius: Double)
@@ -336,7 +344,41 @@ class BoardActivity : Activity() {
         return sb
     }
 
+    private var liveOpen = false
+    /** 맨 위 '🟢 지금 출조 중 N명' 커튼바 (전체 사용자에게 공유한 사람들) */
+    private fun liveCurtain() {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); visibility = View.GONE
+            background = Ui.bg(this@BoardActivity, android.graphics.Color.parseColor("#16352A"), 12, Ui.GREEN)
+        }
+        listBox.addView(box, Ui.lp(this, MATCH, WRAP, top = 12))
+        fun draw(l: List<Live.PubNow>) {
+            box.removeAllViews()
+            box.visibility = if (l.isEmpty()) View.GONE else View.VISIBLE
+            if (l.isEmpty()) return
+            val head = Ui.row(this).apply { isClickable = true; setOnClickListener { liveOpen = !liveOpen; draw(l) } }
+            head.addView(Ui.text(this, 14f, android.graphics.Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중 ${l.size}명"), LinearLayout.LayoutParams(0, WRAP, 1f))
+            head.addView(Ui.text(this, 12f, Ui.SUB, false, if (liveOpen) "▾ 접기" else "▸ 펼치기"))
+            box.addView(head)
+            if (!liveOpen) return
+            l.forEach { m ->
+                val mins = ((System.currentTimeMillis() - m.start) / 60_000L).coerceAtLeast(0)
+                val r = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(8), 0, dp(2)) }
+                r.addView(Ui.text(this, 13f, Ui.TEXT, true, listOf(Store.catShort(m.cat).ifBlank { "출조" }, m.name,
+                    if (mins >= 60) "${mins / 60}시간 ${mins % 60}분" else "${mins}분").joinToString(" · ")))
+                r.addView(Ui.text(this, 12f, android.graphics.Color.parseColor("#C9D3DE"), false,
+                    listOf(m.line.ifBlank { "0마리" }, m.area.takeIf { it.isNotBlank() }?.let { "$it 부근" }).filterNotNull().joinToString(" · ")))
+                box.addView(r)
+            }
+            box.addView(Ui.text(this, 11f, Ui.SUB, false, "출조 시작 때 '전체 사용자에게 공유하기'를 고른 사람만 · 정확한 위치는 안 보여요"),
+                Ui.lp(this, MATCH, WRAP, top = 6))
+        }
+        draw(Live.publicCached())
+        Live.publicNow { l -> if (!isFinishing) draw(l) }
+    }
+
     private fun renderRecent() {
+        liveCurtain()
         val list = filtered()
         if (list.isEmpty()) {
             listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "아직 공개된 출조가 없어요. 출조를 종료할 때 '전체 게시판에도 공개'를 체크해 보세요."),
@@ -446,6 +488,34 @@ class BoardActivity : Activity() {
     private fun tripDetail(t: PublicBoard.PTrip) {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(6)) }
         val cs = t.catches.sortedBy { it.time }
+        // 📸 사진 (맨 위): 대표 사진 크게 + 나머지는 옆으로 밀어서
+        if (t.mthumb.isNotBlank() || t.photoCount > 0) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            box.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row) }, Ui.lp(this, MATCH, WRAP, top = 4))
+            val caption = "${t.nick} · ${dayFmt.format(Date(t.start))}"
+            MainPhoto.decode(t.mthumb)?.let { th ->
+                row.addView(ImageView(this).apply {
+                    setImageBitmap(th); scaleType = ImageView.ScaleType.CENTER_CROP
+                    outlineProvider = android.view.ViewOutlineProvider.BACKGROUND; clipToOutline = true
+                    background = Ui.bg(this@BoardActivity, Ui.CARD, 10)
+                    setOnClickListener { MainPhoto.showBig(this@BoardActivity, "public/${t.id}/photos/main", t.mthumb, caption) }
+                    // 큰 사진으로 바꿔 끼우기
+                    com.google.firebase.firestore.FirebaseFirestore.getInstance().document("public/${t.id}/photos/main").get()
+                        .addOnSuccessListener { d -> d.getString("data")?.let { MainPhoto.decode(it) }?.let { setImageBitmap(it) } }
+                }, LinearLayout.LayoutParams(dp(180), dp(150)).apply { rightMargin = dp(6) })
+            }
+            if (t.photoCount > 0) PublicBoard.loadPhotos(t.id) { ps ->
+                // 대표 사진은 위에 이미 크게 있으니 목록에서 뺌
+                ps.filter { it.id != t.mainId }.forEach { p ->
+                    row.addView(ImageView(this).apply {
+                        setImageBitmap(p.bitmap); scaleType = ImageView.ScaleType.CENTER_CROP
+                        outlineProvider = android.view.ViewOutlineProvider.BACKGROUND; clipToOutline = true
+                        background = Ui.bg(this@BoardActivity, Ui.CARD, 10)
+                        setOnClickListener { ZoomImageView.show(this@BoardActivity, p.bitmap, hm.format(Date(p.time))) }
+                    }, LinearLayout.LayoutParams(dp(96), dp(150)).apply { rightMargin = dp(6) })
+                }
+            }
+        }
         // 지도: 잡은 자리 (정확 = 어종 색 점, 대략 = 원) + 지금 내 위치 + 길 안내
         val spots = spotDots(cs.map { t to it }) { _, c -> MapDialog.slotCol(c.slot) }
         var embedded: MapDialog.Embedded? = null
@@ -457,37 +527,63 @@ class BoardActivity : Activity() {
                     "${t.speciesLine()} · ${spotLegend(spots)}\n● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)}", target)
             }
             embedded = e
-            box.addView(e.view, LinearLayout.LayoutParams(MATCH, dp(240)))
+            box.addView(e.view, Ui.lp(this, MATCH, dp(240), top = 10))
             box.addView(Ui.text(this, 12f, Ui.SUB, false,
                 (if (t.exact) "📍 정확한 위치 공개 · ● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)}" else "◯ 대략 공개 · 원 안 어딘가에서 잡았어요") +
                     "\n파란 점 = 지금 내 위치 · 점선과 위 글씨 = 가장 가까운 자리까지 방향·거리"),
                 Ui.lp(this, MATCH, WRAP, top = 6))
         }
-        val sb = StringBuilder()
-        sb.append(Tide.mulName(t.start)).append("\n")
-        if (cs.isNotEmpty()) sb.append("잡은 시간 ").append(hm.format(Date(cs.first().time))).append(" ~ ").append(hm.format(Date(cs.last().time))).append("\n")
-        regionOf(t).takeIf { it.isNotBlank() }?.let { sb.append("지역: ").append(it).append("\n") }
-        sb.append("\n").append(t.speciesLine()).append(" · 총 ").append(cs.size).append("마리\n\n")
-        phaseText(cs).takeIf { it.isNotBlank() }?.let { sb.append(it).append("\n") }
-        sb.append("시각별\n")
-        cs.forEach { c ->
-            sb.append(hm.format(Date(c.time))).append("  ").append(t.name(c.slot))
-            c.rising?.let { sb.append(" · ").append(if (it) "들물" else "날물") }
-            if (c.near.isNotBlank()) sb.append(" · ").append(c.near)
-            sb.append("\n")
+        val info = Ui.text(this, 14f, Ui.TEXT, false, "").apply { setLineSpacing(0f, 1.3f) }
+        fun paintInfo() {
+            val sb = StringBuilder()
+            sb.append(Tide.mulName(t.start)).append("\n")
+            if (cs.isNotEmpty()) sb.append("잡은 시간 ").append(hm.format(Date(cs.first().time))).append(" ~ ").append(hm.format(Date(cs.last().time))).append("\n")
+            regionOf(t).takeIf { it.isNotBlank() }?.let { sb.append("지역: ").append(it).append("\n") }
+            sb.append(t.speciesLine()).append(" · 총 ").append(cs.size).append("마리\n")
+            phaseText(cs).takeIf { it.isNotBlank() }?.let { sb.append(it) }
+            info.text = sb.toString().trimEnd()
         }
-        box.addView(Ui.text(this, 14f, Ui.TEXT, false, sb.toString().trimEnd()).apply { setLineSpacing(0f, 1.3f) },
-            Ui.lp(this, MATCH, WRAP, top = 10))
-        val photoRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        if (t.photoCount > 0) {
-            box.addView(HorizontalScrollView(this).apply { addView(photoRow) }, Ui.lp(this, MATCH, WRAP, top = 10))
-            PublicBoard.loadPhotos(t.id) { ps ->
-                ps.forEach { p ->
-                    photoRow.addView(ImageView(this).apply {
-                        setImageBitmap(p.bitmap); scaleType = ImageView.ScaleType.CENTER_CROP
-                        setOnClickListener { ZoomImageView.show(this@BoardActivity, p.bitmap, hm.format(Date(p.time))) }
-                    }, LinearLayout.LayoutParams(dp(96), dp(96)).apply { rightMargin = dp(6) })
+        paintInfo()
+        // 동네 이름을 처음 찾는 중이면, 찾은 뒤 다시 씀
+        t.anyCell()?.let { c -> if (Area.cached(this, c.lat, c.lon) == null) Area.fetch(this, c.lat, c.lon) { paintInfo() } }
+        box.addView(info, Ui.lp(this, MATCH, WRAP, top = 10))
+        // ⏱ 시각별: 한 시간씩 커튼바 (눌러서 펼치기 · 지금 시간대만 처음부터 펼침)
+        if (cs.isNotEmpty()) {
+            box.addView(Ui.text(this, 14f, Ui.TEXT, true, "⏱ 시각별 기록"), Ui.lp(this, MATCH, WRAP, top = 14))
+            val hourFmt = SimpleDateFormat("H", Locale.KOREA)
+            val nowKey = SimpleDateFormat("yyMMddH", Locale.KOREA).format(Date())
+            val keyFmt = SimpleDateFormat("yyMMddH", Locale.KOREA)
+            val multiDay = SimpleDateFormat("yyMMdd", Locale.KOREA).let { f -> f.format(Date(cs.first().time)) != f.format(Date(cs.last().time)) }
+            cs.groupBy { keyFmt.format(Date(it.time)) }.forEach { (k, list) ->
+                val hourCount = list.groupingBy { it.slot }.eachCount().entries.sortedBy { it.key }
+                    .joinToString(" · ") { "${t.name(it.key)} ${it.value}" }
+                val ups = list.count { it.rising == true }; val downs = list.count { it.rising == false }
+                val phase = when { ups > 0 && downs == 0 -> "들물"; downs > 0 && ups == 0 -> "날물"; ups + downs > 0 -> "들물·날물"; else -> "" }
+                val day = if (multiDay) SimpleDateFormat("M/d ", Locale.KOREA).format(Date(list.first().time)) else ""
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(9), dp(12), dp(9))
                 }
+                val head = Ui.row(this)
+                val title = Ui.text(this, 13f, Ui.TEXT, true, "")
+                head.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f))
+                if (phase.isNotBlank()) head.addView(Ui.text(this, 11f, Ui.SUB, false, phase), LinearLayout.LayoutParams(WRAP, WRAP))
+                card.addView(head)
+                val body = Ui.text(this, 12f, Ui.SUB, false, list.joinToString("\n") { c ->
+                    StringBuilder(hm.format(Date(c.time))).append("  ").append(t.name(c.slot)).apply {
+                        c.rising?.let { append(" · ").append(if (it) "들물" else "날물") }
+                        if (c.near.isNotBlank()) append(" · ").append(c.near)
+                    }.toString()
+                }).apply { setLineSpacing(0f, 1.25f) }
+                card.addView(body, Ui.lp(this, MATCH, WRAP, top = 6))
+                var open = k == nowKey
+                fun paint() {
+                    title.text = "${if (open) "▾" else "▸"} $day${hourFmt.format(Date(list.first().time))}시 · $hourCount"
+                    body.visibility = if (open) View.VISIBLE else View.GONE
+                    card.background = Ui.bg(this, Ui.CARD, 10, if (open) Ui.GREEN else Ui.LINE)
+                }
+                paint()
+                card.setOnClickListener { open = !open; paint() }
+                box.addView(card, Ui.lp(this, MATCH, WRAP, top = 6))
             }
         }
         val mine = t.owner == Cloud.uid
@@ -596,7 +692,7 @@ class BoardActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 10))
         val names = HashMap<String, Int>()
         pts.take(60).forEachIndexed { i, p ->
-            val base = Tide.stationsNear(this, p.cell.lat, p.cell.lon).firstOrNull()?.name ?: "포인트"
+            val base = Area.name(this, p.cell.lat, p.cell.lon) { areaFound() }.ifBlank { "포인트" }
             val n = (names[base] ?: 0) + 1; names[base] = n
             val title = "$base 부근" + if (n > 1) " #$n" else ""
             val c = Ui.card(this).apply { isClickable = true; setOnClickListener { pointDetail(p, title) } }

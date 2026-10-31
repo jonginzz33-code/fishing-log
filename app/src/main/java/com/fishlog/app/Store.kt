@@ -282,11 +282,25 @@ object Store {
         set(v) { prefs.edit().putBoolean("guideSeen", v).apply() }
 
     /** 같이 출조 중 거리 기준 (m). 0 = 거리 상관없이 같은 그룹 출조 중이면 모두 */
-    /** 내 출조 알리기: "none" 알리지 않기 · "current" 지금 그룹만 · "all" 내 그룹 모두 */
+    /**
+     * 내 출조 알리기: "none" 알리지 않기 · "groups" 체크한 그룹에만 · "public" 전체 사용자에게 (내 그룹 모두 + 전체 게시판)
+     *  (예전 값 "current"·"all" 은 "groups")
+     */
     var liveScope: String
-        get() = prefs.getString("liveScope", "current") ?: "current"
+        get() = when (val v = prefs.getString("liveScope", "groups") ?: "groups") { "none", "public" -> v; else -> "groups" }
         set(v) { prefs.edit().putString("liveScope", v).apply() }
-    fun liveScopeLabel(): String = when (liveScope) { "none" -> "알리지 않기"; "all" -> "내 그룹 모두"; else -> "지금 그룹만" }
+    /** 알릴 그룹 (체크한 것). 한 번도 안 골랐으면 null */
+    var liveGroups: Set<String>?
+        get() = prefs.getStringSet("liveGroups", null)?.toSet() ?: when (prefs.getString("liveScope", "")) {
+            "all" -> emptySet<String>().plus("*")     // 예전 '내 그룹 모두'
+            else -> null
+        }
+        set(v) { prefs.edit().apply { if (v == null) remove("liveGroups") else putStringSet("liveGroups", v) }.apply() }
+    /** 내 출조 알릴 때 위치(지도)도 보여 주기 — 끄면 '출조 중'·마릿수만 */
+    var liveLoc: Boolean
+        get() = prefs.getBoolean("liveLoc", true)
+        set(v) { prefs.edit().putBoolean("liveLoc", v).apply() }
+    fun liveScopeLabel(): String = when (liveScope) { "none" -> "알리지 않기"; "public" -> "전체 사용자에게 공유"; else -> "체크한 그룹에 알리기" }
 
     var mateRange: Int
         get() = prefs.getInt("mateRange", 1000)

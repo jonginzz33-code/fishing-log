@@ -16,7 +16,8 @@ import java.io.File
 /**
  * 대표 조과 사진: 출조 완료 창·출조 기록 화면에서 찍기/앨범/이 출조 사진 중 고르기/빼기
  *  - 목록·게시판 카드 오른쪽에 보이는 작은 사진(mthumb, 320px)은 출조 문서 안에 같이 저장 → 목록 볼 때 따로 안 받음
- *  - 크게 볼 사진은 photosBig/main (그룹), photos/main (전체 게시판) 에 1080px
+ *  - 크게 볼 사진: 그룹은 사진 목록의 큰 사진(photosBig/{이름})을 그대로 씀 (mainId), 전체 게시판만 photos/main 에 1080px
+ *  - 대표 사진으로만 넣은 사진(찍기·앨범)을 다른 사진으로 바꾸면 예전 것은 지움 (사진이 쌓이지 않게)
  */
 object MainPhoto {
     const val REQ_CAM = 7711
@@ -63,12 +64,29 @@ object MainPhoto {
             main.post {
                 if (p == null) { Toast.makeText(a, "사진을 못 가져왔어요", Toast.LENGTH_LONG).show(); return@post }
                 Store.addPhotos(tripId, listOf(p))
-                Store.setMainPhoto(tripId, p.file)
-                Store.find(tripId)?.let { push(it) }
+                setMain(a, tripId, p.file)
                 done()
             }
         }.start()
         return true
+    }
+
+    /** 서버 사진 문서 이름 (Cloud.uploadPhotos 와 같게) */
+    fun docId(p: Store.Photo) = p.file.removeSuffix(".jpg")
+
+    /** 대표 사진으로만 넣은 사진 (찍기·앨범으로 넣고 조과에 안 붙은 것) */
+    private fun mainOnly(p: Store.Photo) = p.file.endsWith("_99.jpg") && p.catchTime == null
+
+    /** 대표 사진 바꾸기 ("" = 빼기). 대표로만 넣었던 예전 사진은 바꿀 때 지움 → 서버·게시판 반영 */
+    fun setMain(c: android.content.Context, tripId: Long, file: String) {
+        val t = Store.find(tripId) ?: return
+        val old = t.main()
+        Store.setMainPhoto(tripId, file)
+        if (old != null && old.file != file && file.isNotBlank() && mainOnly(old)) {
+            Store.removePhoto(tripId, old)
+            try { Photos.file(c, old.file).delete() } catch (_: Exception) {}
+        }
+        Store.find(tripId)?.let { push(it) }
     }
 
     /** 작은 대표 사진 (목록용) base64, 없으면 null */
@@ -78,20 +96,31 @@ object MainPhoto {
         return android.util.Base64.encodeToString(b, android.util.Base64.NO_WRAP)
     }
 
-    /** 대표 사진이 바뀌면: 올린 그룹들 · 전체 게시판에도 바로 반영 */
-    fun push(t: Store.Trip) {
+    /**
+     * 대표 사진이 바뀌면: 올린 그룹들 · 전체 게시판에 한 번만 반영
+     *  groups = 그룹 글(작은 사진·mainId, 그룹엔 사진 목록도 다시 올림), pub = 전체 게시판(작은 사진·큰 사진 photos/main)
+     */
+    fun push(t: Store.Trip, groups: Boolean = true, pub: Boolean = true) {
         val me = Cloud.uid ?: return
         val db = FirebaseFirestore.getInstance()
+        val main = t.main()
         Thread {
             val small = thumbB64(t)
-            val big = t.main()?.let { Photos.bigUpload(Cloud.appContext, it) }?.takeIf { it.size < 720_000 }
-                ?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }
-            val refs = Store.sharedGroups(t.id).map { gid -> db.collection("groups").document(gid).collection("trips").document("${me}_${t.id}") to "photosBig" } +
-                (if (t.pub) listOf(db.collection("public").document(PublicBoard.docIdOf(me, t.id)) to "photos") else emptyList())
-            refs.forEach { (ref, sub) ->
-                ref.update("mthumb", small ?: FieldValue.delete())
-                if (big != null) ref.collection(sub).document("main").set(mapOf("owner" to me, "data" to big, "t" to System.currentTimeMillis(), "main" to true))
-                else ref.collection(sub).document("main").delete()
+            if (groups) Store.sharedGroups(t.id).forEach { gid ->
+                val ref = db.collection("groups").document(gid).collection("trips").document("${me}_${t.id}")
+                ref.update(mapOf("mthumb" to (small ?: FieldValue.delete()),
+                    "mainId" to (main?.let { docId(it) } ?: FieldValue.delete()), "photoCount" to t.photos.size))
+                // 새로 넣은 대표 사진(큰 사진 포함)·지운 예전 사진을 사진 목록에 반영 (이미 올린 건 건너뜀)
+                Cloud.uploadPhotos(ref, t, gid)
+                ref.collection("photosBig").document("main").delete()
+            }
+            if (pub && t.pub) {
+                val ref = db.collection("public").document(PublicBoard.docIdOf(me, t.id))
+                val big = main?.let { Photos.bigUpload(Cloud.appContext, it) }?.takeIf { it.size < 720_000 }
+                    ?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }
+                ref.update(mapOf("mthumb" to (small ?: FieldValue.delete()), "mainId" to (main?.let { docId(it) } ?: FieldValue.delete())))
+                if (big != null) ref.collection("photos").document("main").set(mapOf("owner" to me, "data" to big, "t" to System.currentTimeMillis(), "main" to true))
+                else ref.collection("photos").document("main").delete()
             }
             Cloud.invalidateAll(); PublicBoard.clearCache()
         }.start()

@@ -49,8 +49,11 @@ object Cloud {
         val hasTrack: Boolean = false, val center: Pair<Double, Double>? = null,
         val paid: Boolean? = null, val fee: Int = 0, val gear: List<String> = emptyList(),
         /** 대표 조과 사진 (작은 사진 base64, 없으면 "") */
-        val mthumb: String = ""
+        val mthumb: String = "",
+        /** 대표 사진의 큰 사진 문서 이름 (photosBig/{mainId}), 예전 글은 "" → photosBig/main */
+        val mainId: String = ""
     ) {
+        fun bigMainPath(gid: String) = "groups/$gid/trips/$id/photosBig/" + mainId.ifBlank { "main" }
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun slots(): List<Int> = ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().sorted()
@@ -58,7 +61,7 @@ object Cloud {
         fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId)
         /** "유료 5만원" / "무료" / "" */
         fun costLabel(): String = Store.costLabel(paid, fee)
     }
@@ -242,6 +245,8 @@ object Cloud {
         if (t.gear.isNotEmpty()) doc["gear"] = t.gear.toList()
         // 대표 조과 사진 (목록용 작은 사진은 문서 안에)
         MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
+        // 큰 대표 사진은 사진 목록의 큰 사진(photosBig/{이름})을 그대로 씀 → 따로 한 번 더 저장 안 함
+        t.main()?.let { doc["mainId"] = MainPhoto.docId(it) }
         val tripRef = db.collection("groups").document(g.id).collection("trips").document("${id}_${t.id}")
         tripRef.set(doc)
             .addOnSuccessListener {
@@ -250,7 +255,8 @@ object Cloud {
                 Store.markUploaded(t.id)
                 Store.addShared(t.id, g.id)
                 uploadPhotos(tripRef, t, g.id)
-                if (t.main() != null) MainPhoto.push(t)
+                // 예전 버전이 따로 저장한 큰 대표 사진(photosBig/main) 정리
+                tripRef.collection("photosBig").document("main").delete()
                 invalidateTrips(g.id)
                 done(null)
             }
@@ -1058,7 +1064,7 @@ object Cloud {
             d.getBoolean("hasTrack") == true, if (cla != null && clo != null) cla to clo else null,
             d.getBoolean("paid"), (d.getLong("fee") ?: 0L).toInt(),
             (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-            d.getString("mthumb") ?: "")
+            d.getString("mthumb") ?: "", d.getString("mainId") ?: "")
     } catch (e: Exception) { null }
 
     private fun parsePts(list: List<Map<String, Any?>>?): List<Store.Pt> = list?.mapNotNull {

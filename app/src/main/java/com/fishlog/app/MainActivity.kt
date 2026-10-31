@@ -212,7 +212,7 @@ class MainActivity : Activity() {
             if (!consentOpen) { consentOpen = true; Consent.show(this) { consentOpen = false; recreate() } }
             return
         }
-        paintBoardSub()
+        paintBoardSub(); paintNowBtn()
         if (crashShown || gated) return
         // 관리자가 이용 정지한 계정·폰이면 막는 화면만
         if (Moderation.bannedCached) { crashShown = true; Moderation.showBlockedScreen(this); return }
@@ -467,12 +467,19 @@ class MainActivity : Activity() {
         liveChip = Ui.text(this, 12f, Ui.GREEN, true, "").apply {
             setPadding(dp(10), dp(3), dp(10), dp(3)); visibility = View.GONE
             setOnClickListener {
-                val keys = listOf("none", "current", "all")
+                val box = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+                fun draw() { box.removeAllViews(); liveScopeViews(box) { draw() } }
+                draw()
+                val before = Store.liveScope + Store.liveGroups + Store.liveLoc
                 AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("내 출조 알리기")
-                    .setItems(arrayOf("🔒 알리지 않기", "지금 그룹만", "내 그룹 모두")) { _, i ->
-                        Store.liveScope = keys[i]; Live.scopeChanged(); paintLiveChip()
-                        showMessage("내 출조 알리기: ${Store.liveScopeLabel()}")
+                    .setView(ScrollView(this@MainActivity).apply { addView(box) })
+                    .setPositiveButton("확인", null)
+                    .setOnDismissListener {
+                        if (Store.liveScope + Store.liveGroups + Store.liveLoc != before) {
+                            Live.scopeChanged(); paintLiveChip()
+                            showMessage("내 출조 알리기: ${Store.liveScopeLabel()}")
+                        }
                     }.show()
             }
         }
@@ -556,12 +563,13 @@ class MainActivity : Activity() {
                 else startActivity(Intent(this@MainActivity, BoardActivity::class.java))
             }
         }
-        boardBtn.addView(Ui.text(this, 22f, Ui.TEXT, false, "🌊"))
-        val bt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        bt.addView(Ui.text(this, 16f, Color.parseColor("#F2B27A"), true, "전체 조황 · 포인트 게시판"))
-        boardSub = Ui.text(this, 11f, Color.parseColor("#C99A72"), false, "모든 사용자가 공개한 출조")
+        // 글자는 가운데 (오른쪽 › 와 같은 폭의 빈칸을 왼쪽에 둬서 정확히 가운데)
+        boardBtn.addView(Ui.text(this, 16f, Color.TRANSPARENT, true, "›"))
+        val bt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        bt.addView(Ui.text(this, 16f, Color.parseColor("#F2B27A"), true, "🌊 전체 조황 · 포인트 게시판").apply { gravity = Gravity.CENTER })
+        boardSub = Ui.text(this, 11f, Color.parseColor("#C99A72"), false, "모든 사용자가 공개한 출조").apply { gravity = Gravity.CENTER }
         bt.addView(boardSub)
-        boardBtn.addView(bt, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+        boardBtn.addView(bt, LinearLayout.LayoutParams(0, WRAP, 1f))
         boardBtn.addView(Ui.text(this, 16f, Color.parseColor("#F2B27A"), true, "›"))
         bottomRow.addView(boardBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
@@ -571,6 +579,17 @@ class MainActivity : Activity() {
         gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
         bottomRow.addView(gFrame, LinearLayout.LayoutParams(MATCH, WRAP))
         groupFrame = gFrame
+        // 🟢 지금 출조 중 (내 그룹 + 전체 공유) — 그룹 줄과 따로
+        nowBtn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = Ui.bg(this@MainActivity, Color.parseColor("#16352A"), 14, Ui.GREEN)
+            isClickable = true; visibility = View.GONE
+            setOnClickListener { openNowDialog() }
+        }
+        nowTitle = Ui.text(this, 16f, Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중").apply { gravity = Gravity.CENTER }
+        nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
+        bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }.apply { textSize = 16f }
         bottomRow.addView(menuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
@@ -1178,22 +1197,8 @@ class MainActivity : Activity() {
         fun drawScope() {
             scopeBox.removeAllViews()
             scopeBox.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "🟢 내 출조 알리기"))
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            listOf("none" to "🔒 알리지 않기", "current" to "지금 그룹만", "all" to "내 그룹 모두").forEachIndexed { i, (k, l) ->
-                val on = Store.liveScope == k
-                r.addView(Ui.text(this, 12f, if (on) Ui.BG else Ui.TEXT, true, (if (on) "✓ " else "") + l).apply {
-                    gravity = Gravity.CENTER; maxLines = 1
-                    background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
-                    setOnClickListener { Store.liveScope = k; drawScope() }
-                }, LinearLayout.LayoutParams(0, dp(36), 1f).apply { if (i > 0) leftMargin = dp(6) })
-            }
-            scopeBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
-            val gName = if (Cloud.user == null) null else Cloud.active?.title
-            scopeBox.addView(Ui.text(this, 11f, Ui.SUB, false, when (Store.liveScope) {
-                "none" -> "그룹 사람들에게 '지금 출조 중'·마릿수·위치가 안 보여요"
-                "all" -> "가입한 그룹 모두에 '지금 출조 중'과 마릿수가 보여요"
-                else -> "${gName ?: "지금 그룹"} 사람들에게만 '지금 출조 중'과 마릿수가 보여요"
-            } + " · 지난번 고른 대로 기억"), Ui.lp(this, MATCH, WRAP, top = 6))
+            liveScopeViews(scopeBox) { drawScope() }
+            scopeBox.addView(Ui.text(this, 11f, Ui.SUB, false, "지난번 고른 대로 기억 · 출조 중에 메인에서 바로 바꾸기"), Ui.lp(this, MATCH, WRAP, top = 6))
         }
         if (tripId == null && Cloud.user != null && Cloud.groups.isNotEmpty()) {
             drawScope()
@@ -1524,16 +1529,168 @@ class MainActivity : Activity() {
 
     private lateinit var adminMenuBtn: TextView
     private lateinit var liveChip: TextView
+    private lateinit var nowBtn: LinearLayout
+    private lateinit var nowTitle: TextView
+    private lateinit var nowSub: TextView
+    private var nowAt = 0L
+
+    /** 맨 아래 '🟢 지금 출조 중 N명' 버튼 (1분에 한 번만 새로 받음) */
+    private fun paintNowBtn() {
+        if (!::nowBtn.isInitialized) return
+        if (Cloud.user == null) { nowBtn.visibility = View.GONE; return }
+        fun draw(l: List<Live.AnyNow>) {
+            nowBtn.visibility = View.VISIBLE
+            nowTitle.text = if (l.isEmpty()) "🟢 지금 출조 중 0명" else "🟢 지금 출조 중 ${l.size}명"
+            nowSub.text = if (l.isEmpty()) "내 그룹 · 전체 공유에 출조 중인 사람이 없어요"
+                else l.take(3).joinToString(", ") { it.name } + (if (l.size > 3) " 외 ${l.size - 3}명" else "") + " · 눌러서 보기"
+            nowBtn.alpha = if (l.isEmpty()) 0.6f else 1f
+        }
+        draw(Live.allCached())
+        if (System.currentTimeMillis() - nowAt < 60_000L) return
+        nowAt = System.currentTimeMillis()
+        Live.nowAll { l -> if (!isFinishing) draw(l) }
+    }
+
+    /** '지금 출조 중' 목록 창: 사람을 누르면 그 사람 위치 지도 */
+    private fun openNowDialog() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(8)) }
+        fun draw(l: List<Live.AnyNow>) {
+            box.removeAllViews()
+            if (l.isEmpty()) {
+                box.addView(Ui.text(this, 14f, Ui.SUB, false, "지금 출조 중인 사람이 없어요.\n출조를 알리기로 한 사람만 보여요."), Ui.lp(this, MATCH, WRAP, top = 8))
+                return
+            }
+            l.forEach { m ->
+                val mins = ((System.currentTimeMillis() - m.start) / 60_000L).coerceAtLeast(0)
+                val hasLoc = m.lat != null && m.lon != null
+                val r = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+                    background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.LINE); isClickable = true
+                    setOnClickListener {
+                        if (hasLoc) {
+                            val ago = if (m.at > 0) MapDialog.agoText((System.currentTimeMillis() - m.at) / 1000) else ""
+                            MapDialog.showPerson(this@MainActivity, m.name, m.lat!!, m.lon!!,
+                                listOf(Store.catShort(m.cat).ifBlank { "출조" }, m.line, if (ago.isNotBlank()) "위치 $ago" else null).filterNotNull().joinToString(" · "))
+                        } else showMessage(if (m.pub && m.groups.isEmpty()) "전체 공유는 위치 대신 동네 이름만 보여요" else "${m.name}님은 위치 공유를 꺼 두었어요")
+                    }
+                }
+                val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                tx.addView(Ui.text(this, 15f, Ui.TEXT, true, m.name).apply {
+                    append(android.text.SpannableStringBuilder("  · " + Store.catShort(m.cat).ifBlank { "출조" } + " · " +
+                        (if (mins >= 60) "${mins / 60}시간 ${mins % 60}분" else "${mins}분")).apply {
+                        setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+                    })
+                })
+                tx.addView(Ui.text(this, 13f, Color.parseColor("#FFB36B"), false, m.line.ifBlank { "0마리" }))
+                val where = (m.groups.map { "🚤 $it" } + (if (m.pub) listOf("🌊 전체 공유" + (if (m.area.isNotBlank()) " · ${m.area} 부근" else "")) else emptyList())).joinToString(" · ")
+                tx.addView(Ui.text(this, 11f, Ui.SUB, false, where))
+                r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.text(this, 13f, if (hasLoc) Ui.GREEN else Ui.SUB, true, if (hasLoc) "📍 지도 ›" else "위치 안 보임"))
+                box.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
+            }
+            box.addView(Ui.text(this, 11f, Ui.SUB, false, "출조를 알리기로 한 사람만 보여요 · 📍 = 위치 공유 중 (누르면 그 사람 위치 지도)"), Ui.lp(this, MATCH, WRAP, top = 10))
+        }
+        draw(Live.allCached())
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🟢 지금 출조 중")
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton("닫기", null).show()
+        nowAt = System.currentTimeMillis()
+        Live.nowAll { l -> if (!isFinishing) { draw(l); paintNowBtn() } }
+    }
+    /**
+     * '내 출조 알리기' 고르는 칸 (출조 시작 창 · 출조 중 칩 창 같이 씀)
+     *  🔒 알리지 않기 / 그룹에 알리기 (가입한 그룹 하나씩 체크) / 🌊 전체 사용자에게 공유하기
+     */
+    private fun liveScopeViews(box: LinearLayout, redraw: () -> Unit) {
+        val scope = Store.liveScope
+        fun option(key: String, title: String, sub: String?): LinearLayout {
+            val on = scope == key
+            val o = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(9), dp(12), dp(9))
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, if (on) Ui.TEXT else Ui.LINE)
+                isClickable = true
+                setOnClickListener {
+                    if (key == "groups" && Store.liveGroups == null) Store.liveGroups = Live.checkedGroupIds()
+                    Store.liveScope = key; redraw()
+                }
+            }
+            val r = Ui.row(this)
+            r.addView(Ui.text(this, 15f, if (on) Ui.TEXT else Ui.SUB, true, if (on) "◉" else "○"), LinearLayout.LayoutParams(dp(26), WRAP))
+            val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            tx.addView(Ui.text(this, 14f, Ui.TEXT, on, title))
+            sub?.let { tx.addView(Ui.text(this, 11f, Ui.SUB, false, it)) }
+            r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
+            o.addView(r)
+            box.addView(o, Ui.lp(this, MATCH, WRAP, top = 8))
+            return o
+        }
+        option("none", "🔒 알리지 않기", "아무에게도 '지금 출조 중'·마릿수·위치가 안 보여요")
+        val g = option("groups", "그룹에 알리기", "체크한 그룹 사람들에게만 보여요")
+        if (scope == "groups") {
+            val ids = Live.checkedGroupIds()
+            Cloud.groups.forEach { gr ->
+                val checked = gr.id in ids
+                val r = Ui.row(this).apply {
+                    setPadding(dp(26), dp(6), 0, dp(2)); isClickable = true
+                    setOnClickListener {
+                        val cur = Live.checkedGroupIds().toMutableSet()
+                        if (!cur.add(gr.id)) cur.remove(gr.id)
+                        Store.liveGroups = cur; redraw()
+                    }
+                }
+                r.addView(Ui.text(this, 13f, if (checked) Ui.BG else Ui.SUB, true, if (checked) "✓" else "").apply {
+                    gravity = Gravity.CENTER
+                    background = if (checked) Ui.bg(this@MainActivity, Ui.GREEN, 4) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 4, Ui.SUB)
+                }, LinearLayout.LayoutParams(dp(20), dp(20)))
+                r.addView(Ui.text(this, 13f, if (checked) Ui.TEXT else Ui.SUB, false, "").apply {
+                    text = android.text.SpannableStringBuilder(GroupIcon.prefix(this@MainActivity, gr, 16)).append(gr.title)
+                    if (gr.id == Cloud.active?.id) append(android.text.SpannableStringBuilder("  지금 그룹").apply {
+                        setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), 0, length, 0)
+                        setSpan(android.text.style.AbsoluteSizeSpan(11, true), 0, length, 0)
+                    })
+                }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+                g.addView(r)
+            }
+            if (ids.none { id -> Cloud.groups.any { it.id == id } })
+                g.addView(Ui.text(this, 11f, Color.parseColor("#FF8A92"), false, "체크한 그룹이 없으면 아무에게도 안 보여요").apply { setPadding(dp(26), dp(4), 0, 0) })
+        }
+        option("public", "🌊 전체 사용자에게 공유하기", "앱 쓰는 모든 사람 · 전체 게시판 맨 위에 보여요 (이름은 게시판처럼 익명/닉네임, 위치는 동네 이름만) · 내 그룹 모두에도 보여요")
+        // 📍 위치 공유하기 (알릴 때만)
+        if (scope != "none") {
+            val on = Store.liveLoc
+            val r = Ui.row(this).apply {
+                setPadding(dp(4), dp(10), 0, dp(2)); isClickable = true
+                setOnClickListener { Store.liveLoc = !Store.liveLoc; redraw() }
+            }
+            r.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.SUB, true, if (on) "✓" else "").apply {
+                gravity = Gravity.CENTER
+                background = if (on) Ui.bg(this@MainActivity, Ui.GREEN, 4) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 4, Ui.SUB)
+            }, LinearLayout.LayoutParams(dp(22), dp(22)))
+            val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            tx.addView(Ui.text(this, 14f, Ui.TEXT, true, "📍 위치 공유하기"))
+            tx.addView(Ui.text(this, 11f, Ui.SUB, false,
+                if (on) "그룹 사람들이 '지금 출조 중'에서 눌러 지도로 내 위치를 볼 수 있어요" + (if (scope == "public") " (전체 공유는 동네 이름만)" else "")
+                else "끄면 '출조 중'과 마릿수만 보이고 지도엔 안 나와요"))
+            r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+            box.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
+        }
+    }
+
     private fun paintLiveChip() {
         if (!::liveChip.isInitialized) return
         val t = Store.current
         if (t == null || Cloud.user == null || Cloud.groups.isEmpty()) { liveChip.visibility = View.GONE; return }
         liveChip.visibility = View.VISIBLE
-        val none = Store.liveScope == "none"
+        val none = Store.liveScope == "none" || (Store.liveScope == "groups" && Live.shareGroups().isEmpty())
         liveChip.text = when (Store.liveScope) {
             "none" -> "🔒 내 출조 알리지 않는 중 ▾"
-            "all" -> "🟢 내 그룹 모두에 알리는 중 ▾"
-            else -> "🟢 ${Cloud.groups.firstOrNull { it.id == (Live.sharedGid ?: Cloud.active?.id) }?.title ?: "지금 그룹"}에 알리는 중 ▾"
+            "public" -> "🌊 전체 사용자에게 공유 중 ▾"
+            else -> Live.shareGroups().let { gs ->
+                if (gs.isEmpty()) "🔒 체크한 그룹이 없어 안 알리는 중 ▾"
+                else "🟢 " + (if (gs.size == 1) gs[0].title else "${gs[0].title} 외 ${gs.size - 1}곳") + "에 알리는 중 ▾"
+            }
         }
         liveChip.setTextColor(if (none) Ui.SUB else Ui.GREEN)
         liveChip.background = Ui.bg(this, Color.TRANSPARENT, 99, if (none) Ui.LINE else Ui.GREEN)
@@ -1550,8 +1707,15 @@ class MainActivity : Activity() {
         PublicBoard.load(day0) { list, _ ->
             if (isFinishing || list == null) return@load
             val n = list.count { it.owner != Cloud.uid }
-            boardSub.text = if (n > 0) "모든 사용자가 공개한 출조 · 오늘 새 글 $n" else "모든 사용자가 공개한 출조"
+            boardN = n; paintBoardSubText()
         }
+        Live.publicNow { l -> if (!isFinishing) { boardLive = l.count { it.uid != Cloud.uid }; paintBoardSubText() } }
+    }
+    private var boardN = 0
+    private var boardLive = 0
+    private fun paintBoardSubText() {
+        boardSub.text = listOfNotNull("모든 사용자가 공개한 출조", if (boardN > 0) "오늘 새 글 $boardN" else null,
+            if (boardLive > 0) "🟢 지금 출조 중 ${boardLive}명" else null).joinToString(" · ")
     }
 
     /** 총관리자 메뉴 */
@@ -1643,57 +1807,15 @@ class MainActivity : Activity() {
             tomN > 0 -> { groupBtn.setTextColor(Ui.BG); groupBtn.background = Ui.bg(this, Ui.GREEN, 14) }
             else -> { groupBtn.setTextColor(Ui.TEXT); groupBtn.background = Ui.bg(this, Color.TRANSPARENT, 14, Ui.LINE) }
         }
-        // 🟢 지금 출조 중인 그룹원 (출조 안 해도 보임)
-        if (g != null) {
-            val nowL = Live.nowCached(g.id)
-            if (nowL.isNotEmpty()) {
-                groupBtn.maxLines = 2
-                groupBtn.append(android.text.SpannableStringBuilder("\n🟢 지금 출조 중 ${nowL.size}명 · " + nowL.take(3).joinToString(", ") { it.name } + if (nowL.size > 3) " 외" else "").apply {
-                    setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), 0, length, 0)
-                    setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
-                })
-            } else groupBtn.maxLines = 1
-            val key0 = nowL.joinToString("|") { it.uid + it.line }
-            Live.nowFishing(g.id) { l -> if (!isFinishing && l.joinToString("|") { it.uid + it.line } != key0) renderGroupPanel() }
-        }
+        // 🟢 지금 출조 중은 그룹 줄·그룹 창이 아니라 맨 아래 따로 (paintNowBtn)
+        groupBtn.maxLines = 1
+        paintNowBtn()
         groupDot.text = total.toString()
         groupDot.visibility = if (total > 0) View.VISIBLE else View.GONE
         if (!groupOpen) return
         groupBox.removeAllViews()
         // 맨 위: 지금 여기에서 설정 중이에요 (종류 색으로 꽉 찬 띠)
         GroupBand.view(this, true, filled = true)?.let { groupBox.addView(it) }
-        // 그 아래: 🟢 지금 출조 중인 그룹원 (누르면 같이 출조 중 지도)
-        if (g != null) {
-            val nowL = Live.nowCached(g.id)
-            if (nowL.isNotEmpty()) {
-                val nb = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(8))
-                    background = Ui.bg(this@MainActivity, Color.parseColor("#16352A"), 12, Ui.GREEN)
-                }
-                nb.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중 ${nowL.size}명"))
-                nowL.forEach { m ->
-                    val r = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(4))
-                        isClickable = true; setOnClickListener { openMap() }
-                    }
-                    val mins = ((System.currentTimeMillis() - m.start) / 60_000L).coerceAtLeast(0)
-                    val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                    tx.addView(Ui.text(this, 14f, Ui.TEXT, true, m.name).apply {
-                        append(android.text.SpannableStringBuilder("  · " + Store.catShort(m.cat).ifBlank { "출조" } + " · " +
-                            (if (mins >= 60) "${mins / 60}시간 ${mins % 60}분" else "${mins}분")).apply {
-                            setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
-                            setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
-                        })
-                    })
-                    tx.addView(Ui.text(this, 12f, Color.parseColor("#C9D3DE"), false, m.line))
-                    r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
-                    r.addView(Ui.text(this, 14f, Ui.SUB, true, "›"))
-                    nb.addView(r)
-                }
-                nb.addView(Ui.text(this, 11f, Ui.SUB, false, "누르면 지도 · 알리기를 끈 사람은 안 보여요"))
-                groupBox.addView(nb, Ui.lp(this, MATCH, WRAP, top = 8))
-            }
-        }
         val gs = if (Cloud.user == null) emptyList() else Cloud.groups
         if (gs.isEmpty()) {
             groupBox.addView(Ui.text(this, 13f, Ui.SUB, false,

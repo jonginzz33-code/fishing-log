@@ -213,6 +213,13 @@ object MapDialog {
         }
     }
 
+    /** "7분 전" · "1시간 5분 전" · "40초 전" */
+    fun agoText(sec: Long): String = when {
+        sec < 60 -> "${sec}초 전"
+        sec < 3600 -> "${sec / 60}분 전"
+        else -> "${sec / 3600}시간" + (if ((sec % 3600) / 60 > 0) " ${(sec % 3600) / 60}분" else "") + " 전"
+    }
+
     /** 이동 거리(m): 10m 안쪽 흔들림은 빼고 경로를 따라 더함 / 출발지에서 마지막 위치까지 직선거리(m) */
     fun distances(pts: List<GeoPoint>): Pair<Double, Double> {
         if (pts.size < 2) return 0.0 to 0.0
@@ -264,11 +271,18 @@ object MapDialog {
         val dotList = mutableListOf<MapDot>()
         layers.forEach { layer ->
             if (layer.track.size >= 2) {
+                // 짙은 테두리 선을 먼저 깔고 그 위에 색 선 (지도·위성 어디서나 잘 보이게)
+                map.overlays.add(Polyline(map).apply {
+                    setPoints(layer.track); outlinePaint.color = ROUTE_EDGE
+                    outlinePaint.strokeWidth = dp(a, 7).toFloat(); outlinePaint.isAntiAlias = true
+                    outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                })
                 val line = Polyline(map)
                 line.setPoints(layer.track)
                 line.outlinePaint.color = layer.color
                 line.outlinePaint.strokeWidth = dp(a, 4).toFloat()
                 line.outlinePaint.isAntiAlias = true
+                line.outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; line.outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
                 map.overlays.add(line)
             }
             all.addAll(layer.track)
@@ -277,16 +291,24 @@ object MapDialog {
         }
 
         // 실시간
+        val liveEdge = Polyline(map).apply {
+            outlinePaint.color = ROUTE_EDGE
+            outlinePaint.strokeWidth = dp(a, 7).toFloat()
+            outlinePaint.isAntiAlias = true
+            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+        }
         val liveLine = Polyline(map).apply {
-            outlinePaint.color = Color.parseColor("#EAF2F6")
+            outlinePaint.color = ROUTE
             outlinePaint.strokeWidth = dp(a, 4).toFloat()
             outlinePaint.isAntiAlias = true
+            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
         }
         val boat = BoatOverlay(a)
         if (live != null) {
+            map.overlays.add(liveEdge)
             map.overlays.add(liveLine)
             val l = layerOf(live)
-            liveLine.setPoints(l.track)
+            liveLine.setPoints(l.track); liveEdge.setPoints(l.track)
             dotList.addAll(toDots(l.catches))
             all.addAll(l.track); all.addAll(l.catches.map { it.point })
         }
@@ -531,7 +553,7 @@ object MapDialog {
                     val loc = Tracker.last
                     val pts = l.track.toMutableList()
                     if (loc != null) pts.add(GeoPoint(loc.latitude, loc.longitude))
-                    liveLine.setPoints(pts)
+                    liveLine.setPoints(pts); liveEdge.setPoints(pts)
                     dots.dots = toDots(l.catches)
                     if (loc != null) {
                         val pos = GeoPoint(loc.latitude, loc.longitude)
@@ -549,7 +571,7 @@ object MapDialog {
                         val ageSec = (System.currentTimeMillis() - loc.time) / 1000
                         liveInfo.text = String.format(Locale.KOREA, "속도 %.1f노트 · 방향 %s (%d°)%s",
                             speed * 1.94384f, directionName(heading), heading.toInt(),
-                            if (ageSec > 30) " · 위치 ${ageSec}초 전" else "") + "\n" + distanceText(pts)
+                            if (ageSec > 30) " · 위치 ${agoText(ageSec)}" else "") + "\n" + distanceText(pts)
                     } else {
                         liveInfo.text = "GPS 위치를 찾는 중… (위치 권한·GPS 켜짐 확인)"
                     }
@@ -755,6 +777,99 @@ object MapDialog {
         map.post { fit(map, dots.map { it.point }) }
     }
 
+    /**
+     * 지금 출조 중인 사람 위치 지도 (그룹 '지금 출조 중'에서 눌렀을 때)
+     *  - 그 사람 위치가 가운데 · 초록 점 + 이름표, 내 위치(파란 점)와 점선·거리도 같이
+     *  - 위 버튼: 📍 ○○ 위치로 · 내 위치로 · 둘 다 보기 · 위성 · 닫기
+     */
+    fun showPerson(a: Activity, name: String, lat: Double, lon: Double, info: String) {
+        configure(a)
+        val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val pt = GeoPoint(lat, lon)
+        val map = MapView(a).apply {
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            isTilesScaledToDpi = true
+        }
+        val liveMe = LiveMe.attach(a, map, listOf(pt), name, autoFit = false)
+        map.overlays.add(PersonOverlay(a, pt, name))
+        fun goPerson() { map.controller.setZoom(16.0); map.controller.animateTo(pt) }
+
+        val bg = Color.parseColor("#0B1A26")
+        val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        root.addView(TextView(a).apply {
+            text = "🟢 $name · 지금 출조 중"; textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(a, 16), dp(a, 10), dp(a, 16), dp(a, 4))
+        })
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
+        fun pill(label: String, strong: Boolean = false, onClick: (TextView) -> Unit) = TextView(a).apply {
+            text = label; textSize = 14f; setTextColor(if (strong) Color.parseColor("#0B1A26") else Color.WHITE); gravity = Gravity.CENTER
+            if (strong) typeface = Typeface.DEFAULT_BOLD
+            minHeight = dp(a, 40); setPadding(dp(a, 14), 0, dp(a, 14), 0)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(a, 20).toFloat()
+                if (strong) setColor(Color.parseColor("#5FD49A")) else setStroke(dp(a, 1), Color.parseColor("#3A5A70"))
+            }
+            setOnClickListener { onClick(this) }
+        }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
+        pill("📍 $name 위치로", true) { goPerson() }
+        pill("내 위치로") { v -> liveMe.goToMe(v) }
+        pill("둘 다 보기") { _ ->
+            val p = liveMe.position
+            if (p == null) android.widget.Toast.makeText(a, "아직 내 위치를 못 잡았어요", android.widget.Toast.LENGTH_SHORT).show()
+            else {
+                val box = BoundingBox.fromGeoPoints(listOf(p, pt))
+                if (box.latitudeSpan < 0.002 && box.longitudeSpan < 0.002) goPerson() else map.zoomToBoundingBox(box.increaseByScale(1.4f), true)
+            }
+        }
+        pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
+            Store.satellite = !Store.satellite
+            map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
+        }
+        pill("닫기") { dialog.dismiss() }
+        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        val frame = FrameLayout(a)
+        frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        addStatus(a, frame, liveMe)
+        root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(TextView(a).apply {
+            text = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치 · 점선 = $name 까지 방향·거리\n지도 © OpenStreetMap · 위성 © Esri"
+            textSize = 12f; setTextColor(Color.parseColor("#9FB4C2"))
+            setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
+        })
+        dialog.setContentView(root)
+        dialog.setOnDismissListener { liveMe.stop(); map.onPause(); map.onDetach() }
+        dialog.show()
+        map.onResume()
+        map.post { goPerson() }
+    }
+
+    /** 출조 중인 사람: 초록 점 + 이름표 */
+    private class PersonOverlay(ctx: Context, private val pt: GeoPoint, private val name: String) : org.osmdroid.views.overlay.Overlay() {
+        private val d = ctx.resources.displayMetrics.density
+        private val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(70, 95, 212, 154) }
+        private val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#2FBF71") }
+        private val edge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; strokeWidth = 3 * d; color = Color.WHITE }
+        private val box = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 11, 26, 38) }
+        private val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textSize = 14 * d; typeface = Typeface.DEFAULT_BOLD; textAlign = android.graphics.Paint.Align.CENTER
+        }
+        override fun draw(c: android.graphics.Canvas, map: MapView, shadow: Boolean) {
+            if (shadow) return
+            val p = map.projection.toPixels(pt, null)
+            val x = p.x.toFloat(); val y = p.y.toFloat()
+            c.drawCircle(x, y, 22 * d, ring)
+            c.drawCircle(x, y, 10 * d, dot)
+            c.drawCircle(x, y, 10 * d, edge)
+            val w = txt.measureText(name) + 16 * d
+            val top = y - 46 * d
+            c.drawRoundRect(android.graphics.RectF(x - w / 2, top, x + w / 2, top + 24 * d), 12 * d, 12 * d, box)
+            c.drawText(name, x, top + 17 * d, txt)
+        }
+    }
+
     /** 칸마다 주황 원 (많이 잡힌 곳일수록 진하게) */
     private fun addCircles(a: Activity, map: MapView, dots: List<MapDot>, radiusOf: (MapDot) -> Double) {
         val byCell = dots.filter { radiusOf(it) > 0 }.groupBy { "${it.point.latitude},${it.point.longitude}" }
@@ -850,10 +965,14 @@ object MapDialog {
         val layer = layerOf(t)
         val all = mutableListOf<GeoPoint>()
         if (layer.track.size >= 2) {
+            map.overlays.add(Polyline(map).apply {
+                setPoints(layer.track); outlinePaint.color = ROUTE_EDGE; outlinePaint.strokeWidth = dp(a, 6).toFloat(); outlinePaint.isAntiAlias = true
+            })
             val line = Polyline(map)
             line.setPoints(layer.track)
             line.outlinePaint.color = layer.color
             line.outlinePaint.strokeWidth = dp(a, 3).toFloat()
+            line.outlinePaint.isAntiAlias = true
             map.overlays.add(line)
         }
         all.addAll(layer.track)
@@ -868,7 +987,11 @@ object MapDialog {
     }
 
     // ---- 내 출조를 지도 레이어로 ----
-    fun layerOf(t: Store.Trip, trackColor: Int = Color.parseColor("#EAF2F6")): MapLayer {
+    /** 내 이동 경로 색: 진한 분홍 + 짙은 테두리 (흰 선은 지도와 겹쳐 잘 안 보였음) */
+    val ROUTE = Color.parseColor("#FF3EA5")
+    val ROUTE_EDGE = Color.parseColor("#5A0F3A")
+
+    fun layerOf(t: Store.Trip, trackColor: Int = ROUTE): MapLayer {
         val df = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
         val track = t.track.map { GeoPoint(it.lat, it.lon) }
         val catches = t.catches.filter { it.lat != null && it.lon != null }.map {
@@ -882,8 +1005,9 @@ object MapDialog {
         val df = SimpleDateFormat("M월 d일 HH:mm", Locale.KOREA)
         val withLoc = t.catches.count { it.lat != null }
         val isLive = Store.current?.id == t.id
-        val legend = distanceText(t.track.map { GeoPoint(it.lat, it.lon) }) + "\n" +
-            "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 초록 = 출발 · 흰 선 이동 경로" +
+        // 실시간일 땐 위 굵은 줄에 이동 거리가 이미 있어서 아래 설명엔 안 넣음 (두 번 나오지 않게)
+        val legend = (if (isLive) "" else distanceText(t.track.map { GeoPoint(it.lat, it.lon) }) + "\n") +
+            "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 초록 = 출발 · 분홍 선 = 이동 경로" +
             (if (isLive) " · 배 = 지금 내 위치 · 이름표 = 같이 출조 중인 그룹원" else "") +
             "\n위치가 있는 조과 $withLoc / ${t.catches.size} · 숫자 = 겹친 마릿수 · 점을 누르면 상세"
         if (isLive) show(a, df.format(Date(t.start)) + " 출조 중 (실시간)", emptyList(), legend, live = t, excludeId = t.id)

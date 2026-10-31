@@ -66,8 +66,8 @@ object PublicBoard {
         val paid: Boolean = false,
         /** 올린 사람이 보이게 고른 그룹 이름 · 작은 그룹 이미지 (없으면 "") */
         val gname: String = "", val gimg: String = "",
-        /** 대표 조과 사진 (작은 사진 base64) */
-        val mthumb: String = ""
+        /** 대표 조과 사진 (작은 사진 base64) · 사진 목록에서 대표 사진 문서 이름 */
+        val mthumb: String = "", val mainId: String = ""
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -212,6 +212,7 @@ object PublicBoard {
             if (t.paid == true) doc["paid"] = true
             // 대표 조과 사진 (작은 사진은 글 안에, 큰 사진은 photos/main)
             MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
+            t.main()?.let { doc["mainId"] = MainPhoto.docId(it) }
             // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
             Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
                 doc["gname"] = g.title
@@ -223,7 +224,8 @@ object PublicBoard {
                     Store.setPublic(t.id, true, exact)
                     // 작은 사진만 (이미 올린 건 건너뜀, 사진을 빼고 올리면 예전 사진은 지움)
                     Cloud.uploadPhotos(ref, t, "public", limit = if (withPhotos) 8 else 0, withBig = false)
-                    if (t.main() != null) MainPhoto.push(t)
+                    // 큰 대표 사진만 (작은 사진은 위 글 안에 이미 넣음 · 그룹 글은 안 건드림)
+                    if (t.main() != null) MainPhoto.push(t, groups = false)
                     cache.clear()
                     done(null)
                 }
@@ -329,7 +331,7 @@ object PublicBoard {
                             },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
-                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "")
+                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "")
                     } catch (_: Exception) { null }
                 }, null)
             }
@@ -339,7 +341,8 @@ object PublicBoard {
     fun loadPhotos(id: String, done: (List<Cloud.RemotePhoto>) -> Unit) {
         db.collection("public").document(id).collection("photos").get()
             .addOnSuccessListener { q ->
-                done(q.documents.mapNotNull { d ->
+                // 'main' = 대표 사진 큰 사진 (오른쪽·맨 위 대표 자리에만, 사진 목록엔 안 넣음)
+                done(q.documents.filter { it.id != "main" }.mapNotNull { d ->
                     try {
                         val bytes = android.util.Base64.decode(d.getString("data") ?: return@mapNotNull null, android.util.Base64.DEFAULT)
                         val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@mapNotNull null
