@@ -3,8 +3,10 @@ package com.fishlog.app
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Color
+import android.content.Intent
 import android.os.Bundle
 import android.view.Gravity
+import android.view.View
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -32,6 +34,12 @@ class GroupTripsActivity : Activity() {
     private var period = 0          // 0 이번 달, 1 3개월, 2 올해, 3 전체
     private var person: String? = null   // null = 모든 사람
     private var rankSpecies: String? = null
+    // 꾹 눌러 고르기 (그룹에서 내리기): 내 글 · 그룹장은 모든 글
+    private var selMode = false
+    private val selected = LinkedHashSet<String>()
+    private lateinit var delBar: LinearLayout
+    private var shown: List<Cloud.RemoteTrip> = emptyList()
+    private fun canDel(t: Cloud.RemoteTrip) = t.owner == Cloud.uid || Cloud.isOwner
 
     private val dayFmt = SimpleDateFormat("yyyy.M.d(E)", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
@@ -58,8 +66,23 @@ class GroupTripsActivity : Activity() {
         col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(peopleRow) }, Ui.lp(this, MATCH, WRAP, top = 8))
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(body, Ui.lp(this, MATCH, WRAP, top = 6))
-        setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
+        // 맨 아래 고정 띠 (꾹 눌러 고를 때만)
+        delBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            setPadding(dp(16), dp(8), dp(16), dp(12)); setBackgroundColor(Ui.BG)
+        }
+        setContentView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG)
+            addView(ScrollView(this@GroupTripsActivity).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) }, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            addView(delBar, LinearLayout.LayoutParams(MATCH, WRAP))
+        })
         if (g == null) { body.addView(Ui.text(this, 14f, Ui.SUB, false, "그룹에 가입하면 그룹 출조를 모아 볼 수 있어요")); return }
+        load()
+    }
+
+    private fun load() {
+        val g = Cloud.active ?: return
+        body.removeAllViews()
         body.addView(Ui.text(this, 13f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 10))
         Cloud.recentTripsOf(g) { list, err ->
             if (isFinishing) return@recentTripsOf
@@ -167,10 +190,28 @@ class GroupTripsActivity : Activity() {
         }
 
         // 출조 카드
-        body.addView(Ui.text(this, 12f, Ui.SUB, false, "카드를 누르면 함께한 출조 지도·순위, 사진"), Ui.lp(this, MATCH, WRAP, top = 14))
-        list.take(150).forEach { t ->
-            val c = Ui.card(this).apply { isClickable = true; setOnClickListener { openTrip(t) } }
+        body.addView(Ui.text(this, 12f, Ui.SUB, false, "카드를 누르면 함께한 출조 지도·순위, 사진 · 꾹 누르면 골라서 그룹에서 내리기"), Ui.lp(this, MATCH, WRAP, top = 14))
+        shown = list.take(150)
+        if (selMode) body.addView(selHeader(), Ui.lp(this, MATCH, WRAP, top = 8))
+        shown.forEach { t ->
+            val sel = t.id in selected
+            val c = Ui.card(this).apply {
+                isClickable = true
+                setOnClickListener {
+                    if (selMode) { if (canDel(t)) { if (!selected.add(t.id)) selected.remove(t.id); render() } else toast("그룹장·올린 사람만 내릴 수 있어요") }
+                    else openTrip(t)
+                }
+                setOnLongClickListener {
+                    if (!canDel(t)) { toast("내 글만 고를 수 있어요 (그룹장은 모든 글)"); return@setOnLongClickListener true }
+                    selMode = true; selected.add(t.id); render(); true
+                }
+                if (selMode && sel) background = Ui.bg(this@GroupTripsActivity, Ui.CARD, 16, Ui.GREEN)
+            }
             val r = Ui.row(this)
+            if (selMode) r.addView(Ui.text(this, 14f, if (sel) Ui.BG else Ui.SUB, true, if (sel) "✓" else "").apply {
+                gravity = Gravity.CENTER
+                background = if (sel) Ui.bg(this@GroupTripsActivity, Ui.GREEN, 5) else Ui.bg(this@GroupTripsActivity, Color.TRANSPARENT, 5, if (canDel(t)) Ui.SUB else Ui.LINE)
+            }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(10) })
             val where = listOf(t.place().ifBlank { null }, if (t.cat.isNotBlank()) Store.catShort(t.cat) else null).filterNotNull().joinToString(" · ")
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) + if (where.isNotBlank()) " $where" else ""),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -189,15 +230,81 @@ class GroupTripsActivity : Activity() {
             body.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         if (list.size > 150) body.addView(Ui.text(this, 12f, Ui.SUB, false, "최근 150개까지 보여요"), Ui.lp(this, MATCH, WRAP, top = 8))
+        paintDelBar()
+    }
+
+    /** 고르기 줄: ☐ 전체 선택 (N개) · N개 선택됨 · ✕ */
+    private fun selHeader(): View {
+        val can = shown.filter { canDel(it) }
+        val all = can.isNotEmpty() && can.all { it.id in selected }
+        val r = Ui.row(this).apply { setPadding(dp(12), dp(8), dp(12), dp(8)); background = Ui.bg(this@GroupTripsActivity, Ui.CARD, 12, Ui.LINE) }
+        r.addView(Ui.text(this, 15f, Ui.TEXT, true, (if (all) "☑" else "☐") + " 전체 선택 (${can.size}개)").apply {
+            setOnClickListener { if (all) selected.clear() else can.forEach { selected.add(it.id) }; render() }
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        r.addView(Ui.text(this, 13f, Ui.GREEN, true, "${selected.size}개 선택됨"))
+        r.addView(Ui.text(this, 18f, Ui.SUB, true, "  ✕").apply { setOnClickListener { endSel() } })
+        return r
+    }
+
+    private fun endSel() { selMode = false; selected.clear(); render() }
+
+    @Deprecated("old")
+    override fun onBackPressed() { if (selMode) endSel() else @Suppress("DEPRECATION") super.onBackPressed() }
+
+    private fun paintDelBar() {
+        if (!::delBar.isInitialized) return
+        delBar.removeAllViews()
+        if (!selMode) { delBar.visibility = View.GONE; return }
+        delBar.visibility = View.VISIBLE
+        delBar.addView(Ui.text(this, 16f, Color.WHITE, true, "선택한 ${selected.size}개 그룹에서 내리기").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@GroupTripsActivity, if (selected.isEmpty()) Ui.LINE else Color.parseColor("#C8404C"), 14)
+            setOnClickListener { if (selected.isNotEmpty()) confirmRemove(trips.filter { it.id in selected }) }
+        }, LinearLayout.LayoutParams(MATCH, dp(52)))
+    }
+
+    /** 그룹에서 내리기 (여러 개): 그룹에서만 사라지고 올린 사람 폰 기록은 그대로 · 남의 글은 휴지통 30일 + 알림 */
+    private fun confirmRemove(list: List<Cloud.RemoteTrip>) {
+        if (list.isEmpty()) return
+        val others = list.count { it.owner != Cloud.uid }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("${list.size}개를 그룹에서 내릴까요?")
+            .setMessage("이 그룹 화면에서만 사라지고, 올린 사람 폰의 출조 기록은 그대로예요." +
+                if (others > 0) "\n남의 글 ${others}개는 휴지통에 30일 보관되고 올린 사람에게 알림이 가요." else "")
+            .setPositiveButton("내리기") { _, _ ->
+                toast("내리는 중…")
+                var left = list.size; var fail = 0
+                list.forEach { t ->
+                    Cloud.deleteGroupTrip(t.id) { err ->
+                        if (err != null) fail++
+                        if (--left == 0) {
+                            toast(if (fail == 0) "${list.size}개를 그룹에서 내렸어요" else "${list.size - fail}개 내림 · ${fail}개 실패")
+                            selMode = false; selected.clear(); paintDelBar(); load()
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("취소", null).show()
     }
 
     private fun openTrip(t: Cloud.RemoteTrip) {
         val items = mutableListOf("함께한 출조 지도·순위")
         if (t.photoCount > 0) items.add("사진 보기 (${t.photoCount}장)")
+        val mine = t.owner == Cloud.uid
+        // 내 글: 내 출조 기록 열어서 수정 (폰에 기록이 있을 때) · 고친 뒤 다시 올리면 그룹에도 반영
+        val local = if (mine) t.id.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
+        if (local != null) items.add("✎ 내 출조 기록 열기 (수정)")
+        if (mine) items.add("🗑 그룹에서 내리기")
+        else if (Cloud.isOwner) items.add("🗑 그룹에서 내리기 (그룹장)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${t.ownerName} · ${dayFmt.format(Date(t.start))} ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->
-                if (items[i].startsWith("함께한")) account.showTogether(t) else account.showPhotos(t)
+                when {
+                    items[i].startsWith("함께한") -> account.showTogether(t)
+                    items[i].startsWith("사진") -> account.showPhotos(t)
+                    items[i].startsWith("✎") -> local?.let { startActivity(Intent(this, TripActivity::class.java).putExtra("id", it.id)) }
+                    else -> confirmRemove(listOf(t))
+                }
             }
             .show()
     }

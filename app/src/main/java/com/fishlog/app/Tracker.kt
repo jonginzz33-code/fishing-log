@@ -55,10 +55,14 @@ object Tracker {
 
     fun recent(now: Long): Location? = if (!Store.appLoc) null else last?.takeIf { now - it.time < RECENT_MS }
 
+    /** 10분 넘게 제자리 (닻 내리고 오래 있을 때) → 위치 재는 간격을 더 늘림 */
+    private fun longStill(): Boolean = !moving && anchorTime > 0 && (last?.time ?: 0L) - anchorTime > 10 * 60_000L
+
     private fun desiredInterval(): Long = when {
         live -> 3_000L
         Store.saver -> 180_000L
         moving -> 20_000L
+        longStill() -> 180_000L
         else -> 90_000L
     }
 
@@ -93,7 +97,9 @@ object Tracker {
         } else if (loc.time - anchorTime > 3 * 60_000L) {
             moving = false
         }
-        if (wasMoving != moving) reapply()
+        if (wasMoving != moving || longStill()) reapply()
+        // 조과 버튼을 눌렀을 때 위치가 없었던 조과 → 지금 잡힌 위치로 채움 (1분 안에 누른 것만)
+        Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude)
 
         val saved = lastSaved
         if (saved == null || loc.time - saved.time >= saveEvery() || loc.distanceTo(saved) >= 30f) {
@@ -117,6 +123,22 @@ object Tracker {
         } catch (_: SecurityException) {
         } catch (_: IllegalArgumentException) {
         }
+    }
+
+    /**
+     * 조과 버튼을 눌렀는데 최근 위치가 없으면(오래 멈춰 있어 간격이 길 때 등) GPS 를 한 번 바로 재서 그 조과에 붙임
+     *  - 조과 기록(시각·마릿수)은 그대로 바로 저장 · 위치만 나중에 채움
+     */
+    @SuppressLint("MissingPermission")
+    fun freshFix() {
+        val m = lm ?: return
+        if (!running) return
+        val l = last
+        if (l != null && System.currentTimeMillis() - l.time < 45_000L) return
+        try {
+            @Suppress("DEPRECATION")
+            m.requestSingleUpdate(LocationManager.GPS_PROVIDER, listener, Looper.getMainLooper())
+        } catch (_: Exception) {}
     }
 
     /** 간격 다시 계산 (절약 모드 변경, 지도 열기/닫기, 이동/정지 바뀔 때) */

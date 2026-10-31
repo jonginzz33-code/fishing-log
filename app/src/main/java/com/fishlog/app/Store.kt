@@ -404,9 +404,25 @@ object Store {
         t.ensureSlot(slot, defaultName(slot))
         t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude))
         changed(false)
+        // 위치가 오래됐으면 GPS 한 번 바로 재기 (위치 없는 조과는 잡히면 채움)
+        try { Tracker.freshFix() } catch (_: Exception) {}
         Milestone.onCount(slot, t.count(slot))
         try { Live.pushSoon() } catch (_: Exception) {}
         return t.count(slot)
+    }
+
+    /** 위치 없이 기록된 조과(1분 안)에 새로 잡힌 위치 채우기 */
+    fun fillCatchLoc(fixTime: Long, lat: Double, lon: Double) {
+        val t = current ?: return
+        if (!appLoc) return
+        var any = false
+        for (i in t.catches.indices) {
+            val c = t.catches[i]
+            if (c.lat == null && fixTime >= c.time - 5_000L && fixTime - c.time < 60_000L) {
+                t.catches[i] = Catch(c.time, c.slot, lat, lon); any = true
+            }
+        }
+        if (any) changed(false)
     }
 
     /** 그 버튼의 마지막 기록 하나 지우기 (퀵 버튼 꾹 누르기) */

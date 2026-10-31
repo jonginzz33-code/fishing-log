@@ -573,14 +573,7 @@ class MainActivity : Activity() {
         boardBtn.addView(bt, LinearLayout.LayoutParams(0, WRAP, 1f))
         boardBtn.addView(Ui.text(this, 16f, Color.parseColor("#F2B27A"), true, "›"))
         bottomRow.addView(boardBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
-        val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
-        groupBtn = Ui.button(this, "그룹") { openGroupDialog() }.apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; textSize = 16f }
-        gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
-        groupDot = redDot(0)
-        gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
-        bottomRow.addView(gFrame, LinearLayout.LayoutParams(MATCH, WRAP))
-        groupFrame = gFrame
-        // 🟢 지금 출조 중 (내 그룹 + 전체 공유) — 그룹 줄과 따로
+        // 🟢 지금 출조 중 (내 그룹 + 전체 공유) — 게시판 바로 아래, 그룹 줄 위
         nowBtn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(14), dp(10), dp(14), dp(10))
             background = Ui.bg(this@MainActivity, Color.parseColor("#16352A"), 14, Ui.GREEN)
@@ -591,6 +584,13 @@ class MainActivity : Activity() {
         nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
         bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
+        val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
+        groupBtn = Ui.button(this, "그룹") { openGroupDialog() }.apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; textSize = 16f }
+        gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
+        groupDot = redDot(0)
+        gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
+        bottomRow.addView(gFrame, LinearLayout.LayoutParams(MATCH, WRAP))
+        groupFrame = gFrame
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }.apply { textSize = 16f }
         bottomRow.addView(menuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
@@ -1352,7 +1352,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     if (on) showMessage("지금 출조 종류: ${Store.catLabel(c)}")
                     else if (Store.current != null) showMessage("출조 중에는 종류를 바꿀 수 없어요 (종료 후 변경)")
-                    else { Store.category = c; showMessage("${Store.catLabel(c)}(으)로 바꿨어요") }
+                    else { catOpen = false; Store.category = c; showMessage("${Store.catLabel(c)}(으)로 바꿨어요") }
                 }
             }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { if (i % 3 > 0) leftMargin = dp(8) })
         }
@@ -1818,17 +1818,38 @@ class MainActivity : Activity() {
         openGroupDialog()
     }
 
-    /** 그룹 칸 안 '출조 종류' 칩 (그룹에 종류가 하나면 그 하나만) */
+    /** 그룹 창 '출조 종류' 커튼바 펼침 (칩을 고르면 자동으로 다시 접힘) */
+    private var catOpen = false
+
+    /** 그룹 칸 안 '출조 종류': 평소엔 '🎣 출조 종류 · 지금: ○○ ▾' 한 줄, 누르면 칩·(그룹장) 추가·빼기 */
     private fun addCatSection() {
         val cats = visibleCats()
-        groupBox.addView(Ui.text(this, 12f, Ui.SUB, false,
-            if (cats.size <= 1) "출조 종류 (이 그룹은 ${Store.catLabel(cats.firstOrNull() ?: Store.category)})" else "출조 종류 (눌러서 바꾸기)"),
-            Ui.lp(this, MATCH, WRAP, top = 14))
         (catRow.parent as? LinearLayout)?.removeView(catRow)
-        groupBox.addView(catRow, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) })
+        val g = Cloud.active
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = Ui.bg(this@MainActivity, Ui.CARD, 14, if (catOpen) Ui.TEXT else Ui.LINE)
+            isClickable = true
+            setOnClickListener { catOpen = !catOpen; renderGroupPanel() }
+        }
+        // 가운데 정렬 (오른쪽 ▾ 와 같은 폭을 왼쪽에 비워 둠)
+        head.addView(Ui.text(this, 13f, Color.TRANSPARENT, true, if (catOpen) "▴" else "▾"))
+        head.addView(Ui.text(this, 15f, Ui.TEXT, true, "🎣 출조 종류 · 지금: ").apply {
+            gravity = Gravity.CENTER
+            append(android.text.SpannableStringBuilder(Store.catLabel(Store.current?.cat?.takeIf { it.isNotBlank() } ?: Store.category)).apply {
+                setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), 0, length, 0)
+            })
+            if (cats.size <= 1) append(android.text.SpannableStringBuilder("  (이 그룹 종류 1개)").apply {
+                setSpan(android.text.style.AbsoluteSizeSpan(11, true), 0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
+            })
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        head.addView(Ui.text(this, 13f, Ui.SUB, true, if (catOpen) "▴" else "▾"))
+        groupBox.addView(head, Ui.lp(this, MATCH, WRAP, top = 14))
+        if (!catOpen) return
+        groupBox.addView(catRow, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         renderCats()
         // 그룹장: 우리 그룹 출조 종류 추가·빼기 (관리자가 만든 종류 중에서)
-        val g = Cloud.active
         if (g != null && Cloud.isOwner) {
             groupBox.addView(Ui.text(this, 13f, Ui.BLUE, true, "✎ 우리 그룹 출조 종류 추가 · 빼기 (그룹장)").apply {
                 gravity = Gravity.CENTER
