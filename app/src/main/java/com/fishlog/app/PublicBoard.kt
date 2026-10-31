@@ -75,7 +75,7 @@ object PublicBoard {
             .filter { count(it) > 0 }.joinToString(" · ") { "${name(it)} ${count(it)}" }
         fun anyCell(): Cell? = catches.firstNotNullOfOrNull { it.cell }
         val exact: Boolean get() = prec == "exact"
-        /** 어종 + 낚시 종류 (같은 어종도 종류가 다르면 따로 집계) */
+        /** 어종 + 출조 종류 (같은 어종도 종류가 다르면 따로 집계) */
         fun key(slot: Int): String = speciesKey(name(slot), cat)
     }
 
@@ -85,7 +85,7 @@ object PublicBoard {
     /** "낙지 (해루질)" */
     fun keyLabel(key: String): String = keyName(key) + " (" + Store.catLabel(keyCat(key)).ifBlank { "종류 없음" } + ")"
 
-    /** 공개한 내 출조의 낚시 종류만 고치기 */
+    /** 공개한 내 출조의 출조 종류만 고치기 */
     fun updateCat(t: Store.Trip, done: (String?) -> Unit) {
         if (Cloud.uid == null || !t.pub) return done(null)
         db.collection("public").document(docId(t)).update("cat", t.cat)
@@ -171,7 +171,7 @@ object PublicBoard {
     } catch (_: Exception) { null }
 
     /** "" = 익명으로 올리기, 그 외 = 내 닉네임 */
-    fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명 낚시인" else Cloud.displayName
+    fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명" else Cloud.displayName
 
     /** 서버에 올릴 조과 목록 (백그라운드 스레드에서) */
     private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {

@@ -70,7 +70,7 @@ object Live {
         try {
             val nm = c.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (nm.getNotificationChannel("friendCheer") == null) {
-                nm.createNotificationChannel(android.app.NotificationChannel("friendCheer", "같이 낚시 중 친구 돌파 알림",
+                nm.createNotificationChannel(android.app.NotificationChannel("friendCheer", "같이 출조 중 친구 돌파 알림",
                     android.app.NotificationManager.IMPORTANCE_DEFAULT))
             }
             val open = android.app.PendingIntent.getActivity(c, 11, android.content.Intent(c, MainActivity::class.java),
@@ -102,6 +102,30 @@ object Live {
         return t.anyLocation()
     }
 
+    /** 내 출조를 알릴 그룹 (출조 시작 창 '내 출조 알리기') */
+    fun shareGroups(): List<Cloud.Group> = when (Store.liveScope) {
+        "none" -> emptyList()
+        "all" -> Cloud.groups
+        else -> listOfNotNull(Cloud.groups.firstOrNull { it.id == (sharedGid ?: Cloud.active?.id) })
+    }
+    /** 출조를 시작할 때의 그룹 (지금 그룹만 알릴 때) */
+    @Volatile var sharedGid: String? = null
+    /** 이번 출조에서 내 정보를 올린 그룹들 (끝날 때 '종료' 표시·범위 바꿀 때 지우기용) */
+    private val wroteTo = HashSet<String>()
+
+    /** 알리기 범위를 바꿨을 때: 빠진 그룹에서는 내 정보 지우고 다시 올리기 */
+    fun scopeChanged() {
+        val me = Cloud.uid ?: return
+        val keep = shareGroups().map { it.id }.toSet()
+        wroteTo.filter { it !in keep }.forEach { gid -> db.collection("groups").document(gid).collection("live").document(me).delete() }
+        wroteTo.retainAll(keep)
+        sync(true)
+    }
+
+    private fun liveDoc(t: Store.Trip, now: Long): HashMap<String, Any> = hashMapOf(
+        "name" to Cloud.displayName, "t" to now, "start" to t.start, "cat" to t.cat,
+        "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2), "ended" to false, "line" to t.line())
+
     /** 올리고 받아오기. force=false 면 5분이 안 지났을 땐 건너뜀 */
     fun sync(force: Boolean = false) {
         val me = Cloud.uid ?: return
@@ -113,11 +137,10 @@ object Live {
         if (!force && now - updatedAt < EVERY_MS - 10_000L) return
         updatedAt = now
         val loc = myLocation()
-        val doc = hashMapOf<String, Any>(
-            "name" to Cloud.displayName, "t" to now, "start" to t.start, "cat" to t.cat,
-            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2), "ended" to false)
+        val doc = liveDoc(t, now)
         if (loc != null) { doc["lat"] = loc.first; doc["lon"] = loc.second }
-        groups.forEach { g -> db.collection("groups").document(g.id).collection("live").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge()) }
+        if (sharedGid == null) sharedGid = Cloud.active?.id
+        shareGroups().forEach { g -> wroteTo.add(g.id); db.collection("groups").document(g.id).collection("live").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge()) }
         if (watching.isNotEmpty()) return  // 화면을 보고 있으면 실시간으로 이미 받는 중
         val gotDocs = HashMap<String, List<com.google.firebase.firestore.DocumentSnapshot>>()
         var left = groups.size
@@ -131,12 +154,33 @@ object Live {
         }
     }
 
+    // ---------------- 그룹에서 지금 출조 중인 사람 (출조 안 해도 보임) ----------------
+    class Now(val uid: String, val name: String, val cat: String, val start: Long, val line: String)
+    private val nowCache = HashMap<String, Pair<Long, List<Now>>>()
+    fun nowCached(gid: String): List<Now> = nowCache[gid]?.second ?: emptyList()
+    fun nowFishing(gid: String, done: (List<Now>) -> Unit) {
+        val me = Cloud.uid ?: return done(emptyList())
+        nowCache[gid]?.let { (at, l) -> if (System.currentTimeMillis() - at < 2 * 60_000L) return done(l) }
+        db.collection("groups").document(gid).collection("live").get().addOnSuccessListener { q ->
+            val now = System.currentTimeMillis()
+            val l = q.documents.filter { d -> d.id != me && d.getBoolean("ended") != true && now - (d.getLong("t") ?: 0L) < STALE_MS }
+                .map { d ->
+                    val names = (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번")
+                    val line = d.getString("line") ?: listOf(names.getOrElse(0) { "1번" } to (d.getLong("c1") ?: 0L), names.getOrElse(1) { "2번" } to (d.getLong("c2") ?: 0L))
+                        .joinToString(" · ") { "${it.first} ${it.second}" }
+                    Now(d.id, Cloud.shownName(d.id, d.getString("name") ?: "?"), d.getString("cat") ?: "", d.getLong("start") ?: 0L, line)
+                }.sortedBy { it.start }
+            nowCache[gid] = now to l
+            done(l)
+        }.addOnFailureListener { done(nowCached(gid)) }
+    }
+
     // ---------------- 실시간 ----------------
     private val liveDocs = HashMap<String, List<com.google.firebase.firestore.DocumentSnapshot>>()
     private var watching: List<com.google.firebase.firestore.ListenerRegistration> = emptyList()
     private var watchKey = ""
 
-    /** 앱 화면을 보고 있을 때: 그룹마다 같이 낚시 중 목록을 지켜봄 */
+    /** 앱 화면을 보고 있을 때: 그룹마다 같이 출조 중 목록을 지켜봄 */
     fun watch() {
         if (Store.current == null || Cloud.uid == null) { unwatch(); return }
         val key = Cloud.groups.joinToString(",") { it.id }
@@ -156,7 +200,7 @@ object Live {
         watching = emptyList(); watchKey = ""
     }
 
-    /** 받은 목록 → 거리·시간 조건으로 같이 낚시 중인 사람 */
+    /** 받은 목록 → 거리·시간 조건으로 같이 출조 중인 사람 */
     private fun recompute() {
         val me = Cloud.uid ?: return
         val now = System.currentTimeMillis()
@@ -213,12 +257,11 @@ object Live {
         val me = Cloud.uid ?: return
         if (Cloud.isInitialized() && !Consent.shareLive(Cloud.appContext)) return
         val t = Store.current ?: return
-        val doc = hashMapOf<String, Any>(
-            "name" to Cloud.displayName, "t" to System.currentTimeMillis(), "start" to t.start, "cat" to t.cat,
-            "names" to t.names.toList(), "c1" to t.count(1), "c2" to t.count(2), "ended" to false)
+        val doc = liveDoc(t, System.currentTimeMillis())
         // +1 할 때 위치도 같이 (없으면 지난 위치 그대로)
         myLocation()?.let { doc["lat"] = it.first; doc["lon"] = it.second }
-        Cloud.groups.forEach { g ->
+        shareGroups().forEach { g ->
+            wroteTo.add(g.id)
             db.collection("groups").document(g.id).collection("live").document(me)
                 .set(doc, com.google.firebase.firestore.SetOptions.merge())
         }
@@ -230,13 +273,15 @@ object Live {
         // 지우지 않고 '종료' 표시 + 최종 마릿수 → 같이 출조하던 사람에게 1시간 동안 "출조를 종료했어요"
         val now = System.currentTimeMillis()
         val doc = hashMapOf<String, Any>("ended" to true, "endedAt" to now, "t" to now, "name" to Cloud.displayName)
-        last?.let { doc["names"] = it.names.toList(); doc["c1"] = it.count(1); doc["c2"] = it.count(2) }
-        Cloud.groups.forEach { g ->
+        last?.let { doc["names"] = it.names.toList(); doc["c1"] = it.count(1); doc["c2"] = it.count(2); doc["line"] = it.line() }
+        // 이번 출조를 알린 그룹에만 '종료' 표시
+        (if (wroteTo.isEmpty()) shareGroups() else Cloud.groups.filter { it.id in wroteTo }).forEach { g ->
             db.collection("groups").document(g.id).collection("live").document(me)
                 .set(doc, com.google.firebase.firestore.SetOptions.merge())
         }
         mates = emptyList(); endedMates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null; reason = ""
         unwatch(); liveDocs.clear(); main.removeCallbacks(pushRunnable); pushPending = false
+        wroteTo.clear(); sharedGid = null
         fire()
     }
 }

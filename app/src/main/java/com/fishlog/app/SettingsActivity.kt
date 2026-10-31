@@ -71,16 +71,16 @@ class SettingsActivity : Activity() {
         switchRow("꺼진 화면(AOD)·잠금 화면에 표시", "출조 중 주꾸미 아이콘, 마릿수, +1 버튼을 잠금 해제 없이 보여줘요",
             Store.lockScreenShow) { Store.lockScreenShow = it; if (Store.current != null) RemoteService.start(this) }
         section("알림")
-        switchRow("같이 낚시 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
+        switchRow("같이 출조 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
             Store.friendAlerts) { Store.friendAlerts = it }
 
         section("개인정보 · 위치")
-        switchRow("같이 낚시 중 위치·마릿수 공유", "끄면 다른 그룹원에게 내 출조가 실시간으로 보이지 않아요",
+        switchRow("같이 출조 중 위치·마릿수 공유", "끄면 다른 그룹원에게 내 출조가 실시간으로 보이지 않아요",
             Consent.shareLive(this)) { Consent.setShareLive(this, it) }
         box.addView(Ui.button(this, "🔒 위치·개인정보 이용 동의 내용 보기") { Consent.show(this, readOnly = true) { render() } }
             .apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
 
-        section("같이 낚시 중 거리")
+        section("같이 출조 중 거리")
         val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         listOf(50 to "50m", 200 to "200m", 1000 to "1km", 0 to "거리 상관없이").forEachIndexed { i, (v, l) ->
             val on = Store.mateRange == v
@@ -114,7 +114,7 @@ class SettingsActivity : Activity() {
             }
             card.addView(input)
             card.addView(Ui.text(this, 12f, Color.parseColor("#F2C14E"), false,
-                "나중에 언제든 바꿀 수 있어요 · 다른 사람과 같은 이름은 안 돼요\n구글 계정 실명 대신 이 이름이 그룹·게시판·같이 낚시 중에 보여요"),
+                "나중에 언제든 바꿀 수 있어요 · 다른 사람과 같은 이름은 안 돼요\n구글 계정 실명 대신 이 이름이 그룹·게시판·같이 출조 중에 보여요"),
                 Ui.lp(this, MATCH, WRAP, top = 6))
             card.addView(Ui.button(this, "이 닉네임으로 정하기", true) {
                 val v = input.text.toString().trim()
@@ -126,7 +126,7 @@ class SettingsActivity : Activity() {
             return
         }
         card.addView(Ui.text(this, 20f, Ui.TEXT, true, n))
-        card.addView(Ui.text(this, 12f, Ui.SUB, false, "전체 게시판 · 그룹 · 같이 낚시 중에 이 이름이 보여요"), Ui.lp(this, MATCH, WRAP, top = 4))
+        card.addView(Ui.text(this, 12f, Ui.SUB, false, "전체 게시판 · 그룹 · 같이 출조 중에 이 이름이 보여요"), Ui.lp(this, MATCH, WRAP, top = 4))
         card.addView(Ui.button(this, "닉네임 바꾸기") { askNew() }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 
@@ -136,7 +136,7 @@ class SettingsActivity : Activity() {
         col.addView(nn)
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("닉네임 바꾸기")
-            .setMessage("앞으로 올리는 글·그룹·같이 낚시 중에 새 이름이 보여요")
+            .setMessage("앞으로 올리는 글·그룹·같이 출조 중에 새 이름이 보여요")
             .setView(col)
             .setPositiveButton("바꾸기") { _, _ ->
                 val v = nn.text.toString()

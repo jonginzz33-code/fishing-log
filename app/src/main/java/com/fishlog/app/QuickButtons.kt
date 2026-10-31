@@ -157,7 +157,7 @@ class QuickButtons(
         draw = {
             wrap.removeAllViews()
             wrap.addView(Ui.text(a, 12f, Ui.SUB, false,
-                "리모컨·워치는 위의 큰 카드 1·2번만 · 퀵 버튼은 터치로만 기록 · 낚시 종류마다 따로 저장돼요"))
+                "리모컨·워치는 위의 큰 카드 1·2번만 · 퀵 버튼은 터치로만 기록 · 출조 종류마다 따로 저장돼요"))
             val l = Store.quick()
             if (l.isEmpty()) wrap.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 퀵 버튼이 없어요"), Ui.lp(a, MATCH, WRAP, top = 10))
             l.forEachIndexed { i, q ->

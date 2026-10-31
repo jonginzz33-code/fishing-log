@@ -13,14 +13,14 @@ import com.fishlog.app.Ui.WRAP
 
 /**
  * 위치 정보 · 개인정보 활용 동의 (구글 플레이 등록 대비)
- *  - 처음 켤 때 한 번: [필수] 위치 정보, [필수] 개인정보 수집·이용, [선택] 같이 낚시 중 위치 공유
+ *  - 처음 켤 때 한 번: [필수] 위치 정보, [필수] 개인정보 수집·이용, [선택] 같이 출조 중 위치 공유
  *  - 개인 설정에서 다시 보고, 선택 항목은 언제든 끄고 켤 수 있음
  */
 object Consent {
     private const val VER = 1
     private fun p(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun ok(c: Context) = p(c).getInt("consentVer", 0) >= VER
-    /** 같이 낚시 중(실시간 위치·마릿수) 공유 동의 */
+    /** 같이 출조 중(실시간 위치·마릿수) 공유 동의 */
     fun shareLive(c: Context) = p(c).getBoolean("consentLive", true)
     fun setShareLive(c: Context, v: Boolean) { p(c).edit().putBoolean("consentLive", v).apply() }
 
@@ -53,7 +53,7 @@ object Consent {
         }
         val c1 = block("위치 정보 이용 동의", LOCATION, true, readOnly)
         val c2 = block("개인정보 수집·이용 동의", PRIVACY, true, readOnly)
-        val c3 = block("같이 낚시 중 위치·마릿수 공유", LIVE, false, shareLive(a))
+        val c3 = block("같이 출조 중 위치·마릿수 공유", LIVE, false, shareLive(a))
         val all = CheckBox(a).apply {
             text = "모두 동의"; setTextColor(Ui.TEXT); textSize = 16f
             buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)

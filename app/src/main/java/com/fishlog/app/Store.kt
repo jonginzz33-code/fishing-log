@@ -96,8 +96,8 @@ object Store {
         set(v) { prefs.edit().putString("key2", v).apply(); fireChanged() }
 
     // ---- 설정 ----
-    // ---- 낚시 종류 (선상 · 해루질 · 워킹) ----
-    // 관리자가 '낚시 종류 관리'에서 추가·이름 바꾸기·순서·숨기기 (서버 config/cats → 폰에 저장)
+    // ---- 출조 종류 (선상 · 해루질 · 워킹) ----
+    // 관리자가 '출조 종류 관리'에서 추가·이름 바꾸기·순서·숨기기 (서버 config/cats → 폰에 저장)
     class Cat(val id: String, val label: String, val short: String, val hidden: Boolean = false)
     private val BASE_CATS = listOf(Cat("boat", "선상낚시", "선상"), Cat("night", "해루질", "해루질"), Cat("walk", "워킹낚시", "워킹"))
 
@@ -158,7 +158,7 @@ object Store {
             fireChanged()
         }
 
-    /** 종류가 비어 있는 출조: 어종 이름으로 낚시 종류 짐작 (주꾸미·갑오징어 → 선상, 낙지·골뱅이 → 해루질). 모르면 "" */
+    /** 종류가 비어 있는 출조: 어종 이름으로 출조 종류 짐작 (주꾸미·갑오징어 → 선상, 낙지·골뱅이 → 해루질). 모르면 "" */
     fun guessCat(names: List<String>): String {
         val ns = names.map { it.trim() }.filter { it.isNotBlank() && !it.endsWith("번") }
         if (ns.isEmpty()) return ""
@@ -170,7 +170,7 @@ object Store {
         return if (best.second > 0) best.first else ""
     }
 
-    /** 지난 출조의 낚시 종류 바꾸기 (그룹·백업엔 다시 올려야 반영) */
+    /** 지난 출조의 출조 종류 바꾸기 (그룹·백업엔 다시 올려야 반영) */
     fun setTripCat(tripId: Long, cat: String) {
         val t = find(tripId) ?: return
         t.cat = cat
@@ -281,7 +281,13 @@ object Store {
         get() = prefs.getBoolean("guideSeen", false)
         set(v) { prefs.edit().putBoolean("guideSeen", v).apply() }
 
-    /** 같이 낚시 중 거리 기준 (m). 0 = 거리 상관없이 같은 그룹 출조 중이면 모두 */
+    /** 같이 출조 중 거리 기준 (m). 0 = 거리 상관없이 같은 그룹 출조 중이면 모두 */
+    /** 내 출조 알리기: "none" 알리지 않기 · "current" 지금 그룹만 · "all" 내 그룹 모두 */
+    var liveScope: String
+        get() = prefs.getString("liveScope", "current") ?: "current"
+        set(v) { prefs.edit().putString("liveScope", v).apply() }
+    fun liveScopeLabel(): String = when (liveScope) { "none" -> "알리지 않기"; "all" -> "내 그룹 모두"; else -> "지금 그룹만" }
+
     var mateRange: Int
         get() = prefs.getInt("mateRange", 1000)
         set(v) { prefs.edit().putInt("mateRange", v).apply() }
@@ -295,7 +301,7 @@ object Store {
         get() = prefs.getBoolean("lockShow", true)
         set(v) { prefs.edit().putBoolean("lockShow", v).apply(); fireChanged() }
 
-    /** 개인 설정: 같이 낚시 중 친구 돌파 알림 받기 */
+    /** 개인 설정: 같이 출조 중 친구 돌파 알림 받기 */
     var friendAlerts: Boolean
         get() = prefs.getBoolean("friendAlerts", true)
         set(v) { prefs.edit().putBoolean("friendAlerts", v).apply() }

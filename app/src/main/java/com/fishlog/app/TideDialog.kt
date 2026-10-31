@@ -303,11 +303,17 @@ object TideDialog {
                     val sea = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                     sea.addView(Ui.text(a, 12.5f, Color.parseColor("#7FE0D0"), true, seaVal?.let { String.format(Locale.KOREA, "%.1f°", it) } ?: "-"))
                     if (seaVal != null) sea.addView(Ui.text(a, 9.5f, if (meas != null) Color.parseColor("#04342C") else if (corr != null) Color.parseColor("#7FE0D0") else Ui.SUB, true,
-                        if (meas != null) "실측" else if (corr != null) "보정" else "예상").apply {
+                        if (meas != null) "실측" else "예상").apply {
                         setPadding(dp(5), 0, dp(5), 0)
                         background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99)
                             else Ui.bg(a, Color.TRANSPARENT, 99, if (corr != null) Color.parseColor("#7FE0D0") else Ui.SUB)
                     }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(1) })
+                    // 실측이면 어느 관측소 몇 도인지 작게 (가장 가까운 곳이 끊겨 다른 관측소면 노란 글씨)
+                    if (meas != null) w.measured?.stationAt?.get(rowStart)?.let { stn ->
+                        val other = stn != w.measured?.home
+                        sea.addView(Ui.text(a, 9f, if (other) Color.parseColor("#F2C14E") else Ui.SUB, false,
+                            stn.removeSuffix(" 관측소") + String.format(Locale.KOREA, " %.1f°", meas)).apply { maxLines = 1 })
+                    }
                     // 비 확률
                     val pop = x?.pop
                     val popV = Ui.text(a, 12f, if ((pop ?: 0) >= 50) Ui.BLUE else Ui.SUB, (pop ?: 0) >= 50, pop?.let { "$it%" } ?: "-")
@@ -322,8 +328,8 @@ object TideDialog {
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
                 notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 약함 · 노랑 주의 · 주황 10노트↑ · 빨강 20노트↑) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
-                    "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값, 보정 = 예상에 그날 실측 차이를 더한 값, 예상 = 예측(먼 바다 기준)")
-                if (sstOff != null) notes.add(String.format(Locale.KOREA, "수온 보정: 오늘 실측이 예상보다 %+.1f° 라서 실측이 없는 시간은 그만큼 보정했어요 (예상은 먼 바다 값이라 연안과 차이 나요)", sstOff))
+                    "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값(아래 작은 글씨 = 관측소, 노란색 = 가장 가까운 곳이 끊겨 다음 관측소 값), 예상 = 그날 실측에 맞춘 예측")
+                if (sstOff != null) notes.add(String.format(Locale.KOREA, "수온 예상: 오늘 실측이 먼 바다 예측보다 %+.1f° 라서 실측이 없는 시간은 그만큼 맞춰서 보여요", sstOff))
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
                 if (w.seaNote.isNotBlank() && notes.none { it.endsWith(w.seaNote) }) notes.add(w.seaNote)
                 notes.add(if (w.fromKma) "기온·하늘·비·바람·파고: 기상청 단기예보 (내 칸이 육지면 가까운 바다 칸) · 낙뢰: 기상청 초단기예보 · 돌풍·파도 주기·파향·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
@@ -444,7 +450,7 @@ object TideDialog {
                     val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                     sr.addView(Ui.text(a, 10.5f, Color.parseColor("#7FE0D0"), true, String.format(Locale.KOREA, "수온 %.0f°", seaV)))
                     sr.addView(Ui.text(a, 8.5f, if (meas != null) Color.parseColor("#04342C") else if (wcorr != null) Color.parseColor("#7FE0D0") else Ui.SUB, true,
-                        if (meas != null) "실측" else if (wcorr != null) "보정" else "예상").apply {
+                        if (meas != null) "실측" else "예상").apply {
                         setPadding(dp(3), 0, dp(3), 0)
                         background = if (meas != null) Ui.bg(a, Color.parseColor("#7FE0D0"), 99)
                             else Ui.bg(a, Color.TRANSPARENT, 99, if (wcorr != null) Color.parseColor("#7FE0D0") else Ui.SUB)

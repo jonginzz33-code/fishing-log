@@ -255,10 +255,10 @@ class GroupActivity : Activity() {
             card.addView(nb, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         val typeRow = Ui.row(this)
-        typeRow.addView(Ui.text(this, 14f, Ui.BLUE, true, "낚시 종류: " + g.typesLabel().ifBlank { "미정 (모든 종류)" }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        typeRow.addView(Ui.text(this, 14f, Ui.BLUE, true, "출조 종류: " + g.typesLabel().ifBlank { "미정 (모든 종류)" }), LinearLayout.LayoutParams(0, WRAP, 1f))
         if (Cloud.isOwner) {
             typeRow.addView(Ui.button(this, "✎ 종류 추가·빼기") {
-                account.askTypes("그룹 낚시 종류 (여러 개 선택 가능)", g.types) { types ->
+                account.askTypes("그룹 출조 종류 (여러 개 선택 가능)", g.types) { types ->
                     Cloud.setGroupTypes(types) { err -> toast(err ?: "그룹 종류를 바꿨어요"); load() }
                 }
             }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(WRAP, WRAP))

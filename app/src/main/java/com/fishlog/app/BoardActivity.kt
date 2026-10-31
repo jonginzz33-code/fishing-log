@@ -112,6 +112,7 @@ class BoardActivity : Activity() {
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        tab = try { getSharedPreferences("fishlog", MODE_PRIVATE).getInt("board_tab", 0).coerceIn(0, 1) } catch (_: Exception) { 0 }
         super.onCreate(savedInstanceState)
         Store.init(this)
         window.statusBarColor = Ui.BG
@@ -119,7 +120,7 @@ class BoardActivity : Activity() {
         val col = Ui.column(this)
         val top = Ui.row(this)
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
-        top.addView(Ui.text(this, 20f, Ui.TEXT, true, "전체 조황 · 포인트"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
+        top.addView(Ui.text(this, 18f, Ui.TEXT, true, "전체 조황 · 포인트 게시판").apply { maxLines = 1 }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
         col.addView(top)
         val nickRow = Ui.row(this)
         nickText = Ui.text(this, 12f, Ui.SUB, false).apply { setOnClickListener { askNick() } }
@@ -191,9 +192,20 @@ class BoardActivity : Activity() {
     private fun renderControls() {
         refreshNick()
         tabRow.removeAllViews()
-        listOf("최근 조황", "포인트 도감").forEachIndexed { i, s ->
-            tabRow.addView(pill(s, tab == i, 15f) { tab = i; renderControls(); render() },
-                LinearLayout.LayoutParams(0, dp(46), 1f).apply { if (i > 0) leftMargin = dp(8) })
+        // 맨 위 탭: 🎣 전체 조황 게시판 | 📍 전체 포인트 게시판 (마지막 본 탭 기억)
+        listOf(Triple("🎣 전체 조황 게시판", "최근 출조 · 어종별 마릿수", Ui.ORANGE), Triple("📍 전체 포인트 게시판", "잘 잡히는 자리 · 지도", Ui.BLUE)).forEachIndexed { i, (t1, t2, col) ->
+            val on = tab == i
+            tabRow.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(6), dp(6), dp(6), dp(6))
+                background = if (on) Ui.bg(this@BoardActivity, col, 14) else Ui.bg(this@BoardActivity, Ui.CARD, 14, col)
+                addView(Ui.text(this@BoardActivity, 13.5f, if (on) Ui.BG else col, true, t1).apply { gravity = Gravity.CENTER; maxLines = 1 })
+                addView(Ui.text(this@BoardActivity, 10f, if (on) Ui.BG else Ui.SUB, false, t2).apply { gravity = Gravity.CENTER; maxLines = 1 })
+                setOnClickListener {
+                    tab = i
+                    try { getSharedPreferences("fishlog", MODE_PRIVATE).edit().putInt("board_tab", i).apply() } catch (_: Exception) {}
+                    renderControls(); render()
+                }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
         }
         catRow.removeAllViews()
         (listOf("") + Store.CATS).forEachIndexed { i, c ->
@@ -245,7 +257,7 @@ class BoardActivity : Activity() {
     }
 
     /**
-     * 보여줄 글: 낚시 종류 + 내가 차단한 사람, 신고 누적 기준 이상, 관리자가 정지한 사람은 빼기
+     * 보여줄 글: 출조 종류 + 내가 차단한 사람, 신고 누적 기준 이상, 관리자가 정지한 사람은 빼기
      * (내 글은 항상 보임)
      */
     private fun visible(t: PublicBoard.PTrip): Boolean {
@@ -331,7 +343,7 @@ class BoardActivity : Activity() {
                 Ui.lp(this, MATCH, WRAP, top = 12))
             return
         }
-        // 어종 칩: 누르면 지도 (같은 어종도 낚시 종류가 다르면 따로)
+        // 어종 칩: 누르면 지도 (같은 어종도 출조 종류가 다르면 따로)
         val counts = list.flatMap { t -> t.catches.map { t.key(it.slot) } }.groupingBy { it }.eachCount()
             .entries.sortedByDescending { it.value }
         listBox.addView(Ui.text(this, 14f, Ui.TEXT, true, "어종을 누르면 잡힌 자리를 지도로 봐요"), Ui.lp(this, MATCH, WRAP, top = 14))

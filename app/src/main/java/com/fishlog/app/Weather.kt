@@ -180,7 +180,11 @@ object Weather {
     }
 
     /** 실측 수온: 가장 최근 값 + 그날 시각별 값 (정시 → ℃) */
-    class Measured(val temp: Double, val at: String, val station: String, val series: Map<Long, Double> = emptyMap())
+    class Measured(val temp: Double, val at: String, val station: String, val series: Map<Long, Double> = emptyMap(),
+                   /** 시각별 어느 관측소 값인지 (가장 가까운 곳이 끊긴 시간은 다음 관측소) */
+                   val stationAt: Map<Long, String> = emptyMap(),
+                   /** 가장 가까운(먼저 찾은) 관측소 */
+                   val home: String = station)
 
     class Day(
         val dayStart: Long, val hours: List<Hour>,
@@ -498,6 +502,10 @@ object Weather {
         var note = ""
         // 반경 60km 안 관측소 6곳까지 (수온계가 있는 곳을 찾을 때까지)
         val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 60f }.take(6)
+        var primary: Measured? = null
+        var lastAt = ""
+        var used = 0
+        val ymdIsToday = ymd == keyFmt.format(Date())
         for (s in near) {
             val q = "/1192136/dtRecent/GetDTRecentApiService?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&obsCode=${s.code}&reqDate=$ymd&min=60&type=json&pageNo=1&numOfRows=300"
@@ -554,10 +562,27 @@ object Weather {
                 }
                 if (best != null) {
                     val hm = Regex("\\d{1,2}:\\d{2}").find(best.second)?.value ?: best.second
-                    return Measured(best.first, hm, s.name, series) to ""
+                    if (primary == null) {
+                        primary = Measured(best.first, hm, s.name, series, series.keys.associateWith { s.name })
+                    } else {
+                        // 가까운 관측소가 끊긴 시간만 이 관측소 값으로 채움
+                        val p0 = primary!!
+                        val merged = HashMap(p0.series); val at = HashMap(p0.stationAt)
+                        series.forEach { (k, v) -> if (!merged.containsKey(k)) { merged[k] = v; at[k] = s.name } }
+                        // 위 칸 '최근 실측'은 더 최근 값으로
+                        val newer = best.second > lastAt
+                        primary = Measured(if (newer) best.first else p0.temp, if (newer) hm else p0.at, if (newer) s.name else p0.station, merged, at, p0.home)
+                        if (newer) lastAt = best.second
+                    }
+                    if (lastAt.isEmpty()) lastAt = best.second
+                    used++
+                    // 가장 최근 실측이 지금부터 90분 안이면 더 안 찾음 (최대 3곳)
+                    val newest = primary!!.series.keys.maxOrNull() ?: 0L
+                    if (used >= 3 || System.currentTimeMillis() - newest < 90 * 60_000L || !ymdIsToday) break
                 }
             } catch (_: Exception) {}
         }
+        primary?.let { return it to "" }
         return null to note.ifBlank { "근처 관측소(60km 안)에 수온계가 없어 예상 수온만 보여요" }
     }
 

@@ -95,7 +95,7 @@ class AccountUi(private val a: Activity) {
                             .setMessage("운영자에게 '그룹 만들기' 권한을 요청해 주세요.\n메인 맨 위 ✉ 1:1 문의로 보낼 수 있어요.\n\n초대 코드가 있으면 '초대 코드로 가입'은 누구나 할 수 있어요.")
                             .setPositiveButton("확인", null).show()
                     items[which].startsWith("＋ 새") -> askText("새 그룹 이름", "예: 낚시 모임") { name ->
-                        askTypes("어떤 낚시 그룹인가요? (여러 개 선택 가능)", emptyList()) { types ->
+                        askTypes("어떤 출조 그룹인가요? (여러 개 선택 가능)", emptyList()) { types ->
                             Cloud.createGroup(name, types) { err -> toast(err ?: "그룹을 만들었어요. 초대 코드: ${Cloud.active?.code}") }
                         }
                     }

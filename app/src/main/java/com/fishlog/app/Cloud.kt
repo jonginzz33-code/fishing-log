@@ -804,7 +804,7 @@ object Cloud {
             .addOnFailureListener { done(it.message ?: "저장 실패") }
     }
 
-    // ---------------- 낚시 종류 (관리자만 추가·수정) ----------------
+    // ---------------- 출조 종류 (관리자만 추가·수정) ----------------
     fun loadCats(done: (() -> Unit)? = null) {
         db.collection("config").document("cats").get()
             .addOnSuccessListener { d ->

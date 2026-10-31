@@ -178,9 +178,9 @@ class AdminActivity : Activity() {
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 
-    // ---------------- 낚시 종류 관리 (추가·이름·순서·숨기기) ----------------
+    // ---------------- 출조 종류 관리 (추가·이름·순서·숨기기) ----------------
     private fun renderCatAdmin() {
-        section("낚시 종류 관리", "${Store.allCats().size}개")
+        section("출조 종류 관리", "${Store.allCats().size}개")
         val c = Ui.card(this)
         c.addView(Ui.text(this, 12f, Ui.SUB, false,
             "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요"))
@@ -209,7 +209,7 @@ class AdminActivity : Activity() {
                 LinearLayout.LayoutParams(0, dp(34), 1.2f).apply { leftMargin = dp(6) })
             c.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
         }
-        c.addView(Ui.button(this, "+ 낚시 종류 추가", true) {
+        c.addView(Ui.button(this, "+ 출조 종류 추가", true) {
             askCat(null) { l, sh ->
                 if (list.any { it.label.replace(" ", "") == l.replace(" ", "") }) { toast("이미 있는 이름이에요"); return@askCat }
                 save(list + Store.Cat("c" + java.lang.Long.toString(System.currentTimeMillis(), 36), l, sh))
@@ -221,7 +221,7 @@ class AdminActivity : Activity() {
     }
 
     private fun save(list: List<Store.Cat>) {
-        Cloud.saveCats(list) { e -> toast(e ?: "낚시 종류를 저장했어요"); render(null) }
+        Cloud.saveCats(list) { e -> toast(e ?: "출조 종류를 저장했어요"); render(null) }
     }
 
     /** 삭제: 이 종류를 쓰는 내 출조·그룹 수를 알려주고 한 번 더 확인 */
@@ -246,7 +246,7 @@ class AdminActivity : Activity() {
         val short = EditText(this).apply { hint = "짧은 이름 (예: 원투, 비우면 자동)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(); setText(old?.short ?: "") }
         col.addView(name); col.addView(short)
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(if (old == null) "낚시 종류 추가" else "이름 바꾸기")
+            .setTitle(if (old == null) "출조 종류 추가" else "이름 바꾸기")
             .setView(col)
             .setPositiveButton("저장") { _, _ ->
                 val l = name.text.toString().trim()
