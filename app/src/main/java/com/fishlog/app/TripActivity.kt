@@ -60,6 +60,23 @@ class TripActivity : Activity() {
         }
     }
 
+    /** 이미 올린 글의 이름(익명/닉네임)·그룹 표시 바꾸기 → 다시 올리기 */
+    private fun changeDisplay(t: Store.Trip) {
+        val names = arrayOf("익명 낚시인", "닉네임 (${Cloud.nick ?: "아직 없음"})")
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("게시판에 보일 이름")
+            .setItems(names) { _, i ->
+                if (i == 1 && Cloud.nick == null) { Toast.makeText(this, "닉네임이 없어요 · ⚙ 개인 설정에서 먼저 정해 주세요", Toast.LENGTH_LONG).show(); return@setItems }
+                Store.nick = if (i == 0) "" else "me"
+                val gs = Cloud.groups
+                val items = arrayOf("그룹 표시 안 함") + gs.map { it.title }
+                android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("같이 보일 그룹")
+                    .setItems(items) { _, j -> Store.pubGroup = if (j == 0) "" else gs[j - 1].id; doPublish(t) }
+                    .show()
+            }.show()
+    }
+
     private fun doPublish(t: Store.Trip) {
         Toast.makeText(this, "전체 게시판에 올리는 중…", Toast.LENGTH_SHORT).show()
         PublicBoard.publishFlow(this, t) { err ->
@@ -120,6 +137,47 @@ class TripActivity : Activity() {
         dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.92).toInt())
     }
 
+    private var wxAsked = false
+
+    private fun renderWx(t: Store.Trip, card: LinearLayout) {
+        card.removeAllViews()
+        val snap = if (t.wx.isNotBlank()) Weather.snapFromJson(t.wx) else null
+        if (snap == null) {
+            if (t.end <= 0) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "출조를 완료하면 그 시간대 날씨가 여기에 저장돼요")); return }
+            if (t.anyLocation() == null) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "위치 기록이 없어서 날씨를 저장하지 못했어요")); return }
+            card.addView(Ui.text(this, 13f, Ui.SUB, false, if (wxAsked) "날씨를 못 받았어요 (인터넷 확인)" else "그날 날씨 불러오는 중… (한 번만 받아서 기록에 저장해요)"))
+            if (!wxAsked) {
+                wxAsked = true
+                Weather.snapshot(this, t) { wx -> if (wx != null) Store.setWx(t.id, wx) else if (!isFinishing) renderWx(t, card) }
+            }
+            return
+        }
+        val hf = java.text.SimpleDateFormat("HH시", java.util.Locale.KOREA)
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun hc(txt: String, w: Float) = Ui.text(this, 11f, Ui.SUB, true, txt).apply { gravity = Gravity.CENTER }.also { head.addView(it, LinearLayout.LayoutParams(0, WRAP, w)) }
+        hc("시각", 1f); hc("하늘", 0.8f); hc("기온", 0.9f); hc("바람", 1.5f); hc("파고", 1.3f); hc("수온", 1f)
+        card.addView(head)
+        snap.hours.forEach { h ->
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5)) }
+            fun c(txt: String, w: Float, col: Int = Ui.TEXT) = Ui.text(this, 12.5f, col, false, txt).apply { gravity = Gravity.CENTER; maxLines = 1 }
+                .also { r.addView(it, LinearLayout.LayoutParams(0, WRAP, w)) }
+            val inTrip = h.time >= t.start - 1_800_000L && h.time <= (if (t.end > 0) t.end else h.time) + 1_800_000L
+            c(hf.format(Date(h.time)), 1f, if (inTrip) Ui.TEXT else Ui.SUB)
+            c(h.skyIcon().ifBlank { "-" }, 0.8f)
+            c(h.temp?.let { String.format(java.util.Locale.KOREA, "%.0f°", it) } ?: "-", 0.9f)
+            c(h.wind?.let { String.format(java.util.Locale.KOREA, "%.1fm/s", it) + (h.dir?.let { d -> " " + Weather.dir16(d) } ?: "") } ?: "-", 1.5f)
+            c(h.wave?.let { String.format(java.util.Locale.KOREA, "%.1fm", it) + (h.period?.let { p -> String.format(java.util.Locale.KOREA, " %.0fs", p) } ?: "") } ?: "-", 1.3f)
+            val ms = snap.measured[h.time]
+            c((ms ?: h.sst)?.let { String.format(java.util.Locale.KOREA, "%.1f°", it) + if (ms != null) "실" else "" } ?: "-", 1f,
+                if (ms != null) Ui.GREEN else Ui.TEXT)
+            card.addView(r)
+        }
+        card.addView(Ui.text(this, 11f, Ui.SUB, false,
+            "출조 기록에 저장된 값이에요 (다시 안 불러와요) · 수온 '실' = 관측소 실측" +
+                (if (snap.station.isNotBlank()) " (${snap.station})" else "") + (if (snap.note.isNotBlank()) "\n" + snap.note else "")),
+            Ui.lp(this, MATCH, WRAP, top = 6))
+    }
+
     private fun section(title: String) =
         root.addView(Ui.text(this, 16f, Ui.TEXT, true, title), Ui.lp(this, MATCH, WRAP, top = 22))
 
@@ -166,6 +224,12 @@ class TripActivity : Activity() {
 
         // 이용료 · 준비물
         // 이용료 · 준비물: 펼친 채로 바로 고치기 (안 적었으면 같은 배·항구 지난번 것으로 미리 채움)
+        // 그날 날씨 (출조 기록에 저장된 값 · 없으면 한 번만 받아서 저장)
+        section("그날 날씨")
+        val wxCard = Ui.card(this)
+        root.addView(wxCard, Ui.lp(this, MATCH, WRAP, top = 8))
+        renderWx(t, wxCard)
+
         section("이용료 · 준비물")
         val costCard = Ui.card(this)
         val tripCat = t.cat.ifBlank { Store.category }
@@ -335,6 +399,7 @@ class TripActivity : Activity() {
                         Toast.makeText(this, err ?: if (!exactNow) "정확한 위치로 공개해요" else "대략적인 위치로만 공개해요", Toast.LENGTH_LONG).show()
                     }
                 }, Ui.lp(this, MATCH, WRAP, top = 8))
+                root.addView(Ui.button(this, "게시판 표시 방법 바꾸기 (이름 · 그룹)") { changeDisplay(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
                 root.addView(Ui.button(this, "전체 공개 내리기") {
                     PublicBoard.unpublishMine(t) { err -> Toast.makeText(this, err ?: "전체 공개를 내렸어요", Toast.LENGTH_LONG).show() }
                 }, Ui.lp(this, MATCH, WRAP, top = 8))

@@ -297,13 +297,15 @@ object TideDialog {
                 }
             }
             val notes = mutableListOf<String>()
+            // 파고가 비었거나 먼 바다 값이면 그 이유를 맨 위에
+            if (w.seaNote.startsWith("파고") || w.seaNote.startsWith("근처") || w.seaNote.startsWith("이 위치")) notes.add("ⓘ " + w.seaNote)
             if (w.measuredNote.isNotBlank()) notes.add(w.measuredNote)
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
                 notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 약함 · 노랑 주의 · 주황 10노트↑ · 빨강 20노트↑) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
                     "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값, 예상 = 예측")
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
-                if (w.seaNote.isNotBlank()) notes.add(w.seaNote)
+                if (w.seaNote.isNotBlank() && notes.none { it.endsWith(w.seaNote) }) notes.add(w.seaNote)
                 notes.add(if (w.fromKma) "기온·하늘·비·바람·파고: 기상청 단기예보 (내 칸이 육지면 가까운 바다 칸) · 낙뢰: 기상청 초단기예보 · 돌풍·파도 주기·파향·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
             }
             wxNote.text = notes.joinToString("\n")

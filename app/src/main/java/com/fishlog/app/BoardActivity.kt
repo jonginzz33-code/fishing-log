@@ -397,7 +397,15 @@ class BoardActivity : Activity() {
             if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             c.addView(r)
             val pr = Ui.row(this)
-            pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick} · ${t.speciesLine()} · 총 ${t.catches.size}"),
+            if (t.gimg.isNotBlank()) try {
+                val bytes = android.util.Base64.decode(t.gimg, android.util.Base64.DEFAULT)
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bm ->
+                    pr.addView(android.widget.ImageView(this).apply { setImageBitmap(GroupIcon.circle(bm, dp(26))) },
+                        LinearLayout.LayoutParams(dp(26), dp(26)).apply { rightMargin = dp(6) })
+                }
+            } catch (_: Exception) {}
+            pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick}" + (if (t.gname.isNotBlank()) " · ${t.gname}" else "") +
+                " · ${t.speciesLine()} · 총 ${t.catches.size}"),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
             if (MapDialog.paidMark(t.cat, t.paid)) pr.addView(Ui.chip(this, "유료", android.graphics.Color.parseColor("#F2C14E")),
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })

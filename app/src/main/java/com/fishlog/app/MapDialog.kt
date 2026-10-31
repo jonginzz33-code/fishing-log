@@ -380,6 +380,45 @@ object MapDialog {
             addPill(meBtn)
         }
 
+        // 내 위치 기록 확인 (테스트용 · 출조 아닐 때 · 앱이 켜져 있는 동안만)
+        var testListener: (() -> Unit)? = null
+        if (live == null) {
+            val testLine = Polyline(map).apply {
+                outlinePaint.color = Color.parseColor("#2F7BF6"); outlinePaint.strokeWidth = dp(a, 4).toFloat()
+                outlinePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(dp(a, 8).toFloat(), dp(a, 6).toFloat()), 0f)
+                outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+            }
+            map.overlays.add(testLine)
+            val testBtn = pill("📍 내 위치 기록 확인")
+            val clearBtn = pill("🗑 지우기")
+            fun paintTest() {
+                testLine.setPoints(TestTrack.points.map { GeoPoint(it.lat, it.lon) })
+                if (TestTrack.on) {
+                    val min = (System.currentTimeMillis() - TestTrack.startedAt) / 60_000L
+                    val m = TestTrack.meters()
+                    testBtn.text = "■ 기록 끄기 · ${min}분 · " + (if (m >= 1000) String.format(Locale.KOREA, "%.1fkm", m / 1000) else "${m.toInt()}m")
+                    (testBtn.background as GradientDrawable).setColor(Color.parseColor("#1E5E7A"))
+                } else {
+                    testBtn.text = "📍 내 위치 기록 확인"
+                    (testBtn.background as GradientDrawable).setColor(Color.TRANSPARENT)
+                }
+                clearBtn.visibility = if (TestTrack.points.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                map.invalidate()
+            }
+            testBtn.setOnClickListener {
+                if (TestTrack.on) TestTrack.stop()
+                else TestTrack.start(a)?.let { msg -> android.widget.Toast.makeText(a, msg, android.widget.Toast.LENGTH_LONG).show() }
+                    ?: android.widget.Toast.makeText(a, "지금부터 움직인 길을 그려요 (앱을 닫으면 자동으로 꺼지고 지워져요)", android.widget.Toast.LENGTH_LONG).show()
+                paintTest()
+            }
+            clearBtn.setOnClickListener { TestTrack.clear(); paintTest() }
+            addPill(testBtn); addPill(clearBtn)
+            val tl: () -> Unit = { paintTest() }
+            testListener = tl
+            TestTrack.addListener(tl)
+            paintTest()
+        }
+
         val pastBtn = pill("지난 기록 겹치기")
         var pastLoaded = false
         // 맨 위 한 줄: 지금 어떤 기록을 겹쳐 보는지 + 보기 바꾸기
@@ -524,6 +563,7 @@ object MapDialog {
         dialog.setOnDismissListener {
             handler.removeCallbacksAndMessages(null)
             Live.removeListener(matesListener)
+            testListener?.let { TestTrack.removeListener(it) }
             if (live != null) { Tracker.live = false; sm.unregisterListener(sensorListener) }
             map.onPause(); map.onDetach()
         }

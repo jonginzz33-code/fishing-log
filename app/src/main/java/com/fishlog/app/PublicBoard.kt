@@ -63,7 +63,9 @@ object PublicBoard {
         val cat: String, val names: List<String>, val catches: List<PCatch>, val photoCount: Int,
         val prec: String = "",
         /** 해루질 유료 자리 (금액·준비물은 안 올라감) */
-        val paid: Boolean = false
+        val paid: Boolean = false,
+        /** 올린 사람이 보이게 고른 그룹 이름 · 작은 그룹 이미지 (없으면 "") */
+        val gname: String = "", val gimg: String = ""
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -158,8 +160,16 @@ object PublicBoard {
             .show()
     }
 
+    /** 게시판에 같이 올리는 아주 작은 그룹 이미지 (64px) */
+    fun smallB64(b: android.graphics.Bitmap): String? = try {
+        val sm = android.graphics.Bitmap.createScaledBitmap(b, 64, 64, true)
+        val bos = java.io.ByteArrayOutputStream()
+        sm.compress(android.graphics.Bitmap.CompressFormat.JPEG, 75, bos)
+        android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+    } catch (_: Exception) { null }
+
     /** "" = 익명으로 올리기, 그 외 = 내 닉네임 */
-    fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명" else Cloud.displayName
+    fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명 낚시인" else Cloud.displayName
 
     /** 서버에 올릴 조과 목록 (백그라운드 스레드에서) */
     private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {
@@ -198,6 +208,11 @@ object PublicBoard {
             )
             // 전체 조황엔 유료 여부만 (금액·준비물은 안 올림)
             if (t.paid == true) doc["paid"] = true
+            // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
+            Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
+                doc["gname"] = g.title
+                GroupIcon.cached(g.id)?.let { b -> smallB64(b)?.let { doc["gimg"] = it } }
+            }
             val ref = db.collection("public").document(docId(t))
             ref.set(doc)
                 .addOnSuccessListener {
@@ -308,7 +323,8 @@ object PublicBoard {
                                 Store.guessCat((d.get("names") as? List<*>)?.map { it.toString() } ?: emptyList())
                             },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
-                            (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true)
+                            (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
+                            d.getString("gname") ?: "", d.getString("gimg") ?: "")
                     } catch (_: Exception) { null }
                 }, null)
             }

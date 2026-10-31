@@ -862,6 +862,15 @@ class MainActivity : Activity() {
             // 올릴 그룹 고르기 (지금 그룹만 기본 체크)
             val picks = LinkedHashMap<String, CheckBox>()
             var pubRef: CheckBox? = null
+            var optsRef: View? = null
+            var okRef: android.widget.Button? = null
+            /** 완료 버튼 글자: 게시판에 올리면 (게시판 업로드), 그룹에만 올리면 (그룹 업로드) */
+            fun okLabel(): String {
+                val pub = pubRef?.isChecked == true && pubRef?.visibility == View.VISIBLE
+                val n = picks.values.count { it.isChecked }
+                return "✓ 완료" + when { pub -> " (게시판 업로드)"; n > 0 -> " (그룹 업로드)"; else -> "" }
+            }
+            fun paintOk() { okRef?.text = okLabel() }
             fun titleText0(): String {
                 val chosen = groups.filter { picks[it.id]?.isChecked == true }
                 val where = when {
@@ -900,7 +909,7 @@ class MainActivity : Activity() {
                     val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
                     val cb = CheckBox(this).apply {
                         buttonTintList = ColorStateList.valueOf(Ui.BLUE); isChecked = g.id == Cloud.active?.id
-                        setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0() }
+                        setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0(); paintOk() }
                     }
                     picks[g.id] = cb
                     r.addView(cb)
@@ -920,10 +929,70 @@ class MainActivity : Activity() {
                 buttonTintList = ColorStateList.valueOf(Ui.BLUE)
                 isChecked = canShare
                 visibility = if (canShare) View.VISIBLE else View.GONE
-                setOnCheckedChangeListener { _, _ -> refreshSum() }
+                setOnCheckedChangeListener { _, _ -> refreshSum(); optsRef?.visibility = if (isChecked) View.VISIBLE else View.GONE; paintOk() }
             }
             pubRef = pubBox
             box.addView(pubBox, Ui.lp(this, MATCH, WRAP, top = 8))
+            // 게시판 표시 방법: 이름(익명/닉네임) · 그룹 표시(안 함/그룹) + 미리보기
+            val opts = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = Ui.bg(this@MainActivity, Ui.CARD, 12, Color.parseColor("#F28C38"))
+            }
+            fun drawOpts() {
+                opts.removeAllViews()
+                val orange = Color.parseColor("#F2B27A")
+                fun pill(label: CharSequence, on: Boolean, click: () -> Unit) = Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true).apply {
+                    text = label; gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(dp(6), 0, dp(6), 0)
+                    background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener { click(); drawOpts() }
+                }
+                fun two(a: View, b: View) = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(a, LinearLayout.LayoutParams(0, dp(38), 1f)); addView(b, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(6) })
+                }
+                val anon = Store.nick == "" || Cloud.nick == null
+                opts.addView(Ui.text(this, 13f, orange, true, "게시판에 보일 이름"))
+                opts.addView(two(pill(if (anon) "✓ 익명" else "익명", anon) { Store.nick = "" },
+                    pill((if (!anon) "✓ " else "") + "닉네임 (${Cloud.nick ?: "아직 없음"})", !anon) {
+                        if (Cloud.nick == null) showMessage("닉네임이 없어요 · ⚙ 개인 설정에서 먼저 정해 주세요") else Store.nick = "me"
+                    }), Ui.lp(this, MATCH, WRAP, top = 6))
+                val pg = groups.firstOrNull { it.id == Store.pubGroup }
+                opts.addView(Ui.text(this, 13f, orange, true, "그룹 표시"), Ui.lp(this, MATCH, WRAP, top = 10))
+                val gLabel: CharSequence = if (pg == null) "그룹 고르기 ▾"
+                    else android.text.SpannableStringBuilder("✓ ").append(GroupIcon.prefix(this, pg, 18, GroupBand.catIcon(GroupBand.currentCat(pg)))).append(pg.title).append(" ▾")
+                opts.addView(two(pill(if (pg == null) "✓ 안 함" else "안 함", pg == null) { Store.pubGroup = "" },
+                    pill(gLabel, pg != null) {
+                        if (groups.isEmpty()) { showMessage("가입한 그룹이 없어요"); return@pill }
+                        if (groups.size == 1) { Store.pubGroup = groups[0].id; return@pill }
+                        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                            .setTitle("게시판에 보일 그룹")
+                            .setItems(groups.map { it.title }.toTypedArray()) { _, i -> Store.pubGroup = groups[i].id; drawOpts() }
+                            .show()
+                    }), Ui.lp(this, MATCH, WRAP, top = 6))
+                // 미리보기
+                opts.addView(Ui.text(this, 11f, Ui.SUB, false, "게시판에서 이렇게 보여요"), Ui.lp(this, MATCH, WRAP, top = 10))
+                val pv = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8))
+                    background = Ui.bg(this@MainActivity, Ui.BG, 10)
+                }
+                if (pg != null) pv.addView(GroupIcon.view(this, pg, 28, GroupBand.catIcon(GroupBand.currentCat(pg))), LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(8) })
+                val pvT = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                pvT.addView(Ui.text(this, 14f, Ui.TEXT, true).apply {
+                    text = android.text.SpannableStringBuilder(if (Store.nick == "" || Cloud.nick == null) "익명 낚시인" else Cloud.displayName).apply {
+                        if (pg != null) { val st = length; append("  · ${pg.title}"); setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), st, length, 0)
+                            setSpan(android.text.style.AbsoluteSizeSpan(11, true), st, length, 0) }
+                    }
+                })
+                pvT.addView(Ui.text(this, 12f, Ui.SUB, false, t.line() + " · " + catName))
+                pv.addView(pvT)
+                opts.addView(pv, Ui.lp(this, MATCH, WRAP, top = 4))
+                opts.addView(Ui.text(this, 11f, Ui.SUB, false, "지난번 고른 대로 기억해요"), Ui.lp(this, MATCH, WRAP, top = 4))
+            }
+            optsRef = opts
+            drawOpts()
+            opts.visibility = if (pubBox.isChecked && pubBox.visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            box.addView(opts, Ui.lp(this, MATCH, WRAP, top = 6))
             box.addView(sumView, Ui.lp(this, MATCH, WRAP, top = 4))
             refreshSum()
             // (이용료·꼭 필요한 물건은 출조 기록 화면에서 적어요)
@@ -933,7 +1002,7 @@ class MainActivity : Activity() {
             val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setCustomTitle(titleView)
                 .setView(ScrollView(this).apply { addView(box) })
-                .setPositiveButton("종료") { _, _ ->
+                .setPositiveButton(okLabel()) { _, _ ->
                     val ended = Store.endTrip()
                     RemoteService.stop(this)
                     if (ended != null && Cloud.user != null) {
@@ -943,12 +1012,21 @@ class MainActivity : Activity() {
                         }
                         Cloud.backupPending()
                     }
+                    // 그 출조 시간대 날씨를 출조 기록에 넣어 두기 (나중에 다시 안 불러오게)
+                    if (ended != null) Weather.snapshot(this, ended) { wx -> if (wx != null) Store.setWx(ended.id, wx) }
                     if (ended != null) startActivity(Intent(this, TripActivity::class.java)
                         .putExtra("id", ended.id).putExtra("publish", pubBox.isChecked && pubBox.visibility == View.VISIBLE))
                 }
-                .setNegativeButton("계속", null)
+                .setNegativeButton("취소", null)
                 .create()
             dlg.show()
+            // 완료 = 초록 강조
+            dlg.getButton(AlertDialog.BUTTON_POSITIVE)?.let { b ->
+                okRef = b
+                b.setTextColor(Color.parseColor("#08311F")); b.background = Ui.bg(this, Ui.GREEN, 99)
+                b.setPadding(dp(16), 0, dp(16), 0); b.isAllCaps = false
+            }
+            dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.let { b -> b.setTextColor(Ui.TEXT); b.isAllCaps = false }
         }
     }
 
@@ -958,13 +1036,14 @@ class MainActivity : Activity() {
         }
         Store.startTrip(boat, port)
         RemoteService.start(this)
-        bestLocation()?.let { Tide.prefetch(this, it.first, it.second) }
+        bestLocation()?.let { Tide.prefetch(this, it.first, it.second); Weather.prefetch(this, it.first, it.second) }
         showMessage("출조 시작! 화면을 꺼도 리모컨으로 기록돼요")
     }
 
     private fun suggestField(hint: String, items: List<String>, value: String): AutoCompleteTextView =
         AutoCompleteTextView(this).apply {
             this.hint = hint
+            setHintTextColor(Color.parseColor("#6E7A86"))
             setText(value)
             inputType = InputType.TYPE_CLASS_TEXT
             threshold = 0
@@ -980,14 +1059,45 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
-        val boat = suggestField("배 이름 (예: ○○호)", Store.boats(), t?.boat ?: Store.boats().firstOrNull() ?: "")
-        val port = suggestField("출항지 (예: ○○항)", Store.ports(), t?.port ?: Store.ports().firstOrNull() ?: "")
+        // 출조 시작: 지금 그룹의 낚시 종류를 눌러서 고르기
+        if (tripId == null) {
+            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val g = if (Cloud.user == null) null else Cloud.active
+            if (g != null) head.addView(GroupIcon.view(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(8) })
+            head.addView(Ui.text(this, 14f, Ui.TEXT, true, "낚시 종류"))
+            head.addView(Ui.text(this, 12f, Ui.SUB, false, if (g != null) "  · ${g.title}의 종류" else "  · 전체 종류"))
+            box.addView(head)
+            val cats = visibleCats()
+            val chipBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            fun drawChips() {
+                chipBox.removeAllViews()
+                var line: LinearLayout? = null
+                cats.forEachIndexed { i, c ->
+                    if (i % 3 == 0) { line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; chipBox.addView(line, Ui.lp(this, MATCH, WRAP, top = 6)) }
+                    val on = Store.category == c
+                    line!!.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, (if (on) "✓ " else "") + Store.catLabel(c)).apply {
+                        gravity = Gravity.CENTER; maxLines = 1
+                        background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
+                        setOnClickListener { if (Store.category != c) { Store.category = c; drawChips() } }
+                    }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { if (i % 3 > 0) leftMargin = dp(6) })
+                }
+                val rest = cats.size % 3
+                if (rest != 0) repeat(3 - rest) { line?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(6) }) }
+            }
+            drawChips()
+            box.addView(chipBox, Ui.lp(this, MATCH, WRAP, top = 2))
+        }
+        // 칸 위 작은 제목 + 칸 안 흐린 예시
+        val boat = suggestField("예: 테티스호, 하나개 포인트", Store.boats(), t?.boat ?: Store.boats().firstOrNull() ?: "")
+        val port = suggestField("예: 영흥도 진두항, 하나개 주차장", Store.ports(), t?.port ?: Store.ports().firstOrNull() ?: "")
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "배 이름 · 포인트"), Ui.lp(this, MATCH, WRAP, top = if (tripId == null) 14 else 0))
         box.addView(boat)
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "항구 · 주요 장소"), Ui.lp(this, MATCH, WRAP, top = 10))
         box.addView(port)
         val b = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(if (tripId == null) "출조 시작 · 배와 항구" else "배와 항구 수정")
             .setMessage("한 번 적은 이름은 목록에 저장돼서 다음부터 고를 수 있어요")
-            .setView(box)
+            .setView(ScrollView(this).apply { addView(box) })
         if (tripId == null) {
             b.setPositiveButton("출조 시작") { _, _ -> startTrip(boat.text.toString(), port.text.toString()) }
             b.setNeutralButton("건너뛰기") { _, _ -> startTrip("", "") }

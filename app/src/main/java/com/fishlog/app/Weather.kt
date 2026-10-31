@@ -65,6 +65,74 @@ object Weather {
         } catch (_: Exception) { emptyMap() }
     }
 
+    /** 받은 날씨를 기억해 두는 시간 (3시간 30분) */
+    const val KEEP_MS = 210 * 60_000L
+
+    fun hoursToJson(hours: List<Hour>): JSONObject {
+        val o = JSONObject()
+        hours.forEach { h ->
+            val j = JSONObject()
+            fun put(k: String, v: Any?) { if (v != null) j.put(k, v) }
+            put("w", h.wind); put("d", h.dir); put("g", h.gust); put("wv", h.wave); put("s", h.sst); put("t", h.temp)
+            put("sk", h.sky); put("pt", h.pty); put("p", h.pop); put("pd", h.period); put("wd", h.waveDir); put("c", h.wcode)
+            if (h.thunder) j.put("th", true)
+            if (j.length() > 0) o.put(h.time.toString(), j)
+        }
+        return o
+    }
+
+    fun hoursFromJson(o: JSONObject): List<Hour> {
+        fun dd(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optDouble(k) else null
+        fun ii(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optInt(k) else null
+        return o.keys().asSequence().mapNotNull { k ->
+            val t = k.toLongOrNull() ?: return@mapNotNull null
+            val j = o.getJSONObject(k)
+            Hour(t, dd(j, "w"), dd(j, "d"), dd(j, "g"), dd(j, "wv"), dd(j, "s"), dd(j, "t"), ii(j, "sk"), ii(j, "pt"), ii(j, "p"),
+                dd(j, "pd"), dd(j, "wd"), j.optBoolean("th", false), ii(j, "c"))
+        }.sortedBy { it.time }.toList()
+    }
+
+    /** 출조 기록에 넣어 둔 날씨 (시간별 + 실측 수온) */
+    class Snap(val hours: List<Hour>, val measured: Map<Long, Double>, val station: String, val note: String)
+
+    fun snapFromJson(s: String): Snap? = try {
+        val o = JSONObject(s)
+        val m = HashMap<Long, Double>()
+        o.optJSONObject("m")?.let { mj -> mj.keys().forEach { k -> k.toLongOrNull()?.let { m[it] = mj.getDouble(k) } } }
+        Snap(hoursFromJson(o.optJSONObject("h") ?: JSONObject()), m, o.optString("st"), o.optString("n"))
+    } catch (_: Exception) { null }
+
+    /**
+     * 출조 시간대(앞뒤 1시간)의 날씨를 모아 출조 기록에 넣을 글자로 (완료 때 한 번)
+     * done(null) = 위치가 없거나 못 받음
+     */
+    fun snapshot(ctx: Context, t: Store.Trip, done: (String?) -> Unit) {
+        val loc = t.anyLocation() ?: return done(null)
+        val end = if (t.end > 0) t.end else System.currentTimeMillis()
+        val from = t.start - 3_600_000L; val to = end + 3_600_000L
+        val days = generateSequence(dayStartOf(from)) { it + 86_400_000L }.takeWhile { it <= to }.toList().take(3)
+        val hours = ArrayList<Hour>(); val meas = HashMap<Long, Double>()
+        var station = ""; val notes = ArrayList<String>()
+        var left = days.size
+        days.forEach { ds ->
+            fetch(ctx, loc.first, loc.second, ds) { d ->
+                hours.addAll(d.hours.filter { it.time in from..to })
+                d.measured?.let { m -> station = m.station; m.series.filterKeys { it in from..to }.forEach { (k, v) -> meas[k] = v } }
+                if (d.seaNote.isNotBlank()) notes.add(d.seaNote)
+                left--
+                if (left == 0) {
+                    if (hours.isEmpty()) { done(null); return@fetch }
+                    val o = JSONObject().put("h", hoursToJson(hours.sortedBy { it.time }))
+                    if (meas.isNotEmpty()) o.put("m", JSONObject().apply { meas.forEach { (k, v) -> put(k.toString(), v) } })
+                    if (station.isNotBlank()) o.put("st", station)
+                    notes.firstOrNull()?.let { o.put("n", it) }
+                    o.put("at", System.currentTimeMillis())
+                    done(o.toString())
+                }
+            }
+        }
+    }
+
     /** 받은 값을 서버에 합쳐 저장 (지난 시간 값이 사라지지 않게) */
     private fun saveDay(lat: Double, lon: Double, ymd: String, hours: List<Hour>) {
         if (Cloud.user == null || hours.isEmpty()) return
@@ -133,10 +201,15 @@ object Weather {
 
     private fun dayStartOf(time: Long): Long = dayFmt.parse(dayFmt.format(Date(time)))!!.time
 
+    /** 출조 시작 때 오늘 날씨를 미리 받아 두기 (배 위에서 신호가 약해도 보이게) */
+    fun prefetch(ctx: Context, lat: Double, lon: Double) = fetch(ctx, lat, lon, dayStartOf(System.currentTimeMillis())) { }
+
     /** dayStart = 그날 0시 (한국 시각) */
     fun fetch(ctx: Context, lat: Double, lon: Double, dayStart: Long, done: (Day) -> Unit) {
         val key = String.format(Locale.US, "%.2f,%.2f,%d", lat, lon, dayStart)
-        cache[key]?.let { (at, d) -> if (System.currentTimeMillis() - at < 30 * 60_000L) { done(d); return } }
+        // 기억 시간: 오늘은 30분(낙뢰·지금 날씨), 다른 날은 3시간 30분 (기상청 예보는 3시간마다 바뀜)
+        val ttl = if (dayStart == dayStartOf(System.currentTimeMillis())) 30 * 60_000L else KEEP_MS
+        cache[key]?.let { (at, d) -> if (System.currentTimeMillis() - at < ttl) { done(d); return } }
         val app = ctx.applicationContext
         Thread {
             val d = try { load(app, lat, lon, dayStart) } catch (e: Exception) {
@@ -392,7 +465,7 @@ object Weather {
         if (key.isBlank()) throw KmaError("기상청 예보: 인증키가 앱에 없어요")
         val (bd, bt) = base ?: baseTime(System.currentTimeMillis())
         val ck = "$nx,$ny,$bd$bt"
-        val items = kmaCache[ck]?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.second ?: run {
+        val items = kmaCache[ck]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second ?: run {
             val q = "/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&pageNo=1&numOfRows=1500&dataType=JSON&base_date=$bd&base_time=$bt&nx=$nx&ny=$ny"
             var body: String? = null
@@ -517,7 +590,7 @@ object Weather {
 
     fun fetchWeek(lat: Double, lon: Double, done: (List<WeekDay>?) -> Unit) {
         val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
-        weekCache?.let { (k, v) -> if (k == key && System.currentTimeMillis() - v.first < 60 * 60_000L) { done(v.second); return } }
+        weekCache?.let { (k, v) -> if (k == key && System.currentTimeMillis() - v.first < KEEP_MS) { done(v.second); return } }
         Thread {
             val r = try { loadWeek(lat, lon) } catch (_: Exception) { null }
             main.post {

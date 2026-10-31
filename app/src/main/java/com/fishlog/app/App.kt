@@ -3,13 +3,15 @@ package com.fishlog.app
 import android.app.Application
 import android.util.Log
 
-object BuildConfigInfo { const val VERSION = "2.2" }
+object BuildConfigInfo { const val VERSION = "2.3" }
 
 /** 앱이 죽으면 원인을 저장해 두고, 다음 실행 때 화면에 보여준다 */
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Cloud.appContext = applicationContext
+        // 지도 '내 위치 기록 확인': 앱이 화면에서 사라지면 자동으로 끄기
+        TestTrack.install(this)
         // 지난번에 받아 둔 내 닉네임 (인터넷 없을 때도 실명 대신)
         Cloud.nick = getSharedPreferences("fishlog", MODE_PRIVATE).getString("myNick", null)
         val prev = Thread.getDefaultUncaughtExceptionHandler()

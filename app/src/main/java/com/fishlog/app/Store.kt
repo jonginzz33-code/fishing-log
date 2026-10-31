@@ -37,7 +37,9 @@ object Store {
         /** 이용료 금액 (원) */
         var fee: Int = 0,
         /** 꼭 필요한 물건 */
-        val gear: MutableList<String> = mutableListOf()
+        val gear: MutableList<String> = mutableListOf(),
+        /** 그 출조 시간대 날씨 (완료 때 저장, Weather.snapshot) */
+        var wx: String = ""
     ) {
         fun costLabel(): String = Store.costLabel(paid, fee)
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -390,6 +392,13 @@ object Store {
         return true
     }
 
+    /** 출조 기록에 그날 날씨 넣기 */
+    fun setWx(tripId: Long, wx: String) {
+        val t = find(tripId) ?: return
+        t.wx = wx; t.backedUp = false
+        changed()
+    }
+
     fun undoLast(): Int {
         val t = current ?: return 0
         if (t.catches.isEmpty()) return 0
@@ -533,6 +542,11 @@ object Store {
         get() = prefs.getString("nick", null)
         set(v) { prefs.edit().putString("nick", v).apply() }
 
+    /** 전체 게시판에 함께 보일 그룹 ("" = 안 함) */
+    var pubGroup: String
+        get() = prefs.getString("pub_gid", "") ?: ""
+        set(v) { prefs.edit().putString("pub_gid", v).apply() }
+
     fun markNotUploaded(tripId: Long) { find(tripId)?.uploaded = false; changed() }
 
     fun markUploaded(tripId: Long) { find(tripId)?.uploaded = true; changed() }
@@ -563,6 +577,7 @@ object Store {
         t.paid?.let { o.put("paid", it) }
         if (t.fee > 0) o.put("fee", t.fee)
         if (t.gear.isNotEmpty()) o.put("gear", JSONArray().apply { t.gear.forEach { put(it) } })
+        if (t.wx.isNotBlank()) o.put("wx", t.wx)
         o.put("names", JSONArray().apply { t.names.forEach { put(it) } })
         val arr = JSONArray()
         t.catches.forEach {
@@ -609,7 +624,8 @@ object Store {
             o.optString("boat", ""), o.optString("port", ""), photos, o.optBoolean("bk", false), o.optString("cat", ""),
             o.optBoolean("pub", false), o.optString("pp", ""),
             if (o.has("paid")) o.getBoolean("paid") else null, o.optInt("fee", 0),
-            o.optJSONArray("gear")?.let { g -> (0 until g.length()).map { g.getString(it) }.toMutableList() } ?: mutableListOf())
+            o.optJSONArray("gear")?.let { g -> (0 until g.length()).map { g.getString(it) }.toMutableList() } ?: mutableListOf(),
+            o.optString("wx", ""))
     }
 
     private fun saveCurrent() {
