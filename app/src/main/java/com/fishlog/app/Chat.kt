@@ -59,7 +59,8 @@ object Chat {
         stopAll()
         key = k
         regs = rooms().map { r ->
-            ref(r).whereGreaterThan("t", System.currentTimeMillis() - keepOf(r)).orderBy("t", Query.Direction.DESCENDING).limit(LIMIT)
+            // 시각을 한 시간 단위로 맞춰 같은 질문으로 → 다시 붙일 때 바뀐 글만 읽음 (매번 80개씩 다시 읽지 않게)
+            ref(r).whereGreaterThan("t", (System.currentTimeMillis() - keepOf(r)) / 3_600_000L * 3_600_000L).orderBy("t", Query.Direction.DESCENDING).limit(LIMIT)
                 .addSnapshotListener { q, _ ->
                     if (q == null) return@addSnapshotListener
                     latest[r] = q.documents.map { d ->
@@ -77,7 +78,7 @@ object Chat {
     /** 그만 보기 (다른 화면이 곧 다시 볼 수 있어서 5초 뒤에 끊음) */
     fun stop(onChange: () -> Unit) {
         listeners.remove(onChange)
-        if (listeners.isEmpty()) { main.removeCallbacks(stopLater); main.postDelayed(stopLater, 5_000L) }
+        if (listeners.isEmpty()) { main.removeCallbacks(stopLater); main.postDelayed(stopLater, 3 * 60_000L) }
     }
 
     private fun stopAll() {
@@ -223,7 +224,7 @@ object Chat {
     @Volatile var online: Long = 0L
         private set
     private val presenceTick = object : Runnable {
-        override fun run() { ping(); count(); main.postDelayed(this, 120_000L) }
+        override fun run() { ping(); count(); main.postDelayed(this, 180_000L) }
     }
 
     /** 앱 화면이 켜져 있는 동안 2분마다 '접속 중' 표시 + 접속 인원 세기 */

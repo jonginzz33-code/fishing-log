@@ -59,6 +59,7 @@ object GroupNews {
     /** 가입한 그룹마다 일정·공지를 지켜봄. 바뀌면 onChange (메인 스레드) */
     fun startLive(onChange: () -> Unit) {
         liveListeners.add(onChange)
+        main.removeCallbacks(stopLater)
         if (Cloud.user == null || !Cloud.isInitialized()) return
         val key = Cloud.groups.joinToString(",") { it.id }
         if (key == watchKey && watching.isNotEmpty()) return
@@ -72,9 +73,11 @@ object GroupNews {
         }
     }
 
+    /** 그만 보기: 다른 화면에 갔다 곧 돌아오는 경우가 많아서 3분 뒤에 끊음 (다시 붙일 때 전부 다시 읽지 않게) */
+    private val stopLater = Runnable { if (liveListeners.isEmpty()) stopWatching() }
     fun stopLive(onChange: () -> Unit) {
         liveListeners.remove(onChange)
-        if (liveListeners.isEmpty()) stopWatching()
+        if (liveListeners.isEmpty()) { main.removeCallbacks(stopLater); main.postDelayed(stopLater, 3 * 60_000L) }
     }
 
     private fun stopWatching() {
@@ -140,6 +143,8 @@ object GroupNews {
         val gs = Cloud.groups
         if (gs.isEmpty()) { unseen = emptyMap(); done?.invoke(); return }
         if (!force && System.currentTimeMillis() - loadedAt < 60_000L) { recompute(); done?.invoke(); return }
+        // 실시간으로 지켜보는 중이면 이미 최신 → 다시 안 받음 (읽기 줄이기)
+        if (!force && watching.isNotEmpty() && watchKey == gs.joinToString(",") { it.id }) { recompute(); done?.invoke(); return }
         done?.let { waiting.add(it) }
         if (loading) return
         loading = true

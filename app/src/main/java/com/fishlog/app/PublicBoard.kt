@@ -206,7 +206,7 @@ object PublicBoard {
                 "names" to t.names.toList(), "catches" to catches,
                 "total" to t.catches.size, "photoCount" to photos.size,
                 "prec" to (if (exact) "exact" else "approx"),
-                "created" to System.currentTimeMillis()
+                "created" to System.currentTimeMillis(), "upd" to System.currentTimeMillis()
             )
             // 전체 조황엔 유료 여부만 (금액·준비물은 안 올림)
             if (t.paid == true) doc["paid"] = true
@@ -273,7 +273,7 @@ object PublicBoard {
         Thread {
             val catches = buildCatches(app, t, exact)
             db.collection("public").document(docIdStr)
-                .update(mapOf("catches" to catches, "prec" to (if (exact) "exact" else "approx")))
+                .update(mapOf("catches" to catches, "prec" to (if (exact) "exact" else "approx"), "upd" to System.currentTimeMillis()))
                 .addOnSuccessListener { Store.setPublic(t.id, true, exact); cache.clear(); done(null) }
                 .addOnFailureListener { main.post { done(it.message ?: "바꾸기 실패") } }
         }.start()
@@ -294,22 +294,23 @@ object PublicBoard {
     private val cache = HashMap<Long, Pair<Long, List<PTrip>>>()
 
     fun load(since: Long, done: (List<PTrip>?, String?) -> Unit) {
-        val bucket = since / 3_600_000L
-        cache[bucket]?.let { (at, list) ->
-            if (System.currentTimeMillis() - at < 3 * 60_000L) { done(list, null); return }
+        // 한 번 받은 목록(최근 300개)을 10분 기억 → 기간은 폰에서 거름 (기간을 바꿔도 다시 안 받음)
+        cache[0L]?.let { (at, list) ->
+            if (System.currentTimeMillis() - at < 10 * 60_000L) { done(list.filter { since <= 0 || it.start > since }, null); return }
         }
-        loadServer(since) { list, err ->
-            if (list != null) cache[bucket] = System.currentTimeMillis() to list
-            done(list, err)
+        loadServer(0L) { list, err ->
+            if (list != null) cache[0L] = System.currentTimeMillis() to list
+            done(list?.filter { since <= 0 || it.start > since }, err)
         }
     }
 
     private fun loadServer(since: Long, done: (List<PTrip>?, String?) -> Unit) {
         var q: Query = db.collection("public").orderBy("start", Query.Direction.DESCENDING)
         if (since > 0) q = q.whereGreaterThan("start", since)
-        q.limit(300).get()
-            .addOnSuccessListener { r ->
-                done(r.documents.mapNotNull { d ->
+        // 폰에 저장된 글 + 그 뒤에 새로 올라오거나 바뀐 글만 서버에서 (3시간마다 한 번 전체)
+        Cloud.smartList(db.collection("public"), q.limit(300), "upd", "public_$since") { docs, err ->
+            if (docs == null) { done(null, err ?: "불러오기 실패 (보안 규칙 확인)"); return@smartList }
+            done(docs.mapNotNull { d ->
                     try {
                         @Suppress("UNCHECKED_CAST")
                         val prec = d.getString("prec") ?: ""
@@ -333,9 +334,8 @@ object PublicBoard {
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
                             d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "")
                     } catch (_: Exception) { null }
-                }, null)
-            }
-            .addOnFailureListener { done(null, it.message ?: "불러오기 실패 (보안 규칙 확인)") }
+                }.sortedByDescending { it.start }, null)
+        }
     }
 
     fun loadPhotos(id: String, done: (List<Cloud.RemotePhoto>) -> Unit) {

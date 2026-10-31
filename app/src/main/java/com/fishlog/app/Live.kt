@@ -137,7 +137,7 @@ object Live {
     /** 전체 사용자에게 공유 중인 사람들 (1분 기억) */
     fun publicNow(done: (List<PubNow>) -> Unit) {
         if (Cloud.uid == null) return done(emptyList())
-        pubCache?.let { (at, l) -> if (System.currentTimeMillis() - at < 60_000L) return done(l) }
+        pubCache?.let { (at, l) -> if (System.currentTimeMillis() - at < 3 * 60_000L) return done(l) }
         db.collection("publicLive").get().addOnSuccessListener { q ->
             val now = System.currentTimeMillis()
             val l = q.documents.filter { d -> now - (d.getLong("t") ?: 0L) < STALE_MS && !Moderation.isBlocked(d.id) }
@@ -210,7 +210,7 @@ object Live {
     fun nowCached(gid: String): List<Now> = nowCache[gid]?.second ?: emptyList()
     fun nowFishing(gid: String, done: (List<Now>) -> Unit) {
         val me = Cloud.uid ?: return done(emptyList())
-        nowCache[gid]?.let { (at, l) -> if (System.currentTimeMillis() - at < 2 * 60_000L) return done(l) }
+        nowCache[gid]?.let { (at, l) -> if (System.currentTimeMillis() - at < 3 * 60_000L) return done(l) }
         db.collection("groups").document(gid).collection("live").get().addOnSuccessListener { q ->
             val now = System.currentTimeMillis()
             val l = q.documents.filter { d -> d.id != me && d.getBoolean("ended") != true && now - (d.getLong("t") ?: 0L) < STALE_MS }

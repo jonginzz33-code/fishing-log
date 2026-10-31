@@ -39,7 +39,7 @@ class GroupTripsActivity : Activity() {
     private val selected = LinkedHashSet<String>()
     private lateinit var delBar: LinearLayout
     private var shown: List<Cloud.RemoteTrip> = emptyList()
-    private fun canDel(t: Cloud.RemoteTrip) = t.owner == Cloud.uid || Cloud.isOwner
+    private fun canDel(t: Cloud.RemoteTrip) = t.owner == Cloud.uid || Cloud.isOwner || Cloud.isAdmin
 
     private val dayFmt = SimpleDateFormat("yyyy.M.d(E)", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
@@ -198,11 +198,11 @@ class GroupTripsActivity : Activity() {
             val c = Ui.card(this).apply {
                 isClickable = true
                 setOnClickListener {
-                    if (selMode) { if (canDel(t)) { if (!selected.add(t.id)) selected.remove(t.id); render() } else toast("그룹장·올린 사람만 내릴 수 있어요") }
+                    if (selMode) { if (canDel(t)) { if (!selected.add(t.id)) selected.remove(t.id); render() } else toast("그룹장·관리자·올린 사람만 내릴 수 있어요") }
                     else openTrip(t)
                 }
                 setOnLongClickListener {
-                    if (!canDel(t)) { toast("내 글만 고를 수 있어요 (그룹장은 모든 글)"); return@setOnLongClickListener true }
+                    if (!canDel(t)) { toast("내 글만 고를 수 있어요 (그룹장·관리자는 모든 글)"); return@setOnLongClickListener true }
                     selMode = true; selected.add(t.id); render(); true
                 }
                 if (selMode && sel) background = Ui.bg(this@GroupTripsActivity, Ui.CARD, 16, Ui.GREEN)
@@ -296,6 +296,7 @@ class GroupTripsActivity : Activity() {
         if (local != null) items.add("✎ 내 출조 기록 열기 (수정)")
         if (mine) items.add("🗑 그룹에서 내리기")
         else if (Cloud.isOwner) items.add("🗑 그룹에서 내리기 (그룹장)")
+        else if (Cloud.isAdmin) items.add("🗑 그룹에서 내리기 (관리자)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${t.ownerName} · ${dayFmt.format(Date(t.start))} ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->

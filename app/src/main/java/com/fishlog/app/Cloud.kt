@@ -871,8 +871,8 @@ object Cloud {
                    onTrips: ((List<RemoteTrip>) -> Unit)? = null): List<com.google.firebase.firestore.ListenerRegistration> {
         val gref = db.collection("groups").document(g.id)
         val extra: List<com.google.firebase.firestore.ListenerRegistration> = if (onTrips == null) emptyList() else listOf(
-            // 최근 올라온 출조 30개 (새 글 강조용)
-            gref.collection("trips").orderBy("start", Query.Direction.DESCENDING).limit(30).addSnapshotListener { q, _ ->
+            // 최근 올라온 출조 10개 (새 글 강조용 · 읽기 줄이기)
+            gref.collection("trips").orderBy("start", Query.Direction.DESCENDING).limit(10).addSnapshotListener { q, _ ->
                 if (q != null) onTrips(q.documents.mapNotNull { parse(it) })
             })
         return extra + listOf(
@@ -1105,15 +1105,62 @@ object Cloud {
 
     /** 특정 그룹의 최근 출조 (지난 기록 겹치기에서 그룹을 골라 볼 때) */
     fun recentTripsOf(g: Group, done: (List<RemoteTrip>?, String?) -> Unit) {
-        tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 3 * 60_000L) { done(list, null); return } }
-        db.collection("groups").document(g.id).collection("trips")
-            .orderBy("start", Query.Direction.DESCENDING).limit(300).get()
-            .addOnSuccessListener { q ->
-                val list = q.documents.mapNotNull { parse(it) }
-                tripsCache[g.id] = System.currentTimeMillis() to list
-                done(list, null)
-            }
-            .addOnFailureListener { done(null, it.message ?: "불러오기 실패") }
+        tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 10 * 60_000L) { done(list, null); return } }
+        val col = db.collection("groups").document(g.id).collection("trips")
+        smartList(col, col.orderBy("start", Query.Direction.DESCENDING).limit(300), "updated", "gtrips_${g.id}") { docs, err ->
+            if (docs == null) { done(null, err ?: "불러오기 실패"); return@smartList }
+            val list = docs.mapNotNull { parse(it) }.sortedByDescending { it.start }
+            tripsCache[g.id] = System.currentTimeMillis() to list
+            done(list, null)
+        }
+    }
+
+    /**
+     * 서버 읽기 줄이기: 폰에 저장된 것(무료) + 그 뒤에 바뀐 글만 서버에서 (field = 바뀐 시각 칸)
+     *  - fullEveryMs 마다(기본 3시간) 한 번은 전체를 다시 받아 남이 지운 글도 정리
+     *  - 처음이거나 폰에 아무것도 없으면 전체
+     */
+    fun smartList(col: com.google.firebase.firestore.CollectionReference, base: Query, field: String, key: String,
+                  fullEveryMs: Long = 3 * 3600_000L, done: (List<com.google.firebase.firestore.DocumentSnapshot>?, String?) -> Unit) {
+        val p = appContext.getSharedPreferences("smart_q", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastFull = p.getLong("full_$key", 0L)
+        val lastMax = p.getLong("max_$key", 0L)
+        fun maxField(list: List<com.google.firebase.firestore.DocumentSnapshot>, start: Long) =
+            list.fold(start) { m, d -> kotlin.math.max(m, d.getLong(field) ?: 0L) }
+        fun full() {
+            base.get(com.google.firebase.firestore.Source.SERVER)
+                .addOnSuccessListener { q ->
+                    // 그 칸이 아직 없는 예전 글뿐이면 지금 시각부터 (그 뒤에 바뀐 것만 받음)
+                    p.edit().putLong("full_$key", now).putLong("max_$key", maxField(q.documents, 0L).takeIf { it > 0 } ?: (now - 60_000L)).apply()
+                    done(q.documents, null)
+                }
+                .addOnFailureListener { e ->
+                    // 인터넷이 없으면 폰에 저장된 것이라도
+                    base.get(com.google.firebase.firestore.Source.CACHE)
+                        .addOnSuccessListener { done(it.documents, null) }
+                        .addOnFailureListener { done(null, e.message) }
+                }
+        }
+        if (now - lastFull > fullEveryMs || lastMax == 0L) { full(); return }
+        // 폰마다 시계가 조금씩 달라서 5분 겹치게
+        col.whereGreaterThan(field, lastMax - 5 * 60_000L).get(com.google.firebase.firestore.Source.SERVER).addOnCompleteListener { dq ->
+            val delta = if (dq.isSuccessful) dq.result?.documents.orEmpty() else emptyList()
+            if (dq.isSuccessful) p.edit().putLong("max_$key", maxField(delta, lastMax)).apply()
+            base.get(com.google.firebase.firestore.Source.CACHE)
+                .addOnSuccessListener { cq ->
+                    val map = LinkedHashMap<String, com.google.firebase.firestore.DocumentSnapshot>()
+                    cq.documents.forEach { map[it.id] = it }
+                    delta.forEach { map[it.id] = it }
+                    if (map.isEmpty()) full() else done(map.values.filter { it.exists() }, null)
+                }
+                .addOnFailureListener { full() }
+        }
+    }
+
+    /** 전체 다시 받기 (당겨서 새로고침 · 관리자 정리 후) */
+    fun smartReset(key: String) {
+        appContext.getSharedPreferences("smart_q", Context.MODE_PRIVATE).edit().remove("full_$key").remove("max_$key").apply()
     }
 
     /** 이 시각 앞뒤 하루 안에 올라온 그룹 출조 */

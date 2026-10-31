@@ -1594,7 +1594,7 @@ class MainActivity : Activity() {
             nowBtn.alpha = if (l.isEmpty()) 0.6f else 1f
         }
         draw(Live.allCached())
-        if (System.currentTimeMillis() - nowAt < 60_000L) return
+        if (System.currentTimeMillis() - nowAt < 3 * 60_000L) return
         nowAt = System.currentTimeMillis()
         Live.nowAll { l -> if (!isFinishing) draw(l) }
     }

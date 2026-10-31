@@ -563,6 +563,7 @@ class GroupActivity : Activity() {
         val mine = t.owner == Cloud.uid
         if (mine) items.add("그룹에서 내리기")
         else if (Cloud.isOwner) items.add("그룹에서 내리기 (그룹장)")
+        else if (Cloud.isAdmin) items.add("그룹에서 내리기 (관리자)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("${t.ownerName} · ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->

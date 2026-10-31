@@ -109,7 +109,8 @@ object MainPhoto {
             if (groups) Store.sharedGroups(t.id).forEach { gid ->
                 val ref = db.collection("groups").document(gid).collection("trips").document("${me}_${t.id}")
                 ref.update(mapOf("mthumb" to (small ?: FieldValue.delete()),
-                    "mainId" to (main?.let { docId(it) } ?: FieldValue.delete()), "photoCount" to t.photos.size))
+                    "mainId" to (main?.let { docId(it) } ?: FieldValue.delete()), "photoCount" to t.photos.size,
+                    "updated" to System.currentTimeMillis()))
                 // 새로 넣은 대표 사진(큰 사진 포함)·지운 예전 사진을 사진 목록에 반영 (이미 올린 건 건너뜀)
                 Cloud.uploadPhotos(ref, t, gid)
                 ref.collection("photosBig").document("main").delete()
@@ -118,7 +119,8 @@ object MainPhoto {
                 val ref = db.collection("public").document(PublicBoard.docIdOf(me, t.id))
                 val big = main?.let { Photos.bigUpload(Cloud.appContext, it) }?.takeIf { it.size < 720_000 }
                     ?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }
-                ref.update(mapOf("mthumb" to (small ?: FieldValue.delete()), "mainId" to (main?.let { docId(it) } ?: FieldValue.delete())))
+                ref.update(mapOf("mthumb" to (small ?: FieldValue.delete()), "mainId" to (main?.let { docId(it) } ?: FieldValue.delete()),
+                    "upd" to System.currentTimeMillis()))
                 if (big != null) ref.collection("photos").document("main").set(mapOf("owner" to me, "data" to big, "t" to System.currentTimeMillis(), "main" to true))
                 else ref.collection("photos").document("main").delete()
             }
