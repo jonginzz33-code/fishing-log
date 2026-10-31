@@ -131,8 +131,9 @@ object MainPhoto {
     /** 대표 사진 크게 보기 (그룹·게시판 글): 작은 사진 먼저, 큰 사진 받으면 바꿈 */
     fun showBig(a: Activity, path: String, thumb: String, caption: String) {
         val update = ZoomImageView.show(a, decode(thumb), caption)
-        FirebaseFirestore.getInstance().document(path).get().addOnSuccessListener { d ->
-            d.getString("data")?.let { decode(it) }?.let { update(it) }
+        // 한 번 본 큰 사진은 폰에 저장된 것으로 (대표 사진을 바꾸면 그때 서버에서)
+        Cloud.docCacheFirst(FirebaseFirestore.getInstance().document(path)) { d ->
+            d?.getString("data")?.let { decode(it) }?.let { update(it) }
         }
     }
 

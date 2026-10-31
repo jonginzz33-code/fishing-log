@@ -178,9 +178,46 @@ object Store {
         changed()
     }
 
+    /**
+     * 어종 목록 = 관리자(본인)가 정한 목록 − 내가 지운(숨긴) 어종 + 내가 직접 추가한 어종
+     *  - 관리자가 나중에 새로 넣은 어종은 지운 적 없으니 자동으로 보임
+     *  - 내가 지우거나 추가한 건 앱을 업데이트하거나 관리자가 목록을 바꿔도 그대로
+     */
     fun species(cat: String = category): List<String> {
+        val hidden = myHidden(cat)
+        return (adminSpecies(cat).filter { it !in hidden } + myAdded(cat)).distinct()
+    }
+
+    /** 관리자가 정한 목록 (서버 · 앱 기본) */
+    fun adminSpecies(cat: String = category): List<String> {
         val saved = prefs.getString("species_$cat", null) ?: return DEFAULT_SPECIES[cat] ?: emptyList()
         return try { val a = JSONArray(saved); (0 until a.length()).map { a.getString(it) } } catch (_: Exception) { DEFAULT_SPECIES[cat] ?: emptyList() }
+    }
+
+    private fun strList(key: String): List<String> = try {
+        val a = JSONArray(prefs.getString(key, "[]")); (0 until a.length()).map { a.getString(it) }
+    } catch (_: Exception) { emptyList() }
+    private fun putList(key: String, l: List<String>) {
+        val a = JSONArray(); l.distinct().forEach { a.put(it) }
+        prefs.edit().putString(key, a.toString()).apply(); fireChanged()
+    }
+    /** 내가 지운(숨긴) 관리자 어종 */
+    fun myHidden(cat: String): List<String> = strList("sp_hide_$cat")
+    /** 내가 직접 추가한 어종 (나만 보임) */
+    fun myAdded(cat: String): List<String> = strList("sp_add_$cat")
+
+    /** 내 목록에서 지우기: 관리자 어종이면 숨기기, 내가 추가한 거면 빼기 */
+    fun removeMySpecies(cat: String, name: String) {
+        if (name in myAdded(cat)) putList("sp_add_$cat", myAdded(cat) - name)
+        if (name in adminSpecies(cat)) putList("sp_hide_$cat", myHidden(cat) + name)
+    }
+    /** 지운 어종 다시 보이기 */
+    fun unhideSpecies(cat: String, name: String) = putList("sp_hide_$cat", myHidden(cat) - name)
+    /** 나만 쓰는 어종 추가 (숨겨 둔 관리자 어종이면 다시 보이게) */
+    fun addMySpecies(cat: String, name: String) {
+        val n = name.trim(); if (n.isEmpty()) return
+        if (n in myHidden(cat)) { unhideSpecies(cat, n); return }
+        if (n !in species(cat)) putList("sp_add_$cat", myAdded(cat) + n)
     }
 
     fun setSpecies(cat: String, list: List<String>) {
@@ -221,11 +258,13 @@ object Store {
         get() = prefs.getInt("tideAlarm", 0)
         set(v) { prefs.edit().putInt("tideAlarm", v).apply(); fireChanged() }
 
+    /** 관리자 목록에 추가 (관리자만) */
     fun addSpecies(cat: String, name: String) {
         val n = name.trim()
         if (n.isEmpty()) return
-        val l = species(cat).toMutableList()
+        val l = adminSpecies(cat).toMutableList()
         if (n !in l) { l.add(n); setSpecies(cat, l) }
+        if (n in myHidden(cat)) unhideSpecies(cat, n)
     }
 
     // ---- 퀵 버튼 (3번 이상, 종류마다 따로) · 리모컨은 1·2번만 ----

@@ -631,7 +631,7 @@ class TripActivity : Activity() {
                 .setView(input)
                 .setPositiveButton("추가") { _, _ ->
                     val n = input.text.toString().trim()
-                    if (n.isNotEmpty()) { Store.addSpecies(cat, n); Store.renameInTrip(t.id, slot, n) }
+                    if (n.isNotEmpty()) { if (Cloud.isAdmin) Store.addSpecies(cat, n) else Store.addMySpecies(cat, n); Store.renameInTrip(t.id, slot, n) }
                 }
                 .setNegativeButton("취소", null)
                 .show()

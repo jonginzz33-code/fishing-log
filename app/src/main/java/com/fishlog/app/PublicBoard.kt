@@ -252,6 +252,7 @@ object PublicBoard {
             q.result?.documents?.forEach { it.reference.delete() }
             ref.delete()
                 .addOnSuccessListener {
+                    Cloud.markDeleted("public", id)
                     localTripId?.let { Store.setPublic(it, false); Store.photoUpClear("public", it) }
                     cache.clear()
                     done(null)
@@ -308,7 +309,7 @@ object PublicBoard {
         var q: Query = db.collection("public").orderBy("start", Query.Direction.DESCENDING)
         if (since > 0) q = q.whereGreaterThan("start", since)
         // 폰에 저장된 글 + 그 뒤에 새로 올라오거나 바뀐 글만 서버에서 (3시간마다 한 번 전체)
-        Cloud.smartList(db.collection("public"), q.limit(300), "upd", "public_$since") { docs, err ->
+        Cloud.smartList(db.collection("public"), q.limit(300), "upd", "public_$since", tomb = "public") { docs, err ->
             if (docs == null) { done(null, err ?: "불러오기 실패 (보안 규칙 확인)"); return@smartList }
             done(docs.mapNotNull { d ->
                     try {
@@ -339,8 +340,8 @@ object PublicBoard {
     }
 
     fun loadPhotos(id: String, done: (List<Cloud.RemotePhoto>) -> Unit) {
-        db.collection("public").document(id).collection("photos").get()
-            .addOnSuccessListener { q ->
+        // 한 번 본 사진은 폰에 저장된 것으로 (서버 안 읽음)
+        Cloud.cacheFirst(db.collection("public").document(id).collection("photos")) { q ->
                 // 'main' = 대표 사진 큰 사진 (오른쪽·맨 위 대표 자리에만, 사진 목록엔 안 넣음)
                 done(q.documents.filter { it.id != "main" }.mapNotNull { d ->
                     try {
@@ -349,8 +350,7 @@ object PublicBoard {
                         Cloud.RemotePhoto(d.id, d.getLong("t") ?: 0L, d.getLong("catchT"), bmp)
                     } catch (_: Exception) { null }
                 }.sortedBy { it.time })
-            }
-            .addOnFailureListener { done(emptyList()) }
+        }
     }
 
     // ---------------- 포인트 도감 계산 ----------------

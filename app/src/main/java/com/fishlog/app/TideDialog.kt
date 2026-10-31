@@ -300,7 +300,10 @@ object TideDialog {
                     }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(1) })
                     wind.addView(wTop)
                     val wSub = listOfNotNull(x?.dir?.let { Weather.dir16(it) }, x?.gust?.let { String.format(Locale.KOREA, "최대 %.1f", it) }).joinToString(" · ")
-                    if (wSub.isNotBlank()) wind.addView(Ui.text(a, 9.5f, Ui.SUB, false, wSub).apply { maxLines = 1 })
+                    if (wSub.isNotBlank()) wind.addView(Ui.text(a, 9.5f, Ui.SUB, false, wSub).apply {
+                        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                        setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                    }, LinearLayout.LayoutParams(MATCH, Ui.dp(a, 14)))
                     // 파도: 파향 화살표 + 파고 m / 주기 s
                     val wave = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                     val wvTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -327,7 +330,10 @@ object TideDialog {
                     if (meas != null) w.measured?.stationAt?.get(rowStart)?.let { stn ->
                         val other = stn != w.measured?.home
                         sea.addView(Ui.text(a, 9f, if (other) Color.parseColor("#F2C14E") else Ui.SUB, false,
-                            stn.removeSuffix(" 관측소") + String.format(Locale.KOREA, " %.1f°", meas)).apply { maxLines = 1 })
+                            stn.removeSuffix(" 관측소") + String.format(Locale.KOREA, " %.1f°", meas)).apply {
+                            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                            setAutoSizeTextTypeUniformWithConfiguration(7, 9, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+                        }, LinearLayout.LayoutParams(MATCH, Ui.dp(a, 13)))
                     }
                     // 비 확률
                     val pop = x?.pop

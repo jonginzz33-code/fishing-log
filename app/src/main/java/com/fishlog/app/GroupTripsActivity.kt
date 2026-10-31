@@ -31,7 +31,10 @@ class GroupTripsActivity : Activity() {
     private lateinit var peopleRow: LinearLayout
     private lateinit var body: LinearLayout
     private var trips: List<Cloud.RemoteTrip> = emptyList()
-    private var period = 0          // 0 이번 달, 1 3개월, 2 올해, 3 전체
+    private var period = 3          // -1 새 글(아직 안 본 것), 0 이번 달, 1 3개월, 2 올해, 3 전체
+    private var newIds: Set<String> = emptySet()
+    private var periodChosen = false
+    private fun seenPrefs() = getSharedPreferences("gtrip_seen", MODE_PRIVATE)
     private var person: String? = null   // null = 모든 사람
     private var rankSpecies: String? = null
     // 꾹 눌러 고르기 (그룹에서 내리기): 내 글 · 그룹장은 모든 글
@@ -80,6 +83,12 @@ class GroupTripsActivity : Activity() {
         load()
     }
 
+    override fun onPause() {
+        super.onPause()
+        // 이 화면을 봤으니 지금까지 올라온 글은 '본 것' (다음에 열면 그 뒤 글만 새 글)
+        Cloud.active?.let { g -> if (trips.isNotEmpty()) seenPrefs().edit().putLong(g.id, System.currentTimeMillis()).apply() }
+    }
+
     private fun load() {
         val g = Cloud.active ?: return
         body.removeAllViews()
@@ -88,6 +97,10 @@ class GroupTripsActivity : Activity() {
             if (isFinishing) return@recentTripsOf
             if (list == null) { body.removeAllViews(); body.addView(Ui.text(this, 13f, Ui.ORANGE, false, err ?: "불러오기 실패")); return@recentTripsOf }
             trips = list.sortedByDescending { it.start }
+            // 새 글 = 지난번에 이 화면을 본 뒤에 올라온 남의 출조 (처음 보는 그룹은 사흘 안)
+            val last = seenPrefs().getLong(g.id, System.currentTimeMillis() - 3 * 24 * 3600_000L)
+            newIds = trips.filter { it.owner != Cloud.uid && maxOf(it.end, it.start) > last }.map { it.id }.toSet()
+            if (!periodChosen) period = if (newIds.isNotEmpty()) -1 else 3
             // 열어 봤으니 새 출조 글은 확인한 걸로
             GroupNews.markKindSeen(g.id, "trip")
             render()
@@ -106,6 +119,7 @@ class GroupTripsActivity : Activity() {
         val c = Calendar.getInstance()
         c.set(Calendar.HOUR_OF_DAY, 0); c.set(Calendar.MINUTE, 0); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0)
         return when (period) {
+            -1 -> 0L
             0 -> { c.set(Calendar.DAY_OF_MONTH, 1); c.timeInMillis }
             1 -> { c.add(Calendar.MONTH, -3); c.timeInMillis }
             2 -> { c.set(Calendar.DAY_OF_YEAR, 1); c.timeInMillis }
@@ -115,11 +129,15 @@ class GroupTripsActivity : Activity() {
 
     private fun render() {
         periodRow.removeAllViews()
-        listOf("이번 달", "3개월", "올해", "전체").forEachIndexed { i, l ->
-            periodRow.addView(pill(l, period == i, Ui.TEXT) { period = i; rankSpecies = null; render() },
-                LinearLayout.LayoutParams(0, dp(36), 1f).apply { if (i > 0) leftMargin = dp(6) })
+        // 🆕 새 글 (아직 안 본 것) → 이번 달 · 3개월 · 올해 · 전체
+        val pills = (if (newIds.isNotEmpty()) listOf(-1 to "🆕 새 글 ${newIds.size}") else emptyList()) +
+            listOf(0 to "이번 달", 1 to "3개월", 2 to "올해", 3 to "전체")
+        pills.forEachIndexed { i, (k, l) ->
+            periodRow.addView(pill(l, period == k, if (k == -1) Ui.GREEN else Ui.TEXT) { period = k; periodChosen = true; rankSpecies = null; render() }.apply {
+                maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(0, dp(36), if (k == -1) 1.3f else 1f).apply { if (i > 0) leftMargin = dp(6) })
         }
-        val inPeriod = trips.filter { it.start >= since() }
+        val inPeriod = if (period == -1) trips.filter { it.id in newIds } else trips.filter { it.start >= since() }
         // 사람: 기록이 있는 사람 (나 먼저)
         val owners = trips.map { it.owner to it.ownerName }.distinctBy { it.first }
         peopleRow.removeAllViews()
@@ -147,7 +165,9 @@ class GroupTripsActivity : Activity() {
             background = Ui.bg(this@GroupTripsActivity, Ui.CARD, 12)
             setPadding(dp(12), dp(8), dp(12), dp(8))
             addView(Ui.text(this@GroupTripsActivity, 11f, Ui.SUB, false, label))
-            addView(Ui.text(this@GroupTripsActivity, 20f, Ui.TEXT, true, value).apply { maxLines = 1 })
+            addView(Ui.text(this@GroupTripsActivity, 20f, Ui.TEXT, true, value).apply {
+                maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(11, 20, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }, LinearLayout.LayoutParams(MATCH, Ui.dp(this@GroupTripsActivity, 28)))
         }
         stat.addView(statBox("출조", "${list.size}번"), LinearLayout.LayoutParams(0, WRAP, 1f))
         val top2 = sorted.take(2)
@@ -165,7 +185,7 @@ class GroupTripsActivity : Activity() {
             val sp = rankSpecies?.takeIf { totals.containsKey(it) } ?: sorted[0].key
             val card = Ui.card(this)
             card.background = Ui.bg(this, Ui.CARD, 14, Ui.LINE)
-            val pname = listOf("이번 달", "3개월", "올해", "전체")[period]
+            val pname = if (period == -1) "새 글" else listOf("이번 달", "3개월", "올해", "전체")[period]
             card.addView(Ui.text(this, 12f, Ui.SUB, false, "$pname $sp 많이 잡은 사람"))
             if (sorted.size > 1) {
                 val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }

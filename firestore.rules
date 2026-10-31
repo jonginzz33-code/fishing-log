@@ -138,6 +138,12 @@ service cloud.firestore {
     match /wx/{id} {
       allow read, write: if signedIn();
     }
+    // ---- 지운 글 번호 (다른 폰이 새 글 받을 때 같이 받아서 바로 지움) ----
+    match /deleted/{k}/items/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.by == request.auth.uid;
+      allow delete: if isAdmin();
+    }
     // ---- 물때 저장 (관측소_날짜, 하루 두 번 정도 새로 받아 모두 같이 씀) ----
     match /tide/{id} {
       allow read: if signedIn();

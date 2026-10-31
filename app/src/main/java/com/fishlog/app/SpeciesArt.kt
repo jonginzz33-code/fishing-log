@@ -263,7 +263,16 @@ object SpeciesArt {
         "조개" to Triple("sp_gaejogae", 0.5f, 0.3f), "백합" to Triple("sp_baekhap", 0.5f, 0.3f), "피조개" to Triple("sp_pijogae", 0.5f, 0.3f),
         "꽃게" to Triple("sp_kkotge", 0.5f, 0.3f), "작은게" to Triple("sp_smallcrab", 0.5f, 0.35f), "소라" to Triple("sp_sora", 0.45f, 0.35f),
         "해마" to Triple("sp_haema", 0.6f, 0.15f), "대하" to Triple("sp_daeha", 0.35f, 0.3f), "불가사리" to Triple("sp_bulgasari", 0.5f, 0.35f),
-        "성게" to Triple("sp_seongge", 0.5f, 0.3f), "멍게" to Triple("sp_meongge", 0.4f, 0.25f)
+        "성게" to Triple("sp_seongge", 0.5f, 0.3f), "멍게" to Triple("sp_meongge", 0.4f, 0.25f),
+        // 두 번째 그림판 (2026-11)
+        "대구" to Triple("sp_daegu", 0.7f, 0.25f), "부시리" to Triple("sp_busiri", 0.28f, 0.3f), "방어" to Triple("sp_bangeo", 0.28f, 0.28f),
+        "붉바리" to Triple("sp_bulbari", 0.22f, 0.3f), "능성어" to Triple("sp_neungseong", 0.25f, 0.35f), "민어" to Triple("sp_mineo", 0.25f, 0.3f),
+        "옥돔" to Triple("sp_okdom", 0.72f, 0.3f), "열기" to Triple("sp_yeolgi", 0.25f, 0.3f), "성대" to Triple("sp_seongdae", 0.25f, 0.3f),
+        "양태" to Triple("sp_yangtae", 0.3f, 0.3f), "보리멸" to Triple("sp_borimyeol", 0.22f, 0.3f), "해삼" to Triple("sp_haesam", 0.5f, 0.3f),
+        "전복" to Triple("sp_jeonbok", 0.45f, 0.35f), "키조개" to Triple("sp_kijogae", 0.55f, 0.35f), "굴" to Triple("sp_gul", 0.5f, 0.35f),
+        "가리비" to Triple("sp_garibi", 0.5f, 0.35f), "대게" to Triple("sp_daege", 0.5f, 0.35f), "홍게" to Triple("sp_hongge", 0.5f, 0.35f),
+        "칠게" to Triple("sp_chilge", 0.5f, 0.35f), "갯가재" to Triple("sp_gatgajae", 0.5f, 0.3f), "보리새우" to Triple("sp_borisaeu", 0.4f, 0.3f),
+        "쏙" to Triple("sp_ssok", 0.5f, 0.3f), "갯장어" to Triple("sp_gaetjangeo", 0.3f, 0.3f), "붕장어" to Triple("sp_bungjangeo", 0.75f, 0.25f)
     )
     private val bmpCache = HashMap<String, android.graphics.Bitmap?>()
 
@@ -272,6 +281,31 @@ object SpeciesArt {
         val n = name.replace(" ", "")
         return when {
             n.contains("쭈갑") -> ""
+            // 두 번째 그림판 어종 (일반 규칙보다 먼저)
+            n.contains("대구") -> "대구"
+            n.contains("부시리") -> "부시리"
+            n.contains("방어") -> "방어"
+            n.contains("붉바리") || n.contains("자바리") || n.contains("다금바리") -> "붉바리"
+            n.contains("능성어") -> "능성어"
+            n.contains("민어") -> "민어"
+            n.contains("옥돔") -> "옥돔"
+            n.contains("열기") || n.contains("불볼락") -> "열기"
+            n.contains("성대") -> "성대"
+            n.contains("양태") -> "양태"
+            n.contains("보리멸") || n.contains("청보리멸") -> "보리멸"
+            n.contains("해삼") -> "해삼"
+            n.contains("전복") || n.contains("오분자기") -> "전복"
+            n.contains("키조개") -> "키조개"
+            n == "굴" || n.contains("석화") || n.contains("자연산굴") -> "굴"
+            n.contains("가리비") -> "가리비"
+            n.contains("대게") || n.contains("킹크랩") -> "대게"
+            n.contains("홍게") -> "홍게"
+            n.contains("칠게") -> "칠게"
+            n.contains("갯가재") -> "갯가재"
+            n.contains("보리새우") || n.contains("오도리") -> "보리새우"
+            n == "쏙" || n.contains("쏙") && !n.contains("쏨") -> "쏙"
+            n.contains("갯장어") || n.contains("하모") -> "갯장어"
+            n.contains("장어") -> "붕장어"
             n.contains("쭈꾸미") || n.contains("주꾸미") -> "주꾸미"
             n.contains("갑오징어") || n.contains("갑오") -> "갑오징어"
             n.contains("한치") -> "한치"

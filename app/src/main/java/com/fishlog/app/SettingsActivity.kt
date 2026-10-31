@@ -91,6 +91,7 @@ class SettingsActivity : Activity() {
             val on = Store.mateRange == v
             rr.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, l).apply {
                 gravity = Gravity.CENTER; maxLines = 1
+                setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                 background = if (on) Ui.bg(this@SettingsActivity, Ui.GREEN, 99) else Ui.bg(this@SettingsActivity, Ui.CARD, 99, Ui.LINE)
                 setOnClickListener { Store.mateRange = v; Live.sync(true); render() }
             }, LinearLayout.LayoutParams(0, dp(42), if (v == 0) 1.6f else 1f).apply { if (i > 0) leftMargin = dp(6) })

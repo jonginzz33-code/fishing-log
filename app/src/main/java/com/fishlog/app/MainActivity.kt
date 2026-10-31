@@ -512,11 +512,12 @@ class MainActivity : Activity() {
         quick = QuickButtons(this, quickBox, { showMessage(it) }) { title, done ->
             val cat = Store.category
             val list = Store.species(cat)
-            val tail = if (Cloud.isAdmin) listOf("+ 새 어종 추가") else listOf("목록에 없는 어종은 관리자에게 요청")
-            BigList.show(this, title, list, tail) { i, label ->
-                if (i < list.size) done(label)
-                else if (Cloud.isAdmin) askNewSpecies(cat) { name -> done(name) }
-                else showMessage("어종 추가는 관리자만 할 수 있어요")
+            BigList.show(this, title, list, listOf("+ 새 어종 추가", "⚙ 내 어종 목록 관리")) { i, label ->
+                when {
+                    i < list.size -> done(label)
+                    i == list.size -> askNewSpecies(cat) { name -> done(name) }
+                    else -> manageMySpecies(cat)
+                }
             }
         }
         // 같이 출조 중인 그룹원 (50m 안, 5분마다)
@@ -1226,6 +1227,7 @@ class MainActivity : Activity() {
                     val on = Store.category == c
                     line!!.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, (if (on) "✓ " else "") + Store.catLabel(c)).apply {
                         gravity = Gravity.CENTER; maxLines = 1
+                        setAutoSizeTextTypeUniformWithConfiguration(9, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                         background = if (on) Ui.bg(this@MainActivity, Ui.TEXT, 99) else Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.LINE)
                         setOnClickListener { if (Store.category != c) { Store.category = c; drawChips() } }
                     }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { if (i % 3 > 0) leftMargin = dp(6) })
@@ -1277,22 +1279,27 @@ class MainActivity : Activity() {
     private fun askRename(slot: Int) {
         val cat = Store.current?.cat?.ifBlank { null } ?: Store.category
         val list = Store.species(cat)
-        val tail = if (Cloud.isAdmin) listOf("+ 새 어종 추가") else listOf("목록에 없는 어종은 관리자에게 요청")
-        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, tail) { i, label ->
-            if (i < list.size) Store.rename(slot, label)
-            else if (Cloud.isAdmin) askNewSpecies(cat) { name -> Store.rename(slot, name) }
-            else showMessage("어종 추가는 관리자만 할 수 있어요")
+        BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, listOf("+ 새 어종 추가", "⚙ 내 어종 목록 관리")) { i, label ->
+            when {
+                i < list.size -> Store.rename(slot, label)
+                i == list.size -> askNewSpecies(cat) { name -> Store.rename(slot, name) }
+                else -> manageMySpecies(cat)
+            }
         }
     }
 
     private fun askNewSpecies(cat: String, then: ((String) -> Unit)? = null) {
         val input = EditText(this).apply { hint = "어종 이름"; inputType = InputType.TYPE_CLASS_TEXT }
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("${Store.catLabel(cat)} 어종 추가")
+            .setTitle("${Store.catLabel(cat)} 어종 추가" + if (Cloud.isAdmin) " (모든 사용자)" else " (내 목록)")
             .setView(input)
             .setPositiveButton("추가") { _, _ ->
                 val n = input.text.toString().trim()
-                if (n.isNotEmpty()) { Store.addSpecies(cat, n); saveSpeciesToServer(); then?.invoke(n) }
+                if (n.isEmpty()) return@setPositiveButton
+                // 관리자: 모두의 목록에 · 일반 사용자: 내 목록에만
+                if (Cloud.isAdmin) { Store.addSpecies(cat, n); saveSpeciesToServer() }
+                else { Store.addMySpecies(cat, n); showMessage("'$n'을(를) 내 어종 목록에 추가했어요 (나만 보여요)") }
+                then?.invoke(n)
             }
             .setNegativeButton("취소", null)
             .show()
@@ -1300,14 +1307,14 @@ class MainActivity : Activity() {
 
     /** 종류별 어종 관리: 추가, 순서, 삭제 */
     private fun manageSpecies(cat: String) {
-        val list = Store.species(cat)
+        val list = Store.adminSpecies(cat)
         BigList.show(this, "${Store.catLabel(cat)} 어종 (눌러서 순서·삭제)", list, listOf("+ 새 어종 추가")) { i, label ->
             if (i >= list.size) { askNewSpecies(cat) { manageSpecies(cat) }; return@show }
             val opts = arrayOf("위로 올리기", "아래로 내리기", "삭제")
             AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle(label)
                 .setItems(opts) { _, w ->
-                    val l = Store.species(cat).toMutableList()
+                    val l = Store.adminSpecies(cat).toMutableList()
                     val k = l.indexOf(label)
                     if (k >= 0) when (w) {
                         0 -> if (k > 0) { l.removeAt(k); l.add(k - 1, label) }
@@ -1319,6 +1326,30 @@ class MainActivity : Activity() {
                     manageSpecies(cat)
                 }
                 .show()
+        }
+    }
+
+    /** 내 어종 목록 관리 (나만): 지우기 · 다시 보이기 · 추가 — 업데이트해도 그대로 */
+    private fun manageMySpecies(cat: String) {
+        val list = Store.species(cat)
+        val hidden = Store.myHidden(cat)
+        val mine = Store.myAdded(cat)
+        val labels = list.map { if (it in mine) "$it  (내가 추가)" else it }
+        val tail = mutableListOf("+ 새 어종 추가")
+        if (hidden.isNotEmpty()) tail.add("↺ 지운 어종 다시 보이기 (${hidden.size})")
+        BigList.show(this, "내 ${Store.catLabel(cat)} 어종 (눌러서 지우기)", labels, tail) { i, _ ->
+            when {
+                i < list.size -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("'${list[i]}'을(를) 내 목록에서 지울까요?")
+                    .setMessage("내 폰에서만 안 보여요 · 다른 사람 목록과 지난 기록은 그대로 · 나중에 다시 보이게 할 수 있어요")
+                    .setPositiveButton("지우기") { _, _ -> Store.removeMySpecies(cat, list[i]); manageMySpecies(cat) }
+                    .setNegativeButton("취소", null).show()
+                i == list.size -> askNewSpecies(cat) { manageMySpecies(cat) }
+                else -> BigList.show(this, "다시 보이게 할 어종", hidden, emptyList()) { k, _ ->
+                    hidden.getOrNull(k)?.let { Store.unhideSpecies(cat, it); showMessage("'$it' 다시 보여요") }
+                    manageMySpecies(cat)
+                }
+            }
         }
     }
 
@@ -1588,10 +1619,14 @@ class MainActivity : Activity() {
         if (Cloud.user == null) { nowBtn.visibility = View.GONE; return }
         fun draw(l: List<Live.AnyNow>) {
             nowBtn.visibility = View.VISIBLE
-            nowTitle.text = if (l.isEmpty()) "🟢 지금 출조 중 0명" else "🟢 지금 출조 중 ${l.size}명"
-            nowSub.text = if (l.isEmpty()) "내 그룹 · 전체 공유에 출조 중인 사람이 없어요"
-                else l.take(3).joinToString(", ") { it.name } + (if (l.size > 3) " 외 ${l.size - 3}명" else "") + " · 눌러서 보기"
-            nowBtn.alpha = if (l.isEmpty()) 0.6f else 1f
+            // 아무도 없으면 작은 한 줄로 (자리 덜 차지)
+            val none = l.isEmpty()
+            nowTitle.textSize = if (none) 12f else 16f
+            nowTitle.text = if (none) "🟢 지금 출조 중인 사람 없음" else "🟢 지금 출조 중 ${l.size}명"
+            nowSub.visibility = if (none) View.GONE else View.VISIBLE
+            nowSub.text = l.take(3).joinToString(", ") { it.name } + (if (l.size > 3) " 외 ${l.size - 3}명" else "") + " · 눌러서 보기"
+            nowBtn.setPadding(dp(14), if (none) dp(5) else dp(10), dp(14), if (none) dp(5) else dp(10))
+            nowBtn.alpha = if (none) 0.7f else 1f
         }
         draw(Live.allCached())
         if (System.currentTimeMillis() - nowAt < 3 * 60_000L) return

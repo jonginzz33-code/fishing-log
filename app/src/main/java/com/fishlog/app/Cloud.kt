@@ -321,10 +321,27 @@ object Cloud {
 
     class RemotePhoto(val id: String, val time: Long, val catchTime: Long?, val bitmap: android.graphics.Bitmap)
 
+    /**
+     * 사진처럼 잘 안 바뀌는 것: 폰에 저장된 게 있으면 그걸로 (서버 읽기 0), 없거나 모자라면 서버
+     *  expected = 있어야 할 개수 (모자라면 서버에서 다시)
+     */
+    fun cacheFirst(q: Query, expected: Int? = null, done: (com.google.firebase.firestore.QuerySnapshot) -> Unit) {
+        fun server() { q.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener { done(it) }
+            .addOnFailureListener { q.get(com.google.firebase.firestore.Source.CACHE).addOnSuccessListener { done(it) } } }
+        q.get(com.google.firebase.firestore.Source.CACHE)
+            .addOnSuccessListener { c -> if (c.isEmpty || (expected != null && c.size() < expected)) server() else done(c) }
+            .addOnFailureListener { server() }
+    }
+    fun docCacheFirst(ref: com.google.firebase.firestore.DocumentReference, done: (com.google.firebase.firestore.DocumentSnapshot?) -> Unit) {
+        fun server() { ref.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener { done(it) }.addOnFailureListener { done(null) } }
+        ref.get(com.google.firebase.firestore.Source.CACHE)
+            .addOnSuccessListener { d -> if (d.exists()) done(d) else server() }
+            .addOnFailureListener { server() }
+    }
+
     fun loadPhotos(t: RemoteTrip, done: (List<RemotePhoto>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
-        db.collection("groups").document(g.id).collection("trips").document(t.id).collection("photos").get()
-            .addOnSuccessListener { q ->
+        cacheFirst(db.collection("groups").document(g.id).collection("trips").document(t.id).collection("photos"), t.photoCount) { q ->
                 val out = q.documents.mapNotNull { d ->
                     try {
                         val bytes = android.util.Base64.decode(d.getString("data") ?: return@mapNotNull null, android.util.Base64.DEFAULT)
@@ -333,21 +350,18 @@ object Cloud {
                     } catch (_: Exception) { null }
                 }.sortedBy { it.time }
                 done(out, null)
-            }
-            .addOnFailureListener { done(null, it.message ?: "사진 불러오기 실패") }
+        }
     }
 
     /** 누르면 받는 큰 사진. 없으면(예전 업로드) null */
     fun loadBigPhoto(tripId: String, photoId: String, done: (android.graphics.Bitmap?) -> Unit) {
         val g = active ?: return done(null)
-        db.collection("groups").document(g.id).collection("trips").document(tripId).collection("photosBig").document(photoId).get()
-            .addOnSuccessListener { d ->
-                val s64 = d.getString("data")
-                if (s64 == null) { done(null); return@addOnSuccessListener }
-                val bytes = android.util.Base64.decode(s64, android.util.Base64.DEFAULT)
-                done(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
-            }
-            .addOnFailureListener { done(null) }
+        docCacheFirst(db.collection("groups").document(g.id).collection("trips").document(tripId).collection("photosBig").document(photoId)) { d ->
+            val s64 = d?.getString("data")
+            if (s64 == null) { done(null); return@docCacheFirst }
+            val bytes = android.util.Base64.decode(s64, android.util.Base64.DEFAULT)
+            done(android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        }
     }
 
     /** 그룹에 올린 출조 내리기 (사진까지). 내 것 또는 그룹장 */
@@ -376,6 +390,7 @@ object Cloud {
                 b.result?.documents?.forEach { it.reference.delete() }
                 ref.delete()
                     .addOnSuccessListener {
+                        markDeleted("g_$gid", docId)
                         invalidateTrips(gid)
                         val myId = uid
                         if (myId != null && docId.startsWith(myId + "_")) {
@@ -837,7 +852,7 @@ object Cloud {
 
     fun saveSpecies(done: (String?) -> Unit) {
         if (!isAdmin) return done("관리자만 바꿀 수 있어요")
-        db.collection("config").document("species").set(Store.allCats().map { it.id }.associateWith { Store.species(it) })
+        db.collection("config").document("species").set(Store.allCats().map { it.id }.associateWith { Store.adminSpecies(it) })
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "저장 실패") }
     }
@@ -1107,7 +1122,7 @@ object Cloud {
     fun recentTripsOf(g: Group, done: (List<RemoteTrip>?, String?) -> Unit) {
         tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 10 * 60_000L) { done(list, null); return } }
         val col = db.collection("groups").document(g.id).collection("trips")
-        smartList(col, col.orderBy("start", Query.Direction.DESCENDING).limit(300), "updated", "gtrips_${g.id}") { docs, err ->
+        smartList(col, col.orderBy("start", Query.Direction.DESCENDING).limit(300), "updated", "gtrips_${g.id}", tomb = "g_${g.id}") { docs, err ->
             if (docs == null) { done(null, err ?: "불러오기 실패"); return@smartList }
             val list = docs.mapNotNull { parse(it) }.sortedByDescending { it.start }
             tripsCache[g.id] = System.currentTimeMillis() to list
@@ -1121,41 +1136,63 @@ object Cloud {
      *  - 처음이거나 폰에 아무것도 없으면 전체
      */
     fun smartList(col: com.google.firebase.firestore.CollectionReference, base: Query, field: String, key: String,
-                  fullEveryMs: Long = 3 * 3600_000L, done: (List<com.google.firebase.firestore.DocumentSnapshot>?, String?) -> Unit) {
+                  fullEveryMs: Long = 24 * 3600_000L, tomb: String? = null,
+                  done: (List<com.google.firebase.firestore.DocumentSnapshot>?, String?) -> Unit) {
         val p = appContext.getSharedPreferences("smart_q", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val lastFull = p.getLong("full_$key", 0L)
         val lastMax = p.getLong("max_$key", 0L)
         fun maxField(list: List<com.google.firebase.firestore.DocumentSnapshot>, start: Long) =
             list.fold(start) { m, d -> kotlin.math.max(m, d.getLong(field) ?: 0L) }
+        fun gone(): Set<String> = p.getStringSet("tomb_$key", emptySet()) ?: emptySet()
         fun full() {
             base.get(com.google.firebase.firestore.Source.SERVER)
                 .addOnSuccessListener { q ->
-                    // 그 칸이 아직 없는 예전 글뿐이면 지금 시각부터 (그 뒤에 바뀐 것만 받음)
-                    p.edit().putLong("full_$key", now).putLong("max_$key", maxField(q.documents, 0L).takeIf { it > 0 } ?: (now - 60_000L)).apply()
+                    // 그 칸이 아직 없는 예전 글뿐이면 지금 시각부터 (그 뒤에 바뀐 것만 받음) · 전체를 받았으니 지운 글 목록은 비움
+                    p.edit().putLong("full_$key", now).putLong("max_$key", maxField(q.documents, 0L).takeIf { it > 0 } ?: (now - 60_000L))
+                        .remove("tomb_$key").apply()
                     done(q.documents, null)
                 }
                 .addOnFailureListener { e ->
                     // 인터넷이 없으면 폰에 저장된 것이라도
                     base.get(com.google.firebase.firestore.Source.CACHE)
-                        .addOnSuccessListener { done(it.documents, null) }
+                        .addOnSuccessListener { r -> done(r.documents.filter { it.id !in gone() }, null) }
                         .addOnFailureListener { done(null, e.message) }
                 }
         }
         if (now - lastFull > fullEveryMs || lastMax == 0L) { full(); return }
-        // 폰마다 시계가 조금씩 달라서 5분 겹치게
-        col.whereGreaterThan(field, lastMax - 5 * 60_000L).get(com.google.firebase.firestore.Source.SERVER).addOnCompleteListener { dq ->
-            val delta = if (dq.isSuccessful) dq.result?.documents.orEmpty() else emptyList()
-            if (dq.isSuccessful) p.edit().putLong("max_$key", maxField(delta, lastMax)).apply()
+        val since = lastMax - 5 * 60_000L   // 폰마다 시계가 조금씩 달라서 5분 겹치게
+        fun merge(delta: List<com.google.firebase.firestore.DocumentSnapshot>) {
             base.get(com.google.firebase.firestore.Source.CACHE)
                 .addOnSuccessListener { cq ->
+                    val dead = gone()
                     val map = LinkedHashMap<String, com.google.firebase.firestore.DocumentSnapshot>()
                     cq.documents.forEach { map[it.id] = it }
                     delta.forEach { map[it.id] = it }
-                    if (map.isEmpty()) full() else done(map.values.filter { it.exists() }, null)
+                    dead.forEach { map.remove(it) }
+                    if (map.isEmpty() && dead.isEmpty()) full() else done(map.values.filter { it.exists() }, null)
                 }
                 .addOnFailureListener { full() }
         }
+        col.whereGreaterThan(field, since).get(com.google.firebase.firestore.Source.SERVER).addOnCompleteListener { dq ->
+            val delta = if (dq.isSuccessful) dq.result?.documents.orEmpty() else emptyList()
+            if (dq.isSuccessful) p.edit().putLong("max_$key", maxField(delta, lastMax)).apply()
+            if (tomb == null) { merge(delta); return@addOnCompleteListener }
+            // 남이 지운 글: 지운 글 번호만 받아서 바로 빼기 (폰에 기억 → 다음 전체 받기까지)
+            db.collection("deleted").document(tomb).collection("items").whereGreaterThan("t", since)
+                .get(com.google.firebase.firestore.Source.SERVER).addOnCompleteListener { tq ->
+                    val ids = if (tq.isSuccessful) tq.result?.documents.orEmpty().map { it.id } else emptyList()
+                    if (ids.isNotEmpty()) p.edit().putStringSet("tomb_$key", gone() + ids).apply()
+                    merge(delta.filter { it.id !in ids })
+                }
+        }
+    }
+
+    /** 지운 글 번호 남기기 (다른 폰이 새 글 받을 때 같이 받아서 바로 지움) */
+    fun markDeleted(tomb: String, id: String) {
+        if (uid == null) return
+        db.collection("deleted").document(tomb).collection("items").document(id)
+            .set(mapOf("t" to System.currentTimeMillis(), "by" to (uid ?: "")))
     }
 
     /** 전체 다시 받기 (당겨서 새로고침 · 관리자 정리 후) */
