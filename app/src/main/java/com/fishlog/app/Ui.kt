@@ -663,7 +663,7 @@ object TideLayers {
             }
         }
         paint()
-        box.addView(hscroll(c, chips),
+        box.addView(Ui.hscroll(c, chips),
             android.widget.LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
         return box
     }
