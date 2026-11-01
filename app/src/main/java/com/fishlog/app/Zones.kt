@@ -455,7 +455,7 @@ object Zones {
                 val box = map.boundingBox
                 val place = Area.name(a, box.centerLatitude, box.centerLongitude).ifBlank { "이 지역" }
                 prog.visibility = View.VISIBLE; prog.text = "📥 받는 중…"
-                Khoa.prefetch(a, box.latSouth, box.latNorth, box.lonWest, box.lonEast, place, { d, t -> prog.text = "📥 받는 중… $d / $t" }) { ok, fail ->
+                Khoa.prefetch(a, box.latSouth, box.latNorth, box.lonWest, box.lonEast, place, null, { d, t -> prog.text = "📥 받는 중… $d / $t" }) { ok, fail ->
                     prog.text = if (fail == 0) "📥 '$place' 받기 완료 · ⚙ 설정 '오프라인 지역'에서 관리" else "📥 받기 끝 · ${fail}곳 실패 (인터넷 확인 후 다시)"
                     map.invalidate()
                 }

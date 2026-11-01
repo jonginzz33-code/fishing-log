@@ -323,8 +323,8 @@ object Khoa {
     }
 
     /** 이 범위 미리 받기: 모든 레이어 (꺼 둔 묶음도 · 나중에 켜도 바로 보이게) · progress(받은, 전체) · done(성공, 실패) */
-    fun prefetch(c: Context, s: Double, n: Double, w: Double, e: Double, name: String,
-                 progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit, oldId: String? = null) {
+    fun prefetch(c: Context, s: Double, n: Double, w: Double, e: Double, name: String, oldId: String?,
+                 progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) {
         val k = key(c)
         if (k.isBlank()) return done(0, 0)
         val app = c.applicationContext
@@ -351,7 +351,7 @@ object Khoa {
         }
     }
     fun redownload(c: Context, r: Region, progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) =
-        prefetch(c, r.s, r.n, r.w, r.e, r.name, progress, done, r.id)
+        prefetch(c, r.s, r.n, r.w, r.e, r.name, r.id, progress, done)
 
     fun distanceOk(a: Double, b: Double) = abs(a - b) < 1e-9
 }
