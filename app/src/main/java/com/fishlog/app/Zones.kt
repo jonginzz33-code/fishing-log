@@ -98,23 +98,25 @@ object Zones {
     /** 종류: 코드 → 이름 · 색 */
     val TYPES = linkedMapOf(
         "village" to "마을어장", "farm" to "양식장", "res" to "수산자원관리수면",
-        "risk" to "사고 위험 구역", "etc" to "기타 어장"
+        "risk" to "사고 위험 구역", "ban" to "낚시 · 레저 금지 · 제한", "etc" to "기타 어장"
     )
     fun typeColor(t: String): Int = when (t) {
         "village" -> Color.parseColor("#FF8A3D")
         "farm" -> Color.parseColor("#4FB3FF")
         "res" -> Color.parseColor("#5FD39A")
         "risk" -> Color.parseColor("#FF4D5E")
+        "ban" -> Color.parseColor("#FF4FA8")
         else -> Color.parseColor("#C9A6FF")
     }
     fun typeIcon(t: String): String = when (t) {
-        "village" -> "🐚"; "farm" -> "🦪"; "res" -> "🐟"; "risk" -> "⚠"; else -> "📍"
+        "village" -> "🐚"; "farm" -> "🦪"; "res" -> "🐟"; "risk" -> "⚠"; "ban" -> "🚫"; else -> "📍"
     }
     fun typeWarn(t: String): String = when (t) {
         "village" -> "어촌계가 관리하는 마을어장일 수 있어요. 패류 · 해조류 등 채취는 분쟁 · 처벌될 수 있으니 확인하세요."
         "farm" -> "면허 양식장일 수 있어요. 양식 생물 채취 · 시설 훼손은 처벌될 수 있어요."
         "res" -> "수산자원관리수면일 수 있어요. 기간 · 어종 · 방법 제한이 있을 수 있어요."
         "risk" -> "연안 사고 위험이 높은 곳이에요. 밀물 고립 · 갯골 · 너울에 주의하세요."
+        "ban" -> "낚시 · 수중레저 등이 금지되거나 제한된 구역이에요. 기간 · 방법은 현장 안내판을 확인하세요."
         else -> "어업 면허 구역일 수 있어요. 채취 전에 확인하세요."
     }
 
@@ -190,6 +192,7 @@ object Zones {
 
     /** 이 칸들 준비 (폰에 있으면 바로, 없으면 서버에서) */
     fun ensure(c: Context, want: List<String>, done: () -> Unit) {
+        appCtx = c.applicationContext
         if (!Cloud.isInitialized() || Cloud.user == null) return done()
         checkVer(c) {
             val miss = ArrayList<String>()
@@ -228,16 +231,25 @@ object Zones {
     }
 
     /** 지금 기억된 것 중 이 범위에 걸치는 구역 (같은 구역이 여러 칸에 있어도 하나로) */
+    /** 앱 context (개방海 기억을 꺼낼 때) */
+    @Volatile private var appCtx: Context? = null
+
     fun zonesIn(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double): List<Zone> {
         val seen = HashSet<String>()
         val out = ArrayList<Zone>()
-        cellsFor(minLat, maxLat, minLon, maxLon, 200).forEach { id ->
-            cells[id]?.forEach { z ->
-                if (z.activeNow() && z.maxLat >= minLat && z.minLat <= maxLat && z.maxLon >= minLon && z.minLon <= maxLon && seen.add(z.id)) out.add(z)
-            }
+        val ids = cellsFor(minLat, maxLat, minLon, maxLon, 200)
+        fun take(z: Zone) {
+            if (z.activeNow() && z.maxLat >= minLat && z.minLat <= maxLat && z.maxLon >= minLon && z.minLon <= maxLon && seen.add(z.id)) out.add(z)
         }
+        ids.forEach { id -> cells[id]?.forEach { take(it) } }
+        // v3.9: 개방海 (WFS) 레이어
+        appCtx?.let { c -> Khoa.zonesOf(c, ids).forEach { take(it) } }
         return out
     }
+
+    /** UTM-K (EPSG:5179) → 위경도 (개방海 응답) */
+    fun fromUtmK(x: Double, y: Double): GeoPoint = tmInv(x, y, 127.5, 0.9996, 1_000_000.0, 2_000_000.0)
+    fun simplifyPts(p: List<GeoPoint>, tol: Double): List<GeoPoint> = simplify(p, tol).let { if (it.size > 500) simplify(p, tol * 8) else it }
 
     fun zonesAt(lat: Double, lon: Double): List<Zone> =
         zonesIn(lat, lat, lon, lon).filter { it.contains(lat, lon) }
@@ -253,6 +265,8 @@ object Zones {
         if (now - lastCheck < 15_000L) return
         lastCheck = now
         val near = cellsFor(lat - 0.01, lat + 0.01, lon - 0.01, lon + 0.01)
+        appCtx = c.applicationContext
+        Khoa.ensure(c, near) {}
         ensure(c, near) {
             val here = zonesAt(lat, lon)
             val ids = here.map { it.id }.toSet()
@@ -314,13 +328,15 @@ object Zones {
             if (map.zoomLevelDouble < MIN_ZOOM) { say("🦀 해루질 참고 구역은 조금 더 확대하면 보여요"); return }
             val box = map.boundingBox
             val want = cellsFor(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
-            val key = want.joinToString(",") + "#" + gen
+            val key = want.joinToString(",") + "#" + gen + "#" + Khoa.GROUPS.keys.joinToString("") { if (Khoa.groupOn(a, it)) "1" else "0" } + Khoa.key(a).length
             if (key != lastKey) {
                 lastKey = key
                 ensure(a, want) { map.invalidate() }
+                Khoa.ensure(a, want) { map.invalidate() }
             }
             val list = zonesIn(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
-            say(if (list.isEmpty()) "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요" else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)")
+            val err = if (Cloud.isAdmin && Khoa.lastErr.isNotBlank()) "\n(관리자) 개방海 오류: ${Khoa.lastErr}" else ""
+            say((if (list.isEmpty()) "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요" else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)") + err)
             val pj = map.projection
             val showName = map.zoomLevelDouble >= 14.0
             txt.textSize = 11 * d; halo.textSize = 11 * d; halo.strokeWidth = 3 * d
@@ -399,14 +415,42 @@ object Zones {
         }
         paint()
         v.setOnClickListener {
-            val now = !on(a)
-            setOn(a, now); paint(); map.invalidate(); after()
-            if (now && !prefs(a).getBoolean("haeru_seen", false)) {
-                prefs(a).edit().putBoolean("haeru_seen", true).apply()
-                explain(a)
-            }
+            if (on(a)) { setOn(a, false); paint(); map.invalidate(); after(); return@setOnClickListener }
+            // v3.9 (157): 켤 때마다 '참고용' 안내 → [확인]을 눌러야 켜짐 · 볼 구역 고르기
+            confirmOn(a) { paint(); map.invalidate(); after() }
         }
         return v
+    }
+
+    /** 켜기 전 안내창 (참고용) + 볼 구역 묶음 체크 → 확인이면 켬 */
+    fun confirmOn(a: Activity, done: () -> Unit) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(4)) }
+        box.addView(Ui.text(a, 13.5f, Ui.TEXT, false,
+            "• 공공데이터(자료 기준 연도)를 바탕으로 한 참고용이에요. 실제 경계 · 면허 기간과 다를 수 있어요.\n" +
+            "• 현장 안내판 · 어촌계 · 지자체 안내가 우선이에요.\n" +
+            "• 낚시는 이 구역에서도 할 수 있어요. 해루질(채취) 분쟁과 사고를 피하려는 용도예요.\n" +
+            "• 켜 두면 출조 중 구역에 들어갈 때 진동 + 알림이 와요.").apply { setLineSpacing(0f, 1.3f) })
+        box.addView(Ui.text(a, 12.5f, Ui.SUB, true, "지도에 보일 구역"), Ui.lp(a, MATCH, WRAP, top = 12))
+        val sel = HashMap<String, Boolean>()
+        Khoa.GROUPS.forEach { (g, label) ->
+            sel[g] = Khoa.groupOn(a, g)
+            val t = Ui.text(a, 14f, Ui.TEXT, true, "").apply { setPadding(0, dp(8), 0, dp(8)) }
+            fun paintT() { t.text = (if (sel[g] == true) "☑ " else "☐ ") + label; t.setTextColor(if (sel[g] == true) Ui.TEXT else Ui.SUB) }
+            paintT()
+            t.setOnClickListener { sel[g] = sel[g] != true; paintT() }
+            box.addView(t)
+        }
+        box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "어장 · 갯골 · 금지구역은 국립해양조사원 '개방海' 자료 (관리자가 인증키를 넣었을 때) + 관리자가 올린 구역이에요."),
+            Ui.lp(a, MATCH, WRAP, top = 6))
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🦀 해루질 참고용 — 꼭 읽어 주세요")
+            .setView(ScrollView(a).apply { addView(box) })
+            .setPositiveButton("확인 — 참고용으로 켜기") { _, _ ->
+                sel.forEach { (g, on) -> Khoa.setGroupOn(a, g, on) }
+                setOn(a, true); done()
+            }
+            .setNegativeButton("취소", null).show()
     }
 
     /** 처음 켤 때 · ? 설명 */
@@ -435,9 +479,28 @@ object Zones {
             card.addView(Ui.text(a, 15f, typeColor(z.type), true, "${typeIcon(z.type)} ${TYPES[z.type] ?: "구역"}" +
                 (if (z.month > 0) " (${z.month}월 예측)" else "")))
             if (z.name.isNotBlank()) card.addView(Ui.text(a, 14f, Ui.TEXT, true, z.name), Ui.lp(a, MATCH, WRAP, top = 2))
-            if (z.note.isNotBlank()) card.addView(Ui.text(a, 12f, Ui.SUB, false, z.note), Ui.lp(a, MATCH, WRAP, top = 2))
+            if (z.note.isNotBlank()) {
+                // v3.9 (156): 줄마다 이름표 · 면허 종료일이면 남은 기간 / 만료
+                val txt = z.note.replace("¶", "\n")
+                card.addView(Ui.text(a, 12.5f, Ui.TEXT, false, txt).apply { setLineSpacing(0f, 1.3f) }, Ui.lp(a, MATCH, WRAP, top = 4))
+                Regex("~\\s*(\\d{4})-(\\d{2})-(\\d{2})").find(txt)?.let { m ->
+                    val end = java.util.Calendar.getInstance().apply {
+                        set(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt(), 23, 59)
+                    }.timeInMillis
+                    val days = (end - System.currentTimeMillis()) / 86_400_000L
+                    val (label, col) = when {
+                        days < 0 -> "⛔ 면허 만료됨 (자료 기준 · 재면허를 받았을 수 있어요, 현장 확인)" to Color.parseColor("#FF8A92")
+                        days < 60 -> "⏳ 면허 끝나기 ${days}일 전" to Color.parseColor("#F2C14E")
+                        days < 730 -> "✅ 면허 남은 기간 약 ${days / 30}개월" to Ui.GREEN
+                        else -> "✅ 면허 남은 기간 약 ${days / 365}년 ${(days % 365) / 30}개월" to Ui.GREEN
+                    }
+                    card.addView(Ui.text(a, 12.5f, col, true, label), Ui.lp(a, MATCH, WRAP, top = 4))
+                }
+            }
             card.addView(Ui.text(a, 12.5f, Ui.TEXT, false, typeWarn(z.type)).apply { setLineSpacing(0f, 1.2f) }, Ui.lp(a, MATCH, WRAP, top = 6))
-            if (Cloud.isAdmin) {
+            if (Cloud.isAdmin && z.id.startsWith("k")) {
+                card.addView(Ui.text(a, 11f, Ui.SUB, false, "(개방海 자료라 여기서 수정 · 삭제는 안 돼요)"), Ui.lp(a, MATCH, WRAP, top = 6))
+            } else if (Cloud.isAdmin) {
                 val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
                 r.addView(Ui.button(a, "✎ 수정") {
                     dlg?.dismiss()
@@ -607,24 +670,25 @@ object Zones {
             val total = counts.values.sum()
             val msg = if (total == 0) "아직 올린 구역이 없어요" else
                 TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}: ${counts[it.key] ?: 0}곳" } + "\n(올린 CSV 기준 · 직접 그린 구역 포함)"
-            val items = arrayOf("🌐 API로 받기 · 어장정보 (마을어장 · 양식장)", "🌐 API로 받기 · 다른 API 주소",
-                "📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
+            val items = arrayOf("📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
                 "🗑 종류별로 CSV · API 구역 모두 지우기", "📌 어디서 데이터를 받나요?")
             // 안내 글 + 버튼 4개 (setMessage 와 setItems 를 같이 쓰면 버튼이 안 보여서 직접 만듦)
             fun dp(v: Int) = Ui.dp(a, v)
             val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(4)) }
             box.addView(Ui.text(a, 13f, Ui.SUB, false, msg).apply { setLineSpacing(0f, 1.2f) })
             var dlg: AlertDialog? = null
+            // v3.9 (158): 🌊 개방海 (자동 · 전국) 카드
+            box.addView(khoaCard(a) { dlg?.dismiss() }, Ui.lp(a, MATCH, WRAP, top = 10))
+            // v3.9 (155): 🌐 API로 받기 목록 (커튼)
+            box.addView(apiCurtain(a) { dlg?.dismiss() }, Ui.lp(a, MATCH, WRAP, top = 8))
             items.forEachIndexed { i, label ->
                 box.addView(Ui.button(a, label) {
                     dlg?.dismiss()
                     when (i) {
-                        0 -> fetchApi(a, FARM_API, "어장정보 (2023)")
-                        1 -> askApiPath(a)
-                        2 -> pickCsv(a)
-                        3 -> openAdminMap(a)
-                        4 -> askWipe(a)
-                        5 -> sources(a)
+                        0 -> pickCsv(a)
+                        1 -> openAdminMap(a)
+                        2 -> askWipe(a)
+                        3 -> sources(a)
                     }
                 }.apply { textSize = 14f; minHeight = dp(48) }, Ui.lp(a, MATCH, WRAP, top = 8))
             }
@@ -760,6 +824,131 @@ object Zones {
     const val FARM_API = "/15114195/v1/uddi:1899391e-d671-4438-b3a4-ed0f547fdc52"
     private fun apiPrefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
+    // ---- v3.9 (155) API 목록: 이름 · 주소 · 종류 (폰에 저장) ----
+    class ApiItem(val name: String, val path: String, val type: String)
+    private fun apis(c: Context): MutableList<ApiItem> = try {
+        val arr = JSONArray(apiPrefs(c).getString("haeru_apis", "[]"))
+        (0 until arr.length()).map { arr.getJSONObject(it).let { o -> ApiItem(o.optString("n"), o.optString("p"), o.optString("t", "auto")) } }.toMutableList()
+    } catch (_: Exception) { mutableListOf() }
+    private fun saveApis(c: Context, l: List<ApiItem>) {
+        val arr = JSONArray(); l.forEach { arr.put(JSONObject().put("n", it.name).put("p", it.path).put("t", it.type)) }
+        apiPrefs(c).edit().putString("haeru_apis", arr.toString()).apply()
+    }
+    private fun typeLabel(t: String) = if (t == "auto") "🤖 자동" else "${typeIcon(t)} ${TYPES[t] ?: t}"
+
+    private fun apiCurtain(a: Activity, close: () -> Unit): View {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val card = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.BLUE) }
+        val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }
+        val title = Ui.text(a, 14.5f, Ui.TEXT, true, "")
+        val arrow = Ui.text(a, 14f, Ui.SUB, true, "▾")
+        head.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f)); head.addView(arrow)
+        val inner = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(12), dp(10)); visibility = View.GONE }
+        card.addView(head); card.addView(inner)
+        fun paint() {
+            val l = apis(a)
+            title.text = "🌐 API로 받기 (${l.size}개)"
+            inner.removeAllViews()
+            l.forEachIndexed { idx, it0 ->
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
+                val tb = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                tb.addView(Ui.text(a, 14f, Ui.TEXT, true, it0.name).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                tb.addView(Ui.text(a, 11f, Ui.SUB, false, typeLabel(it0.type) + " · " + it0.path.take(28) + if (it0.path.length > 28) "…" else "").apply { maxLines = 1 })
+                r.addView(tb, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.chip(a, "받기").apply { setOnClickListener { close(); fetchApi(a, it0.path, it0.name, it0.type) } })
+                r.addView(Ui.text(a, 16f, Ui.TEXT, true, "✎").apply { setPadding(dp(10), dp(4), dp(6), dp(4)); setOnClickListener {
+                    editApi(a, it0) { ni -> val all = apis(a); all[idx] = ni; saveApis(a, all); paint() } } })
+                r.addView(Ui.text(a, 16f, Color.parseColor("#FF8A92"), true, "✕").apply { setPadding(dp(6), dp(4), 0, dp(4)); setOnClickListener {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("'${it0.name}'을(를) 목록에서 지울까요?")
+                        .setMessage("목록에서만 지워져요. 이미 올린 구역은 그대로예요.")
+                        .setPositiveButton("지우기") { _, _ -> val all = apis(a); all.removeAt(idx); saveApis(a, all); paint() }
+                        .setNegativeButton("취소", null).show() } })
+                inner.addView(r)
+            }
+            if (l.isEmpty()) inner.addView(Ui.text(a, 12f, Ui.SUB, false, "아직 없어요 · 공공데이터포털 Swagger 화면의 /숫자/v1/uddi:… 주소로 추가해요"))
+            inner.addView(Ui.text(a, 14f, Ui.BLUE, true, "＋ API 추가 (이름 · 주소 · 종류)").apply {
+                gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(10))
+                background = Ui.bg(a, Color.TRANSPARENT, 12, Ui.BLUE)
+                setOnClickListener { editApi(a, null) { ni -> val all = apis(a); all.add(ni); saveApis(a, all); paint() } }
+            }, Ui.lp(a, MATCH, WRAP, top = 6))
+        }
+        paint()
+        head.setOnClickListener {
+            val open = inner.visibility != View.VISIBLE
+            inner.visibility = if (open) View.VISIBLE else View.GONE; arrow.text = if (open) "▴" else "▾"
+        }
+        return card
+    }
+
+    private fun editApi(a: Activity, old: ApiItem?, done: (ApiItem) -> Unit) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        val name = EditText(a).apply { hint = "이름 (예: 위험구역 해수욕장)"; setSingleLine(); setText(old?.name ?: "") }
+        val path = EditText(a).apply { hint = "/숫자/v1/uddi:…"; setSingleLine(); setText(old?.path ?: ""); inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI }
+        box.addView(name); box.addView(path, Ui.lp(a, MATCH, WRAP, top = 4))
+        box.addView(Ui.text(a, 12.5f, Ui.SUB, true, "종류"), Ui.lp(a, MATCH, WRAP, top = 10))
+        var type = old?.type ?: "auto"
+        val chips = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        fun paintChips() {
+            chips.removeAllViews()
+            (listOf("auto") + TYPES.keys).forEach { k ->
+                val on = k == type
+                chips.addView(Ui.text(a, 13.5f, if (on) Color.parseColor("#1B0E02") else Ui.TEXT, true, (if (on) "✓ " else "") + typeLabel(k)).apply {
+                    gravity = Gravity.CENTER; setPadding(0, dp(8), 0, dp(8))
+                    background = if (on) Ui.bg(a, if (k == "auto") Ui.BLUE else typeColor(k), 12) else Ui.bg(a, Color.TRANSPARENT, 12, Ui.LINE)
+                    setOnClickListener { type = k; paintChips() }
+                }, Ui.lp(a, MATCH, WRAP, top = 5))
+            }
+        }
+        paintChips(); box.addView(chips)
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(if (old == null) "＋ API 추가" else "✎ API 수정")
+            .setView(ScrollView(a).apply { addView(box) })
+            .setPositiveButton("저장") { _, _ ->
+                var p = path.text.toString().trim()
+                p = p.substringAfter("api.odcloud.kr/api", p).substringBefore("?")
+                if (!p.startsWith("/")) p = "/$p"
+                if (!p.contains("/v1/") && !p.contains("uddi")) { Ui.toast(a, "주소 모양이 달라요 (/숫자/v1/uddi:… 형식)"); return@setPositiveButton }
+                done(ApiItem(name.text.toString().trim().ifBlank { p.split("/").getOrNull(1) ?: "API" }, p, type))
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    /** 🌊 개방海 카드: 인증키 넣기 · 연결 확인 */
+    private fun khoaCard(a: Activity, close: () -> Unit): View {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val card = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = Ui.bg(a, Color.parseColor("#102A3A"), 14, Ui.GREEN)
+        }
+        val has = Khoa.key(a).isNotBlank()
+        card.addView(Ui.text(a, 14.5f, Ui.GREEN, true, "🌊 개방海 자동 받기 (전국)"))
+        card.addView(Ui.text(a, 12f, Ui.SUB, false,
+            (if (has) "✅ 인증키 들어 있음 · " else "⚠ 인증키가 아직 없어요 · ") +
+            "어장정보(23년, 면허기간) · 양식장 · 갯골 · 웅덩이 · 인명사고 · 낚시금지/제한 · 수중레저금지를 지도에 보이는 곳만 그때그때 받아요 (파일 올리기 필요 없음)").apply { setLineSpacing(0f, 1.2f) },
+            Ui.lp(a, MATCH, WRAP, top = 4))
+        val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        r.addView(Ui.button(a, "🔑 인증키 넣기") {
+            val et = EditText(a).apply { hint = "개방海 '해양공간정보' 인증키"; setSingleLine(); setText(Khoa.key(a)) }
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("🔑 개방海 인증키")
+                .setMessage("khoa.go.kr → 오픈 API 신청 → 사용구분 '해양공간정보'의 인증키를 붙여 넣어요 (해아름 키 말고). 모든 사용자가 같이 써요.")
+                .setView(LinearLayout(a).apply { setPadding(dp(20), 0, dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
+                .setPositiveButton("저장") { _, _ ->
+                    Khoa.saveKey(a, et.text.toString()) { err -> Ui.toast(a, err ?: "저장했어요 · '연결 확인'을 눌러 보세요"); if (err == null) { close(); openAdmin(a) } }
+                }.setNegativeButton("취소", null).show()
+        }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        r.addView(Ui.button(a, "🔌 연결 확인") {
+            Ui.toast(a, "개방海에 물어보는 중…")
+            Khoa.test(a) { msg ->
+                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("🌊 개방海 연결 확인")
+                    .setMessage(msg + "\n\n(❌가 나오면 이 화면을 캡처해서 보내 주세요)").setPositiveButton("확인", null).show()
+            }
+        }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        card.addView(r, Ui.lp(a, MATCH, WRAP, top = 8))
+        return card
+    }
+
     private fun askApiPath(a: Activity) {
         fun dp(v: Int) = Ui.dp(a, v)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
@@ -785,7 +974,7 @@ object Zones {
     }
 
     /** 페이지마다 1000줄씩 받아서 CSV와 같은 모양으로 → 그다음은 CSV 올리기와 똑같이 (종류 고르기 · 확인 · 바꾸기/더하기) */
-    fun fetchApi(a: Activity, path: String, label: String) {
+    fun fetchApi(a: Activity, path: String, label: String, preset: String? = null) {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) { Ui.toast(a, "앱에 공공데이터 인증키가 없어요 (GitHub 비밀값 KHOA_KEY)"); return }
         val pd = progress(a, "🌐 $label 받는 중…")
@@ -828,7 +1017,7 @@ object Zones {
                         .setPositiveButton("확인", null).show()
                     return@post
                 }
-                askImport(a, Csv(h, rows, "🌐 $label"))
+                askImport(a, Csv(h, rows, "🌐 $label"), preset)
             }
         }.start()
     }
@@ -880,7 +1069,7 @@ object Zones {
         return -1
     }
 
-    private fun askImport(a: Activity, csv: Csv) {
+    private fun askImport(a: Activity, csv: Csv, preset: String? = null) {
         val h = csv.head
         val cGrade = col(h, "위험등급", "등급")
         // v3.8.1: 칸 이름 말고 값으로 확인 (도형 칸 또는 위경도 · 평면좌표를 읽을 수 있는 줄이 하나라도 있는지)
@@ -894,10 +1083,7 @@ object Zones {
         }
         val keys = listOf("auto") + TYPES.keys
         val labels = listOf("🤖 자동 (어업면허명 · 어업방법으로 마을어장 · 양식장 · 기타 구분)") + TYPES.entries.map { "${typeIcon(it.key)} 모두 ${it.value}" }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("어떤 구역인가요? (${csv.rows.size}줄)")
-            .setItems(labels.toTypedArray()) { _, i ->
-                val type = keys[i]
+        fun go(type: String) {
                 if (cGrade >= 0) {
                     val vals = csv.rows.mapNotNull { it.getOrNull(cGrade)?.trim()?.takeIf { v -> v.isNotBlank() } }.groupingBy { it }.eachCount()
                         .entries.sortedBy { it.key }.take(12)
@@ -911,7 +1097,12 @@ object Zones {
                             build(a, csv, type, keep)
                         }.setNegativeButton("취소", null).show()
                 } else build(a, csv, type, null)
-            }
+        }
+        // v3.9 (155): API 목록에 종류를 정해 둔 경우엔 바로
+        if (preset != null && preset in keys) return go(preset)
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("어떤 구역인가요? (${csv.rows.size}줄)")
+            .setItems(labels.toTypedArray()) { _, i -> go(keys[i]) }
             .setNegativeButton("취소", null).show()
     }
 
@@ -983,7 +1174,16 @@ object Zones {
             var name = v(cName).ifBlank { v(cSigungu) }
             if (t == "risk" && name.isBlank()) name = "위험등급 " + v(cGrade)
             if (cGrid >= 0 && t == "risk" && v(cGrade).isNotBlank()) name = "위험등급 " + v(cGrade)
-            val note = (listOfNotNull(kindText.takeIf { it.isNotBlank() }) + cNote.map { v(it) }.filter { it.isNotBlank() }).distinct().joinToString(" · ").take(80)
+            // v3.9 (156): 이름표 붙인 자세한 정보 (¶ = 줄바꿈)
+            val nl = ArrayList<String>()
+            val cS = col(h, "면허시작일자", "시작일"); val cE = col(h, "면허종료일자", "종료일")
+            if (v(cS).isNotBlank() || v(cE).isNotBlank()) nl.add("📅 면허기간 ${v(cS)} ~ ${v(cE)}")
+            nl.add(listOfNotNull(v(col(h, "면허번호")).takeIf { it.isNotBlank() }?.let { "🔖 면허번호 $it" },
+                v(cArea).takeIf { it.isNotBlank() }?.let { "📐 면적 $it" }).joinToString(" · "))
+            nl.add(listOf(kindText, v(col(h, "어업방법명")), v(col(h, "양식대상종명"))).flatMap { it.split(" ") }.filter { it.isNotBlank() }.distinct().joinToString(" ").let { if (it.isBlank()) "" else "🎣 $it" })
+            nl.add(listOf(v(col(h, "관련부서명")), v(cSigungu)).filter { it.isNotBlank() }.joinToString(" · ").let { if (it.isBlank()) "" else "🏛 $it (문의처)" })
+            v(col(h, "개정년도")).takeIf { it.isNotBlank() }?.let { nl.add("자료 $it") }
+            val note = nl.filter { it.isNotBlank() }.joinToString("¶").take(300)
             val month = if (cMonth >= 0) (v(cMonth).filter { it.isDigit() }.toIntOrNull() ?: 0).let { if (it in 1..12) it else 0 } else 0
             val ref = locate(row) ?: (if (cGeo >= 0) pointOf(v(cGeo)) else null)
             val refLat = ref?.first; val refLon = ref?.second

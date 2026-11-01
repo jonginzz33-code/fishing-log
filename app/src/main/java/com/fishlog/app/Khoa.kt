@@ -1,0 +1,253 @@
+package com.fishlog.app
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import org.osmdroid.util.GeoPoint
+import java.io.File
+import java.util.Locale
+import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.floor
+
+/**
+ * 🌊 국립해양조사원 '개방海' 해양공간정보 WFS (v3.9)
+ *  - 지도에 보이는 칸(0.25°)마다 레이어별로 구역 도형을 받아 옴 → 전국 자동 (파일 올리기 필요 없음)
+ *  - 인증키: 관리자가 앱에서 한 번 입력 → 서버 haeruMeta/khoa 에 두고 모든 사용자가 같이 씀
+ *  - 받은 칸은 폰에 30일 기억 (다시 안 물어봄)
+ *  - 요청: otmsWfsApi.do?ServiceKey=&Layer=&minlon=도^분^초 … &srsName=EPSG:5179 → GML
+ */
+object Khoa {
+    class Layer(val id: String, val name: String, val group: String, val type: String, val point: Boolean = false)
+
+    val LAYERS = listOf(
+        Layer("TL_DIST_FSHFRM", "어장정보(23년)", "farm", "auto"),
+        Layer("VI_MARCUL_A", "양식장(해도)", "farm", "farm"),
+        Layer("TL_LEIHAZ_TIDCHA_A", "갯골", "tidal", "risk"),
+        Layer("TL_LEIHAZ_PUDDLE_A", "웅덩이", "tidal", "risk"),
+        Layer("VI_NSHPAC_P", "인명사고 지점", "tidal", "risk", point = true),
+        Layer("TL_RESARE_ENS", "낚시금지구역", "ban", "ban"),
+        Layer("TL_RESARE_FR", "낚시제한구역", "ban", "ban"),
+        Layer("TL_WLAPRHA_A", "수중레저활동금지구역", "ban", "ban")
+    )
+    /** 사용자가 켜고 끄는 묶음 */
+    val GROUPS = linkedMapOf(
+        "farm" to "🐚🦪 마을어장 · 양식장 (면허기간 포함)",
+        "tidal" to "⚠ 갯골 · 웅덩이 · 인명사고 지점",
+        "ban" to "🚫 낚시금지 · 낚시제한 · 수중레저금지 구역"
+    )
+
+    private const val URL = "https://www.khoa.go.kr/oceanmap/otmsWfsApi.do"
+    private const val KEEP_MS = 30L * 24 * 3600_000L
+    private val main = Handler(Looper.getMainLooper())
+    private val pool = Executors.newFixedThreadPool(3)
+    private val db get() = FirebaseFirestore.getInstance()
+
+    private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+    fun groupOn(c: Context, g: String) = prefs(c).getBoolean("khoa_g_$g", true)
+    fun setGroupOn(c: Context, g: String, v: Boolean) = prefs(c).edit().putBoolean("khoa_g_$g", v).apply()
+
+    // ---------------- 인증키 ----------------
+    @Volatile private var keyChecked = false
+    fun key(c: Context): String = prefs(c).getString("khoa_key", "") ?: ""
+    /** 서버에서 관리자가 넣은 키를 한 번 받아 옴 (앱을 켤 때마다 한 번) */
+    fun loadKey(c: Context, done: () -> Unit) {
+        if (keyChecked || !Cloud.isInitialized() || Cloud.user == null) return done()
+        keyChecked = true
+        db.collection("haeruMeta").document("khoa").get()
+            .addOnSuccessListener { d ->
+                val k = d.getString("key") ?: ""
+                if (k != key(c)) { prefs(c).edit().putString("khoa_key", k).apply(); mem.clear() }
+                done()
+            }
+            .addOnFailureListener { keyChecked = false; done() }
+    }
+    fun saveKey(c: Context, k: String, done: (String?) -> Unit) {
+        db.collection("haeruMeta").document("khoa").set(mapOf("key" to k.trim(), "at" to System.currentTimeMillis()), SetOptions.merge())
+            .addOnSuccessListener {
+                prefs(c).edit().putString("khoa_key", k.trim()).apply()
+                mem.clear(); dir(c).listFiles()?.forEach { it.delete() }; lastErr = ""
+                done(null)
+            }
+            .addOnFailureListener { done("저장 실패: ${it.message}") }
+    }
+
+    // ---------------- 칸별 기억 ----------------
+    private val mem = HashMap<String, List<Zones.Zone>>()     // "레이어|칸" → 구역
+    private val loading = HashSet<String>()
+    @Volatile var lastErr = ""
+    private fun dir(c: Context) = File(c.filesDir, "khoa").apply { mkdirs() }
+
+    /** 지금 켜 둔 레이어 */
+    fun activeLayers(c: Context) = LAYERS.filter { groupOn(c, it.group) }
+
+    /** 이 칸들에 들어 있는 (켜 둔 레이어의) 구역 */
+    fun zonesOf(c: Context, cellIds: List<String>): List<Zones.Zone> {
+        if (key(c).isBlank()) return emptyList()
+        val out = ArrayList<Zones.Zone>()
+        activeLayers(c).forEach { l -> cellIds.forEach { id -> mem["${l.id}|$id"]?.let { out.addAll(it) } } }
+        return out
+    }
+
+    /** 이 칸들 준비 (폰에 있으면 바로, 없으면 개방海에서) · 하나 받을 때마다 done */
+    fun ensure(c: Context, cellIds: List<String>, done: () -> Unit) {
+        if (!Zones.on(c)) return
+        loadKey(c) {
+            val k = key(c)
+            if (k.isBlank()) return@loadKey
+            val app = c.applicationContext
+            activeLayers(c).forEach { l ->
+                cellIds.take(12).forEach { id ->
+                    val mk = "${l.id}|$id"
+                    if (mem.containsKey(mk) || mk in loading) return@forEach
+                    val f = File(dir(c), "${l.id}_$id.txt")
+                    if (f.exists() && System.currentTimeMillis() - f.lastModified() < KEEP_MS) {
+                        mem[mk] = try { f.readLines().mapNotNull { Zones.decodeLine(it) } } catch (_: Exception) { emptyList() }
+                        return@forEach
+                    }
+                    loading.add(mk)
+                    pool.execute {
+                        val list = try { fetch(k, l, id) } catch (e: Exception) { lastErr = "${l.name}: ${e.message}"; null }
+                        main.post {
+                            loading.remove(mk)
+                            if (list != null) {
+                                mem[mk] = list
+                                try { File(dir(app), "${l.id}_$id.txt").writeText(list.joinToString("\n") { it.encode() }) } catch (_: Exception) {}
+                            } else mem[mk] = emptyList()   // 이번 실행 동안은 다시 안 물어봄
+                            done()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** 칸 이름 '위_경' (0.25° 단위) → 범위 */
+    private fun cellBox(id: String): DoubleArray {
+        val (y, x) = id.split("_").map { it.toInt() }
+        return doubleArrayOf(y / Zones.CELL, (y + 1) / Zones.CELL, x / Zones.CELL, (x + 1) / Zones.CELL)
+    }
+
+    /** 도 → '도^분^초' */
+    private fun dms(v: Double): String {
+        val d = floor(v).toInt(); val mf = (v - d) * 60; val m = floor(mf).toInt(); val s = Math.round((mf - m) * 60).toInt()
+        return if (s >= 60) "$d^${m + 1}^0" else "$d^$m^$s"
+    }
+
+    fun urlFor(k: String, layer: String, minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) =
+        "$URL?ServiceKey=" + java.net.URLEncoder.encode(k, "UTF-8") + "&Layer=$layer" +
+            "&minlon=${dms(minLon)}&minlat=${dms(minLat)}&maxlon=${dms(maxLon)}&maxlat=${dms(maxLat)}&srsName=EPSG:5179"
+
+    fun get(url: String): String {
+        val con = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        con.connectTimeout = 15_000; con.readTimeout = 60_000
+        val code = con.responseCode
+        val body = (if (code in 200..299) con.inputStream else con.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
+        if (code !in 200..299) throw Exception("HTTP $code ${body.take(120)}")
+        return body
+    }
+
+    private fun fetch(k: String, l: Layer, cellId: String): List<Zones.Zone> {
+        val b = cellBox(cellId)
+        val body = get(urlFor(k, l.id, b[0], b[1], b[2], b[3]))
+        if (!body.contains("FeatureCollection")) {
+            // 인증키 오류 등 (XML/JSON 메시지)
+            throw Exception(body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(150))
+        }
+        lastErr = ""
+        return parse(body, l)
+    }
+
+    // ---------------- GML 읽기 ----------------
+    private val FEATURE = Regex("<(mapprime:[A-Za-z0-9_]+)\\s+gml:id=\"([^\"]*)\"[^>]*>(.*?)</\\1>", RegexOption.DOT_MATCHES_ALL)
+    private val PROP = Regex("<mapprime:([A-Za-z0-9_]+)>([^<]*)</mapprime:\\1>")
+    private val EXTERIOR = Regex("<gml:exterior>\\s*<gml:LinearRing>\\s*<gml:posList[^>]*>([^<]+)</gml:posList>", RegexOption.DOT_MATCHES_ALL)
+    private val OUTER_OLD = Regex("<gml:outerBoundaryIs>\\s*<gml:LinearRing>\\s*<gml:coordinates[^>]*>([^<]+)</gml:coordinates>", RegexOption.DOT_MATCHES_ALL)
+    private val POS = Regex("<gml:pos(?:\\s[^>]*)?>([^<]+)</gml:pos>")
+    private val COORDS = Regex("<gml:coordinates[^>]*>([^<]+)</gml:coordinates>")
+
+    fun parse(body: String, l: Layer): List<Zones.Zone> {
+        val out = ArrayList<Zones.Zone>()
+        FEATURE.findAll(body).forEach { m ->
+            val gid = m.groupValues[2]
+            val inner = m.groupValues[3]
+            val p = HashMap<String, String>()
+            PROP.findAll(inner).forEach { pm -> p[pm.groupValues[1].lowercase(Locale.US)] = pm.groupValues[2].trim() }
+            val (type, name, note) = describe(l, p)
+            val id = "k" + (l.id.hashCode() and 0xffff).toString(36) + gid.substringAfterLast('.').ifBlank { gid.hashCode().toString(36) }
+            val rings = EXTERIOR.findAll(inner).map { flat(it.groupValues[1]) }.toMutableList()
+            if (rings.isEmpty()) OUTER_OLD.findAll(inner).forEach { rings.add(pairs(it.groupValues[1])) }
+            if (rings.isNotEmpty()) {
+                rings.forEachIndexed { i, r ->
+                    val pts = Zones.simplifyPts(r.map { Zones.fromUtmK(it[0], it[1]) }, 0.00002)
+                    if (pts.size >= 3) out.add(Zones.Zone(if (i == 0) id else "$id-$i", type, name, pts, null, 0.0, 0, note))
+                }
+            } else {
+                // 점 (인명사고 등) → 반지름 60m 원
+                val pt = POS.find(inner)?.groupValues?.get(1)?.let { flat(it).firstOrNull() }
+                    ?: COORDS.find(inner)?.groupValues?.get(1)?.let { pairs(it).firstOrNull() }
+                if (pt != null) out.add(Zones.Zone(id, type, name, emptyList(), Zones.fromUtmK(pt[0], pt[1]), 60.0, 0, note))
+            }
+        }
+        return out
+    }
+
+    private fun flat(s: String): List<DoubleArray> {
+        val n = s.trim().split(Regex("\\s+")).mapNotNull { it.toDoubleOrNull() }
+        return (0 until n.size / 2).map { doubleArrayOf(n[it * 2], n[it * 2 + 1]) }
+    }
+    private fun pairs(s: String): List<DoubleArray> = s.trim().split(Regex("\\s+")).mapNotNull { t ->
+        val v = t.split(",").mapNotNull { it.toDoubleOrNull() }; if (v.size >= 2) doubleArrayOf(v[0], v[1]) else null
+    }
+
+    private fun ymd(s: String?): String {
+        val d = (s ?: "").filter { it.isDigit() }
+        return if (d.length >= 8) "${d.substring(0, 4)}-${d.substring(4, 6)}-${d.substring(6, 8)}" else ""
+    }
+
+    /** 레이어 + 속성 → (종류, 이름, 자세한 정보 ¶ 줄바꿈) */
+    private fun describe(l: Layer, p: Map<String, String>): Triple<String, String, String> {
+        fun v(vararg k: String) = k.firstNotNullOfOrNull { p[it]?.takeIf { s -> s.isNotBlank() } } ?: ""
+        if (l.id == "TL_DIST_FSHFRM") {
+            val se = v("fids_se")
+            val type = when { se.contains("마을") -> "village"; se.contains("양식") -> "farm"; else -> "etc" }
+            val rgn = v("rgn_nm", "sgg_nm")
+            val addr = v("addr")
+            val lines = ArrayList<String>()
+            val b = ymd(v("lcns_bgng_ymd")); val e = ymd(v("lcns_end_ymd"))
+            if (b.isNotBlank() || e.isNotBlank()) lines.add("📅 면허기간 $b ~ $e")
+            val area = v("area").toDoubleOrNull()
+            lines.add(listOfNotNull(v("lcns_no").takeIf { it.isNotBlank() }?.let { "🔖 면허번호 $it" },
+                area?.takeIf { it > 0 }?.let { String.format(Locale.KOREA, "📐 면적 %.1fha", it / 10_000.0) }).joinToString(" · "))
+            lines.add(listOf(v("fids_knd"), v("fids_mthd"), v("farm_knd")).filter { it.isNotBlank() }.distinct().joinToString(" · ").let { if (it.isBlank()) "" else "🎣 $it" })
+            lines.add(listOf(v("rel_dept"), rgn).filter { it.isNotBlank() }.joinToString(" · ").let { if (it.isBlank()) "" else "🏛 $it (문의처)" })
+            lines.add("자료 ${v("rvsn_yr").ifBlank { "2023" }} · 국립해양조사원 개방海")
+            val name = listOf(rgn.substringAfter(" ", rgn), addr).filter { it.isNotBlank() }.joinToString(" ").ifBlank { se }
+            return Triple(type, name.take(40), lines.filter { it.isNotBlank() }.joinToString("¶"))
+        }
+        // 그 밖의 레이어: 이름처럼 보이는 속성 하나 + 레이어 이름
+        val nm = p.entries.firstOrNull { (k, s) -> s.isNotBlank() && s.any { it in '가'..'힣' } && (k.contains("nm") || k.contains("nam") || k.contains("name") || k.contains("title")) }?.value
+            ?: p.values.firstOrNull { s -> s.isNotBlank() && s.length in 2..40 && s.any { it in '가'..'힣' } } ?: ""
+        val extra = p.entries.filter { (k, s) -> s.isNotBlank() && s.any { it in '가'..'힣' } && s != nm }.take(3).joinToString(" · ") { it.value.take(40) }
+        val note = listOf(if (extra.isNotBlank()) "ℹ $extra" else "", "자료: 국립해양조사원 개방海 · ${l.name}").filter { it.isNotBlank() }.joinToString("¶")
+        return Triple(l.type, (if (nm.isNotBlank()) "${l.name} · $nm" else l.name).take(40), note)
+    }
+
+    /** 관리자: 연결 확인 (신안 앞바다 예시 범위) → 받은 개수 · 응답 앞부분 */
+    fun test(c: Context, done: (String) -> Unit) {
+        val k = key(c)
+        if (k.isBlank()) return done("인증키가 아직 없어요")
+        pool.execute {
+            val msg = try {
+                val body = get(urlFor(k, "TL_DIST_FSHFRM", 34.758, 34.805, 125.983, 126.140))
+                val n = if (body.contains("FeatureCollection")) parse(body, LAYERS[0]).size else -1
+                if (n >= 0) "✅ 연결됐어요 · 시험 범위(신안)에서 어장 ${n}곳 받음" else "❌ 응답이 이상해요:\n" + body.take(400)
+            } catch (e: Exception) { "❌ 받지 못했어요: ${e.message}" }
+            main.post { done(msg) }
+        }
+    }
+
+    fun distanceOk(a: Double, b: Double) = abs(a - b) < 1e-9
+}
