@@ -40,7 +40,8 @@ object PointMap {
         val df = SimpleDateFormat("yy.M.d HH:mm", Locale.KOREA)
         val me = Cloud.uid
         val mineRecs = Analysis.mine(cat, since)
-        val pubRecs = Analysis.public(pubList, me)   // 내 글은 '나만의 포인트'에 이미 있음
+        val pubRecs = Analysis.public(pubList, me)   // 남이 올린 글
+        val pubMine = Analysis.public(pubList.filter { it.owner == me }, null)   // 내가 올린 글 (나만의 포인트를 끄면 여기서 보임)
 
         val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
@@ -71,7 +72,9 @@ object PointMap {
         bottom.addView(anBtn, Ui.lp(a, MATCH, WRAP, top = 8))
         root.addView(bottom)
 
-        fun recs(): List<Analysis.Rec> = (if (showMine) mineRecs else emptyList()) + (if (showPub) pubRecs else emptyList())
+        // 둘 다 켜면 내 글은 '나만의 포인트'로 한 번만 · 전체만 켜면 내가 올린 글도 전체에 같이
+        fun recs(): List<Analysis.Rec> = (if (showMine) mineRecs else emptyList()) +
+            (if (showPub) pubRecs + (if (showMine) emptyList() else pubMine) else emptyList())
         fun inside(): List<Analysis.Rec> {
             val c = circle.center ?: return emptyList()
             return Analysis.inCircle(recs(), c.latitude, c.longitude, circle.radiusM)

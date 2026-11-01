@@ -676,16 +676,16 @@ class BoardActivity : Activity() {
                 PointMap.open(this@BoardActivity, list, cat, since)
             }
         }, Ui.lp(this, MATCH, WRAP, top = 10))
-        // 어종 칩 (많이 잡힌 순)
-        val counts = list.flatMap { t -> t.catches.filter { it.cell != null }.map { t.key(it.slot) } }
-            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
-        if (counts.isEmpty()) {
-            listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "위치가 있는 공개 조과가 아직 없어요. 데이터가 모이면 어종별 포인트 순위가 보여요."),
-                Ui.lp(this, MATCH, WRAP, top = 12))
+        // 출조 한 건씩 (지역으로 쪼개지 않음) — 자리별 분석은 위 '포인트 지도'에서 원 그리기로
+        if (list.isEmpty()) {
+            listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "공개된 출조가 아직 없어요."), Ui.lp(this, MATCH, WRAP, top = 12))
             return
         }
-        if (species == null || counts.none { it.key == species }) species = counts[0].key
+        // 어종 칩: 전체 + 많이 잡힌 순 (고르면 그 어종 1시간 평균으로 순위)
+        val counts = list.flatMap { t -> t.catches.map { t.key(it.slot) } }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
+        if (species != null && counts.none { it.key == species }) species = null
         val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        chips.addView(pill("전체 어종", species == null, 13f) { species = null; render() }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         counts.forEach { e ->
             chips.addView(pill("${PublicBoard.keyLabel(e.key)} ${e.value}", e.key == species, 13f) { species = e.key; render() },
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
@@ -700,27 +700,40 @@ class BoardActivity : Activity() {
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
         listBox.addView(sortRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
-        var pts = PublicBoard.points(list, species!!)
-        if (nearFirst && me != null) pts = pts.sortedBy { distKm(me, it.cell.lat, it.cell.lon) }
+        val sp = species
+        fun nOf(t: PublicBoard.PTrip) = if (sp == null) t.catches.size else t.catches.count { t.key(it.slot) == sp }
+        fun hoursOf(t: PublicBoard.PTrip): Double {
+            val end = if (t.end > t.start) t.end else (t.catches.maxOfOrNull { it.time } ?: t.start)
+            return ((end - t.start).coerceAtLeast(15 * 60_000L)) / 3_600_000.0
+        }
+        fun rateOf(t: PublicBoard.PTrip) = nOf(t) / hoursOf(t)
+        fun locOf(t: PublicBoard.PTrip): Pair<Double, Double>? = t.catches.firstNotNullOfOrNull { c ->
+            if (c.hasExact) c.exactLat!! to c.exactLon!! else c.cell?.let { it.lat to it.lon } }
+        var trips = list.filter { nOf(it) > 0 }
+        trips = if (nearFirst && me != null) trips.sortedBy { t -> locOf(t)?.let { distKm(me, it.first, it.second) } ?: Float.MAX_VALUE }
+            else trips.sortedByDescending { rateOf(it) }
         listBox.addView(Ui.text(this, 13f, Ui.SUB, false,
-            "${PublicBoard.keyLabel(species!!)} 포인트 ${pts.size}곳 · 약 150m 범위로 묶음 (대략 공개는 1km) · 순위는 1시간당 마릿수 (출조 2번 이상인 곳 먼저)"),
+            "${if (sp == null) "전체 어종" else PublicBoard.keyLabel(sp)} · 출조 ${trips.size}건 · 순위는 1시간 평균 마릿수 · 누르면 그 출조 지도 · 조과 · 사진 · 날씨"),
             Ui.lp(this, MATCH, WRAP, top = 10))
-        val names = HashMap<String, Int>()
-        pts.take(60).forEachIndexed { i, p ->
-            val base = Area.name(this, p.cell.lat, p.cell.lon) { areaFound() }.ifBlank { "포인트" }
-            val n = (names[base] ?: 0) + 1; names[base] = n
-            val title = "$base 부근" + if (n > 1) " #$n" else ""
-            val c = Ui.card(this).apply { isClickable = true; setOnClickListener { pointDetail(p, title) } }
+        val hmF = SimpleDateFormat("HH:mm", Locale.KOREA)
+        trips.take(80).forEachIndexed { i, t ->
+            val c = Ui.card(this).apply { isClickable = true; setOnClickListener { tripDetail(t) } }
             val r = Ui.row(this)
-            r.addView(Ui.text(this, 16f, Ui.TEXT, true, "${i + 1}. $title"), LinearLayout.LayoutParams(0, WRAP, 1f))
-            if (p.trips.size < 2) r.addView(Ui.chip(this, "데이터 부족", Ui.SUB), LinearLayout.LayoutParams(WRAP, WRAP))
-            else r.addView(Ui.text(this, 13f, Ui.SUB, false, "출조 ${p.trips.size}번 ›"))
+            val end = if (t.end > t.start) t.end else (t.catches.maxOfOrNull { it.time } ?: t.start)
+            r.addView(Ui.text(this, 15f, Ui.TEXT, true, "${i + 1}. " + dateFmt.format(Date(t.start)) + " " + hmF.format(Date(t.start)) + "~" + hmF.format(Date(end)) +
+                (if (t.cat.isNotBlank()) " · " + Store.catShort(t.cat) else "")).apply { maxLines = 1 }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             c.addView(r)
-            val dist = me?.let { String.format(Locale.KOREA, " · 내 위치에서 %.1fkm", distKm(it, p.cell.lat, p.cell.lon)) } ?: ""
-            c.addView(Ui.text(this, 14f, Ui.TEXT, false,
-                String.format(Locale.KOREA, "총 %d마리 · 1시간에 평균 %.1f마리", p.total, p.rate) + dist), Ui.lp(this, MATCH, WRAP, top = 4))
-            val best = PublicBoard.bestWhen(p)
-            if (best.isNotBlank()) c.addView(Ui.text(this, 13f, Ui.GREEN, false, "잘 나온 때: $best"), Ui.lp(this, MATCH, WRAP, top = 2))
+            c.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick} · ${t.speciesLine()}"), Ui.lp(this, MATCH, WRAP, top = 4))
+            val dist = me?.let { m -> locOf(t)?.let { String.format(Locale.KOREA, " · 내 위치에서 %.1fkm", distKm(m, it.first, it.second)) } } ?: ""
+            c.addView(Ui.text(this, 13.5f, Ui.ORANGE, true, String.format(Locale.KOREA, "1시간에 평균 %.1f마리", rateOf(t)) +
+                (if (sp != null) " (${PublicBoard.keyLabel(sp)})" else "") + dist), Ui.lp(this, MATCH, WRAP, top = 2))
+            val reg = regionOf(t)
+            c.addView(Ui.text(this, 12f, Ui.GREEN, false, Tide.mulName(t.start).substringBefore(" (") + if (reg.isNotBlank()) " · $reg" else ""),
+                Ui.lp(this, MATCH, WRAP, top = 2))
+            if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
+                MainPhoto.showBig(this, "public/${t.id}/photos/main", t.mthumb, "${t.nick} · ${dayFmt.format(Date(t.start))}")
+            }
             listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
         }
     }

@@ -923,7 +923,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(WRAP, dp(34)))
         methodBox.addView(head)
 
-        fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, help: Pair<String, String>? = null, onToggle: () -> Unit) {
+        fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, help: Pair<String, String>? = null, note: String? = null, onToggle: () -> Unit) {
             val r = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(10), dp(10), dp(10), dp(10))
@@ -936,7 +936,14 @@ class MainActivity : Activity() {
                 background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 5) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 5, Ui.BLUE)
             }, LinearLayout.LayoutParams(dp(22), dp(22)))
             val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            txt.addView(Ui.text(this, 15f, Ui.TEXT, true, title))
+            txt.addView(Ui.text(this, 15f, Ui.TEXT, true, title).apply {
+                maxLines = 1
+                // 제목 옆 작은 안내 (예: 리모컨 (음악 리모컨 전용))
+                if (note != null) append(android.text.SpannableStringBuilder("  $note").apply {
+                    setSpan(android.text.style.AbsoluteSizeSpan(11, true), 0, length, 0)
+                    setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFD79A")), 0, length, 0)
+                })
+            })
             txt.addView(Ui.text(this, 12f, Ui.SUB, false, sub))
             r.addView(txt, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
             if (action != null) r.addView(Ui.text(this, 12f, Ui.TEXT, true, if (learning) "등록 취소" else "버튼 등록").apply {
@@ -957,7 +964,13 @@ class MainActivity : Activity() {
         }
         val nKeys = (1..Store.MAX_REMOTE).count { Store.key(it) != null }
         option("리모컨", if (nKeys == 0) "버튼을 등록해 주세요 (최대 ${Store.MAX_REMOTE}개)" else "버튼 ${nKeys}개 등록 · 리모컨 N번 = N번 카드" + if (remoteOpen || learning) "  ▲" else "  ▼",
-            remoteOn(), null) { remoteOpen = !remoteOpen }
+            remoteOn(), null, "🎮 어떤 리모컨이 되나요?" to
+            "블루투스 음악(미디어) 리모컨만 돼요.\n버튼에 VOL+ · VOL− · ⏮ · ⏭ · ⏯ 그림이 있는 리모컨이에요. 화면을 꺼도, 다른 앱을 켜 둬도 기록돼요.\n\n" +
+            "✅ 되는 것\n• 자동차 핸들 · 자전거 핸들용 음악 리모컨\n• 'Music · Media control' 리모컨\n\n" +
+            "❌ 안 되는 것\n• 틱톡 · 쇼츠 넘기기 리모컨 (화면 밀기 방식)\n• 셀카 · 카메라 셔터 리모컨 (신호가 1개뿐)\n• 마우스 모드 리모컨 (화면에 화살표가 생김)\n\n" +
+            "살 때 팁: 상품 설명에 'Music', 'Media', '볼륨', '이전 · 다음 곡'이 있는지 확인하세요.\n" +
+            "가운데(재생) 버튼을 길게 누르면 음성 비서가 켜지는 리모컨도 있어요. '길게 = 마지막 기록 취소'는 다른 버튼으로 쓰세요.",
+            "(음악 리모컨 전용)") { remoteOpen = !remoteOpen }
         if (remoteOpen || learning) remoteRows()
         option("터치", "카드를 눌러 +1", Store.touchMode, null) { Store.touchMode = !Store.touchMode }
         option("갤럭시 워치", "워치 음악 화면 ⏮ = 1번 · ⏭ = 2번", Store.watchMode, null) {
