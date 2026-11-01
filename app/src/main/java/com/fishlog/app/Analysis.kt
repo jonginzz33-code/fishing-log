@@ -22,7 +22,9 @@ object Analysis {
               /** true = 내 폰 기록 · false = 전체 게시판 */
               val mine: Boolean,
               /** 게시판 '대략 공개' (자리 범위만) */
-              val approx: Boolean)
+              val approx: Boolean,
+              /** v3.8.1 그룹 출조 기록에서 온 조과 = 그룹 이름 (아니면 "") · who = 올린 사람 */
+              val group: String = "", val who: String = "")
 
     /** 내 폰 기록 (대략 위치로 잡힌 조과는 빼고) */
     fun mine(cat: String, since: Long): List<Rec> = Store.history.filter { (cat == "" || it.cat == cat) && it.start >= since }.flatMap { t ->
@@ -40,6 +42,15 @@ object Analysis {
             Rec(c.time, t.name(c.slot), la, lo, "p${t.id}", t.start, if (t.end > 0) t.end else t.start, t.wx, false, !c.hasExact)
         }
     }
+
+    /** 그룹 출조 기록 (v3.8.1) · skipOwner = 내 글은 '나만의 포인트'와 겹치니 뺄 때 */
+    fun group(list: List<Cloud.RemoteTrip>, gname: String, cat: String, since: Long, skipOwner: String?): List<Rec> =
+        list.filter { it.owner != skipOwner && (cat == "" || it.cat == "" || it.cat == cat) && it.start >= since }.flatMap { t ->
+            val end = if (t.end > 0) t.end else t.catches.maxOfOrNull { it.time } ?: t.start
+            t.catches.filter { it.lat != null && it.lon != null }.map { c ->
+                Rec(c.time, t.names.getOrElse(c.slot - 1) { "${c.slot}번" }, c.lat!!, c.lon!!, "g${t.owner}_${t.start}", t.start, end, t.wx, false, false, gname, t.ownerName)
+            }
+        }
 
     fun inCircle(recs: List<Rec>, lat: Double, lon: Double, radiusM: Double): List<Rec> {
         val r = FloatArray(1)

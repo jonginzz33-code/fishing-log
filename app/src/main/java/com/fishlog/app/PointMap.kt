@@ -42,6 +42,12 @@ object PointMap {
         val mineRecs = Analysis.mine(cat, since)
         val pubRecs = Analysis.public(pubList, me)   // 남이 올린 글
         val pubMine = Analysis.public(pubList.filter { it.owner == me }, null)   // 내가 올린 글 (나만의 포인트를 끄면 여기서 보임)
+        // v3.8.1 그룹 포인트: 내가 가입한 그룹 중 고른 그룹의 출조 기록 조과 (커튼에서 고름 · 폰에 기억)
+        val myGroups = Cloud.groups
+        val selGroups = (p.getStringSet("pm_groups", emptySet()) ?: emptySet()).filter { id -> myGroups.any { it.id == id } }.toMutableSet()
+        val groupTrips = HashMap<String, List<Cloud.RemoteTrip>>()
+        val groupLoading = HashSet<String>()
+        var groupOpen = false
 
         val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
@@ -54,6 +60,12 @@ object PointMap {
         root.addView(head)
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        // 그룹 포인트 커튼 (그룹 목록 체크)
+        val curtain = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(6), dp(12), dp(8)); visibility = View.GONE
+            background = Ui.bg(a, Color.parseColor("#1A2A38"), 14, Color.parseColor("#FF8FB8"))
+        }
+        root.addView(curtain, LinearLayout.LayoutParams(MATCH, WRAP).apply { setMargins(dp(12), 0, dp(12), dp(8)) })
 
         val map = MapDialog.newMap(a)
         val dots = DotsOverlay(a, emptyList(), false) { MapDialog.openCluster(a, it) }.apply { icons = true; mergeDp = 34f }
@@ -79,8 +91,20 @@ object PointMap {
         root.addView(bottom)
 
         // 둘 다 켜면 내 글은 '나만의 포인트'로 한 번만 · 전체만 켜면 내가 올린 글도 전체에 같이
+        fun groupRecs(): List<Analysis.Rec> {
+            val out = ArrayList<Analysis.Rec>()
+            val seen = HashSet<String>()   // 같은 출조를 여러 그룹에 올린 경우 한 번만
+            selGroups.forEach { gid ->
+                val g = myGroups.firstOrNull { it.id == gid } ?: return@forEach
+                Analysis.group(groupTrips[gid] ?: emptyList(), g.title, cat, since, if (showMine) me else null).forEach { r ->
+                    if (seen.add("${r.trip}|${r.time}|${r.lat}")) out.add(r)
+                }
+            }
+            return out
+        }
         fun recs(): List<Analysis.Rec> = (if (showMine) mineRecs else emptyList()) +
-            (if (showPub) pubRecs + (if (showMine) emptyList() else pubMine) else emptyList())
+            (if (showPub) pubRecs + (if (showMine) emptyList() else pubMine) else emptyList()) +
+            groupRecs()
         fun inside(): List<Analysis.Rec> {
             val c = circle.center ?: return emptyList()
             return Analysis.inCircle(recs(), c.latitude, c.longitude, circle.radiusM)
@@ -88,7 +112,7 @@ object PointMap {
         fun paintInfo() {
             val c = circle.center
             if (c == null) {
-                info.text = "점 ${recs().size}개 · 어종 그림 + 숫자 = 조과 (보라 테두리 = 전체 포인트, 흰 테두리 = 나만의 포인트)\n" +
+                info.text = "점 ${recs().size}개 · 어종 그림 + 숫자 = 조과 (테두리: 보라 = 전체 · 흰 = 나만의 · 분홍 = 그룹)\n" +
                     if (circle.drawMode) "지도를 눌러 원을 놓으세요 · 분홍 점을 끌면 크기가 바뀌어요" else "'⭕ 원 그리기'로 자리를 골라 분석해요"
                 anBtn.visibility = View.GONE
             } else {
@@ -100,13 +124,16 @@ object PointMap {
         }
         fun paintDots() {
             dots.dots = recs().map { r ->
-                MapDot(GeoPoint(r.lat, r.lon), if (r.mine) MapDialog.slotCol(1) else Color.parseColor("#5BC8DF"),
-                    (if (r.mine) "나" else "전체") + " · ${df.format(Date(r.time))} · ${r.species}" + if (r.approx) " (대략)" else "",
-                    r.species, r.time, if (r.mine) "나" else "", r.species, false, if (r.mine) 0 else 2, if (r.approx) PublicBoard.APPROX_M / 2 else 0.0)
+                val grp = r.group.isNotBlank()
+                MapDot(GeoPoint(r.lat, r.lon), if (r.mine) MapDialog.slotCol(1) else if (grp) Color.parseColor("#F28C38") else Color.parseColor("#5BC8DF"),
+                    (if (r.mine) "나" else if (grp) "${r.group} · ${r.who}" else "전체") + " · ${df.format(Date(r.time))} · ${r.species}" + if (r.approx) " (대략)" else "",
+                    r.species, r.time, if (r.mine) "나" else if (grp) "${r.group} · ${r.who}" else "", r.species, false,
+                    if (r.mine) 0 else if (grp) 1 else 2, if (r.approx) PublicBoard.APPROX_M / 2 else 0.0)
             }
             map.invalidate(); paintInfo()
         }
         circle.onChange = { paintInfo() }
+
 
         fun pill(label: String, on: Boolean, onClick: () -> Unit): TextView = Ui.text(a, 13f, if (on) Ui.BG else Ui.TEXT, true, label).apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
@@ -122,6 +149,14 @@ object PointMap {
             add(pill((if (showMine) "☑" else "☐") + " 나만의 포인트", showMine) {
                 showMine = !showMine; p.edit().putBoolean("pm_mine", showMine).apply(); paintBar(); paintDots()
             })
+            // 그룹 포인트: 누르면 아래로 커튼 (가입한 그룹 체크)
+            val gOn = selGroups.isNotEmpty()
+            add(Ui.text(a, 13f, if (gOn) Color.parseColor("#4B1528") else Color.parseColor("#FF8FB8"), true,
+                (if (gOn) "☑" else "☐") + " 그룹 포인트" + (if (gOn) " (${selGroups.size})" else "") + if (groupOpen) " ▴" else " ▾").apply {
+                gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
+                background = if (gOn) Ui.bg(a, Color.parseColor("#FF8FB8"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FF8FB8"))
+                setOnClickListener { groupOpen = !groupOpen; paintBar() }
+            })
             add(Ui.text(a, 13f, if (circle.drawMode) Color.WHITE else Color.parseColor("#FF4FA8"), true, if (circle.drawMode) "⭕ 원 그리는 중" else "⭕ 원 그리기").apply {
                 gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7))
                 background = if (circle.drawMode) Ui.bg(a, Color.parseColor("#FF4FA8"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FF4FA8"))
@@ -130,11 +165,46 @@ object PointMap {
             if (circle.center != null) add(pill("원 지우기", false) { circle.center = null; circle.drawMode = false; paintBar(); paintInfo(); map.invalidate() })
             add(Zones.pill(a, map))
             add(pill(if (Store.satellite) "지도로" else "위성으로", false) { MapDialog.setSatellite(map, !Store.satellite); paintBar() })
+            paintCurtain()
         }
+        fun loadGroup(gid: String) {
+            if (groupTrips.containsKey(gid) || !groupLoading.add(gid)) return
+            val g = myGroups.firstOrNull { it.id == gid } ?: return
+            Cloud.recentTripsOf(g) { list, _ ->
+                groupLoading.remove(gid)
+                groupTrips[gid] = list ?: emptyList()
+                if (dlg.isShowing) { paintDots(); paintCurtainRef?.invoke() }
+            }
+        }
+        paintCurtainRef = {
+            curtain.removeAllViews()
+            curtain.visibility = if (groupOpen) View.VISIBLE else View.GONE
+            if (groupOpen) {
+                curtain.addView(Ui.text(a, 12f, Ui.SUB, false, if (myGroups.isEmpty()) "가입한 그룹이 없어요" else "볼 그룹 고르기 (가입한 그룹만 · 그룹 출조 기록에 올라온 조과)"))
+                myGroups.forEach { g ->
+                    val on = g.id in selGroups
+                    val n = if (on) groupTrips[g.id]?.let { l -> Analysis.group(l, g.title, cat, since, null).size } else null
+                    curtain.addView(Ui.text(a, 15f, if (on) Ui.TEXT else Ui.SUB, true,
+                        (if (on) "☑ " else "☐ ") + g.title + when {
+                            on && g.id in groupLoading -> "  · 불러오는 중…"
+                            n != null -> "  · ${n}마리"
+                            else -> ""
+                        }).apply {
+                        setPadding(0, dp(8), 0, dp(8))
+                        setOnClickListener {
+                            if (g.id in selGroups) selGroups.remove(g.id) else { selGroups.add(g.id); loadGroup(g.id) }
+                            p.edit().putStringSet("pm_groups", HashSet(selGroups)).apply()
+                            paintBar(); paintDots()
+                        }
+                    })
+                }
+            }
+        }
+        selGroups.forEach { loadGroup(it) }
         anBtn.setOnClickListener {
             val c = circle.center ?: return@setOnClickListener
             showAnalysis(a, inside(), Area.name(a, c.latitude, c.longitude).ifBlank { "이 자리" } + " · 반경 " + radiusLabel(circle.radiusM),
-                showPub, showMine)
+                showPub, showMine, selGroups.mapNotNull { id -> myGroups.firstOrNull { it.id == id }?.title })
         }
         paintBar(); paintDots()
         dlg.setContentView(root)
@@ -224,7 +294,11 @@ object PointMap {
     }
 
     // ---------------- 분석 창 ----------------
-    fun showAnalysis(a: Activity, recs: List<Analysis.Rec>, place: String, pub: Boolean, mine: Boolean) {
+    /** 커튼 다시 그리기 (open 안에서 정함) */
+    private var paintCurtainRef: (() -> Unit)? = null
+    private fun paintCurtain() { paintCurtainRef?.invoke() }
+
+    fun showAnalysis(a: Activity, recs: List<Analysis.Rec>, place: String, pub: Boolean, mine: Boolean, groups: List<String> = emptyList()) {
         fun dp(v: Int) = Ui.dp(a, v)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(6), dp(14), dp(10)) }
         val loading = Ui.text(a, 13f, Ui.SUB, false, "계산하는 중…")
@@ -239,7 +313,7 @@ object PointMap {
             box.removeAllViews()
             val mf = SimpleDateFormat("yyyy.M", Locale.KOREA)
             box.addView(Ui.text(a, 14f, Ui.TEXT, true, "출조 ${res.trips}번 · 총 ${res.total}마리 · ${mf.format(Date(res.from))} ~ ${mf.format(Date(res.to))}"))
-            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, listOfNotNull(if (pub) "☑ 전체 포인트" else null, if (mine) "☑ 나만의 포인트" else null).joinToString("  ") +
+            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, ("분석 대상: " + (listOfNotNull(if (pub) "전체" else null, if (mine) "나만의" else null) + groups).joinToString(" + ").ifBlank { "-" }) +
                 " · 물세기·만조간조는 가까운 관측소 기준" + if (res.note.isNotBlank()) "\n${res.note}" else ""), Ui.lp(a, MATCH, WRAP, top = 2))
             // 어종별 한눈에 정리
             res.species.take(6).forEach { sp ->

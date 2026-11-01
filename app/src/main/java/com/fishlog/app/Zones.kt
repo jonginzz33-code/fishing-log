@@ -882,14 +882,13 @@ object Zones {
 
     private fun askImport(a: Activity, csv: Csv) {
         val h = csv.head
-        val cGeo = col(h, "공간정보", "geom", "wkt", "the_geom", "shape", "geometry", "공간정보_좌표")
-        val cLat = col(h, "위도", "lat", "어장위도", "y좌표")
-        val cLon = col(h, "경도", "lon", "lng", "어장경도", "x좌표")
         val cGrade = col(h, "위험등급", "등급")
-        if (cGeo < 0 && (cLat < 0 || cLon < 0)) {
+        // v3.8.1: 칸 이름 말고 값으로 확인 (도형 칸 또는 위경도 · 평면좌표를 읽을 수 있는 줄이 하나라도 있는지)
+        val loc = locator(csv)
+        if (geomCol(csv) < 0 && sampleRows(csv).none { loc(it) != null }) {
             AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("좌표가 없는 파일이에요")
-                .setMessage("'공간정보' 칸이나 '위도 · 경도' 칸이 있어야 지도에 그릴 수 있어요.\n\n이 파일의 칸: " + h.take(25).joinToString(", "))
+                .setTitle("좌표를 찾지 못했어요")
+                .setMessage("도형(공간정보)이나 위도 · 경도 값을 읽을 수 있는 칸이 없어요.\n이 화면을 캡처해서 보내 주시면 맞춰 고칠게요 ↓ 받은 자료 첫 줄\n\n" + sampleText(csv))
                 .setPositiveButton("확인", null).show()
             return
         }
@@ -927,7 +926,8 @@ object Zones {
                 val by = zones.groupingBy { it.type }.eachCount()
                 if (zones.isEmpty()) {
                     AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setTitle("그릴 수 있는 구역이 없어요").setMessage("못 쓴 줄 ${skipped}개 (좌표가 비었거나 한국 밖)")
+                        .setTitle("그릴 수 있는 구역이 없어요")
+                        .setMessage("못 쓴 줄 ${skipped}개 (좌표가 비었거나 한국 밖)\n\n이 화면을 캡처해서 보내 주시면 맞춰 고칠게요 ↓ 받은 자료 첫 줄\n\n" + sampleText(csv))
                         .setPositiveButton("확인", null).show()
                     return@post
                 }
@@ -961,9 +961,9 @@ object Zones {
     /** CSV 줄들 → 구역들 · 못 쓴 줄 수 */
     private fun convert(csv: Csv, type: String, keepGrades: Set<String>?): Pair<List<Zone>, Int> {
         val h = csv.head
-        val cGeo = col(h, "공간정보", "geom", "wkt", "the_geom", "shape", "geometry", "공간정보_좌표")
-        val cLat = col(h, "위도", "lat", "어장위도")
-        val cLon = col(h, "경도", "lon", "lng", "어장경도")
+        // v3.8.1: 칸 이름만 보지 않고 '값'을 보고 좌표 칸을 찾음 (도·분·초 글자 · 도/분/초 따로 칸 · X/Y 평면좌표)
+        val cGeo = geomCol(csv)
+        val locate = locator(csv)
         val cArea = col(h, "면적", "area")
         val cMonth = h.indexOfFirst { it.trim() == "월" || it.trim().equals("month", true) }
         val cGrade = col(h, "위험등급", "등급")
@@ -985,7 +985,8 @@ object Zones {
             if (cGrid >= 0 && t == "risk" && v(cGrade).isNotBlank()) name = "위험등급 " + v(cGrade)
             val note = (listOfNotNull(kindText.takeIf { it.isNotBlank() }) + cNote.map { v(it) }.filter { it.isNotBlank() }).distinct().joinToString(" · ").take(80)
             val month = if (cMonth >= 0) (v(cMonth).filter { it.isDigit() }.toIntOrNull() ?: 0).let { if (it in 1..12) it else 0 } else 0
-            val refLat = v(cLat).toDoubleOrNull(); val refLon = v(cLon).toDoubleOrNull()
+            val ref = locate(row) ?: (if (cGeo >= 0) pointOf(v(cGeo)) else null)
+            val refLat = ref?.first; val refLon = ref?.second
             val rings = if (cGeo >= 0) parseGeom(v(cGeo), refLat, refLon) else emptyList()
             if (rings.isNotEmpty()) {
                 rings.forEach { ring ->
@@ -1005,6 +1006,103 @@ object Zones {
     }
 
     private fun inKorea(g: GeoPoint) = g.latitude in 32.5..39.5 && g.longitude in 123.5..132.5
+
+    // ---------------- v3.8.1 좌표 칸 찾기 ----------------
+    private val NUM = Regex("[0-9]+(?:\\.[0-9]+)?")
+    /** '34.6368' · '34-38-12.5' · '34°38'12"' · 'N34 38 12' · '34도 38분 12초' → 소수 도 */
+    fun parseCoord(s0: String?): Double? {
+        val s = s0?.trim()?.replace(",", "") ?: return null
+        if (s.isEmpty()) return null
+        s.toDoubleOrNull()?.let { return it }
+        val n = NUM.findAll(s).map { it.value.toDouble() }.toList()
+        return when {
+            n.isEmpty() -> null
+            n.size == 1 -> n[0]
+            n.size == 2 -> if (n[1] < 60) n[0] + n[1] / 60.0 else null
+            else -> if (n[1] < 60 && n[2] < 60) n[0] + n[1] / 60.0 + n[2] / 3600.0 else null
+        }
+    }
+
+    private fun sampleRows(csv: Csv): List<List<String>> =
+        if (csv.rows.size <= 300) csv.rows else (0 until 300).map { csv.rows[it * csv.rows.size / 300] }
+
+    /** 공간정보(도형) 칸: 값에 POLYGON · POINT · {"type" 이 들어 있는 칸 */
+    private fun geomCol(csv: Csv): Int {
+        val rows = sampleRows(csv)
+        var best = -1; var bestN = 0
+        csv.head.indices.forEach { i ->
+            val n = rows.count { r -> val v = r.getOrNull(i)?.trim()?.uppercase(Locale.US) ?: ""
+                v.contains("POLYGON") || v.contains("POINT") || v.startsWith("{\"TYPE") || v.startsWith("{\"GEOMETRY") || v.contains("\"COORDINATES\"") }
+            if (n > bestN) { bestN = n; best = i }
+        }
+        return if (bestN > 0) best else -1
+    }
+
+    /** 한 줄에서 위도·경도(소수 도)를 꺼내는 함수 · 못 찾으면 null 돌려줌 */
+    private fun locator(csv: Csv): (List<String>) -> Pair<Double, Double>? {
+        val h = csv.head.map { it.trim() }
+        val rows = sampleRows(csv)
+        fun v(r: List<String>, i: Int) = r.getOrNull(i)?.trim() ?: ""
+        // ① 도 · 분 · 초가 따로 있는 칸 (예: 위도_도, 위도_분, 위도_초)
+        fun parts(key: List<String>): Triple<Int, Int, Int>? {
+            val cols = h.indices.filter { i -> key.any { h[i].contains(it, true) } }
+            if (cols.size < 2) return null
+            val mi = cols.firstOrNull { h[it].contains("분") || h[it].contains("min", true) } ?: return null
+            val si = cols.firstOrNull { h[it].contains("초") || h[it].contains("sec", true) } ?: -1
+            val di = cols.firstOrNull { it != mi && it != si } ?: return null
+            return Triple(di, mi, si)
+        }
+        val latP = parts(listOf("위도", "lat")); val lonP = parts(listOf("경도", "lon", "lng"))
+        if (latP != null && lonP != null) {
+            fun dms(r: List<String>, p: Triple<Int, Int, Int>): Double? {
+                val d = parseCoord(v(r, p.first)) ?: return null
+                val m = parseCoord(v(r, p.second)) ?: 0.0
+                val sec = if (p.third >= 0) parseCoord(v(r, p.third)) ?: 0.0 else 0.0
+                return d + m / 60.0 + sec / 3600.0
+            }
+            val f = { r: List<String> -> val la = dms(r, latP); val lo = dms(r, lonP); if (la != null && lo != null) la to lo else null }
+            if (rows.count { f(it)?.let { p -> inKorea(GeoPoint(p.first, p.second)) } == true } > rows.size / 5) return f
+        }
+        // ② 값이 위도 범위(32.5~39.5) · 경도 범위(123.5~132.5)인 칸 (이름에 위도·경도가 있으면 가산점)
+        fun score(i: Int, lo: Double, hi: Double, names: List<String>): Double {
+            val ok = rows.count { r -> parseCoord(v(r, i))?.let { it in lo..hi } == true }
+            if (ok == 0) return 0.0
+            val bonus = if (names.any { h[i].contains(it, true) }) 1.5 else 1.0
+            val penalty = if (h[i].contains("최소") || h[i].contains("최대") || h[i].contains("min", true) || h[i].contains("max", true)) 0.5 else 1.0
+            return ok * bonus * penalty
+        }
+        val latC = h.indices.maxByOrNull { score(it, 32.5, 39.5, listOf("위도", "lat")) } ?: -1
+        val lonC = h.indices.filter { it != latC }.maxByOrNull { score(it, 123.5, 132.5, listOf("경도", "lon", "lng")) } ?: -1
+        if (latC >= 0 && lonC >= 0 && score(latC, 32.5, 39.5, listOf("위도")) > 0 && score(lonC, 123.5, 132.5, listOf("경도")) > 0) {
+            return { r -> val la = parseCoord(v(r, latC)); val lo = parseCoord(v(r, lonC)); if (la != null && lo != null) la to lo else null }
+        }
+        // ③ X · Y 평면좌표 (TM · UTM-K) 칸
+        fun xy(keys: List<String>) = h.indices.filter { i -> keys.any { h[i].contains(it, true) } }
+            .filterNot { h[it].contains("최소") || h[it].contains("최대") || h[it].contains("min", true) || h[it].contains("max", true) }
+            .firstOrNull { i -> rows.count { (parseCoord(v(it, i)) ?: 0.0) > 1000 } > rows.size / 3 }
+        val xc = xy(listOf("x좌표", "엑스", "x_", "_x", "coord_x", "x")); val yc = xy(listOf("y좌표", "와이", "y_", "_y", "coord_y", "y"))
+        if (xc != null && yc != null && xc != yc) {
+            return { r ->
+                val x = parseCoord(v(r, xc)); val y = parseCoord(v(r, yc))
+                if (x == null || y == null) null else pickProjection(x, y, null, null)?.invoke(x, y)?.let { it.latitude to it.longitude }
+            }
+        }
+        return { _ -> null }
+    }
+
+    /** 'POINT (x y)' → 위도·경도 */
+    private fun pointOf(g: String): Pair<Double, Double>? {
+        if (!g.uppercase(Locale.US).contains("POINT")) return null
+        val n = NUM.findAll(g.substringAfter("(")).map { it.value.toDouble() }.toList()
+        if (n.size < 2) return null
+        return pickProjection(n[0], n[1], null, null)?.invoke(n[0], n[1])?.let { it.latitude to it.longitude }
+    }
+
+    /** 0곳일 때: 받은 자료 첫 줄을 '칸 이름: 값' 으로 (캡처해서 보내면 맞춰 고침) */
+    private fun sampleText(csv: Csv): String {
+        val r = csv.rows.firstOrNull { row -> row.count { it.isNotBlank() } >= 3 } ?: return "(빈 자료)"
+        return csv.head.indices.take(25).joinToString("\n") { i -> "${csv.head[i]}: ${(r.getOrNull(i) ?: "").take(60)}" }
+    }
 
     // ---- 공간정보: WKT (POLYGON / MULTIPOLYGON) · GeoJSON · 좌표계 자동 ----
     private fun parseGeom(s0: String, refLat: Double?, refLon: Double?): List<List<GeoPoint>> {

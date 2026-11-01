@@ -1588,8 +1588,13 @@ class MainActivity : Activity() {
     }
 
     private fun openMap() {
-        val t = Store.current ?: Store.history.firstOrNull()
-        if (t == null) { showMessage("출조를 시작하면 지도에 경로와 조과 위치가 표시돼요"); return }
+        // v3.8.1: 출조 중이 아니면 지난 출조를 열지 않고 빈 지도 + 내 위치만 (지난 조과는 '지난 기록 겹치기'를 켰을 때만)
+        val t = Store.current
+        if (t == null) {
+            MapDialog.show(this, "🗺 지도 · 내 위치", emptyList(),
+                "출조 중이 아니에요 · 지난 조과는 '지난 기록 겹치기'를 켜면 보여요 · 지난 출조 하나는 ☰ 메뉴 → 지난 출조에서")
+            return
+        }
         MapDialog.showTrip(this, t)
     }
 
