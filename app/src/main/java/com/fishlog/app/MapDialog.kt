@@ -407,6 +407,8 @@ object MapDialog {
             setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8))
         }
         fun addPill(v: TextView) = bar.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
+        // v3.9.1 (159): 맨 왼쪽 🔍 장소 검색
+        addPill(MapSearch.pill(a, map))
 
         val legendView = TextView(a).apply {
             textSize = 12f
@@ -550,7 +552,8 @@ object MapDialog {
 
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        if (all.isEmpty() && live == null) {
+        // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)
+        if (all.isEmpty() && live == null && layers.isNotEmpty()) {
             frame.addView(TextView(a).apply {
                 text = "아직 위치 기록이 없어요\n출조 중에 위치 권한을 허용하면 경로와 조과 위치가 표시돼요"
                 setTextColor(Color.WHITE)

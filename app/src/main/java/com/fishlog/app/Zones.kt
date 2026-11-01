@@ -241,9 +241,15 @@ object Zones {
         fun take(z: Zone) {
             if (z.activeNow() && z.maxLat >= minLat && z.minLat <= maxLat && z.maxLon >= minLon && z.minLon <= maxLon && seen.add(z.id)) out.add(z)
         }
-        ids.forEach { id -> cells[id]?.forEach { take(it) } }
+        // v3.9.1: 개방海 어장을 켜 두면, 관리자가 CSV · API로 올린 어장(마을 · 양식 · 기타)은 겹치니 숨김 (직접 그린 구역 · 다른 종류는 그대로)
+        val c0 = appCtx
+        val khoaFarm = c0 != null && Khoa.key(c0).isNotBlank() && Khoa.groupOn(c0, "farm")
+        ids.forEach { id -> cells[id]?.forEach { z ->
+            if (khoaFarm && !z.manual && !z.id.startsWith("k") && z.type in setOf("village", "farm", "etc")) return@forEach
+            take(z)
+        } }
         // v3.9: 개방海 (WFS) 레이어
-        appCtx?.let { c -> Khoa.zonesOf(c, ids).forEach { take(it) } }
+        c0?.let { c -> Khoa.zonesOf(c, ids).forEach { take(it) } }
         return out
     }
 
@@ -278,8 +284,10 @@ object Zones {
 
     private fun alert(c: Context, list: List<Zone>) {
         val z = list.first()
-        val title = "${typeIcon(z.type)} ${TYPES[z.type] ?: "구역"} 안이에요 (해루질 참고용)"
-        val text = (if (z.name.isNotBlank()) z.name + " · " else "") + typeWarn(z.type)
+        // v3.9.1: 여러 구역에 한꺼번에 들어가면 알림 하나로 (예: 🐚 마을어장 · ⚠ 사고 위험 구역 안이에요)
+        val kinds = list.map { it.type }.distinct()
+        val title = kinds.joinToString(" · ") { "${typeIcon(it)} ${TYPES[it] ?: "구역"}" } + " 안이에요 (해루질 참고용)"
+        val text = list.distinctBy { it.type }.joinToString("\n") { (if (it.name.isNotBlank()) it.name + " · " else "") + typeWarn(it.type) }
         try { Haptics.undo(c) } catch (_: Exception) {}
         try {
             val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -336,7 +344,9 @@ object Zones {
             }
             val list = zonesIn(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
             val err = if (Cloud.isAdmin && Khoa.lastErr.isNotBlank()) "\n(관리자) 개방海 오류: ${Khoa.lastErr}" else ""
-            say((if (list.isEmpty()) "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요" else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)") + err)
+            val busy = Khoa.pending()
+            say((if (list.isEmpty()) (if (busy > 0) "🦀 해루질 참고 구역" else "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요") else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)") +
+                (if (busy > 0) " · 🌊 개방海 받는 중… ${busy}" else "") + err)
             val pj = map.projection
             val showName = map.zoomLevelDouble >= 14.0
             txt.textSize = 11 * d; halo.textSize = 11 * d; halo.strokeWidth = 3 * d
@@ -346,7 +356,15 @@ object Zones {
                 edge.color = col; edge.strokeWidth = 1.6f * d
                 edge.pathEffect = if (z.type == "risk") android.graphics.DashPathEffect(floatArrayOf(6 * d, 4 * d), 0f) else null
                 var cx: Float; var cy: Float
-                if (z.center != null) {
+                if (z.center != null && z.id.startsWith("k")) {
+                    // v3.9.1: 개방海 점(인명사고 등)은 큰 원 대신 작은 ⚠ 점 · 많이 확대했을 때만
+                    if (map.zoomLevelDouble < 13.0) return@forEach
+                    pj.toPixels(z.center, pt)
+                    fill.color = col; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 5 * d, fill)
+                    edge.pathEffect = null; edge.color = Color.WHITE; edge.strokeWidth = 1.2f * d
+                    c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 5 * d, edge)
+                    cx = pt.x.toFloat(); cy = pt.y.toFloat()
+                } else if (z.center != null) {
                     pj.toPixels(z.center, pt)
                     val r = pj.metersToPixels(z.radiusM.toFloat())
                     c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, fill); c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, edge)
@@ -750,6 +768,9 @@ object Zones {
         AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setMessage(msg).setCancelable(false).show()
 
     /** 이 종류들의 CSV 구역을 통째로 새것으로 (직접 그린 것은 그대로) */
+    /** 마지막으로 올릴 때 중복이라 건너뛴 개수 */
+    @Volatile var lastDupSkipped = 0
+
     private fun replaceAll(a: Activity, types: Set<String>, fresh: List<Zone>, done: (String?) -> Unit) {
         db.collection(COL).get().addOnSuccessListener { q ->
             val byCell = HashMap<String, MutableList<Zone>>()
@@ -762,7 +783,16 @@ object Zones {
                     if (z.manual || z.type !in types) l.add(z)
                 }
             }
-            fresh.forEach { z -> cellsOfZone(z).forEach { byCell.getOrPut(it) { mutableListOf() }.add(z) } }
+            // v3.9.1: 이미 있는 것과 종류 · 모양이 같은 구역은 건너뜀 (같은 파일을 두 번 '더하기' 해도 중복 안 생김)
+            fun sig(z: Zone) = z.type + "|" + (z.center?.let { String.format(Locale.US, "%.4f,%.4f", it.latitude, it.longitude) }
+                ?: String.format(Locale.US, "%.4f,%.4f,%d", z.pts[0].latitude, z.pts[0].longitude, z.pts.size))
+            val have = HashSet<String>()
+            byCell.values.forEach { l -> l.forEach { have.add(sig(it)) } }
+            lastDupSkipped = 0
+            fresh.forEach { z ->
+                if (!have.add(sig(z))) { lastDupSkipped++; return@forEach }
+                cellsOfZone(z).forEach { byCell.getOrPut(it) { mutableListOf() }.add(z) }
+            }
             // 종류별 개수 (중복 없이)
             val uniq = HashMap<String, Zone>()
             byCell.values.forEach { l -> l.forEach { uniq[it.id] = it } }
@@ -909,6 +939,7 @@ object Zones {
                 p = p.substringAfter("api.odcloud.kr/api", p).substringBefore("?")
                 if (!p.startsWith("/")) p = "/$p"
                 if (!p.contains("/v1/") && !p.contains("uddi")) { Ui.toast(a, "주소 모양이 달라요 (/숫자/v1/uddi:… 형식)"); return@setPositiveButton }
+                if (apis(a).any { it.path == p && it.path != old?.path }) { Ui.toast(a, "이미 목록에 있는 API 주소예요"); return@setPositiveButton }
                 done(ApiItem(name.text.toString().trim().ifBlank { p.split("/").getOrNull(1) ?: "API" }, p, type))
             }
             .setNegativeButton("취소", null).show()
@@ -1135,7 +1166,8 @@ object Zones {
                     }
                     .setNeutralButton("더하기") { _, _ ->
                         val p2 = progress(a, "올리는 중… (구역이 많으면 1~2분)")
-                        replaceAll(a, emptySet(), zones) { err -> p2.dismiss(); Ui.toast(a, err ?: "더했어요 · ${zones.size}곳") }
+                        replaceAll(a, emptySet(), zones) { err -> p2.dismiss()
+                            Ui.toast(a, err ?: ("더했어요 · ${zones.size - lastDupSkipped}곳" + if (lastDupSkipped > 0) " · 이미 있는 ${lastDupSkipped}곳은 뺐어요" else "")) }
                     }
                     .setNegativeButton("취소", null).show()
             }
@@ -1441,6 +1473,7 @@ object Zones {
             bar.removeAllViews()
             fun add(v: View) = bar.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             if (!ov.drawMode) {
+                add(MapSearch.pill(a, map))
                 add(pill("✏ 새 구역 그리기", Color.parseColor("#FF4FA8")) { ov.drawMode = true; ov.drawing.clear(); paint(); map.invalidate() })
                 add(pill(if (Store.satellite) "지도로" else "위성으로", Ui.TEXT) { MapDialog.setSatellite(map, !Store.satellite); paint() })
                 info.text = "구역을 누르면 ✎ 수정 · 🗑 삭제 · 확대해야 보여요"

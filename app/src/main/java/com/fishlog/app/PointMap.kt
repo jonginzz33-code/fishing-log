@@ -143,6 +143,7 @@ object PointMap {
         fun paintBar() {
             bar.removeAllViews()
             fun add(v: View) = bar.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+            add(MapSearch.pill(a, map))   // v3.9.1 (159) 🔍 장소 검색
             add(pill((if (showPub) "☑" else "☐") + " 전체 포인트", showPub) {
                 showPub = !showPub; p.edit().putBoolean("pm_pub", showPub).apply(); paintBar(); paintDots()
             })

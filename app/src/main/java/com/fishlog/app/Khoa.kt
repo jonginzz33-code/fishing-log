@@ -27,7 +27,7 @@ object Khoa {
         Layer("VI_MARCUL_A", "양식장(해도)", "farm", "farm"),
         Layer("TL_LEIHAZ_TIDCHA_A", "갯골", "tidal", "risk"),
         Layer("TL_LEIHAZ_PUDDLE_A", "웅덩이", "tidal", "risk"),
-        Layer("VI_NSHPAC_P", "인명사고 지점", "tidal", "risk", point = true),
+        Layer("VI_NSHPAC_P", "인명사고 지점", "accident", "risk", point = true),
         Layer("TL_RESARE_ENS", "낚시금지구역", "ban", "ban"),
         Layer("TL_RESARE_FR", "낚시제한구역", "ban", "ban"),
         Layer("TL_WLAPRHA_A", "수중레저활동금지구역", "ban", "ban")
@@ -35,7 +35,8 @@ object Khoa {
     /** 사용자가 켜고 끄는 묶음 */
     val GROUPS = linkedMapOf(
         "farm" to "🐚🦪 마을어장 · 양식장 (면허기간 포함)",
-        "tidal" to "⚠ 갯골 · 웅덩이 · 인명사고 지점",
+        "tidal" to "⚠ 갯골 · 웅덩이",
+        "accident" to "⚠ 인명사고 지점 (많이 확대했을 때 작은 점)",
         "ban" to "🚫 낚시금지 · 낚시제한 · 수중레저금지 구역"
     )
 
@@ -46,7 +47,7 @@ object Khoa {
     private val db get() = FirebaseFirestore.getInstance()
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
-    fun groupOn(c: Context, g: String) = prefs(c).getBoolean("khoa_g_$g", true)
+    fun groupOn(c: Context, g: String) = prefs(c).getBoolean("khoa_g_$g", g != "accident")
     fun setGroupOn(c: Context, g: String, v: Boolean) = prefs(c).edit().putBoolean("khoa_g_$g", v).apply()
 
     // ---------------- 인증키 ----------------
@@ -77,7 +78,10 @@ object Khoa {
     // ---------------- 칸별 기억 ----------------
     private val mem = HashMap<String, List<Zones.Zone>>()     // "레이어|칸" → 구역
     private val loading = HashSet<String>()
+    /** 실패한 칸: 이 시각 전엔 다시 안 물어봄 (1분 뒤 다시) */
+    private val retryAt = HashMap<String, Long>()
     @Volatile var lastErr = ""
+    fun pending() = loading.size
     private fun dir(c: Context) = File(c.filesDir, "khoa").apply { mkdirs() }
 
     /** 지금 켜 둔 레이어 */
@@ -102,6 +106,7 @@ object Khoa {
                 cellIds.take(12).forEach { id ->
                     val mk = "${l.id}|$id"
                     if (mem.containsKey(mk) || mk in loading) return@forEach
+                    if ((retryAt[mk] ?: 0L) > System.currentTimeMillis()) return@forEach
                     val f = File(dir(c), "${l.id}_$id.txt")
                     if (f.exists() && System.currentTimeMillis() - f.lastModified() < KEEP_MS) {
                         mem[mk] = try { f.readLines().mapNotNull { Zones.decodeLine(it) } } catch (_: Exception) { emptyList() }
@@ -115,7 +120,7 @@ object Khoa {
                             if (list != null) {
                                 mem[mk] = list
                                 try { File(dir(app), "${l.id}_$id.txt").writeText(list.joinToString("\n") { it.encode() }) } catch (_: Exception) {}
-                            } else mem[mk] = emptyList()   // 이번 실행 동안은 다시 안 물어봄
+                            } else retryAt[mk] = System.currentTimeMillis() + 60_000L   // v3.9.1: 빈 칸으로 기억하지 않고 1분 뒤 다시
                             done()
                         }
                     }
@@ -142,7 +147,7 @@ object Khoa {
 
     fun get(url: String): String {
         val con = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        con.connectTimeout = 15_000; con.readTimeout = 60_000
+        con.connectTimeout = 15_000; con.readTimeout = 45_000
         val code = con.responseCode
         val body = (if (code in 200..299) con.inputStream else con.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
         if (code !in 200..299) throw Exception("HTTP $code ${body.take(120)}")
@@ -151,13 +156,30 @@ object Khoa {
 
     private fun fetch(k: String, l: Layer, cellId: String): List<Zones.Zone> {
         val b = cellBox(cellId)
-        val body = get(urlFor(k, l.id, b[0], b[1], b[2], b[3]))
-        if (!body.contains("FeatureCollection")) {
-            // 인증키 오류 등 (XML/JSON 메시지)
-            throw Exception(body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(150))
-        }
+        val out = fetchBox(k, l, b[0], b[1], b[2], b[3], 0)
         lastErr = ""
-        return parse(body, l)
+        // 칸을 나눠 받으면 같은 구역이 겹쳐 올 수 있어 한 번만
+        return out.distinctBy { it.id }
+    }
+
+    /** v3.9.1: 한 번에 받다가 끊기면(자료가 큰 곳: 보령 · 남해 · 전남) 4칸으로 나눠 다시 · 최대 3단계 (약 3km 칸) */
+    private fun fetchBox(k: String, l: Layer, la0: Double, la1: Double, lo0: Double, lo1: Double, depth: Int): List<Zones.Zone> {
+        var lastE: Exception? = null
+        for (tryN in 0..1) {
+            try {
+                val body = get(urlFor(k, l.id, la0, la1, lo0, lo1))
+                if (!body.contains("FeatureCollection")) {
+                    // 인증키 오류 등 (XML/JSON 메시지) → 나눠도 소용없음
+                    throw IllegalStateException(body.replace(Regex("<[^>]+>"), " ").replace(Regex("\\s+"), " ").trim().take(150))
+                }
+                return parse(body, l)
+            } catch (e: IllegalStateException) { throw e
+            } catch (e: Exception) { lastE = e; if (depth < 3) break }
+        }
+        if (depth >= 3) throw lastE ?: Exception("받지 못했어요")
+        val mLa = (la0 + la1) / 2; val mLo = (lo0 + lo1) / 2
+        return fetchBox(k, l, la0, mLa, lo0, mLo, depth + 1) + fetchBox(k, l, la0, mLa, mLo, lo1, depth + 1) +
+            fetchBox(k, l, mLa, la1, lo0, mLo, depth + 1) + fetchBox(k, l, mLa, la1, mLo, lo1, depth + 1)
     }
 
     // ---------------- GML 읽기 ----------------
