@@ -582,7 +582,7 @@ class MainActivity : Activity() {
             setOnClickListener { openNowDialog() }
         }
         nowTitle = Ui.text(this, 16f, Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중").apply { gravity = Gravity.CENTER }
-        nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 4; setLineSpacing(0f, 1.2f) }
         nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
         bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
@@ -612,6 +612,7 @@ class MainActivity : Activity() {
         menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
             startActivity(Intent(this, HelpActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP, top = 10))
+        menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
@@ -802,7 +803,8 @@ class MainActivity : Activity() {
     }
 
     // ---------------- 기록 방식 (리모컨 · 터치 · 워치 · 배터리 절약) ----------------
-    private fun remoteOn() = Store.key1 != null && Store.key2 != null
+    private fun remoteOn() = Store.anyKey()
+    private var remoteOpen = false
 
     /** 한 번이라도 골랐는지 (예전부터 쓰던 사람은 고른 걸로) */
     private fun methodsChosen(): Boolean = Store.methodsChosen || Store.history.isNotEmpty() || remoteOn() || Store.watchMode
@@ -810,6 +812,72 @@ class MainActivity : Activity() {
     private fun chip(label: String, on: Boolean) = Ui.text(this, 12f, if (on) Color.parseColor("#04222A") else Ui.SUB, on, label).apply {
         setPadding(dp(10), dp(4), dp(10), dp(4))
         background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+    }
+
+    /** 리모컨 커튼: 번호(1~8)마다 [리모컨 버튼] 눌러 실제 버튼 등록 · 이름 · 지우기 · 추가 */
+    private fun remoteRows() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(6), 0, dp(6), dp(4)) }
+        box.addView(Ui.text(this, 11.5f, Ui.SUB, false,
+            "[리모컨 버튼]을 누르고 리모컨에서 쓸 버튼을 한 번 누르면 등록돼요 · 길게(1초) 누르면 마지막 기록 취소"), Ui.lp(this, MATCH, WRAP, top = 6))
+        val rows = Store.remoteRows
+        for (n in 1..rows) {
+            val code = Store.key(n)
+            val waiting = ButtonRouter.learningStep == n
+            val r = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(6), dp(6), dp(6))
+                background = Ui.bg(this@MainActivity, Color.argb(60, 0, 0, 0), 10, if (waiting) Ui.BLUE else 0)
+            }
+            r.addView(Ui.text(this, 13f, Color.WHITE, true, "$n").apply {
+                gravity = Gravity.CENTER
+                background = Ui.bg(this@MainActivity, Store.slotColor(Store.slotForRemote(n) ?: n), 99)
+            }, LinearLayout.LayoutParams(dp(26), dp(26)))
+            val nm = Store.keyName(n)
+            val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            txt.addView(Ui.text(this, 14f, Ui.TEXT, true, "${n}번" + if (nm.isNotBlank()) " · $nm" else ""))
+            txt.addView(Ui.text(this, 11.5f, if (code == null) Ui.SUB else Color.parseColor("#FFD79A"), false,
+                when { waiting -> "리모컨 버튼을 눌러주세요…"; code == null -> "미등록"; else -> ButtonRouter.label(code) }).apply { maxLines = 1 })
+            r.addView(txt, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            fun small(label: String, act: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
+                gravity = Gravity.CENTER; setPadding(dp(8), 0, dp(8), 0); maxLines = 1
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 8, Ui.LINE)
+                setOnClickListener { act() }
+            }
+            r.addView(small(if (waiting) "등록 취소" else "리모컨 버튼") {
+                Store.methodsChosen = true
+                if (waiting) ButtonRouter.cancelLearning() else ButtonRouter.startLearning(n)
+                refresh(); renderMethods()
+            }, LinearLayout.LayoutParams(WRAP, dp(32)))
+            if (code != null) r.addView(small("✎") {
+                val e = android.widget.EditText(this).apply { setText(nm); hint = "예: 위 큰 버튼, 왼쪽 동그라미"; setSingleLine() }
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("리모컨 ${n}번 버튼 이름").setView(e)
+                    .setPositiveButton("저장") { _, _ -> Store.setKeyName(n, e.text.toString().take(12)); renderMethods() }
+                    .setNegativeButton("취소", null).show()
+            }, LinearLayout.LayoutParams(dp(34), dp(32)).apply { leftMargin = dp(4) })
+            if (code != null || (n == rows && n > 1)) r.addView(small("✕") {
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(if (code != null) "리모컨 ${n}번 등록을 지울까요?" else "${n}번 줄을 뺄까요?")
+                    .setPositiveButton("지우기") { _, _ ->
+                        if (code != null) { Store.setKey(n, null); Store.setKeyName(n, "") }
+                        if (n == Store.remoteRows && n > 1 && Store.key(n) == null) Store.remoteRows = n - 1
+                        if (ButtonRouter.learningStep == n) ButtonRouter.cancelLearning()
+                        renderMethods()
+                    }.setNegativeButton("취소", null).show()
+            }, LinearLayout.LayoutParams(dp(34), dp(32)).apply { leftMargin = dp(4) })
+            box.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
+        }
+        if (rows < Store.MAX_REMOTE) box.addView(Ui.text(this, 13f, Ui.BLUE, true, "＋ 리모컨 버튼 추가 ($rows / ${Store.MAX_REMOTE})").apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(9), 0, dp(9))
+            background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Ui.BLUE)
+            setOnClickListener {
+                Store.methodsChosen = true
+                Store.remoteRows = rows + 1
+                ButtonRouter.startLearning(rows + 1)
+                refresh(); renderMethods()
+            }
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        methodBox.addView(box)
     }
 
     private fun renderMethods() {
@@ -878,18 +946,10 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(WRAP, dp(34)))
             methodBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
         }
-        val learnAction = {
-            if (ButtonRouter.learningStep == 0) ButtonRouter.startLearning() else ButtonRouter.cancelLearning()
-            refresh()
-        }
-        option("리모컨", "1번: ${ButtonRouter.label(Store.key1)} · 2번: ${ButtonRouter.label(Store.key2)}", remoteOn(), learnAction) {
-            if (remoteOn()) {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("리모컨 등록을 지울까요?")
-                    .setPositiveButton("지우기") { _, _ -> Store.key1 = null; Store.key2 = null; renderMethods() }
-                    .setNegativeButton("취소", null).show()
-            } else learnAction()
-        }
+        val nKeys = (1..Store.MAX_REMOTE).count { Store.key(it) != null }
+        option("리모컨", if (nKeys == 0) "버튼을 등록해 주세요 (최대 ${Store.MAX_REMOTE}개)" else "버튼 ${nKeys}개 등록 · 리모컨 N번 = N번 카드" + if (remoteOpen || learning) "  ▲" else "  ▼",
+            remoteOn(), null) { remoteOpen = !remoteOpen }
+        if (remoteOpen || learning) remoteRows()
         option("터치", "카드를 눌러 +1", Store.touchMode, null) { Store.touchMode = !Store.touchMode }
         option("갤럭시 워치", "워치 음악 화면 ⏮ = 1번 · ⏭ = 2번", Store.watchMode, null) {
             Store.watchMode = !Store.watchMode
@@ -1627,7 +1687,25 @@ class MainActivity : Activity() {
             nowTitle.textSize = if (none) 12f else 16f
             nowTitle.text = if (none) "🟢 지금 출조 중인 사람 없음" else "🟢 지금 출조 중 ${l.size}명"
             nowSub.visibility = if (none) View.GONE else View.VISIBLE
-            nowSub.text = l.take(3).joinToString(", ") { it.name } + (if (l.size > 3) " 외 ${l.size - 3}명" else "") + " · 눌러서 보기"
+            // 이름 옆에 어디에 알리는 중인지 꼬리표 (그룹 이름 · 전체)
+            val sb = android.text.SpannableStringBuilder()
+            l.take(3).forEachIndexed { i, m ->
+                if (i > 0) sb.append("\n")
+                sb.append(m.name)
+                fun tag(t: String, bgc: Int, fg: Int) {
+                    sb.append(" ")
+                    val st = sb.length
+                    sb.append("\u00A0$t\u00A0")
+                    sb.setSpan(android.text.style.BackgroundColorSpan(bgc), st, sb.length, 0)
+                    sb.setSpan(android.text.style.ForegroundColorSpan(fg), st, sb.length, 0)
+                    sb.setSpan(android.text.style.RelativeSizeSpan(0.85f), st, sb.length, 0)
+                }
+                m.groups.take(2).forEach { tag(it, Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF")) }
+                if (m.groups.size > 2) tag("+${m.groups.size - 2}", Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF"))
+                if (m.pub) tag("전체", Color.parseColor("#5A3B12"), Color.parseColor("#FFD79A"))
+            }
+            sb.append((if (l.size > 3) "\n외 ${l.size - 3}명" else "") + " · 눌러서 보기")
+            nowSub.text = sb
             nowBtn.setPadding(dp(14), if (none) dp(5) else dp(10), dp(14), if (none) dp(5) else dp(10))
             nowBtn.alpha = if (none) 0.7f else 1f
         }
@@ -1669,8 +1747,20 @@ class MainActivity : Activity() {
                     })
                 })
                 tx.addView(Ui.text(this, 13f, Color.parseColor("#FFB36B"), false, m.line.ifBlank { "0마리" }))
-                val where = (m.groups.map { "🚤 $it" } + (if (m.pub) listOf("🌊 전체 공유" + (if (m.area.isNotBlank()) " · ${m.area} 부근" else "")) else emptyList())).joinToString(" · ")
-                tx.addView(Ui.text(this, 11f, Ui.SUB, false, where))
+                // 📢 어디에 알리는 중 (그룹 꼬리표 · 전체 공유) · 위치 공유 여부
+                val where = android.text.SpannableStringBuilder("📢 ")
+                fun tag(t: String, bgc: Int, fg: Int) {
+                    val st = where.length
+                    where.append("\u00A0$t\u00A0")
+                    where.setSpan(android.text.style.BackgroundColorSpan(bgc), st, where.length, 0)
+                    where.setSpan(android.text.style.ForegroundColorSpan(fg), st, where.length, 0)
+                    where.setSpan(android.text.style.StyleSpan(Typeface.BOLD), st, where.length, 0)
+                    where.append(" ")
+                }
+                m.groups.forEach { tag(it, Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF")) }
+                if (m.pub) tag("전체 공유" + if (m.area.isNotBlank()) " · ${m.area} 부근" else "", Color.parseColor("#5A3B12"), Color.parseColor("#FFD79A"))
+                where.append(if (hasLoc) "· 📍 위치 공유 중" else "· 위치 끔")
+                tx.addView(Ui.text(this, 11.5f, Ui.SUB, false, "").apply { text = where; setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 3))
                 r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.text(this, 13f, if (hasLoc) Ui.GREEN else Ui.SUB, true, if (hasLoc) "📍 지도 ›" else "위치 안 보임"))
                 box.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))

@@ -43,7 +43,9 @@ class QuickButtons(
         list.forEach { q ->
             val nm = if (t != null && t.names.size >= q.slot) t.name(q.slot) else q.name
             counts[q.slot]?.text = (t?.count(q.slot) ?: 0).toString()
-            names[q.slot]?.text = nm
+            // 리모컨 번호 (3~8번째 카드) 앞에 작게
+            val no = Store.cardNumOf(q.slot)
+            names[q.slot]?.text = if (no in 3..Store.MAX_REMOTE) "${"①②③④⑤⑥⑦⑧"[no - 1]} $nm" else nm
             arts[q.slot]?.species = nm
         }
     }

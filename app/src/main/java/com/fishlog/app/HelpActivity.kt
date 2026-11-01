@@ -30,7 +30,8 @@ class HelpActivity : Activity() {
         col.addView(top)
 
         col.addView(Ui.button(this, "▶ 처음 안내 다시 보기 (그림 6장)", true) { Guide.show(this) }, Ui.lp(this, MATCH, WRAP, top = 14))
-        col.addView(Ui.text(this, 12f, Ui.SUB, false, "처음이면 위 버튼으로 그림 안내를 먼저 보세요. 아래는 기능별 자세한 설명이에요."),
+        col.addView(Ui.button(this, "📋 업데이트 내역 (종류별)") { History.show(this) }.apply { minHeight = dp(46) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        col.addView(Ui.text(this, 12f, Ui.SUB, false, "궁금한 기능을 누르면 펼쳐져요. 다시 누르면 접혀요."),
             Ui.lp(this, MATCH, WRAP, top = 6))
 
         section(col, HelpPic.REMOTE, "1. 출조 시작 · 카드 눌러 +1",
@@ -42,11 +43,13 @@ class HelpActivity : Activity() {
             "• 출조 중 카드 아래 '같이 출조 중' 칸: 같이 출조한 그룹원의 마릿수가 실시간으로 나와요 (아래 두 번째 그림 ③). 끝낸 사람은 1시간 동안 '종료했어요'로 보여요.",
             R.drawable.guide_g1_start, R.drawable.guide_g7_live)
 
-        section(col, HelpPic.REMOTE, "2. 리모컨 · 갤럭시 워치",
-            "• 블루투스 리모컨 버튼 2개를 '리모컨 버튼 등록'으로 1번·2번에 정해요.\n" +
-            "• 진동: 1번은 짧게 1번, 2번은 짧게 2번. 버튼을 1초 길게 누르면 마지막 기록 취소.\n" +
-            "• 갤럭시 워치: '갤럭시 워치로 기록'을 켜고, 출조 중 워치의 미디어 컨트롤러(음악) 화면에서 ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번. 워치 화면에 지금 마릿수가 보여요. (워치 옆 버튼은 삼성이 막아 둬서 쓸 수 없어요)\n" +
-            "• 워치는 연달아 빠르게 눌러도 누른 만큼 셀 수 있어요 (한 번에 3마리면 ⏮ 3번). 워치·블루투스가 늦으면 가끔 빠질 수 있으니 워치 화면 숫자로 확인하세요.")
+        section(col, HelpPic.REMOTE, "2. 리모컨 (1~8번) · 갤럭시 워치",
+            "• 메인 '기록 방식 바꾸기' → '리모컨'을 누르면 커튼이 펼쳐지고 1번·2번… 줄이 보여요. '＋ 리모컨 버튼 추가'로 최대 8번까지 늘려요.\n" +
+            "• 줄 옆 [리모컨 버튼]을 누르고, 리모컨에서 그 번호로 쓸 버튼을 한 번 누르면 등록돼요 (앱이 미리 정하지 않아요). 다른 번호에 쓰던 버튼이면 이 번호로 옮겨져요.\n" +
+            "• ✎로 버튼 이름(예: 위 큰 버튼)을 붙이고, ✕로 지워요.\n" +
+            "• 리모컨 N번 = 화면 N번째 카드예요. 1번 주황 · 2번 하늘 카드, 3번부터는 퀵 버튼 순서(카드 이름 앞 ③④…). 어종은 카드의 ✎에서 그때그때 바꾸면 돼요 — 리모컨 설정은 한 번만.\n" +
+            "• 진동: 홀수 번호 짧게 1번, 짝수 번호 짧게 2번. 버튼을 1초 길게 누르면 마지막 기록 취소.\n" +
+            "• 갤럭시 워치: '갤럭시 워치'를 켜고, 출조 중 워치의 음악 화면에서 ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번. 연달아 눌러도 누른 만큼 세요.")
 
         section(col, HelpPic.TIDE, "3. 물때 · 날씨 (시간별 / 주간)",
             "• '물때 보기 ›' 또는 물때 한 줄을 누르면: 물높이 그래프, 만조·간조, 일출·일몰 (국립해양조사원 예보). ◀ ▶ 또는 날짜를 눌러 다른 날을 봐요.\n" +
@@ -147,7 +150,7 @@ class HelpActivity : Activity() {
             "• 처음 켤 때 위치·개인정보 동의가 나와요. ⚙ 개인 설정에서 다시 보고, '같이 출조 중 공유'는 끌 수 있어요.\n" +
             "• 설명서는 ☰ 메뉴의 '사용 설명서'에서 열어요.")
 
-        section(col, HelpPic.GROUP, "16. 퀵 버튼 · 그룹 이미지 (v2.2)",
+        section(col, HelpPic.GROUP, "16. 퀵 버튼 · 그룹 이미지",
             "• 1·2번 큰 카드 아래 '＋ 어종 추가'로 어종 버튼을 원하는 만큼 만들어요 (해루질·원투용 5~6개 등). 출조 종류마다 따로 저장돼요.\n" +
             "• '⚙ 퀵 버튼 관리'에서 버튼마다 크기(작게·보통·크게)·색·순서(▲▼)를 바꾸고, ✎로 어종 변경, 🗑로 삭제해요.\n" +
             "• 퀵 버튼은 터치로만 기록해요 (리모컨·워치는 1·2번만). 꾹 누르면 그 어종 마지막 기록이 −1 돼요.\n" +
@@ -156,59 +159,76 @@ class HelpActivity : Activity() {
             "• 출조 종료 창에서 올릴 그룹을 하나씩 체크해 원하는 그룹에만 올려요 (기본: 지금 그룹).\n" +
             "• 재고표: 품목 → 종류 → 호수 3단계. 폰에 바로 저장되고, 폰 바꿀 때를 대비해 '서버에 저장하기'를 눌러 두세요.")
 
-        section(col, HelpPic.GROUP, "17. 출조 시작·완료 · 그날 날씨 (v2.3)",
+        section(col, HelpPic.GROUP, "17. 출조 시작·완료 · 그날 날씨",
             "• 출조 시작 창에서 지금 그룹의 출조 종류를 눌러 고르고, 배 이름·포인트와 항구·주요 장소를 적어요.\n" +
             "• 출조 완료 창: 올릴 그룹을 체크하고, 전체 게시판에 올릴 땐 이름(익명/닉네임)과 함께 보일 그룹을 골라요. 아래 미리보기 그대로 올라가요.\n" +
             "• '취소'는 창만 닫고 출조는 계속돼요. 초록 '✓ 완료'를 누르면 출조가 끝나요.\n" +
             "• 완료할 때 그 시간대 날씨·바람·파고·수온(실측 포함)이 출조 기록에 저장돼요. 지난 출조 화면의 '그날 날씨'에서 언제든 다시 봐요.\n" +
             "• 지도의 '📍 내 위치 기록 확인'은 출조 없이 내가 움직인 길을 그려 보는 테스트 기능이에요. 앱을 닫거나 내리면 자동으로 꺼지고 지워져요.")
 
-        section(col, HelpPic.GROUP, "18. 대표 사진 · 휴지통 · 수온 보정 (v2.4)",
+        section(col, HelpPic.GROUP, "18. 대표 사진 · 휴지통 · 수온 보정",
             "• 출조 완료 창의 '📸 대표 조과 사진'에서 찍거나 앨범에서 골라요. 나중에 출조 기록 화면에서 바꾸거나 이 출조 사진 중 골라도 돼요.\n" +
             "• 대표 사진은 지난 출조·그룹 출조 기록·전체 조황 카드 오른쪽에 보이고, 누르면 크게 봐요.\n" +
             "• 내가 지운 조과도 휴지통(☰ 메뉴 → 🗑 휴지통)에 30일 보관돼요. '복구'하면 그룹·전체 게시판까지 다시 올라가요.\n" +
             "• 물때 창 수온: 실측 = 관측소에서 잰 값, 보정 = 예상에 그날 실측 차이를 더한 값, 예상 = 먼 바다 예측.\n" +
             "• 물때 그래프에서 낮은 밝게, 밤은 어둡게 보여요.")
 
-        section(col, HelpPic.GROUP, "19. 지금 출조 중 · 게시판 (v2.5)",
+        section(col, HelpPic.GROUP, "19. 지금 출조 중 · 게시판",
             "• 그룹원이 출조 중이면 메인 맨 아래 '🟢 지금 출조 중' 버튼에 보여요. 누르면 이름·종류·마릿수 목록, 사람을 누르면 그 사람 위치 지도.\n" +
             "• 출조 시작 창의 '내 출조 알리기'로 누구에게 알릴지 골라요 (20번 참고). 출조 중에도 메인의 초록 칩을 눌러 바꿀 수 있어요.\n" +
             "• 메인 맨 아래 '🌊 전체 조황 · 포인트 게시판'을 누르면 위쪽 탭으로 조황 게시판과 포인트 게시판을 오가요.\n" +
             "• 수온 칸 아래 작은 글씨는 실측한 관측소예요. 노란색이면 가장 가까운 관측소가 끊겨 다음 관측소 값을 쓴 거예요.")
 
-        section(col, HelpPic.GROUP, "20. 내 출조 알리기 · 후기 (v2.6)",
+        section(col, HelpPic.GROUP, "20. 내 출조 알리기 · 후기",
             "• 출조 시작 창 '내 출조 알리기': 🔒 알리지 않기 / 그룹에 알리기(알릴 그룹을 하나씩 체크) / 🌊 전체 사용자에게 공유하기.\n" +
             "• 전체 공유를 고르면 전체 조황 게시판 맨 위 '🟢 지금 출조 중'에 보여요. 이름은 게시판처럼 익명/닉네임, 위치는 동네 이름만. 내 그룹 모두에도 보여요.\n" +
             "• '지금 출조 중'은 한 줄로 접혀 있어요. 누르면 사람별 종류 · 경과 · 마릿수가 펼쳐져요.\n" +
             "• 지도의 내 이동 경로는 분홍 선이에요.\n" +
             "• 게시판 후기는 사진이 맨 위, 시각별 기록은 한 시간씩 접혀 있어요(눌러서 펼치기).")
 
-        section(col, HelpPic.GROUP, "21. 지금 출조 중 · 위치 공유 (v2.7)",
+        section(col, HelpPic.GROUP, "21. 지금 출조 중 · 위치 공유",
             "• 메인 맨 아래 '🟢 지금 출조 중 N명'을 누르면 내 그룹과 전체 공유한 사람이 보여요.\n" +
             "• '📍 지도 ›'가 있는 사람을 누르면 그 사람 위치(초록 점)가 가운데인 지도가 열려요. '📍 ○○ 위치로'로 언제든 그 사람에게 돌아가고, '둘 다 보기'로 나와 같이 봐요.\n" +
-            "• 내 출조를 알릴 때 '📍 위치 공유하기'를 끄면 출조 중 · 마릿수만 보이고 지도엔 안 나와요.")
+            "• 내 출조를 알릴 때 '📍 위치 공유하기'를 끄면 출조 중 · 마릿수만 보이고 지도엔 안 나와요.\n" +
+            "• 이름 옆 꼬리표로 어디에 알리는 중인지 보여요: 파란 꼬리표 = 그룹 이름, 주황 '전체' = 전체 공유. 목록에는 '📍 위치 공유 중 / 위치 끔'도 나와요.")
 
-        section(col, HelpPic.GROUP, "22. 내 위치 사용 · 물때 (v2.8)",
+        section(col, HelpPic.GROUP, "22. 내 위치 사용 · 물때",
             "• ⚙ 개인 설정 '📍 이 앱에서 내 위치 사용'을 끄면 앱이 위치를 전혀 쓰지 않아요(경로 · 조과 위치 · 지도 내 위치 · 위치 공유).\n" +
             "• 출조 시작 때 위치가 꺼져 있으면 안내 창이 떠요. '켜러 가기'로 꺼진 것만 차례로 켜고 돌아오면 그대로 출조가 시작돼요.\n" +
             "• 물때 그래프에 '추정'이 붙은 만조·간조는 받은 자료에 빠져 있어서 앞뒤로 짐작한 거예요. '여기부터 예측'은 관측소 자료가 없어 예측으로 이은 부분이에요.")
 
-        section(col, HelpPic.GROUP, "23. 그룹 출조 기록 내리기 (v2.9)",
+        section(col, HelpPic.GROUP, "23. 그룹 출조 기록 내리기",
             "• 그룹 출조 기록에서 카드를 누르면 '🗑 그룹에서 내리기'가 있어요. 내 글은 누구나, 그룹장은 모든 글을 내릴 수 있어요.\n" +
             "• 카드를 꾹 누르면 체크박스가 생겨 여러 개를 골라 한 번에 내릴 수 있어요(전체 선택 · 맨 아래 버튼).\n" +
             "• 그룹에서만 내려가고 올린 사람 폰의 기록은 그대로예요. 남의 글은 휴지통에 30일 보관돼요.\n" +
             "• 그룹 창 '🎣 출조 종류 · 지금: ○○'를 누르면 종류를 고를 수 있어요.")
 
-        section(col, HelpPic.GROUP, "24. 서버 절약 (v3.0)",
+        section(col, HelpPic.GROUP, "24. 서버 절약",
             "• 게시판 · 그룹 출조 기록은 한 번 받은 글을 폰에 기억하고 새로 올라온 글만 받아요. 남이 지운 글은 몇 시간 뒤에 사라질 수 있어요.\n" +
             "• '지금 출조 중' · 채팅 접속 인원은 3분마다 새로 받아요.")
 
-        section(col, HelpPic.GROUP, "25. 내 어종 목록 · 새 글 (v3.1)",
+        section(col, HelpPic.GROUP, "25. 내 어종 목록 · 새 글",
             "• 버튼 어종을 고르는 창 맨 아래 '⚙ 내 어종 목록 관리'에서 필요 없는 어종을 지우거나(내 폰에서만), 지운 어종을 다시 보이게 하거나, 나만 쓰는 어종을 추가할 수 있어요. 업데이트해도 그대로예요.\n" +
             "• 그룹 출조 기록은 처음 열면 '🆕 새 글'(아직 안 본 글)부터 보여요.\n" +
             "• 한 번 본 사진은 폰에 저장돼서 다시 받지 않아요(데이터 · 서버 절약).")
 
-        section(col, HelpPic.UPDATE, "26. 업데이트",
+        section(col, HelpPic.TIDE, "26. 그때 날씨 · 실측 조류",
+            "• 후기(전체 게시판 글)와 그룹 출조 기록에도 그 출조 때 날씨(기온 · 하늘 · 바람 · 파고 · 수온)가 한 줄로 붙어요. 누르면 시간별 표.\n" +
+            "• 물때 창 위쪽 '🌊 실측 조류 (지금)': 가까운 관측소에서 지금 잰 유향(물이 흘러가는 방향) · 유속(cm/s · 노트)과 세기(약함 · 보통 · 셈)예요. 유속계가 있는 관측소만 나와요.\n" +
+            "• 서해는 밀물 때 대체로 육지 쪽(동 · 북), 썰물 때 바다 쪽(서 · 남)으로 흘러요.")
+
+        section(col, HelpPic.MAP, "27. 조과 위치 정확도",
+            "• 카드를 누를 때 20초 안에 잡힌 GPS가 있으면 그 자리로 저장돼요.\n" +
+            "• GPS가 없으면(실내 · 신호 약함) 폰이 아는 위치로 일단 저장하고, 누른 뒤 1분 동안 GPS를 2초마다 재서 잡히면 정확한 위치로 바꿔 넣어요.\n" +
+            "• 그래도 못 잡았으면 이동 경로 앞뒤 GPS 점으로 그 시각 위치를 다시 계산해요 (출조를 끝낼 때도 한 번 더).\n" +
+            "• 지도에서 조과를 누르면 '(대략 위치 ±m)' · '(경로로 계산한 위치)'로 어떻게 잡힌 위치인지 보여요.\n" +
+            "• 건물 안에서는 GPS가 거의 안 잡혀요. 위치 테스트는 밖에서 해 주세요.")
+
+        section(col, HelpPic.FISH, "28. 어종 그림 · 앱 아이콘",
+            "• 어종 그림 70종을 새 그림으로 바꿨어요. 카드 이마의 이름 띠는 그대로예요. 그림이 없는 어종은 기본 그림으로 나와요.\n" +
+            "• ☰ 메뉴 '📋 업데이트 내역'에서 언제 무엇이 바뀌었는지 종류별로 볼 수 있어요.")
+
+        section(col, HelpPic.UPDATE, "29. 업데이트",
             "• 새 버전이 나오면 큰 창이 떠서 '이번에 바뀐 것'을 보여줘요. '지금 업데이트' → 창 안에서 받기(진행 %) → '설치하기'.\n" +
             "• 처음이면 '출처를 알 수 없는 앱' 허용을 켜고 돌아와 '설치하기'를 다시 눌러요. 기록은 그대로 남아요.\n" +
             "• '나중에'를 눌러도 ☰ 메뉴 맨 아래 버전 줄에 '새 버전 있음'이 보이고, 누르면 다시 창이 떠요.\n" +
@@ -218,16 +238,26 @@ class HelpActivity : Activity() {
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
     }
 
+    /** 기능 하나 = 커튼 (제목만 보이고, 누르면 그림 + 설명 펼침) */
     private fun section(col: LinearLayout, pic: Int, title: String, body: String, image: Int = 0, image2: Int = 0) {
         val c = Ui.card(this)
-        val r = Ui.row(this)
-        r.addView(HelpPic(this, pic), LinearLayout.LayoutParams(dp(64), dp(64)))
-        r.addView(Ui.text(this, 17f, Ui.TEXT, true, title), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
+        val r = Ui.row(this).apply { isClickable = true }
+        r.addView(HelpPic(this, pic), LinearLayout.LayoutParams(dp(40), dp(40)))
+        r.addView(Ui.text(this, 16f, Ui.TEXT, true, title), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
+        val arrow = Ui.text(this, 15f, Ui.SUB, true, "▸")
+        r.addView(arrow, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
         c.addView(r)
-        if (image != 0) c.addView(Guide.image(this, image), Ui.lp(this, MATCH, WRAP, top = 10))
-        if (image2 != 0) c.addView(Guide.image(this, image2), Ui.lp(this, MATCH, WRAP, top = 8))
-        c.addView(Ui.text(this, 14f, Ui.TEXT, false, body).apply { setLineSpacing(0f, 1.35f) }, Ui.lp(this, MATCH, WRAP, top = 10))
-        col.addView(c, Ui.lp(this, MATCH, WRAP, top = 14))
+        val inner = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        if (image != 0) inner.addView(Guide.image(this, image), Ui.lp(this, MATCH, WRAP, top = 10))
+        if (image2 != 0) inner.addView(Guide.image(this, image2), Ui.lp(this, MATCH, WRAP, top = 8))
+        inner.addView(Ui.text(this, 14f, Ui.TEXT, false, body).apply { setLineSpacing(0f, 1.35f) }, Ui.lp(this, MATCH, WRAP, top = 10))
+        c.addView(inner)
+        r.setOnClickListener {
+            val open = inner.visibility != View.VISIBLE
+            inner.visibility = if (open) View.VISIBLE else View.GONE
+            arrow.text = if (open) "▾" else "▸"
+        }
+        col.addView(c, Ui.lp(this, MATCH, WRAP, top = 10))
     }
 
     private fun tip(col: LinearLayout, s: String) {

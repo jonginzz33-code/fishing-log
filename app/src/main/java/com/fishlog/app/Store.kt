@@ -8,7 +8,9 @@ import org.json.JSONObject
 /** 조과 기록 저장소. 모든 호출은 메인 스레드에서. */
 object Store {
 
-    class Catch(val time: Long, val slot: Int, val lat: Double? = null, val lon: Double? = null)
+    /** 조과 한 마리. acc = 위치 오차(m, -1 모름) · q = 위치 정확도 (0 없음 · 1 대략(폰 위치·지난 위치) · 2 경로로 계산 · 3 GPS) */
+    class Catch(val time: Long, val slot: Int, val lat: Double? = null, val lon: Double? = null,
+                val acc: Float = -1f, val q: Int = if (lat != null) 3 else 0)
 
     /** 이동 경로의 점 하나 */
     class Pt(val time: Long, val lat: Double, val lon: Double)
@@ -88,12 +90,31 @@ object Store {
     fun find(id: Long): Trip? = if (current?.id == id) current else history.firstOrNull { it.id == id }
 
     // ---- 리모컨 버튼 등록 ----
+    // 리모컨 1~8번: 사용자가 실제 리모컨 버튼을 눌러 등록 (앱이 미리 정하지 않음)
+    //  리모컨 N번 = 화면 N번째 카드 (1·2번 큰 카드, 3번부터 퀵 버튼 순서) · 어종은 카드에서 정함
+    const val MAX_REMOTE = 8
+    fun key(n: Int): String? = prefs.getString("key$n", null)
+    fun setKey(n: Int, v: String?) { prefs.edit().putString("key$n", v).apply(); fireChanged() }
+    /** 사용자가 붙인 버튼 이름 (예: 위 큰 버튼) */
+    fun keyName(n: Int): String = prefs.getString("keyname$n", "") ?: ""
+    fun setKeyName(n: Int, v: String) { prefs.edit().putString("keyname$n", v.trim()).apply(); fireChanged() }
+    /** 화면에 보이는 리모컨 줄 수 (2~8) */
+    var remoteRows: Int
+        get() = prefs.getInt("remote_rows", maxOf(2, (1..MAX_REMOTE).lastOrNull { key(it) != null } ?: 2)).coerceIn(1, MAX_REMOTE)
+        set(v) { prefs.edit().putInt("remote_rows", v.coerceIn(1, MAX_REMOTE)).apply(); fireChanged() }
+    fun anyKey(): Boolean = (1..MAX_REMOTE).any { key(it) != null }
+    /** 이 신호가 등록된 리모컨 번호 (없으면 0) */
+    fun remoteNumOf(code: String): Int = (1..MAX_REMOTE).firstOrNull { key(it) == code } ?: 0
+    /** 리모컨 N번 → 카드 번호(slot) (그 카드가 없으면 null) */
+    fun slotForRemote(n: Int, cat: String = category): Int? = if (n <= 2) n else quick(cat).getOrNull(n - 3)?.slot
+    /** 카드 번호(slot) → 화면 순서 번호 (1·2, 퀵 버튼은 3부터) */
+    fun cardNumOf(slot: Int, cat: String = category): Int = if (slot <= 2) slot else quick(cat).indexOfFirst { it.slot == slot }.let { if (it < 0) 0 else it + 3 }
     var key1: String?
-        get() = prefs.getString("key1", null)
-        set(v) { prefs.edit().putString("key1", v).apply(); fireChanged() }
+        get() = key(1)
+        set(v) = setKey(1, v)
     var key2: String?
-        get() = prefs.getString("key2", null)
-        set(v) { prefs.edit().putString("key2", v).apply(); fireChanged() }
+        get() = key(2)
+        set(v) = setKey(2, v)
 
     // ---- 설정 ----
     // ---- 출조 종류 (선상 · 해루질 · 워킹) ----
@@ -430,6 +451,7 @@ object Store {
     fun endTrip(): Trip? {
         val t = current ?: return null
         t.end = System.currentTimeMillis()
+        refineCatches(t)
         history.add(0, t)
         current = null
         changed()
@@ -439,29 +461,59 @@ object Store {
     fun addCatch(slot: Int): Int {
         val t = current ?: return 0
         val now = System.currentTimeMillis()
-        val loc = Tracker.recent(now)
+        // 20초 안의 GPS면 그대로(정확) · 아니면 지난 위치/폰 위치로 일단 저장(대략) → 1분 동안 GPS 촘촘히 재서 바꿔 넣음
+        val gps = Tracker.last?.takeIf { appLoc && now - it.time <= 20_000L && it.provider == android.location.LocationManager.GPS_PROVIDER }
+        val rough = if (gps == null) (Tracker.recent(now) ?: Tracker.approx(now)) else null
+        val loc = gps ?: rough
         t.ensureSlot(slot, defaultName(slot))
-        t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude))
+        t.catches.add(Catch(now, slot, loc?.latitude, loc?.longitude,
+            if (loc != null && loc.hasAccuracy()) loc.accuracy else -1f, when { gps != null -> 3; rough != null -> 1; else -> 0 }))
         changed(false)
-        // 위치가 오래됐으면 GPS 한 번 바로 재기 (위치 없는 조과는 잡히면 채움)
-        try { Tracker.freshFix() } catch (_: Exception) {}
+        try { Tracker.burst() } catch (_: Exception) {}
         Milestone.onCount(slot, t.count(slot))
         try { Live.pushSoon() } catch (_: Exception) {}
         return t.count(slot)
     }
 
-    /** 위치 없이 기록된 조과(1분 안)에 새로 잡힌 위치 채우기 */
-    fun fillCatchLoc(fixTime: Long, lat: Double, lon: Double) {
+    /** 누른 뒤 1분 안에 잡힌 위치로 조과 위치 바꿔 넣기 (GPS = 정확으로, 폰 위치 = 위치 없던 조과만 대략으로) */
+    fun fillCatchLoc(fixTime: Long, lat: Double, lon: Double, acc: Float = -1f, gps: Boolean = true) {
         val t = current ?: return
         if (!appLoc) return
         var any = false
         for (i in t.catches.indices) {
             val c = t.catches[i]
-            if (c.lat == null && fixTime >= c.time - 5_000L && fixTime - c.time < 60_000L) {
-                t.catches[i] = Catch(c.time, c.slot, lat, lon); any = true
-            }
+            if (fixTime < c.time - 5_000L || fixTime - c.time >= 60_000L) continue
+            val better = if (gps) c.q < 3 && (acc < 0f || acc <= 80f) else c.q == 0
+            if (better) { t.catches[i] = Catch(c.time, c.slot, lat, lon, acc, if (gps) 3 else 1); any = true }
         }
         if (any) changed(false)
+    }
+
+    /** GPS를 못 잡은 조과(대략·없음)는 이동 경로 앞뒤 점으로 그 시각 위치 다시 계산 */
+    fun refineCatches(t: Trip? = current): Boolean {
+        t ?: return false
+        if (t.track.size < 1) return false
+        var any = false
+        val tr = t.track
+        for (i in t.catches.indices) {
+            val c = t.catches[i]
+            if (c.q == 3) continue   // GPS로 잡힌 건 그대로
+            val prev = tr.lastOrNull { it.time <= c.time }
+            val next = tr.firstOrNull { it.time >= c.time }
+            val okP = prev != null && c.time - prev.time <= 10 * 60_000L
+            val okN = next != null && next.time - c.time <= 10 * 60_000L
+            val p: Pair<Double, Double>? = when {
+                okP && okN && next!!.time != prev!!.time -> {
+                    val f = (c.time - prev.time).toDouble() / (next.time - prev.time)
+                    (prev.lat + (next.lat - prev.lat) * f) to (prev.lon + (next.lon - prev.lon) * f)
+                }
+                okP && c.time - prev!!.time <= 2 * 60_000L -> prev.lat to prev.lon
+                okN && next!!.time - c.time <= 2 * 60_000L -> next.lat to next.lon
+                else -> null
+            }
+            if (p != null && (c.lat != p.first || c.lon != p.second)) { t.catches[i] = Catch(c.time, c.slot, p.first, p.second, -1f, 2); any = true }
+        }
+        return any
     }
 
     /** 그 버튼의 마지막 기록 하나 지우기 (퀵 버튼 꾹 누르기) */
@@ -503,6 +555,7 @@ object Store {
     fun addTrackPoint(time: Long, lat: Double, lon: Double) {
         val t = current ?: return
         t.track.add(Pt(time, lat, lon))
+        if (refineCatches(t)) fireChanged()
         saveCurrent()
     }
 
@@ -675,7 +728,10 @@ object Store {
         val arr = JSONArray()
         t.catches.forEach {
             val c = JSONArray().put(it.time).put(it.slot)
-            if (it.lat != null && it.lon != null) c.put(it.lat).put(it.lon)
+            if (it.lat != null && it.lon != null) {
+                c.put(it.lat).put(it.lon)
+                if (it.q != 3 || it.acc >= 0f) c.put(Math.round(it.acc * 10) / 10.0).put(it.q)
+            }
             arr.put(c)
         }
         o.put("catches", arr)
@@ -694,7 +750,8 @@ object Store {
         val list = mutableListOf<Catch>()
         for (i in 0 until arr.length()) {
             val c = arr.getJSONArray(i)
-            if (c.length() >= 4) list.add(Catch(c.getLong(0), c.getInt(1), c.getDouble(2), c.getDouble(3)))
+            if (c.length() >= 6) list.add(Catch(c.getLong(0), c.getInt(1), c.getDouble(2), c.getDouble(3), c.getDouble(4).toFloat(), c.getInt(5)))
+            else if (c.length() >= 4) list.add(Catch(c.getLong(0), c.getInt(1), c.getDouble(2), c.getDouble(3)))
             else list.add(Catch(c.getLong(0), c.getInt(1)))
         }
         val track = mutableListOf<Pt>()

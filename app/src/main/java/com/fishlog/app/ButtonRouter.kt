@@ -10,7 +10,7 @@ import android.view.KeyEvent
  */
 object ButtonRouter {
 
-    /** 0 = 평소, 1 = 1번 버튼 기다림, 2 = 2번 버튼 기다림 */
+    /** 0 = 평소, N = 리모컨 N번 버튼 기다림 (1~8) */
     var learningStep = 0
         private set
 
@@ -23,9 +23,9 @@ object ButtonRouter {
     private var watchAt = 0L
     private var lastAt = 0L
 
-    fun startLearning() {
-        learningStep = 1
-        onMessage?.invoke("리모컨의 1번 버튼을 눌러주세요")
+    fun startLearning(n: Int = 1) {
+        learningStep = n.coerceIn(1, Store.MAX_REMOTE)
+        onMessage?.invoke("리모컨에서 ${learningStep}번으로 쓸 버튼을 한 번 눌러주세요")
     }
 
     fun cancelLearning() {
@@ -37,8 +37,7 @@ object ButtonRouter {
     fun wants(keyCode: Int): Boolean {
         if (learningStep != 0) return isRemoteLike(keyCode)
         if (Store.current == null) return false
-        val code = codeOf(keyCode)
-        return code == Store.key1 || code == Store.key2
+        return Store.remoteNumOf(codeOf(keyCode)) != 0
     }
 
     /** 리모컨이 보낼 법한 키만 등록 대상으로 받음 (뒤로가기·홈 등 제외) */
@@ -98,35 +97,26 @@ object ButtonRouter {
         if (now - lastAt < DEBOUNCE_MS) return
         lastAt = now
 
-        when (learningStep) {
-            1 -> {
-                Store.key1 = code
-                learningStep = 2
-                Haptics.slot(ctx, 1)
-                onMessage?.invoke("1번 = ${label(code)} 등록! 이제 2번 버튼을 눌러주세요")
-                return
-            }
-            2 -> {
-                if (code == Store.key1) {
-                    Haptics.error(ctx)
-                    onMessage?.invoke("1번과 같은 신호예요. 다른 버튼을 눌러주세요 (같은 신호만 보내는 리모컨일 수 있어요)")
-                    return
-                }
-                Store.key2 = code
-                learningStep = 0
-                Haptics.slot(ctx, 2)
-                onMessage?.invoke("2번 = ${label(code)} 등록 완료!")
-                return
-            }
+        if (learningStep != 0) {
+            val n = learningStep
+            val was = Store.remoteNumOf(code)
+            if (was != 0 && was != n) Store.setKey(was, null)   // 다른 번호에 쓰던 버튼이면 이 번호로 옮김
+            Store.setKey(n, code)
+            if (n > Store.remoteRows) Store.remoteRows = n
+            learningStep = 0
+            Haptics.slot(ctx, if (n % 2 == 1) 1 else 2)
+            onMessage?.invoke("리모컨 ${n}번 = ${label(code)} 등록!" + if (was != 0 && was != n) " (${was}번에서 옮겼어요)" else "")
+            return
         }
 
         if (Store.current == null) return
-        val slot = when (code) {
-            Store.key1 -> 1
-            Store.key2 -> 2
-            else -> 0
+        val num = Store.remoteNumOf(code)
+        if (num == 0) return
+        val slot = Store.slotForRemote(num)
+        if (slot == null) {
+            if (!longPress) { Haptics.error(ctx); onMessage?.invoke("리모컨 ${num}번에 맞는 ${num}번 카드가 없어요 (＋ 어종 추가로 카드를 만들어 주세요)") }
+            return
         }
-        if (slot == 0) return
 
         if (longPress) {
             val undone = Store.undoLast()

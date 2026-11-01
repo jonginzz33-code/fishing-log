@@ -236,7 +236,7 @@ class RemoteService : Service() {
     /** 리모컨을 등록했거나 워치 기록을 켰을 때만 무음 재생 (버튼 우선권 유지 + 워치 음악 화면에 보이기) */
     private fun updateSilence() {
         updateMetadata()
-        val want = Store.current != null && (Store.key1 != null || Store.key2 != null || Store.watchMode)
+        val want = Store.current != null && (Store.anyKey() || Store.watchMode)
         if (want && silence == null) startSilence()
         if (!want && silence != null) stopSilence()
     }

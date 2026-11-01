@@ -211,6 +211,75 @@ object Weather {
 
     private val cache = HashMap<String, Pair<Long, Day>>()
 
+    // ---------------- 실측 조류 (유향·유속) ----------------
+    /** dir = 흘러가는 방향(도), speed = cm/s */
+    class Current(val dir: Double?, val speed: Double, val at: String, val station: String, val km: Float)
+    private var curCache: Triple<String, Long, Pair<Current?, String>>? = null
+
+    /** 유속 세기: 약함 · 보통 · 셈 */
+    fun currentLevel(cms: Double): String = when { cms < 25 -> "약함"; cms < 60 -> "보통"; else -> "셈" }
+    fun cmsKnots(cms: Double): Double = cms / 51.444
+
+    /** 가까운 관측소(40km 안)의 가장 최근 실측 유향·유속 ('조위관측소 최신 관측데이터' — 수온과 같은 신청) */
+    fun current(ctx: Context, lat: Double, lon: Double, done: (Current?, String) -> Unit) {
+        val ck = String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        curCache?.let { (k, at, v) -> if (k == ck && System.currentTimeMillis() - at < 10 * 60_000L) { done(v.first, v.second); return } }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        Thread {
+            val r = try { measuredCurrent(ctx, lat, lon) } catch (e: Exception) { null to "실측 조류를 못 받았어요" }
+            if (r.first != null) curCache = Triple(ck, System.currentTimeMillis(), r)
+            main.post { done(r.first, r.second) }
+        }.start()
+    }
+
+    private fun measuredCurrent(ctx: Context, lat: Double, lon: Double): Pair<Current?, String> {
+        val key = BuildConfig.KHOA_KEY
+        if (key.isBlank()) return null to "실측 조류: 인증키가 앱에 없어요"
+        val ymd = keyFmt.format(Date())
+        val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 40f }.take(6)
+        if (near.isEmpty()) return null to "40km 안에 조류를 재는 관측소가 없어요"
+        fun isCur(k: String) = k.startsWith("cr") || k.contains("crnt") || k.contains("current") || k.contains("flw") || k.contains("tdlcr")
+        for (s in near) {
+            val q = "/1192136/dtRecent/GetDTRecentApiService?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
+                "&obsCode=${s.code}&reqDate=$ymd&min=10&type=json&pageNo=1&numOfRows=300"
+            var body: String? = null
+            for (scheme in listOf("https", "http")) { try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {} }
+            val b = body?.trim() ?: continue
+            if (b.startsWith("<")) {
+                if (b.contains("SERVICE_KEY_IS_NOT_REGISTERED") || b.contains("ACCESS DENIED"))
+                    return null to "실측 조류: 공공데이터포털 '조위관측소 최신 관측데이터' 활용신청이 필요해요"
+                continue
+            }
+            try {
+                val root = JSONObject(b).let { if (it.has("response")) it.getJSONObject("response") else it }
+                if ((root.optJSONObject("header")?.optString("resultCode") ?: "") != "00") continue
+                val itemAny = (root.optJSONObject("body")?.opt("items") as? JSONObject)?.opt("item")
+                val arr = when (itemAny) { is JSONArray -> itemAny; is JSONObject -> JSONArray().put(itemAny); else -> JSONArray() }
+                var best: Current? = null
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    var dir: Double? = null; var sp: Double? = null
+                    o.keys().forEach { k0 ->
+                        val k = k0.lowercase(Locale.US)
+                        if (!isCur(k) || k.contains("wnd") || k.contains("wind")) return@forEach
+                        val v = o.optString(k0).toDoubleOrNull() ?: return@forEach
+                        if (k.contains("dir") || k.contains("drc")) dir = v
+                        else if (k.contains("sp") || k.contains("vel") || k.contains("spd")) sp = v
+                    }
+                    val speed = sp ?: continue
+                    // 유속계가 없는 곳은 0으로 옴
+                    if (speed <= 0.05 && (dir == null || dir!! <= 0.05)) continue
+                    if (speed < 0 || speed > 600) continue
+                    val at = o.optString("obsrvnDt")
+                    if (best == null || at > best.at) best = Current(dir?.takeIf { it in 0.0..360.0 }, speed, at, s.name, Tide.stationKm(s, lat, lon) ?: 0f)
+                }
+                if (best != null) return best to ""
+            } catch (_: Exception) {}
+        }
+        return null to "가까운 관측소에 실측 조류 값이 없어요 (유속계가 있는 관측소만 나와요)"
+    }
+
+
     private fun get(url: String): String {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000; c.readTimeout = 10_000

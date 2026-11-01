@@ -198,9 +198,28 @@ object MapDialog {
         b.setPositiveButton("닫기", null).show()
     }
 
+    /** 폰이 아는 가장 최근 내 위치 (앱 위치 사용·권한 있을 때만) */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun knownLoc(c: Context): GeoPoint? {
+        val l0 = Tracker.last
+        if (l0 != null) return GeoPoint(l0.latitude, l0.longitude)
+        if (!Tracker.hasPermission(c)) return null
+        return try {
+            val lm = c.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+            listOf(android.location.LocationManager.GPS_PROVIDER, android.location.LocationManager.NETWORK_PROVIDER, android.location.LocationManager.PASSIVE_PROVIDER)
+                .mapNotNull { p: String -> try { lm.getLastKnownLocation(p) } catch (_: Exception) { null } }
+                .maxByOrNull { it.time }?.let { GeoPoint(it.latitude, it.longitude) }
+        } catch (_: Exception) { null }
+    }
+
     private fun fit(map: MapView, all: List<GeoPoint>) {
         when {
-            all.isEmpty() -> { map.controller.setZoom(7.0); map.controller.setCenter(GeoPoint(36.3, 127.8)) }
+            // 위치 기록이 없으면 한국 전체 말고 내 현재 위치로 (모르면 한국 전체)
+            all.isEmpty() -> {
+                val me = knownLoc(map.context)
+                if (me != null) { map.controller.setZoom(14.0); map.controller.setCenter(me) }
+                else { map.controller.setZoom(7.0); map.controller.setCenter(GeoPoint(36.3, 127.8)) }
+            }
             all.size == 1 -> { map.controller.setZoom(16.0); map.controller.setCenter(all[0]) }
             else -> {
                 val box = BoundingBox.fromGeoPoints(all)
@@ -516,7 +535,9 @@ object MapDialog {
                 gravity = Gravity.CENTER
                 setPadding(dp(a, 16), dp(a, 12), dp(a, 16), dp(a, 12))
                 background = GradientDrawable().apply { setColor(Color.argb(200, 11, 26, 38)); cornerRadius = dp(a, 12).toFloat() }
-            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                topMargin = dp(a, 10); leftMargin = dp(a, 12); rightMargin = dp(a, 12)   // 지도 가운데를 가리지 않게 맨 위로
+            })
         }
         if (liveMe != null) addStatus(a, frame, liveMe)
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -996,7 +1017,11 @@ object MapDialog {
         val track = t.track.map { GeoPoint(it.lat, it.lon) }
         val catches = t.catches.filter { it.lat != null && it.lon != null }.map {
             MapCatch(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
-                df.format(Date(it.time)) + " " + t.name(it.slot), t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid))
+                df.format(Date(it.time)) + " " + t.name(it.slot) + when (it.q) {
+                    1 -> " (대략 위치" + (if (it.acc > 0f) " ±${it.acc.toInt()}m" else "") + ")"
+                    2 -> " (경로로 계산한 위치)"
+                    else -> if (it.acc > 0f) " (±${it.acc.toInt()}m)" else ""
+                }, t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid))
         }
         return MapLayer(trackColor, track, catches)
     }

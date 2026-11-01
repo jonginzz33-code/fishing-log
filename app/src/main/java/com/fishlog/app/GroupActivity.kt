@@ -220,10 +220,10 @@ class GroupActivity : Activity() {
             ib.addView(Ui.button(this, "🖼 대표 이미지 올리기 · 바꾸기") {
                 @Suppress("DEPRECATION")
                 startActivityForResult(android.content.Intent(android.content.Intent.ACTION_GET_CONTENT).setType("image/*"), PICK_IMG)
-            }.apply { minHeight = dp(38); textSize = 12f })
+            }.apply { minHeight = dp(38); textSize = 12f; maxLines = 1 }, Ui.lp(this, MATCH, dp(38)))
             ib.addView(Ui.button(this, "대표 이미지 지우기") {
                 Cloud.setGroupImage(g.id, null) { err -> toast(err ?: "지웠어요"); renderHead() }
-            }.apply { minHeight = dp(34); textSize = 12f }, Ui.lp(this, MATCH, WRAP, top = 4))
+            }.apply { minHeight = dp(34); textSize = 12f; maxLines = 1 }, Ui.lp(this, MATCH, dp(34), top = 6))
             imgRow.addView(ib, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
         } else imgRow.addView(Ui.text(this, 12f, Ui.SUB, false, "그룹 대표 이미지"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
         card.addView(imgRow, Ui.lp(this, MATCH, WRAP, top = 0))
@@ -235,10 +235,11 @@ class GroupActivity : Activity() {
             })
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { topMargin = dp(8) })
         if (Cloud.isOwner) {
-            nameRow.addView(Ui.button(this, "✎ 이름") { askRename(g.name) }.apply { minHeight = dp(40); textSize = 13f },
-                LinearLayout.LayoutParams(WRAP, WRAP))
+            nameRow.addView(Ui.button(this, "✎ 이름") { askRename(g.name) }.apply { minHeight = dp(40); textSize = 13f; maxLines = 1 },
+                LinearLayout.LayoutParams(WRAP, dp(40)).apply { leftMargin = dp(8); topMargin = dp(8) })
         }
-        card.addView(nameRow)
+        // 대표 이미지 버튼들과 겹치지 않게 간격 (그룹장 카드)
+        card.addView(nameRow, Ui.lp(this, MATCH, WRAP, top = 10))
         // 공지 한 줄 (그룹장만 쓰기)
         if (g.notice.isNotBlank() || Cloud.isOwner) {
             val nb = Ui.row(this).apply {

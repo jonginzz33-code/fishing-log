@@ -161,6 +161,26 @@ object TideDialog {
         col.addView(flowNote, Ui.lp(a, MATCH, WRAP, top = 2))
         val info = Ui.text(a, 13f, Ui.SUB, false, "")
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
+        // 실측 조류 (가까운 관측소 지금 유향·유속)
+        val curView = Ui.text(a, 12.5f, Ui.SUB, false, "🌊 실측 조류 불러오는 중…").apply {
+            setPadding(dp(12), dp(8), dp(12), dp(8)); background = Ui.bg(a, Color.parseColor("#0F2A33"), 12, Color.parseColor("#1F4E5C"))
+        }
+        col.addView(curView, Ui.lp(a, MATCH, WRAP, top = 8))
+        Weather.current(a, lat, lon) { c, note ->
+            if (c == null) { curView.text = "🌊 실측 조류: " + note.ifBlank { "값이 없어요" }; return@current }
+            val lvl = Weather.currentLevel(c.speed)
+            val col0 = when (lvl) { "셈" -> Color.parseColor("#FF8A65"); "보통" -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#7FE0D0") }
+            val sb = android.text.SpannableStringBuilder("🌊 실측 조류 (지금)  ")
+            val st = sb.length
+            val arrow = c.dir?.let { d -> arrayOf("↑", "↗", "→", "↘", "↓", "↙", "←", "↖")[(((d + 22.5) % 360) / 45).toInt()] } ?: ""
+            sb.append((c.dir?.let { "${Weather.dir16(it)} $arrow  " } ?: "") +
+                String.format(Locale.KOREA, "%.1fcm/s · %.1f노트 · %s", c.speed, Weather.cmsKnots(c.speed), lvl))
+            sb.setSpan(android.text.style.ForegroundColorSpan(col0), st, sb.length, 0)
+            sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), st, sb.length, 0)
+            val hm = Regex("\\d{1,2}:\\d{2}").find(c.at)?.value ?: c.at
+            sb.append("\n${c.station} 관측소 ${hm} · ${String.format(Locale.KOREA, "%.0f", c.km)}km · 유향 = 물이 흘러가는 방향")
+            curView.text = sb
+        }
 
         // ---- 바람 · 파도 · 수온 ----
         // 제목 + (관리자·권한 받은 사람만) 새로고침: 기억해 둔 값 무시하고 지금 바로 다시 받기

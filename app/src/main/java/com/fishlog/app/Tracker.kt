@@ -58,7 +58,12 @@ object Tracker {
     /** 10분 넘게 제자리 (닻 내리고 오래 있을 때) → 위치 재는 간격을 더 늘림 */
     private fun longStill(): Boolean = !moving && anchorTime > 0 && (last?.time ?: 0L) - anchorTime > 10 * 60_000L
 
+    /** 조과 버튼을 누른 뒤 1분 동안은 GPS를 2초마다 (그 조과 위치를 정확하게) */
+    private var burstUntil = 0L
+    private val main = android.os.Handler(Looper.getMainLooper())
+
     private fun desiredInterval(): Long = when {
+        System.currentTimeMillis() < burstUntil -> 2_000L
         live -> 3_000L
         Store.saver -> 180_000L
         moving -> 20_000L
@@ -98,8 +103,9 @@ object Tracker {
             moving = false
         }
         if (wasMoving != moving || longStill()) reapply()
-        // 조과 버튼을 눌렀을 때 위치가 없었던 조과 → 지금 잡힌 위치로 채움 (1분 안에 누른 것만)
-        Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude)
+        // 조과 버튼을 누른 뒤 1분 안에 잡힌 위치 → 그 조과 위치로 (GPS면 정확, 아니면 위치 없던 것만 대략)
+        Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else -1f,
+            loc.provider == LocationManager.GPS_PROVIDER)
 
         val saved = lastSaved
         if (saved == null || loc.time - saved.time >= saveEvery() || loc.distanceTo(saved) >= 30f) {
@@ -116,13 +122,39 @@ object Tracker {
         interval = desiredInterval()
         try {
             if (m.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                m.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, if (live) 0f else 10f, listener, Looper.getMainLooper())
+                val fast = interval <= 3_000L
+                m.requestLocationUpdates(LocationManager.GPS_PROVIDER, interval, if (fast) 0f else 10f, listener, Looper.getMainLooper())
+                // 조과를 누른 뒤엔 실내·약한 신호 대비 와이파이·기지국 위치도 같이 (GPS가 오면 GPS 우선)
+                if (System.currentTimeMillis() < burstUntil && m.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
+                    m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 5_000L, 0f, listener, Looper.getMainLooper())
             } else if (m.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 m.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, maxOf(interval, 60_000L), 30f, listener, Looper.getMainLooper())
             }
         } catch (_: SecurityException) {
         } catch (_: IllegalArgumentException) {
         }
+    }
+
+    /** 조과 버튼을 눌렀을 때: 1분 동안 GPS 촘촘히 (끝나면 원래 간격으로) */
+    fun burst() {
+        if (!running) return
+        val first = System.currentTimeMillis() >= burstUntil
+        burstUntil = System.currentTimeMillis() + 60_000L
+        if (first) request()
+        main.removeCallbacks(burstEnd); main.postDelayed(burstEnd, 61_000L)
+    }
+    private val burstEnd = Runnable { reapply() }
+
+    /** GPS가 없을 때 쓸 폰 위치 (와이파이·기지국 · 30분 안) — 대략 */
+    @SuppressLint("MissingPermission")
+    fun approx(now: Long): Location? {
+        if (!Store.appLoc) return null
+        val m = lm ?: return null
+        return try {
+            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER, LocationManager.GPS_PROVIDER)
+                .mapNotNull { p: String -> try { m.getLastKnownLocation(p) } catch (_: Exception) { null } }
+                .filter { now - it.time < 30 * 60_000L }.maxByOrNull { it.time }
+        } catch (_: Exception) { null }
     }
 
     /**
