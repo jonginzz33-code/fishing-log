@@ -27,6 +27,15 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // v3.7 🦀 해루질 참고 구역 (모두 읽기 · 관리자만 쓰기)
+    match /haeruZones/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /haeruMeta/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       // 권한(perms)은 관리자만 바꿈
@@ -159,6 +168,12 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
     }
     // ---- 전체 사용자에게 '지금 출조 중' 공유 (본인만 쓰기, 정확한 위치 없음) ----
+    // ---- 실시간 조과 지도 (전체 공유 + '정확한 위치 공유' 켠 사람) — 보는 건 관리자가 권한(liveMap) 준 사람만 ----
+    match /publicLiveMap/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPerm('liveMap'));
+      allow create, update: if notBanned() && request.auth.uid == uid;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
     match /publicLive/{uid} {
       allow read: if signedIn();
       allow create, update: if notBanned() && request.auth.uid == uid && request.resource.data.owner == uid;
@@ -206,6 +221,12 @@ service cloud.firestore {
         allow read: if isMember(gid);
         allow create, update: if isMember(gid) && request.auth.uid == mid;
         allow delete: if isGroupOwner(gid) || request.auth.uid == mid;
+      }
+      // 실시간 조과 지도 (그룹) — 그룹원 중 관리자가 권한(liveMap) 준 사람만 보기
+      match /liveMap/{mid} {
+        allow read: if isMember(gid) && (request.auth.uid == mid || isAdmin() || hasPerm('liveMap'));
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
+        allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid) || isAdmin());
       }
       match /live/{mid} {
         allow read: if isMember(gid);

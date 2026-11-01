@@ -438,13 +438,14 @@ class MainActivity : Activity() {
         val tideCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = Ui.bg(this@MainActivity, Ui.CARD, 14)
+            background = WxArt.CardBg(this@MainActivity, Ui.CARD, 14, WxArt.NONE).also { tideBg = it }
             setPadding(dp(14), dp(10), dp(10), dp(10))
             isClickable = true
             setOnClickListener { openTodayTide() }
         }
+        tideCardView = tideCard
         val tideTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        tideTitle = Ui.text(this, 17f, Ui.TEXT, true, "")
+        tideTitle = Ui.text(this, 17f, Ui.TEXT, true, "").apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         tideSub = Ui.text(this, 12f, Ui.SUB, false, "물때 불러오는 중…")
         tideSun = Ui.text(this, 12f, Ui.SUB, false, "")
         tideTexts.addView(tideTitle); tideTexts.addView(tideSub, Ui.lp(this, MATCH, WRAP, top = 2))
@@ -497,8 +498,9 @@ class MainActivity : Activity() {
         col.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 출조 시작 / 종료: 카드 바로 위 (앱 켜면 바로 누를 수 있게)
-        tripBtn = Ui.button(this, "출조 시작", filled = true) { onTripButton() }
+        tripBtn = Ui.button(this, "출조 시작", filled = true) { onTripButton() }.apply { maxLines = 1 }
         col.addView(tripBtn, Ui.lp(this, MATCH, WRAP, top = 14))
+        Zones.listener = { msg -> runOnUiThread { if (!isFinishing) showMessage(msg) } }
 
         // 카운터
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -554,8 +556,19 @@ class MainActivity : Activity() {
 
         // ---- 맨 아래: [그룹] [메뉴] 두 버튼 → 누르면 물때 보기 같은 큰 창 ----
         col.addView(divider(), Ui.lp(this, MATCH, dp(1), top = 20))
-        // 세 줄: 그룹 · 메뉴 · 관리자 페이지 (한 줄에 하나씩) + 맨 위에 전체 조황 · 포인트 게시판
+        // 순서: 🟢 지금 출조 중 → 전체 조황 · 포인트 게시판 → 그룹 → 메뉴 → 관리자 페이지 (한 줄에 하나씩)
         val bottomRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
+        // 🟢 지금 출조 중 (내 그룹 + 전체 공유) — 맨 위 (그 아래 게시판 → 그룹 → 메뉴 → 관리자)
+        nowBtn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = Ui.bg(this@MainActivity, Color.parseColor("#16352A"), 14, Ui.GREEN)
+            isClickable = true; visibility = View.GONE
+            setOnClickListener { openNowDialog() }
+        }
+        nowTitle = Ui.text(this, 16f, Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중").apply { gravity = Gravity.CENTER }
+        nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 4; setLineSpacing(0f, 1.2f) }
+        nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
+        bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         boardBtn = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10))
             background = Ui.bg(this@MainActivity, Color.parseColor("#2A1A0C"), 16, Ui.ORANGE)
@@ -574,17 +587,6 @@ class MainActivity : Activity() {
         boardBtn.addView(bt, LinearLayout.LayoutParams(0, WRAP, 1f))
         boardBtn.addView(Ui.text(this, 16f, Color.parseColor("#F2B27A"), true, "›"))
         bottomRow.addView(boardBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
-        // 🟢 지금 출조 중 (내 그룹 + 전체 공유) — 게시판 바로 아래, 그룹 줄 위
-        nowBtn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(14), dp(10), dp(14), dp(10))
-            background = Ui.bg(this@MainActivity, Color.parseColor("#16352A"), 14, Ui.GREEN)
-            isClickable = true; visibility = View.GONE
-            setOnClickListener { openNowDialog() }
-        }
-        nowTitle = Ui.text(this, 16f, Color.parseColor("#9FE7C1"), true, "🟢 지금 출조 중").apply { gravity = Gravity.CENTER }
-        nowSub = Ui.text(this, 11f, Color.parseColor("#C9D3DE"), false, "").apply { gravity = Gravity.CENTER; maxLines = 4; setLineSpacing(0f, 1.2f) }
-        nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
-        bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         val gFrame = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(8), 0, 0) }
         groupBtn = Ui.button(this, "그룹") { openGroupDialog() }.apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; textSize = 16f }
         gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
@@ -1482,10 +1484,57 @@ class MainActivity : Activity() {
 
     /** 메인 물때 한 줄: "8물 · 사리" / "지금 날물 · 다음 간조 23:52 · 물세기 100%" */
     private var mainPct: Int? = null
+    private var tideBg: WxArt.CardBg? = null
+    private var tideCardView: View? = null
+    private var wxKey = ""
+    private var wxAt = 0L
+
+    /** 첫 줄 맨 앞: 📍안산 (지금 위치의 시 · 군 이름 짧게) */
+    private fun shortPlace(loc: Pair<Double, Double>?): String {
+        if (loc == null) return ""
+        val full = Area.name(this, loc.first, loc.second) { refreshTideRow() }
+        val w = full.trim().split(" ").firstOrNull()?.trim() ?: return ""
+        return if (w.length >= 3 && (w.endsWith("시") || w.endsWith("군"))) w.dropLast(1) else w
+    }
+
+    private fun paintTideTitle(t: Long, loc: Pair<Double, Double>?) {
+        val place = shortPlace(loc)
+        val sb = android.text.SpannableStringBuilder()
+        if (place.isNotBlank()) {
+            sb.append("📍$place ")
+            sb.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFB27A")), 0, sb.length, 0)
+            sb.setSpan(android.text.style.RelativeSizeSpan(0.88f), 0, sb.length, 0)
+        }
+        sb.append(TideDialog.dayTitle(Tide.mulName(t).substringBefore(" ("), t, mainPct, true))
+        tideTitle.text = sb
+    }
+
+    /** 물때 카드 배경 = 지금 날씨 그림 (30분마다) */
+    private fun paintTideWeather(loc: Pair<Double, Double>?) {
+        if (loc == null) return
+        val now = System.currentTimeMillis()
+        val key = String.format(Locale.US, "%.2f,%.2f", loc.first, loc.second)
+        if (key == wxKey && now - wxAt < 30 * 60_000L) return
+        wxKey = key; wxAt = now
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val day0 = cal.timeInMillis
+        Weather.fetch(this, loc.first, loc.second, day0) { day ->
+            if (isFinishing) return@fetch
+            val hr = ((System.currentTimeMillis() - day0) / 3_600_000L).toInt()
+            val k = WxArt.kindOf(day.at(hr) ?: day.at(hr - 1) ?: day.at(hr + 1))
+            if (k == WxArt.NONE && day.hours.isEmpty()) wxAt = 0L   // 못 받았으면 다음에 다시
+            tideBg?.let { it.kind = k; it.invalidateSelf() }
+            tideCardView?.invalidate()
+        }
+    }
+
     private fun refreshTideRow() {
         val now = System.currentTimeMillis()
-        tideTitle.text = TideDialog.dayTitle(Tide.mulName(now).substringBefore(" ("), now, mainPct, true)
         val loc = bestLocation()
+        paintTideTitle(now, loc)
+        paintTideWeather(loc)
         paintSun(now, loc)
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
         val st = Tide.stationFor(this, loc.first, loc.second)
@@ -1503,7 +1552,7 @@ class MainActivity : Activity() {
             }
             stg?.let { parts.add("물세기 ${it.pct}%" + if (it.estimated) "(추정)" else "") }
             mainPct = stg?.pct
-            tideTitle.text = TideDialog.dayTitle(Tide.mulName(t).substringBefore(" ("), t, mainPct, true)
+            paintTideTitle(t, loc)
             tideSub.text = parts.joinToString(" · ").ifBlank { "눌러서 물때 보기" }
             tideSub.setTextColor(if ((stg?.pct ?: 0) >= 80) Ui.ORANGE else Ui.SUB)
         }
@@ -1579,6 +1628,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (Zones.onResult(this, requestCode, resultCode, data)) return
         MainPhoto.onResult(this, requestCode, resultCode, data) { mainPrevPaint?.invoke() }
     }
 
@@ -1948,7 +1998,7 @@ class MainActivity : Activity() {
     /** 총관리자 메뉴 */
     private fun openAdminMenu() {
         if (!Cloud.isAdmin) return
-        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화")
+        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)")
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
@@ -1961,6 +2011,7 @@ class MainActivity : Activity() {
                         .setMessage("전체 채팅방 글만 모두 지워요. 그룹 채팅방과 1:1 문의방은 그대로예요. 되돌릴 수 없어요.")
                         .setPositiveButton("초기화") { _, _ -> Chat.resetAll { err -> showMessage(err ?: "전체 채팅방을 초기화했어요") } }
                         .setNegativeButton("취소", null).show()
+                    4 -> Zones.openAdmin(this)
                     else -> {}
                 }
             }
@@ -2426,10 +2477,20 @@ class MainActivity : Activity() {
         last1.text = lastText(t, 1)
         last2.text = lastText(t, 2)
         quick?.render()
-        tripBtn.text = if (t == null) "출조 시작" else "■ 출조 종료"
+        // 대기 중: ▶(분홍 동그라미) + 크고 굵은 '출조 시작' · 주황 + 하늘 이중 테두리 (높이는 그대로 52dp)
         // 출조 중엔 빨간 바탕 · 흰 글씨 (실수로 안 누르게, 끝낼 때 바로 찾게)
-        if (t == null) { tripBtn.setTextColor(Ui.BG); tripBtn.background = Ui.bg(this, Ui.TEXT, 14) }
-        else { tripBtn.setTextColor(Color.WHITE); tripBtn.background = Ui.bg(this, RED, 14) }
+        if (t == null) {
+            tripBtn.text = android.text.SpannableStringBuilder("  출조 시작").apply {
+                setSpan(android.text.style.ImageSpan(WxArt.PlayIcon(this@MainActivity, 20),
+                    if (android.os.Build.VERSION.SDK_INT >= 29) android.text.style.DynamicDrawableSpan.ALIGN_CENTER else android.text.style.DynamicDrawableSpan.ALIGN_BASELINE),
+                    0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            tripBtn.textSize = 20f; tripBtn.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            tripBtn.setTextColor(Ui.BG); tripBtn.background = WxArt.doubleBorder(this, Ui.TEXT)
+        } else {
+            tripBtn.text = "■ 출조 종료"; tripBtn.textSize = 15f
+            tripBtn.setTextColor(Color.WHITE); tripBtn.background = Ui.bg(this, RED, 14)
+        }
         undoBtn.visibility = if (t == null) View.GONE else View.VISIBLE
         placeRecent()
         if (t != null) Live.watch() else { Live.unwatch(); checkForced() }

@@ -296,6 +296,10 @@ object MapDialog {
             isTilesScaledToDpi = true
         }
 
+        // 🦀 해루질 참고 구역 (맨 아래 · ☑ 일 때만)
+        val zoneOv = Zones.ZoneOverlay(a) { Zones.on(a) }
+        zoneOv.onTapZones = { Zones.showInfo(a, it, map) }
+        map.overlays.add(zoneOv)
         // 지난 기록 (맨 아래, 반투명)
         val past = DotsOverlay(a, emptyList(), true) { showCluster(a, it) }
         past.isEnabled = false
@@ -415,7 +419,9 @@ object MapDialog {
             setPadding(dp(a, 16), dp(a, 8), dp(a, 16), 0)
         }
         var pastNote = ""
-        fun updateLegend() { legendView.text = legend + pastNote + "\n지도 © OpenStreetMap · 위성 © Esri" }
+        var zoneNote = ""
+        fun updateLegend() { legendView.text = legend + pastNote + (if (zoneNote.isNotBlank()) "\n$zoneNote" else "") + "\n지도 © OpenStreetMap · 위성 © Esri" }
+        zoneOv.hint = { zoneNote = it; updateLegend() }
         updateLegend()
 
         var follow = live != null
@@ -526,6 +532,7 @@ object MapDialog {
             map.invalidate()
         }
         addPill(pastBtn)
+        addPill(Zones.pill(a, map) { updateLegend() })
 
         val toggle = pill(if (Store.satellite) "지도로 보기" else "위성으로 보기")
         toggle.setOnClickListener {

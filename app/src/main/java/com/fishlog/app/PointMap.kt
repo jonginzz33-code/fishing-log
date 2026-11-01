@@ -58,6 +58,9 @@ object PointMap {
         val map = MapDialog.newMap(a)
         val dots = DotsOverlay(a, emptyList(), false) { MapDialog.openCluster(a, it) }
         val circle = CircleOverlay(a)
+        val zoneOv = Zones.ZoneOverlay(a) { Zones.on(a) }
+        zoneOv.onTapZones = { Zones.showInfo(a, it, map) }
+        map.overlays.add(zoneOv)
         map.overlays.add(dots)
         map.overlays.add(circle)
         val liveMe = LiveMe.attach(a, map, emptyList(), "포인트", autoFit = false)
@@ -68,6 +71,9 @@ object PointMap {
         val info = Ui.text(a, 12.5f, Ui.SUB, false, "")
         val anBtn = Ui.button(a, "📊 이 원 안 분석 보기", true).apply { visibility = View.GONE; minHeight = dp(46) }
         val bottom = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(12)) }
+        val zoneHint = Ui.text(a, 12f, Color.parseColor("#FFB27A"), false, "").apply { visibility = View.GONE }
+        bottom.addView(zoneHint)
+        zoneOv.hint = { s -> zoneHint.text = s; zoneHint.visibility = if (s.isBlank()) View.GONE else View.VISIBLE }
         bottom.addView(info)
         bottom.addView(anBtn, Ui.lp(a, MATCH, WRAP, top = 8))
         root.addView(bottom)
@@ -122,6 +128,7 @@ object PointMap {
                 setOnClickListener { circle.drawMode = !circle.drawMode; paintBar(); paintInfo(); map.invalidate() }
             })
             if (circle.center != null) add(pill("원 지우기", false) { circle.center = null; circle.drawMode = false; paintBar(); paintInfo(); map.invalidate() })
+            add(Zones.pill(a, map))
             add(pill(if (Store.satellite) "지도로" else "위성으로", false) { MapDialog.setSatellite(map, !Store.satellite); paintBar() })
         }
         anBtn.setOnClickListener {

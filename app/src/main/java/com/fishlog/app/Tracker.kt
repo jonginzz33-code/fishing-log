@@ -124,6 +124,8 @@ object Tracker {
         if (wasMoving != moving || longStill()) reapply()
         // 조과 버튼을 누른 뒤 1분 안에 잡힌 정확한 GPS → 그 조과 위치로
         Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else -1f, true)
+        // 🦀 해루질 참고 구역 안에 들어가면 알림 (켜 둔 사람만)
+        appCtx?.let { c -> try { Zones.onFix(c, loc.latitude, loc.longitude) } catch (_: Exception) {} }
 
         val saved = lastSaved
         if (saved == null || loc.time - saved.time >= saveEvery() || loc.distanceTo(saved) >= 30f) {

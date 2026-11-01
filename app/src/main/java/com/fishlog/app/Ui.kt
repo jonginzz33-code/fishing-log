@@ -38,6 +38,8 @@ object Ui {
             if (stroke != 0) setStroke(dp(c, 1), stroke)
         }
 
+    fun toast(c: Context, msg: String) = android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
+
     fun text(c: Context, size: Float, color: Int = TEXT, bold: Boolean = false, value: String = ""): TextView =
         TextView(c).apply {
             textSize = size

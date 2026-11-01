@@ -1,0 +1,1057 @@
+package com.fishlog.app
+
+import android.app.Activity
+import android.app.AlertDialog
+import android.app.Dialog
+import android.content.Context
+import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.text.InputType
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import com.fishlog.app.Ui.MATCH
+import com.fishlog.app.Ui.WRAP
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import org.json.JSONArray
+import org.json.JSONObject
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Overlay
+import java.io.File
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.atan
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
+
+/**
+ * 🦀 해루질 참고용 구역 (마을어장 · 양식장 · 수산자원관리수면 · 사고 위험 구역)
+ *  - 지도에 ☐ 해루질 참고용 을 켰을 때만 그림 (끄면 아무것도 안 보임 · 알림도 없음)
+ *  - 데이터: 관리자가 공공데이터포털에서 받은 CSV(공간정보 · 위경도)를 앱에서 올림 + 지도에서 직접 그려 추가·수정·삭제
+ *  - 서버: haeruZones/{칸}_{번호} (0.25° 칸마다 한 문서, 구역을 한 줄씩 글자로) · haeruMeta/info (판 번호 · 개수)
+ *  - 폰: 칸마다 파일로 기억, 판 번호가 바뀌면 다시 받음 (읽기 절약)
+ *  - 출조 중 + 켜짐: 구역 안에 들어가면 진동 + 알림 (참고용)
+ */
+object Zones {
+    class Zone(
+        val id: String, val type: String, val name: String,
+        /** 다각형 꼭짓점 (원이면 비어 있음) */
+        val pts: List<GeoPoint>,
+        /** 원: 가운데 + 반지름(m) */
+        val center: GeoPoint? = null, val radiusM: Double = 0.0,
+        /** 1~12 = 그 달만 (사고 위험 예측), 0 = 항상 */
+        val month: Int = 0,
+        val note: String = ""
+    ) {
+        val minLat = if (center != null) center.latitude - radiusM / 111_000.0 else pts.minOf { it.latitude }
+        val maxLat = if (center != null) center.latitude + radiusM / 111_000.0 else pts.maxOf { it.latitude }
+        val minLon = if (center != null) center.longitude - radiusM / 88_000.0 else pts.minOf { it.longitude }
+        val maxLon = if (center != null) center.longitude + radiusM / 88_000.0 else pts.maxOf { it.longitude }
+        val manual get() = id.startsWith("m")
+
+        fun contains(lat: Double, lon: Double): Boolean {
+            if (lat < minLat || lat > maxLat || lon < minLon || lon > maxLon) return false
+            if (center != null) {
+                val r = FloatArray(1)
+                android.location.Location.distanceBetween(lat, lon, center.latitude, center.longitude, r)
+                return r[0] <= radiusM
+            }
+            var inside = false
+            var j = pts.size - 1
+            for (i in pts.indices) {
+                val yi = pts[i].latitude; val xi = pts[i].longitude
+                val yj = pts[j].latitude; val xj = pts[j].longitude
+                if ((yi > lat) != (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside
+                j = i
+            }
+            return inside
+        }
+
+        fun activeNow(): Boolean = month == 0 || month == java.util.Calendar.getInstance().get(java.util.Calendar.MONTH) + 1
+
+        fun encode(): String {
+            val geo = if (center != null) String.format(Locale.US, "c:%.5f,%.5f,%.0f", center.latitude, center.longitude, radiusM)
+            else pts.joinToString(";") { String.format(Locale.US, "%.5f,%.5f", it.latitude, it.longitude) }
+            return listOf(id, type, clean(name), month.toString(), clean(note), geo).joinToString("|")
+        }
+    }
+
+    /** 종류: 코드 → 이름 · 색 */
+    val TYPES = linkedMapOf(
+        "village" to "마을어장", "farm" to "양식장", "res" to "수산자원관리수면",
+        "risk" to "사고 위험 구역", "etc" to "기타 어장"
+    )
+    fun typeColor(t: String): Int = when (t) {
+        "village" -> Color.parseColor("#FF8A3D")
+        "farm" -> Color.parseColor("#4FB3FF")
+        "res" -> Color.parseColor("#5FD39A")
+        "risk" -> Color.parseColor("#FF4D5E")
+        else -> Color.parseColor("#C9A6FF")
+    }
+    fun typeIcon(t: String): String = when (t) {
+        "village" -> "🐚"; "farm" -> "🦪"; "res" -> "🐟"; "risk" -> "⚠"; else -> "📍"
+    }
+    fun typeWarn(t: String): String = when (t) {
+        "village" -> "어촌계가 관리하는 마을어장일 수 있어요. 패류 · 해조류 등 채취는 분쟁 · 처벌될 수 있으니 확인하세요."
+        "farm" -> "면허 양식장일 수 있어요. 양식 생물 채취 · 시설 훼손은 처벌될 수 있어요."
+        "res" -> "수산자원관리수면일 수 있어요. 기간 · 어종 · 방법 제한이 있을 수 있어요."
+        "risk" -> "연안 사고 위험이 높은 곳이에요. 밀물 고립 · 갯골 · 너울에 주의하세요."
+        else -> "어업 면허 구역일 수 있어요. 채취 전에 확인하세요."
+    }
+
+    const val CELL = 4.0   // 1° 를 4칸 = 0.25°
+    const val MIN_ZOOM = 11.0
+    private const val COL = "haeruZones"
+    private const val CHUNK = 300_000
+
+    private val db get() = FirebaseFirestore.getInstance()
+    private val main = Handler(Looper.getMainLooper())
+
+    /** 칸 → 구역들 (폰에 기억된 것) */
+    private val cells = HashMap<String, List<Zone>>()
+    private val loading = HashSet<String>()
+    private var serverVer = -1L
+    private var verAt = 0L
+
+    private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+    /** ☐ 해루질 참고용 (기본 꺼짐) */
+    fun on(c: Context) = prefs(c).getBoolean("haeru_ref", false)
+    fun setOn(c: Context, v: Boolean) { prefs(c).edit().putBoolean("haeru_ref", v).apply(); if (!v) insideIds.clear() }
+
+    fun cellOf(lat: Double, lon: Double) = "${floor(lat * CELL).toInt()}_${floor(lon * CELL).toInt()}"
+    private fun cellsFor(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double, cap: Int = 36): List<String> {
+        val out = ArrayList<String>()
+        var y = floor(minLat * CELL).toInt()
+        while (y <= floor(maxLat * CELL).toInt()) {
+            var x = floor(minLon * CELL).toInt()
+            while (x <= floor(maxLon * CELL).toInt()) { out.add("${y}_$x"); if (out.size >= cap) return out; x++ }
+            y++
+        }
+        return out
+    }
+
+    private fun clean(s: String) = s.replace("|", "/").replace("\n", " ").replace("\r", " ").trim()
+
+    fun decodeLine(l: String): Zone? = try {
+        val p = l.split("|")
+        if (p.size < 6) null else {
+            val geo = p[5]
+            if (geo.startsWith("c:")) {
+                val v = geo.substring(2).split(",").map { it.toDouble() }
+                Zone(p[0], p[1], p[2], emptyList(), GeoPoint(v[0], v[1]), v[2], p[3].toIntOrNull() ?: 0, p[4])
+            } else {
+                val pts = geo.split(";").mapNotNull { s -> val v = s.split(","); if (v.size == 2) GeoPoint(v[0].toDouble(), v[1].toDouble()) else null }
+                if (pts.size < 3) null else Zone(p[0], p[1], p[2], pts, null, 0.0, p[3].toIntOrNull() ?: 0, p[4])
+            }
+        }
+    } catch (_: Exception) { null }
+
+    // ---------------- 불러오기 (폰 파일 → 서버) ----------------
+    private fun dir(c: Context) = File(c.filesDir, "haeru").apply { mkdirs() }
+    private fun localVer(c: Context) = prefs(c).getLong("haeru_ver", -1L)
+
+    /** 서버 판 번호 (30분마다 한 번만 읽음) → 바뀌었으면 폰 기억 비움 */
+    private fun checkVer(c: Context, done: () -> Unit) {
+        val now = System.currentTimeMillis()
+        if (serverVer >= 0 && now - verAt < 30 * 60_000L) return done()
+        db.collection("haeruMeta").document("info").get()
+            .addOnSuccessListener { d ->
+                serverVer = d.getLong("ver") ?: 0L; verAt = System.currentTimeMillis()
+                if (serverVer != localVer(c)) {
+                    dir(c).listFiles()?.forEach { it.delete() }
+                    cells.clear()
+                    prefs(c).edit().putLong("haeru_ver", serverVer).apply()
+                }
+                done()
+            }
+            .addOnFailureListener { verAt = System.currentTimeMillis(); if (serverVer < 0) serverVer = localVer(c); done() }
+    }
+
+    /** 이 칸들 준비 (폰에 있으면 바로, 없으면 서버에서) */
+    fun ensure(c: Context, want: List<String>, done: () -> Unit) {
+        if (!Cloud.isInitialized() || Cloud.user == null) return done()
+        checkVer(c) {
+            val miss = ArrayList<String>()
+            want.forEach { id ->
+                if (cells.containsKey(id) || id in loading) return@forEach
+                val f = File(dir(c), "$id.txt")
+                if (f.exists()) cells[id] = f.readLines().mapNotNull { decodeLine(it) } else miss.add(id)
+            }
+            if (miss.isEmpty()) return@checkVer done()
+            loading.addAll(miss)
+            var left = (miss.size + 29) / 30
+            miss.chunked(30).forEach { part ->
+                db.collection(COL).whereIn("cell", part).get()
+                    .addOnSuccessListener { q ->
+                        val by = HashMap<String, StringBuilder>()
+                        part.forEach { by[it] = StringBuilder() }
+                        q.documents.forEach { d ->
+                            val id = d.getString("cell") ?: return@forEach
+                            val z = d.getString("z") ?: ""
+                            if (z.isNotBlank()) by.getOrPut(id) { StringBuilder() }.append(z).append('\n')
+                        }
+                        by.forEach { (id, sb) ->
+                            val txt = sb.toString().trim()
+                            try { File(dir(c), "$id.txt").writeText(txt) } catch (_: Exception) {}
+                            cells[id] = txt.lines().mapNotNull { decodeLine(it) }
+                        }
+                        loading.removeAll(part.toSet())
+                        left--; if (left == 0) main.post { done() }
+                    }
+                    .addOnFailureListener {
+                        loading.removeAll(part.toSet())
+                        left--; if (left == 0) main.post { done() }
+                    }
+            }
+        }
+    }
+
+    /** 지금 기억된 것 중 이 범위에 걸치는 구역 (같은 구역이 여러 칸에 있어도 하나로) */
+    fun zonesIn(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double): List<Zone> {
+        val seen = HashSet<String>()
+        val out = ArrayList<Zone>()
+        cellsFor(minLat, maxLat, minLon, maxLon, 200).forEach { id ->
+            cells[id]?.forEach { z ->
+                if (z.activeNow() && z.maxLat >= minLat && z.minLat <= maxLat && z.maxLon >= minLon && z.minLon <= maxLon && seen.add(z.id)) out.add(z)
+            }
+        }
+        return out
+    }
+
+    fun zonesAt(lat: Double, lon: Double): List<Zone> =
+        zonesIn(lat, lat, lon, lon).filter { it.contains(lat, lon) }
+
+    // ---------------- 출조 중 들어가면 알림 ----------------
+    private val insideIds = HashSet<String>()
+    private var lastCheck = 0L
+
+    /** Tracker 가 정확한 위치를 받을 때마다 */
+    fun onFix(c: Context, lat: Double, lon: Double) {
+        if (!on(c) || Store.current == null) { insideIds.clear(); return }
+        val now = System.currentTimeMillis()
+        if (now - lastCheck < 15_000L) return
+        lastCheck = now
+        val near = cellsFor(lat - 0.01, lat + 0.01, lon - 0.01, lon + 0.01)
+        ensure(c, near) {
+            val here = zonesAt(lat, lon)
+            val ids = here.map { it.id }.toSet()
+            val fresh = here.filter { it.id !in insideIds }
+            insideIds.clear(); insideIds.addAll(ids)
+            if (fresh.isNotEmpty()) alert(c, fresh)
+        }
+    }
+
+    private fun alert(c: Context, list: List<Zone>) {
+        val z = list.first()
+        val title = "${typeIcon(z.type)} ${TYPES[z.type] ?: "구역"} 안이에요 (해루질 참고용)"
+        val text = (if (z.name.isNotBlank()) z.name + " · " else "") + typeWarn(z.type)
+        try { Haptics.undo(c) } catch (_: Exception) {}
+        try {
+            val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel("haeruZone") == null)
+                nm.createNotificationChannel(android.app.NotificationChannel("haeruZone", "해루질 참고 구역 알림", android.app.NotificationManager.IMPORTANCE_HIGH))
+            val open = android.app.PendingIntent.getActivity(c, 13, Intent(c, MainActivity::class.java),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = android.app.Notification.Builder(c, "haeruZone")
+                .setSmallIcon(R.drawable.ic_stat_octo)
+                .setColor(typeColor(z.type))
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(android.app.Notification.BigTextStyle().bigText(text + "\n※ 참고용 자료예요. 실제 경계 · 허용 여부는 현장 안내판 · 어촌계 · 지자체에 확인하세요."))
+                .setContentIntent(open).setAutoCancel(true)
+                .build()
+            nm.notify(31, n)
+        } catch (_: Exception) {}
+        listener?.invoke(title)
+    }
+    /** 앱이 켜져 있으면 화면 아래 안내도 */
+    var listener: ((String) -> Unit)? = null
+
+    // ---------------- 지도 위에 그리기 ----------------
+    class ZoneOverlay(private val a: Activity, private val isOn: () -> Boolean) : Overlay() {
+        private val d = a.resources.displayMetrics.density
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+        private val txt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD }
+        private val halo = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; style = Paint.Style.STROKE; color = Color.parseColor("#0B1A26") }
+        private val path = Path()
+        private val pt = android.graphics.Point()
+        private var lastKey = ""
+        /** 그리기 모드 (관리자): 찍은 꼭짓점 */
+        val drawing = ArrayList<GeoPoint>()
+        var drawMode = false
+        var onTapZones: ((List<Zone>) -> Unit)? = null
+        var onDrawChange: (() -> Unit)? = null
+        var hint: ((String) -> Unit)? = null
+        private var lastHint = ""
+        private fun say(s: String) { if (s != lastHint) { lastHint = s; hint?.let { h -> a.runOnUiThread { h(s) } } } }
+
+        override fun draw(c: Canvas, map: MapView, shadow: Boolean) {
+            if (shadow) return
+            if (drawMode) drawDraft(c, map)
+            if (!isOn()) { say(""); return }
+            if (map.zoomLevelDouble < MIN_ZOOM) { say("🦀 해루질 참고 구역은 조금 더 확대하면 보여요"); return }
+            val box = map.boundingBox
+            val want = cellsFor(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
+            val key = want.joinToString(",")
+            if (key != lastKey) {
+                lastKey = key
+                ensure(a, want) { map.invalidate() }
+            }
+            val list = zonesIn(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
+            say(if (list.isEmpty()) "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요" else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)")
+            val pj = map.projection
+            val showName = map.zoomLevelDouble >= 14.0
+            txt.textSize = 11 * d; halo.textSize = 11 * d; halo.strokeWidth = 3 * d
+            list.forEach { z ->
+                val col = typeColor(z.type)
+                fill.color = Color.argb(if (z.type == "risk") 70 else 55, Color.red(col), Color.green(col), Color.blue(col))
+                edge.color = col; edge.strokeWidth = 1.6f * d
+                edge.pathEffect = if (z.type == "risk") android.graphics.DashPathEffect(floatArrayOf(6 * d, 4 * d), 0f) else null
+                var cx: Float; var cy: Float
+                if (z.center != null) {
+                    pj.toPixels(z.center, pt)
+                    val r = pj.metersToPixels(z.radiusM.toFloat())
+                    c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, fill); c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, edge)
+                    cx = pt.x.toFloat(); cy = pt.y.toFloat()
+                } else {
+                    path.reset()
+                    var sx = 0f; var sy = 0f
+                    z.pts.forEachIndexed { i, g ->
+                        pj.toPixels(g, pt)
+                        if (i == 0) path.moveTo(pt.x.toFloat(), pt.y.toFloat()) else path.lineTo(pt.x.toFloat(), pt.y.toFloat())
+                        sx += pt.x; sy += pt.y
+                    }
+                    path.close()
+                    c.drawPath(path, fill); c.drawPath(path, edge)
+                    cx = sx / z.pts.size; cy = sy / z.pts.size
+                }
+                if (showName) {
+                    val label = typeIcon(z.type) + " " + (z.name.ifBlank { TYPES[z.type] ?: "" }).take(14)
+                    txt.color = col
+                    c.drawText(label, cx, cy, halo); c.drawText(label, cx, cy, txt)
+                }
+            }
+        }
+
+        private fun drawDraft(c: Canvas, map: MapView) {
+            if (drawing.isEmpty()) return
+            val pj = map.projection
+            path.reset()
+            drawing.forEachIndexed { i, g ->
+                pj.toPixels(g, pt)
+                if (i == 0) path.moveTo(pt.x.toFloat(), pt.y.toFloat()) else path.lineTo(pt.x.toFloat(), pt.y.toFloat())
+            }
+            if (drawing.size >= 3) path.close()
+            fill.color = Color.argb(60, 255, 79, 168)
+            edge.color = Color.parseColor("#FF4FA8"); edge.strokeWidth = 2.5f * d; edge.pathEffect = null
+            if (drawing.size >= 3) c.drawPath(path, fill)
+            c.drawPath(path, edge)
+            drawing.forEach { g ->
+                pj.toPixels(g, pt)
+                fill.color = Color.WHITE; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 6 * d, fill)
+                c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 6 * d, edge)
+            }
+        }
+
+        override fun onSingleTapConfirmed(e: MotionEvent, map: MapView): Boolean {
+            val g = map.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
+            if (drawMode) { drawing.add(g); onDrawChange?.invoke(); map.invalidate(); return true }
+            if (!isOn() || map.zoomLevelDouble < MIN_ZOOM) return false
+            val hit = zonesAt(g.latitude, g.longitude)
+            if (hit.isEmpty()) return false
+            onTapZones?.invoke(hit); return true
+        }
+    }
+
+    /** 지도 위 ☐ 해루질 참고용 칩 (지도 창마다) */
+    fun pill(a: Activity, map: MapView, after: () -> Unit = {}): TextView {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val v = Ui.text(a, 13f, Ui.TEXT, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
+        }
+        fun paint() {
+            val o = on(a)
+            v.text = (if (o) "☑" else "☐") + " 해루질 참고용"
+            v.setTextColor(if (o) Color.parseColor("#1B0E02") else Color.parseColor("#FFB27A"))
+            v.background = if (o) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FFB27A"))
+        }
+        paint()
+        v.setOnClickListener {
+            val now = !on(a)
+            setOn(a, now); paint(); map.invalidate(); after()
+            if (now && !prefs(a).getBoolean("haeru_seen", false)) {
+                prefs(a).edit().putBoolean("haeru_seen", true).apply()
+                explain(a)
+            }
+        }
+        return v
+    }
+
+    /** 처음 켤 때 · ? 설명 */
+    fun explain(a: Activity) {
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🦀 해루질 참고용")
+            .setMessage("지도에 이런 곳을 색으로 보여줘요 (확대하면 보여요)\n\n" +
+                TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}" } +
+                "\n\n• 출조 중에 이 구역 안으로 들어가면 진동 + 알림으로 알려줘요\n" +
+                "• 낚시는 이 구역에서도 할 수 있어요. 해루질(맨손 · 도구 채취) 분쟁을 피하려는 참고용이에요\n" +
+                "• 공공데이터를 바탕으로 해서 실제 경계 · 최신 면허와 다를 수 있어요. 현장 안내판 · 어촌계 · 지자체 안내가 우선이에요\n" +
+                "• 끄면(☐) 지도에도 안 보이고 알림도 없어요")
+            .setPositiveButton("확인", null).show()
+    }
+
+    /** 구역을 눌렀을 때 */
+    fun showInfo(a: Activity, list: List<Zone>, map: MapView?) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(6), dp(18), dp(4)) }
+        var dlg: AlertDialog? = null
+        list.forEach { z ->
+            val card = LinearLayout(a).apply {
+                orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = Ui.bg(a, Ui.CARD, 12, typeColor(z.type))
+            }
+            card.addView(Ui.text(a, 15f, typeColor(z.type), true, "${typeIcon(z.type)} ${TYPES[z.type] ?: "구역"}" +
+                (if (z.month > 0) " (${z.month}월 예측)" else "")))
+            if (z.name.isNotBlank()) card.addView(Ui.text(a, 14f, Ui.TEXT, true, z.name), Ui.lp(a, MATCH, WRAP, top = 2))
+            if (z.note.isNotBlank()) card.addView(Ui.text(a, 12f, Ui.SUB, false, z.note), Ui.lp(a, MATCH, WRAP, top = 2))
+            card.addView(Ui.text(a, 12.5f, Ui.TEXT, false, typeWarn(z.type)).apply { setLineSpacing(0f, 1.2f) }, Ui.lp(a, MATCH, WRAP, top = 6))
+            if (Cloud.isAdmin) {
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                r.addView(Ui.button(a, "✎ 수정") {
+                    dlg?.dismiss()
+                    askMeta(a, "구역 수정", z.type, z.name, z.note) { t, n, no ->
+                        replaceZone(a, z, Zone(z.id, t, n, z.pts, z.center, z.radiusM, z.month, no)) { err ->
+                            Ui.toast(a, err ?: "고쳤어요"); map?.invalidate()
+                        }
+                    }
+                }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.button(a, "🗑 삭제") {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("이 구역을 지울까요?")
+                        .setMessage("${TYPES[z.type]} ${z.name}")
+                        .setPositiveButton("삭제") { _, _ ->
+                            dlg?.dismiss()
+                            replaceZone(a, z, null) { err -> Ui.toast(a, err ?: "지웠어요"); map?.invalidate() }
+                        }.setNegativeButton("취소", null).show()
+                }.apply { minHeight = dp(40); textSize = 13f; setTextColor(Color.parseColor("#FF8A92")) },
+                    LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+                card.addView(r, Ui.lp(a, MATCH, WRAP, top = 8))
+            }
+            col.addView(card, Ui.lp(a, MATCH, WRAP, top = 8))
+        }
+        col.addView(Ui.text(a, 11.5f, Color.parseColor("#F2C14E"), false,
+            "※ 참고용이에요. 실제 경계 · 허용 여부는 현장 안내판 · 어촌계 · 지자체가 우선이에요. 낚시는 할 수 있어요."),
+            Ui.lp(a, MATCH, WRAP, top = 10))
+        dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🦀 해루질 참고 구역")
+            .setView(ScrollView(a).apply { addView(col) })
+            .setPositiveButton("닫기", null).show()
+    }
+
+    /** 종류 · 이름 · 메모 입력 */
+    private fun askMeta(a: Activity, title: String, type0: String, name0: String, note0: String, done: (String, String, String) -> Unit) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        var type = type0
+        val chips = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        fun paintChips() {
+            chips.removeAllViews()
+            TYPES.forEach { (k, v) ->
+                val on = k == type
+                chips.addView(Ui.text(a, 14f, if (on) Color.parseColor("#1B0E02") else Ui.TEXT, true, (if (on) "✓ " else "") + typeIcon(k) + " " + v).apply {
+                    gravity = Gravity.CENTER; setPadding(0, dp(9), 0, dp(9))
+                    background = if (on) Ui.bg(a, typeColor(k), 12) else Ui.bg(a, Color.TRANSPARENT, 12, Ui.LINE)
+                    setOnClickListener { type = k; paintChips() }
+                }, Ui.lp(a, MATCH, WRAP, top = 6))
+            }
+        }
+        paintChips()
+        box.addView(chips)
+        val name = EditText(a).apply { hint = "이름 (예: OO리 마을어장)"; setText(name0); inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
+        val note = EditText(a).apply { hint = "메모 (예: 어촌계 연락처 · 기간)"; setText(note0); inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
+        box.addView(name, Ui.lp(a, MATCH, WRAP, top = 10)); box.addView(note, Ui.lp(a, MATCH, WRAP, top = 4))
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(title)
+            .setView(ScrollView(a).apply { addView(box) })
+            .setPositiveButton("저장") { _, _ -> done(type, name.text.toString().trim(), note.text.toString().trim()) }
+            .setNegativeButton("취소", null).show()
+    }
+
+    // ---------------- 관리자: 저장 ----------------
+    private fun newId(manual: Boolean): String {
+        val cs = "abcdefghijkmnpqrstuvwxyz23456789"
+        return (if (manual) "m" else "c") + (1..7).map { cs.random() }.joinToString("")
+    }
+
+    /** 구역이 걸치는 칸들 */
+    private fun cellsOfZone(z: Zone) = cellsFor(z.minLat, z.maxLat, z.minLon, z.maxLon, 16)
+
+    /** 칸 하나를 통째로 다시 씀 (문서 여러 개로 쪼갬) */
+    private fun writeCell(batch: com.google.firebase.firestore.WriteBatch, cell: String, zones: List<Zone>, oldDocs: Int): Int {
+        val chunks = ArrayList<String>()
+        val sb = StringBuilder()
+        zones.forEach { z ->
+            val line = z.encode()
+            if (sb.length + line.length + 1 > CHUNK && sb.isNotEmpty()) { chunks.add(sb.toString()); sb.setLength(0) }
+            if (sb.isNotEmpty()) sb.append('\n')
+            sb.append(line)
+        }
+        if (sb.isNotEmpty()) chunks.add(sb.toString())
+        chunks.forEachIndexed { k, s ->
+            batch.set(db.collection(COL).document("${cell}_$k"), mapOf("cell" to cell, "k" to k, "z" to s, "at" to System.currentTimeMillis()))
+        }
+        for (k in chunks.size until oldDocs) batch.delete(db.collection(COL).document("${cell}_$k"))
+        return chunks.size
+    }
+
+    /** 서버의 칸 몇 개를 읽어 옴 (관리자 수정용) → 칸 → (구역들, 문서 수) */
+    private fun readCells(ids: List<String>, done: (Map<String, Pair<MutableList<Zone>, Int>>?) -> Unit) {
+        if (ids.isEmpty()) return done(emptyMap())
+        val out = HashMap<String, Pair<MutableList<Zone>, Int>>()
+        ids.forEach { out[it] = mutableListOf<Zone>() to 0 }
+        var left = (ids.size + 29) / 30
+        var failed = false
+        ids.chunked(30).forEach { part ->
+            db.collection(COL).whereIn("cell", part).get()
+                .addOnSuccessListener { q ->
+                    q.documents.forEach { d ->
+                        val id = d.getString("cell") ?: return@forEach
+                        val cur = out[id] ?: (mutableListOf<Zone>() to 0)
+                        (d.getString("z") ?: "").lines().mapNotNull { decodeLine(it) }.forEach { cur.first.add(it) }
+                        out[id] = cur.first to cur.second + 1
+                    }
+                    left--; if (left == 0) done(if (failed) null else out)
+                }
+                .addOnFailureListener { failed = true; left--; if (left == 0) done(null) }
+        }
+    }
+
+    /** 판 번호 올리기 + 종류별 개수 */
+    private fun bumpVer(counts: Map<String, Int>?, done: (String?) -> Unit) {
+        val data = HashMap<String, Any>()
+        data["ver"] = System.currentTimeMillis()
+        if (counts != null) data["counts"] = counts
+        db.collection("haeruMeta").document("info").set(data, SetOptions.merge())
+            .addOnSuccessListener { done(null) }.addOnFailureListener { done("저장 실패: ${it.message}") }
+    }
+
+    /** 구역 하나 추가 / 수정 / 삭제 (new = null 이면 삭제) */
+    fun replaceZone(a: Activity, old: Zone?, new: Zone?, done: (String?) -> Unit) {
+        if (!Cloud.isAdmin) return done("관리자만 할 수 있어요")
+        val ids = ((old?.let { cellsOfZone(it) } ?: emptyList()) + (new?.let { cellsOfZone(it) } ?: emptyList())).distinct()
+        readCells(ids) { got ->
+            if (got == null) return@readCells done("서버를 읽지 못했어요")
+            val batch = db.batch()
+            got.forEach { (cell, pair) ->
+                val list = pair.first.filter { it.id != old?.id && it.id != new?.id }.toMutableList()
+                if (new != null && cell in cellsOfZone(new)) list.add(new)
+                writeCell(batch, cell, list, pair.second)
+            }
+            batch.commit().addOnSuccessListener {
+                ids.forEach { cells.remove(it); File(dir(a), "$it.txt").delete() }
+                bumpVer(null) { err ->
+                    prefs(a).edit().putLong("haeru_ver", serverVer).apply()
+                    verAt = 0L
+                    done(err)
+                }
+            }.addOnFailureListener { done("저장 실패: ${it.message}") }
+        }
+    }
+
+    // ---------------- 관리자 메뉴 ----------------
+    const val PICK_CSV = 7301
+
+    fun openAdmin(a: Activity) {
+        if (!Cloud.isAdmin) return
+        db.collection("haeruMeta").document("info").get().addOnCompleteListener { t ->
+            @Suppress("UNCHECKED_CAST")
+            val counts = ((if (t.isSuccessful) t.result else null)?.get("counts") as? Map<String, Any>)?.mapValues { (it.value as? Number)?.toInt() ?: 0 } ?: emptyMap()
+            val total = counts.values.sum()
+            val msg = if (total == 0) "아직 올린 구역이 없어요" else
+                TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}: ${counts[it.key] ?: 0}곳" } + "\n(올린 CSV 기준 · 직접 그린 구역 포함)"
+            val items = arrayOf("📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
+                "🗑 종류별로 CSV 구역 모두 지우기", "📌 어디서 데이터를 받나요?")
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("🦀 해루질 참고 구역 · 관리")
+                .setMessage(msg)
+                .setItems(items) { _, i ->
+                    when (i) {
+                        0 -> pickCsv(a)
+                        1 -> openAdminMap(a)
+                        2 -> askWipe(a)
+                        3 -> sources(a)
+                    }
+                }
+                .setNegativeButton("닫기", null).show()
+        }
+    }
+
+    private fun sources(a: Activity) {
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("📌 데이터 받는 곳 (공공데이터포털 data.go.kr)")
+            .setMessage("검색창에 아래 이름을 넣고 [다운로드] → 이 메뉴의 'CSV 올리기'\n\n" +
+                "🐚🦪 해양수산부_공동활용체계_어장정보 (최신 연도) — 마을어업 · 양식 면허 어장 (종류 자동 구분)\n" +
+                "🦪 해양수산부_공동활용체계_어업면허양식장\n" +
+                "🐚 각 시·군 어업면허대장 (위도 · 경도 있는 것, 예: 부안군)\n" +
+                "🐟 수산자원관리수면 · 수산자원보호구역 (시·도 고시, 좌표 있는 파일)\n" +
+                "⚠ 해양경찰청_연안안전 예측분석모델 — 사고 위험 격자 (위험등급 골라서)\n\n" +
+                "• 좌표가 없는 파일(주소만 있는 면허대장 등)은 쓸 수 없어요 → 지도에서 직접 그리기\n" +
+                "• 같은 종류를 다시 올리면 그 종류의 예전 CSV 구역은 새것으로 바뀌고, 직접 그린 구역은 그대로예요")
+            .setPositiveButton("확인", null).show()
+    }
+
+    private fun pickCsv(a: Activity) {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "application/octet-stream"))
+        }
+        try {
+            @Suppress("DEPRECATION")
+            a.startActivityForResult(i, PICK_CSV)
+        } catch (_: Exception) {
+            @Suppress("DEPRECATION")
+            a.startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply { type = "*/*" }, PICK_CSV)
+        }
+    }
+
+    private fun askWipe(a: Activity) {
+        val keys = TYPES.keys.toList()
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("어떤 종류의 CSV 구역을 지울까요?")
+            .setItems(keys.map { "${typeIcon(it)} ${TYPES[it]}" }.toTypedArray()) { _, i ->
+                val t = keys[i]
+                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("${TYPES[t]} CSV 구역을 모두 지울까요?")
+                    .setMessage("직접 그린 구역은 남아요. 되돌릴 수 없어요.")
+                    .setPositiveButton("지우기") { _, _ ->
+                        val pd = progress(a, "지우는 중…")
+                        replaceAll(a, setOf(t), emptyList()) { err -> pd.dismiss(); Ui.toast(a, err ?: "지웠어요") }
+                    }.setNegativeButton("취소", null).show()
+            }.setNegativeButton("취소", null).show()
+    }
+
+    private fun progress(a: Activity, msg: String): AlertDialog =
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setMessage(msg).setCancelable(false).show()
+
+    /** 이 종류들의 CSV 구역을 통째로 새것으로 (직접 그린 것은 그대로) */
+    private fun replaceAll(a: Activity, types: Set<String>, fresh: List<Zone>, done: (String?) -> Unit) {
+        db.collection(COL).get().addOnSuccessListener { q ->
+            val byCell = HashMap<String, MutableList<Zone>>()
+            val docs = HashMap<String, Int>()
+            q.documents.forEach { d ->
+                val id = d.getString("cell") ?: return@forEach
+                docs[id] = (docs[id] ?: 0) + 1
+                val l = byCell.getOrPut(id) { mutableListOf() }
+                (d.getString("z") ?: "").lines().mapNotNull { decodeLine(it) }.forEach { z ->
+                    if (z.manual || z.type !in types) l.add(z)
+                }
+            }
+            fresh.forEach { z -> cellsOfZone(z).forEach { byCell.getOrPut(it) { mutableListOf() }.add(z) } }
+            // 종류별 개수 (중복 없이)
+            val uniq = HashMap<String, Zone>()
+            byCell.values.forEach { l -> l.forEach { uniq[it.id] = it } }
+            val counts = TYPES.keys.associateWith { t -> uniq.values.count { it.type == t } }
+            // 한 번에 400개씩 나눠 저장
+            // 한 번에 보내는 양: 문서 400개 · 약 4MB 까지
+            val cellsAll = (byCell.keys + docs.keys).distinct()
+            val parts = ArrayList<List<String>>()
+            var curPart = ArrayList<String>(); var curSize = 0; var curOps = 0
+            cellsAll.forEach { cell ->
+                val size = (byCell[cell] ?: emptyList()).sumOf { it.encode().length + 1 }
+                val ops = size / CHUNK + 1 + (docs[cell] ?: 0)
+                if (curPart.isNotEmpty() && (curSize + size > 4_000_000 || curOps + ops > 400)) { parts.add(curPart); curPart = ArrayList(); curSize = 0; curOps = 0 }
+                curPart.add(cell); curSize += size; curOps += ops
+            }
+            if (curPart.isNotEmpty()) parts.add(curPart)
+            var idx = 0
+            fun next() {
+                if (idx >= parts.size) {
+                    cells.clear(); dir(a).listFiles()?.forEach { it.delete() }
+                    bumpVer(counts) { err -> verAt = 0L; serverVer = -1L; main.post { done(err) } }
+                    return
+                }
+                val batch = db.batch()
+                parts[idx].forEach { cell -> writeCell(batch, cell, byCell[cell] ?: emptyList(), docs[cell] ?: 0) }
+                idx++
+                batch.commit().addOnSuccessListener { next() }.addOnFailureListener { main.post { done("저장 실패: ${it.message}") } }
+            }
+            next()
+        }.addOnFailureListener { done("서버를 읽지 못했어요: ${it.message}") }
+    }
+
+    // ---------------- CSV 읽기 ----------------
+    /** MainActivity.onActivityResult 에서 부름 */
+    fun onResult(a: Activity, requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode != PICK_CSV) return false
+        val uri = data?.data ?: return true
+        if (resultCode != Activity.RESULT_OK) return true
+        val pd = progress(a, "파일 읽는 중…")
+        Thread {
+            val res = try { readCsv(a, uri) } catch (e: Exception) { null }
+            main.post {
+                pd.dismiss()
+                if (res == null || res.rows.isEmpty()) { Ui.toast(a, "CSV를 읽지 못했어요 (쉼표로 나뉜 CSV 파일인지 확인)"); return@post }
+                askImport(a, res)
+            }
+        }.start()
+        return true
+    }
+
+    class Csv(val head: List<String>, val rows: List<List<String>>, val fileName: String)
+
+    private fun readCsv(a: Activity, uri: Uri): Csv {
+        val bytes = a.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+        var text = String(bytes, Charsets.UTF_8)
+        if (text.count { it == '�' } > 3) text = String(bytes, charset("MS949"))
+        text = text.removePrefix("﻿")
+        val rows = parseCsv(text)
+        var name = "파일"
+        try {
+            a.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (i >= 0 && c.moveToFirst()) name = c.getString(i) ?: name
+            }
+        } catch (_: Exception) {}
+        return Csv(rows.firstOrNull()?.map { it.trim() } ?: emptyList(), rows.drop(1).filter { r -> r.any { it.isNotBlank() } }, name)
+    }
+
+    /** 따옴표 안의 쉼표 · 줄바꿈까지 처리하는 CSV */
+    fun parseCsv(s: String): List<List<String>> {
+        val out = ArrayList<List<String>>()
+        var row = ArrayList<String>()
+        val cur = StringBuilder()
+        var q = false
+        var i = 0
+        while (i < s.length) {
+            val ch = s[i]
+            if (q) {
+                if (ch == '"') { if (i + 1 < s.length && s[i + 1] == '"') { cur.append('"'); i++ } else q = false }
+                else cur.append(ch)
+            } else when (ch) {
+                '"' -> q = true
+                ',' -> { row.add(cur.toString()); cur.setLength(0) }
+                '\n' -> { row.add(cur.toString()); cur.setLength(0); out.add(row); row = ArrayList() }
+                '\r' -> {}
+                else -> cur.append(ch)
+            }
+            i++
+        }
+        if (cur.isNotEmpty() || row.isNotEmpty()) { row.add(cur.toString()); out.add(row) }
+        return out
+    }
+
+    private fun col(head: List<String>, vararg keys: String): Int {
+        keys.forEach { k -> head.indexOfFirst { it.equals(k, true) }.let { if (it >= 0) return it } }
+        keys.forEach { k -> head.indexOfFirst { it.contains(k, true) }.let { if (it >= 0) return it } }
+        return -1
+    }
+
+    private fun askImport(a: Activity, csv: Csv) {
+        val h = csv.head
+        val cGeo = col(h, "공간정보", "geom", "wkt", "the_geom", "shape", "geometry", "공간정보_좌표")
+        val cLat = col(h, "위도", "lat", "어장위도", "y좌표")
+        val cLon = col(h, "경도", "lon", "lng", "어장경도", "x좌표")
+        val cGrade = col(h, "위험등급", "등급")
+        if (cGeo < 0 && (cLat < 0 || cLon < 0)) {
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("좌표가 없는 파일이에요")
+                .setMessage("'공간정보' 칸이나 '위도 · 경도' 칸이 있어야 지도에 그릴 수 있어요.\n\n이 파일의 칸: " + h.take(25).joinToString(", "))
+                .setPositiveButton("확인", null).show()
+            return
+        }
+        val keys = listOf("auto") + TYPES.keys
+        val labels = listOf("🤖 자동 (어업면허명 · 어업방법으로 마을어장 · 양식장 · 기타 구분)") + TYPES.entries.map { "${typeIcon(it.key)} 모두 ${it.value}" }
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("${csv.fileName} · ${csv.rows.size}줄\n어떤 구역인가요?")
+            .setItems(labels.toTypedArray()) { _, i ->
+                val type = keys[i]
+                if (cGrade >= 0) {
+                    val vals = csv.rows.mapNotNull { it.getOrNull(cGrade)?.trim()?.takeIf { v -> v.isNotBlank() } }.groupingBy { it }.eachCount()
+                        .entries.sortedBy { it.key }.take(12)
+                    val names = vals.map { "${it.key} (${it.value})" }.toTypedArray()
+                    val checked = BooleanArray(vals.size) { idx -> vals[idx].key.contains("높") || vals[idx].key.contains("위험") || vals[idx].key == vals.last().key }
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("어느 위험등급만 넣을까요?")
+                        .setMultiChoiceItems(names, checked) { _, w, on -> checked[w] = on }
+                        .setPositiveButton("다음") { _, _ ->
+                            val keep = vals.filterIndexed { idx, _ -> checked[idx] }.map { it.key }.toSet()
+                            build(a, csv, type, keep)
+                        }.setNegativeButton("취소", null).show()
+                } else build(a, csv, type, null)
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    private fun build(a: Activity, csv: Csv, type: String, keepGrades: Set<String>?) {
+        val pd = progress(a, "구역 만드는 중…")
+        Thread {
+            val r = try { convert(csv, type, keepGrades) } catch (e: Exception) { null }
+            main.post {
+                pd.dismiss()
+                if (r == null) { Ui.toast(a, "변환하지 못했어요"); return@post }
+                val (zones, skipped) = r
+                val by = zones.groupingBy { it.type }.eachCount()
+                if (zones.isEmpty()) {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("그릴 수 있는 구역이 없어요").setMessage("못 쓴 줄 ${skipped}개 (좌표가 비었거나 한국 밖)")
+                        .setPositiveButton("확인", null).show()
+                    return@post
+                }
+                val types = if (type == "auto") setOf("village", "farm", "etc") else setOf(type)
+                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("서버에 올릴까요?")
+                    .setMessage(by.entries.joinToString("\n") { "${typeIcon(it.key)} ${TYPES[it.key]}: ${it.value}곳" } +
+                        "\n못 쓴 줄: ${skipped}개\n\n" + types.joinToString(" · ") { TYPES[it] ?: it } +
+                        "의 예전 CSV 구역은 이걸로 바뀌어요 (직접 그린 구역은 그대로)")
+                    .setPositiveButton("올리기") { _, _ ->
+                        val p2 = progress(a, "올리는 중… (구역이 많으면 1~2분)")
+                        replaceAll(a, types, zones) { err -> p2.dismiss(); Ui.toast(a, err ?: "올렸어요 · ${zones.size}곳") }
+                    }
+                    .setNegativeButton("취소", null).show()
+            }
+        }.start()
+    }
+
+    private fun autoType(text: String): String = when {
+        text.contains("마을") -> "village"
+        text.contains("양식") -> "farm"
+        text.contains("자원관리") || text.contains("보호수면") || text.contains("자원보호") -> "res"
+        else -> "etc"
+    }
+
+    /** CSV 줄들 → 구역들 · 못 쓴 줄 수 */
+    private fun convert(csv: Csv, type: String, keepGrades: Set<String>?): Pair<List<Zone>, Int> {
+        val h = csv.head
+        val cGeo = col(h, "공간정보", "geom", "wkt", "the_geom", "shape", "geometry", "공간정보_좌표")
+        val cLat = col(h, "위도", "lat", "어장위도")
+        val cLon = col(h, "경도", "lon", "lng", "어장경도")
+        val cArea = col(h, "면적", "area")
+        val cMonth = h.indexOfFirst { it.trim() == "월" || it.trim().equals("month", true) }
+        val cGrade = col(h, "위험등급", "등급")
+        val cKind = listOf(col(h, "어업면허명"), col(h, "어업방법명"), col(h, "어업종류"), col(h, "면허종류"), col(h, "구분"), col(h, "종류")).filter { it >= 0 }
+        val cName = listOf(col(h, "어장위치설명"), col(h, "명칭"), col(h, "이름"), col(h, "어장명"), col(h, "수면명"), col(h, "구역명"), col(h, "name"), col(h, "소재지"), col(h, "위치")).firstOrNull { it >= 0 } ?: -1
+        val cNote = listOf(col(h, "양식대상종명"), col(h, "어종"), col(h, "어장면허종료일자"), col(h, "면허기간"), col(h, "기간")).filter { it >= 0 }
+        val cSigungu = col(h, "시군구명", "시군구")
+        val cGrid = col(h, "격자번호")
+
+        val out = ArrayList<Zone>()
+        var skipped = 0
+        csv.rows.forEach { row ->
+            fun v(i: Int) = if (i >= 0) row.getOrNull(i)?.trim() ?: "" else ""
+            if (keepGrades != null && cGrade >= 0 && v(cGrade) !in keepGrades) return@forEach
+            val kindText = cKind.joinToString(" ") { v(it) }
+            val t = if (type == "auto") autoType(kindText) else type
+            var name = v(cName).ifBlank { v(cSigungu) }
+            if (t == "risk" && name.isBlank()) name = "위험등급 " + v(cGrade)
+            if (cGrid >= 0 && t == "risk" && v(cGrade).isNotBlank()) name = "위험등급 " + v(cGrade)
+            val note = (listOfNotNull(kindText.takeIf { it.isNotBlank() }) + cNote.map { v(it) }.filter { it.isNotBlank() }).distinct().joinToString(" · ").take(80)
+            val month = if (cMonth >= 0) (v(cMonth).filter { it.isDigit() }.toIntOrNull() ?: 0).let { if (it in 1..12) it else 0 } else 0
+            val refLat = v(cLat).toDoubleOrNull(); val refLon = v(cLon).toDoubleOrNull()
+            val rings = if (cGeo >= 0) parseGeom(v(cGeo), refLat, refLon) else emptyList()
+            if (rings.isNotEmpty()) {
+                rings.forEach { ring ->
+                    val simp = simplify(ring, 0.00003).let { if (it.size > 400) simplify(ring, 0.0002) else it }
+                    if (simp.size >= 3 && inKorea(simp[0])) out.add(Zone(newId(false), t, name.take(40), simp, null, 0.0, month, note))
+                    else skipped++
+                }
+            } else if (refLat != null && refLon != null && inKorea(GeoPoint(refLat, refLon))) {
+                // 점만 있으면: 면적으로 원 (면적을 모르면 100m)
+                var area = v(cArea).replace(",", "").toDoubleOrNull() ?: 0.0
+                if (area in 0.0001..500.0) area *= 10_000.0   // ha 로 보임
+                val r = if (area > 0) sqrt(area / Math.PI).coerceIn(30.0, 3000.0) else 100.0
+                out.add(Zone(newId(false), t, name.take(40), emptyList(), GeoPoint(refLat, refLon), r, month, note))
+            } else skipped++
+        }
+        return out to skipped
+    }
+
+    private fun inKorea(g: GeoPoint) = g.latitude in 32.5..39.5 && g.longitude in 123.5..132.5
+
+    // ---- 공간정보: WKT (POLYGON / MULTIPOLYGON) · GeoJSON · 좌표계 자동 ----
+    private fun parseGeom(s0: String, refLat: Double?, refLon: Double?): List<List<GeoPoint>> {
+        val s = s0.trim()
+        if (s.isBlank()) return emptyList()
+        val raw: List<List<DoubleArray>> = if (s.startsWith("{")) geoJsonRings(s) else wktRings(s)
+        if (raw.isEmpty()) return emptyList()
+        val sample = raw[0][0]
+        val conv = pickProjection(sample[0], sample[1], refLat, refLon) ?: return emptyList()
+        return raw.map { r -> r.map { conv(it[0], it[1]) } }
+    }
+
+    /** 바깥 테두리만 (구멍은 무시) */
+    private fun wktRings(s: String): List<List<DoubleArray>> {
+        val u = s.uppercase(Locale.US)
+        val body = s.substring(s.indexOf('(').coerceAtLeast(0))
+        val out = ArrayList<List<DoubleArray>>()
+        // 다각형마다 "((" 로 시작 · 첫 고리만
+        val polys = if (u.contains("MULTIPOLYGON")) body.split(Regex("\\)\\s*\\)\\s*,\\s*\\(\\s*\\(")) else listOf(body)
+        polys.forEach { p ->
+            val first = p.replace("(", " ").split(")")[0]
+            val pts = first.split(",").mapNotNull { pair ->
+                val n = pair.trim().split(Regex("\\s+")).mapNotNull { it.toDoubleOrNull() }
+                if (n.size >= 2) doubleArrayOf(n[0], n[1]) else null
+            }
+            if (pts.size >= 3) out.add(pts)
+        }
+        return out
+    }
+
+    private fun geoJsonRings(s: String): List<List<DoubleArray>> {
+        val o = JSONObject(s)
+        val g = if (o.has("geometry")) o.getJSONObject("geometry") else o
+        val c = g.getJSONArray("coordinates")
+        fun ring(a: JSONArray) = (0 until a.length()).map { i -> val p = a.getJSONArray(i); doubleArrayOf(p.getDouble(0), p.getDouble(1)) }
+        return when (g.optString("type")) {
+            "Polygon" -> listOf(ring(c.getJSONArray(0)))
+            "MultiPolygon" -> (0 until c.length()).map { ring(c.getJSONArray(it).getJSONArray(0)) }
+            else -> emptyList()
+        }
+    }
+
+    /** x, y 가 어느 좌표계인지 보고 위경도로 바꾸는 함수 */
+    private fun pickProjection(x: Double, y: Double, refLat: Double?, refLon: Double?): ((Double, Double) -> GeoPoint)? {
+        if (x in 123.0..133.0 && y in 32.0..40.0) return { a, b -> GeoPoint(b, a) }            // 경도, 위도
+        if (y in 123.0..133.0 && x in 32.0..40.0) return { a, b -> GeoPoint(a, b) }            // 위도, 경도
+        if (x > 1.2e7 && x < 1.5e7) return { a, b -> mercInv(a, b) }                            // 웹 메르카토르
+        val cands = ArrayList<(Double, Double) -> GeoPoint>()
+        if (y > 1.2e6 && y < 2.4e6 && x > 6e5 && x < 1.5e6) cands.add { a, b -> tmInv(a, b, 127.5, 0.9996, 1_000_000.0, 2_000_000.0) } // UTM-K (5179)
+        if (y > 0 && y < 1.2e6) {
+            listOf(127.0, 129.0, 125.0, 131.0).forEach { lon0 ->
+                cands.add { a, b -> tmInv(a, b, lon0, 1.0, 200_000.0, 600_000.0) }               // 5186 · 5187 · 5185 · 5188
+                cands.add { a, b -> tmInv(a, b, lon0, 1.0, 200_000.0, 500_000.0) }               // 옛 (5181 계열)
+            }
+        }
+        if (cands.isEmpty()) return null
+        if (refLat != null && refLon != null && refLat in 32.0..40.0) {
+            return cands.minByOrNull { f -> val g = f(x, y); abs(g.latitude - refLat) + abs(g.longitude - refLon) }
+        }
+        return cands.firstOrNull { f -> inKorea(f(x, y)) }
+    }
+
+    private fun mercInv(x: Double, y: Double): GeoPoint {
+        val lon = x / 6378137.0 * 180.0 / Math.PI
+        val lat = (2 * atan(exp(y / 6378137.0)) - Math.PI / 2) * 180.0 / Math.PI
+        return GeoPoint(lat, lon)
+    }
+
+    /** 횡메르카토르 역변환 (GRS80, 원점 위도 38°) */
+    private fun tmInv(x: Double, y: Double, lon0: Double, k0: Double, fe: Double, fn: Double): GeoPoint {
+        val a = 6378137.0; val f = 1 / 298.257222101
+        val e2 = f * (2 - f); val ep2 = e2 / (1 - e2)
+        val lat0 = Math.toRadians(38.0)
+        fun mArc(p: Double) = a * ((1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 * e2 * e2 / 256) * p -
+            (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 * e2 * e2 / 1024) * sin(2 * p) +
+            (15 * e2 * e2 / 256 + 45 * e2 * e2 * e2 / 1024) * sin(4 * p) - (35 * e2 * e2 * e2 / 3072) * sin(6 * p))
+        val m = mArc(lat0) + (y - fn) / k0
+        val mu = m / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 * e2 * e2 / 256))
+        val e1 = (1 - sqrt(1 - e2)) / (1 + sqrt(1 - e2))
+        val p1 = mu + (3 * e1 / 2 - 27 * e1 * e1 * e1 / 32) * sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 * e1 * e1 * e1 / 32) * sin(4 * mu) +
+            (151 * e1 * e1 * e1 / 96) * sin(6 * mu) + (1097 * e1 * e1 * e1 * e1 / 512) * sin(8 * mu)
+        val c1 = ep2 * cos(p1) * cos(p1); val t1 = tan(p1) * tan(p1)
+        val n1 = a / sqrt(1 - e2 * sin(p1) * sin(p1))
+        val r1 = a * (1 - e2) / Math.pow(1 - e2 * sin(p1) * sin(p1), 1.5)
+        val dd = (x - fe) / (n1 * k0)
+        val lat = p1 - (n1 * tan(p1) / r1) * (dd * dd / 2 - (5 + 3 * t1 + 10 * c1 - 4 * c1 * c1 - 9 * ep2) * dd * dd * dd * dd / 24 +
+            (61 + 90 * t1 + 298 * c1 + 45 * t1 * t1 - 252 * ep2 - 3 * c1 * c1) * Math.pow(dd, 6.0) / 720)
+        val lon = (dd - (1 + 2 * t1 + c1) * dd * dd * dd / 6 + (5 - 2 * c1 + 28 * t1 - 3 * c1 * c1 + 8 * ep2 + 24 * t1 * t1) * Math.pow(dd, 5.0) / 120) / cos(p1)
+        return GeoPoint(Math.toDegrees(lat), lon0 + Math.toDegrees(lon))
+    }
+
+    /** 점 줄이기 (더글러스-포이커) */
+    private fun simplify(p: List<GeoPoint>, tol: Double): List<GeoPoint> {
+        if (p.size < 5) return p
+        val keep = BooleanArray(p.size); keep[0] = true; keep[p.size - 1] = true
+        val stack = ArrayDeque<Pair<Int, Int>>(); stack.add(0 to p.size - 1)
+        while (stack.isNotEmpty()) {
+            val (s, e) = stack.removeLast()
+            var best = -1; var bd = 0.0
+            val ax = p[s].longitude; val ay = p[s].latitude; val bx = p[e].longitude; val by = p[e].latitude
+            val len = sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay))
+            for (i in s + 1 until e) {
+                val px = p[i].longitude; val py = p[i].latitude
+                val dist = if (len == 0.0) sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay)) else abs((bx - ax) * (ay - py) - (ax - px) * (by - ay)) / len
+                if (dist > bd) { bd = dist; best = i }
+            }
+            if (best > 0 && bd > tol) { keep[best] = true; stack.add(s to best); stack.add(best to e) }
+        }
+        return p.filterIndexed { i, _ -> keep[i] }.let { r -> if (r.size > 1 && r.first() == r.last()) r.dropLast(1) else r }
+    }
+
+    // ---------------- 관리자: 지도에서 직접 그리기 ----------------
+    fun openAdminMap(a: Activity) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val map = MapDialog.newMap(a)
+        val ov = ZoneOverlay(a) { true }
+        map.overlays.add(ov)
+        val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.parseColor("#0B1A26")) }
+        root.addView(Ui.text(a, 17f, Color.WHITE, true, "🦀 해루질 참고 구역 · 직접 그리기").apply { setPadding(dp(16), dp(10), dp(16), dp(2)) })
+        val info = Ui.text(a, 12f, Ui.SUB, false, "").apply { setPadding(dp(16), dp(2), dp(16), dp(6)) }
+        root.addView(info)
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), 0, dp(12), dp(8)) }
+        val hs = android.widget.HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) }
+        root.addView(hs)
+        val frame = FrameLayout(a)
+        frame.addView(map, FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(frame, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        fun pill(label: String, color: Int, onClick: () -> Unit) = Ui.text(a, 13f, color, true, label).apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
+            background = Ui.bg(a, Color.TRANSPARENT, 99, color); setOnClickListener { onClick() }
+        }
+        var hintText = ""
+        ov.hint = { hintText = it }
+        fun paint() {
+            bar.removeAllViews()
+            fun add(v: View) = bar.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+            if (!ov.drawMode) {
+                add(pill("✏ 새 구역 그리기", Color.parseColor("#FF4FA8")) { ov.drawMode = true; ov.drawing.clear(); paint(); map.invalidate() })
+                add(pill(if (Store.satellite) "지도로" else "위성으로", Ui.TEXT) { MapDialog.setSatellite(map, !Store.satellite); paint() })
+                info.text = "구역을 누르면 ✎ 수정 · 🗑 삭제 · 확대해야 보여요"
+            } else {
+                add(pill("↶ 한 점 취소", Ui.TEXT) { if (ov.drawing.isNotEmpty()) ov.drawing.removeAt(ov.drawing.size - 1); paint(); map.invalidate() })
+                add(pill("✓ 완료 (${ov.drawing.size}점)", Ui.GREEN) {
+                    if (ov.drawing.size < 3) { Ui.toast(a, "꼭짓점을 3개 이상 찍어 주세요"); return@pill }
+                    val pts = ArrayList(ov.drawing)
+                    askMeta(a, "새 구역", "village", "", "") { t, n, no ->
+                        replaceZone(a, null, Zone(newId(true), t, n, pts)) { err ->
+                            Ui.toast(a, err ?: "추가했어요"); ov.drawMode = false; ov.drawing.clear(); paint(); map.invalidate()
+                        }
+                    }
+                })
+                add(pill("✕ 그만", Color.parseColor("#FF8A92")) { ov.drawMode = false; ov.drawing.clear(); paint(); map.invalidate() })
+                info.text = "지도를 눌러 꼭짓점을 차례로 찍어요 (3개 이상) → ✓ 완료"
+            }
+        }
+        ov.onDrawChange = { paint() }
+        ov.onTapZones = { showInfo(a, it, map) }
+        paint()
+        dlg.setContentView(root)
+        dlg.setOnDismissListener { map.onPause(); map.onDetach() }
+        dlg.show()
+        map.onResume()
+        map.post {
+            map.controller.setZoom(13.0)
+            map.controller.setCenter(Tracker.last?.let { GeoPoint(it.latitude, it.longitude) } ?: GeoPoint(37.3, 126.6))
+        }
+    }
+}
