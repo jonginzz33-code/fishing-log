@@ -56,7 +56,7 @@ object PointMap {
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
 
         val map = MapDialog.newMap(a)
-        val dots = DotsOverlay(a, emptyList(), false) { MapDialog.openCluster(a, it) }
+        val dots = DotsOverlay(a, emptyList(), false) { MapDialog.openCluster(a, it) }.apply { icons = true; mergeDp = 34f }
         val circle = CircleOverlay(a)
         val zoneOv = Zones.ZoneOverlay(a) { Zones.on(a) }
         zoneOv.onTapZones = { Zones.showInfo(a, it, map) }
@@ -88,7 +88,7 @@ object PointMap {
         fun paintInfo() {
             val c = circle.center
             if (c == null) {
-                info.text = "점 ${recs().size}개 · 주황·하늘 점 = 조과 (보라 테두리 = 전체 포인트, 흰 테두리 = 나만의 포인트)\n" +
+                info.text = "점 ${recs().size}개 · 어종 그림 + 숫자 = 조과 (보라 테두리 = 전체 포인트, 흰 테두리 = 나만의 포인트)\n" +
                     if (circle.drawMode) "지도를 눌러 원을 놓으세요 · 분홍 점을 끌면 크기가 바뀌어요" else "'⭕ 원 그리기'로 자리를 골라 분석해요"
                 anBtn.visibility = View.GONE
             } else {

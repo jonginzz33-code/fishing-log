@@ -410,7 +410,7 @@ object Store {
     /** 배터리 절약 모드: 경로를 3분 간격으로 */
     var saver: Boolean
         get() = prefs.getBoolean("saver", false)
-        set(v) { prefs.edit().putBoolean("saver", v).apply(); Tracker.reapply(); fireChanged() }
+        set(v) { prefs.edit().putBoolean("saver", v).apply(); Tracker.reapply(); try { Live.saverChanged() } catch (_: Exception) {}; fireChanged() }
 
     var satellite: Boolean
         get() = prefs.getBoolean("satellite", true)
@@ -454,6 +454,7 @@ object Store {
 
     fun endTrip(): Trip? {
         val t = current ?: return null
+        try { Live.flushNow() } catch (_: Exception) {}   // 배터리 절약으로 기다리던 마릿수 먼저 올림
         t.end = System.currentTimeMillis()
         refineCatches(t)
         history.add(0, t)

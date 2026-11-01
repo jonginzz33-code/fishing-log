@@ -353,7 +353,8 @@ object MapDialog {
         // 출발 지점 (초록)
         val startPt = (live?.let { layerOf(it).track.firstOrNull() }) ?: layers.firstOrNull()?.track?.firstOrNull()
         if (startPt != null) map.overlays.add(DotsOverlay(a, listOf(MapDot(startPt, Color.parseColor("#5FD39A"), "출발 지점", "출발")), false, null))
-        val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }
+        // v3.8: 조과 점 = 어종 그림 + 마릿수 (숫자 동그라미 대신)
+        val dots = DotsOverlay(a, dotList, false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f }
         map.overlays.add(dots)
         // 같이 출조 중인 그룹원 위치 (실시간)
         val matesOv = MatesOverlay(a) { m ->
@@ -773,7 +774,7 @@ object MapDialog {
             isTilesScaledToDpi = true
         }
         addCircles(a, map, dots, radiusOf)
-        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { mergeDp = 34f })
+        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f })
         val targets = dots.map { it.point }.distinctBy { "${it.latitude},${it.longitude}" }
         val liveMe = LiveMe.attach(a, map, targets, targetName)
 
@@ -842,7 +843,7 @@ object MapDialog {
             outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
         }
         val pEdge = route(7, ROUTE_EDGE); val pLine = route(4, ROUTE)
-        val pDots = DotsOverlay(a, emptyList(), false) { showCluster(a, it) }
+        val pDots = DotsOverlay(a, emptyList(), false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f }
         map.overlays.add(pEdge); map.overlays.add(pLine); map.overlays.add(pDots)
         val liveMe = LiveMe.attach(a, map, listOf(pt), name, autoFit = false)
         map.overlays.add(PersonOverlay(a, pt, name))
@@ -979,7 +980,7 @@ object MapDialog {
         // 팝업을 스크롤하지 않고 지도를 움직이게
         map.setOnTouchListener { v, _ -> v.parent?.requestDisallowInterceptTouchEvent(true); false }
         addCircles(a, map, dots, radiusOf)
-        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) })
+        map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f })
         val targets = dots.map { it.point }.distinctBy { "${it.latitude},${it.longitude}" }
         val live = LiveMe.attach(a, map, targets, targetName)
         val frame = FrameLayout(a)
@@ -1051,7 +1052,7 @@ object MapDialog {
         }
         all.addAll(layer.track)
         all.addAll(layer.catches.map { it.point })
-        map.overlays.add(DotsOverlay(a, toDots(layer.catches), false, null))
+        map.overlays.add(DotsOverlay(a, toDots(layer.catches), false, null).apply { icons = true; mergeDp = 34f })
         map.setOnTouchListener { _, e ->
             if (e.action == MotionEvent.ACTION_UP) onTap()
             true
@@ -1088,7 +1089,7 @@ object MapDialog {
         val legend = (if (isLive) "" else distanceText(t.track.map { GeoPoint(it.lat, it.lon) }) + "\n") +
             "● 주황 ${t.name(1)} · ● 하늘 ${t.name(2)} · 초록 = 출발 · 분홍 선 = 이동 경로" +
             (if (isLive) " · 배 = 지금 내 위치 · 이름표 = 같이 출조 중인 그룹원" else "") +
-            "\n위치가 있는 조과 $withLoc / ${t.catches.size} · 숫자 = 겹친 마릿수 · 점을 누르면 상세"
+            "\n위치가 있는 조과 $withLoc / ${t.catches.size} · 어종 그림 + 숫자 = 그 자리 마릿수 · 누르면 상세"
         if (isLive) show(a, df.format(Date(t.start)) + " 출조 중 (실시간)", emptyList(), legend, live = t, excludeId = t.id)
         else show(a, df.format(Date(t.start)) + " 출조", listOf(layerOf(t)), legend, excludeId = t.id)
     }

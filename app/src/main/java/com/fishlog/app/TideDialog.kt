@@ -82,7 +82,7 @@ object TideDialog {
     }
 
     /** 제목 줄: "물때 · 바람 · 수온 · 인천송도" */
-    fun titleText(a: Activity, lat: Double?, lon: Double?): CharSequence {
+    fun titleText(a: Activity, lat: Double?, lon: Double?, day: Long? = null): CharSequence {
         val st = Tide.stationFor(a, lat, lon)
         val sb = android.text.SpannableStringBuilder("물때 · 바람 · 수온")
         if (st != null) {
@@ -91,8 +91,20 @@ object TideDialog {
             sb.append(st.name)
             sb.setSpan(android.text.style.ForegroundColorSpan(Ui.BLUE), s0, sb.length, 0)
         }
+        // v3.8: 지금 보고 있는 날짜 (오늘 = '오늘', 다른 날 = '11/7(토)' 노랑)
+        if (day != null) {
+            sb.append(" · ")
+            val s0 = sb.length
+            sb.append(dayTag(day))
+            sb.setSpan(android.text.style.ForegroundColorSpan(if (isToday(day)) Ui.GREEN else Color.parseColor("#F2C14E")), s0, sb.length, 0)
+        }
         return sb
     }
+
+    private val tagFmt = SimpleDateFormat("M/d(E)", Locale.KOREA)
+    private fun isToday(day: Long): Boolean = dayStart(day) == dayStart(System.currentTimeMillis())
+    /** '오늘' 또는 '11/7(토)' */
+    fun dayTag(day: Long): String = if (isToday(day)) "오늘" else tagFmt.format(Date(day))
 
     /** 제목 아래 작은 줄: "인천송도 관측소 기준 · 내 위치에서 32km · 바꾸기 ▾" */
     fun stationSub(a: Activity, lat: Double?, lon: Double?): String {
@@ -186,7 +198,8 @@ object TideDialog {
         // 제목 + (관리자·권한 받은 사람만) 새로고침: 기억해 둔 값 무시하고 지금 바로 다시 받기
         var reloadWx: () -> Unit = {}
         val wxHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        wxHead.addView(Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val wxTitle = Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온")
+        wxHead.addView(wxTitle, LinearLayout.LayoutParams(0, WRAP, 1f))
         if (Cloud.can("wx")) wxHead.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 새로고침").apply {
             gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
             background = Ui.bg(a, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
@@ -196,6 +209,9 @@ object TideDialog {
             }
         }, LinearLayout.LayoutParams(WRAP, dp(32)))
         col.addView(wxHead, Ui.lp(a, MATCH, WRAP, top = 18))
+        // ☀ 자외선지수 (v3.8 · 기상청 생활기상지수 · 시·도 단위 · 받을 수 있는 날만)
+        val uvLine = Ui.text(a, 13f, Ui.TEXT, true, "").apply { visibility = View.GONE }
+        col.addView(uvLine, Ui.lp(a, MATCH, WRAP, top = 4))
         // [오늘 시간별] [주간 (7일)] 탭
         val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
@@ -384,6 +400,32 @@ object TideDialog {
         fun load() {
             val id = ++loadId
             val noon = cur + 12 * 3_600_000L
+            // v3.8: 맨 위 제목과 날씨 칸 제목에도 지금 보는 날짜
+            titleView.text = titleText(a, lat, lon, cur)
+            uvLine.visibility = View.GONE
+            Uv.fetch(lat, lon) { uv ->
+                if (id != loadId || uv == null) return@fetch
+                val mx = uv.maxOn(cur) ?: return@fetch
+                val sb = android.text.SpannableStringBuilder("☀ 자외선 ")
+                fun put(v: Int, label: String) {
+                    val s0 = sb.length
+                    sb.append("$label $v ${Uv.level(v)}")
+                    sb.setSpan(android.text.style.ForegroundColorSpan(Uv.color(v)), s0, sb.length, 0)
+                }
+                put(mx, "최고")
+                if (isToday(cur)) uv.at(System.currentTimeMillis())?.let { sb.append(" · "); put(it, "지금") }
+                val s1 = sb.length
+                sb.append("  (${Uv.sidoName(lat, lon)} · 기상청)")
+                sb.setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), s1, sb.length, 0)
+                sb.setSpan(android.text.style.AbsoluteSizeSpan(11, true), s1, sb.length, 0)
+                uvLine.text = sb; uvLine.visibility = View.VISIBLE
+            }
+            wxTitle.text = android.text.SpannableStringBuilder().apply {
+                val s0 = length
+                append(dayTag(cur) + " ")
+                setSpan(android.text.style.ForegroundColorSpan(if (isToday(cur)) Ui.GREEN else Color.parseColor("#F2C14E")), s0, length, 0)
+                append("날씨 · 바람 · 파도 · 수온")
+            }
             dateText.text = android.text.SpannableStringBuilder(titleFmt.format(Date(cur)) + " · ").apply {
                 val st = length
                 append(dayOffsetLabel(cur))
@@ -564,7 +606,7 @@ object TideDialog {
 
         val pickStation = {
             StationPicker.show(a, lat, lon) {
-                titleView.text = titleText(a, lat, lon)
+                titleView.text = titleText(a, lat, lon, cur)
                 stationBtn.text = stationSub(a, lat, lon)
                 onChanged?.invoke()
                 load()

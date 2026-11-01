@@ -340,12 +340,32 @@ object Live {
 
     // ---------------- 내 +1 바로 올리기 (3초 안에, 연달아 눌러도 3초마다 꼭) ----------------
     @Volatile private var pushPending = false
-    private val pushRunnable = Runnable { pushPending = false; pushCounts() }
+    /** 지금 잡혀 있는 올리기가 '배터리 절약' 5분짜리인지 */
+    @Volatile private var pushLong = false
+    private val pushRunnable = Runnable { pushPending = false; pushLong = false; pushCounts() }
+    /** v3.8 배터리 절약 켬: 서버 올리기를 5분마다 묶어서 (조과는 누른 순간 폰에 저장 그대로) */
+    const val SAVER_PUSH_MS = 5 * 60_000L
     fun pushSoon() {
         if (Cloud.uid == null || Store.current == null) return
-        if (pushPending) return          // 이미 3초 안에 올리기로 잡혀 있음 (그때 최신 마릿수로 올림)
-        pushPending = true
-        main.postDelayed(pushRunnable, 3_000L)
+        val long = Store.saver
+        if (pushPending) {
+            // 5분 기다리던 중에 배터리 절약을 껐으면 → 3초 뒤로 당김
+            if (pushLong && !long) { main.removeCallbacks(pushRunnable); pushLong = false; main.postDelayed(pushRunnable, 3_000L) }
+            return                       // 이미 올리기로 잡혀 있음 (그때 최신 마릿수로 올림)
+        }
+        pushPending = true; pushLong = long
+        main.postDelayed(pushRunnable, if (long) SAVER_PUSH_MS else 3_000L)
+    }
+
+    /** 배터리 절약을 바꿨을 때: 끄면 기다리던 것 바로 올림 */
+    fun saverChanged() {
+        if (pushPending && pushLong && !Store.saver) { main.removeCallbacks(pushRunnable); pushPending = false; pushLong = false; pushCounts() }
+    }
+
+    /** 출조 종료 직전: 기다리던 마릿수 · 조과 지도를 바로 올림 */
+    fun flushNow() {
+        if (!pushPending) return
+        main.removeCallbacks(pushRunnable); pushPending = false; pushLong = false; pushCounts()
     }
 
     private fun pushCounts() {
@@ -400,7 +420,7 @@ object Live {
         if (targets.isEmpty()) return
         val now = System.currentTimeMillis()
         val sig = "${t.catches.size}:${t.track.size}"
-        if (!force && (now - mapAt < 3 * 60_000L || sig == mapSig)) return
+        if (!force && (now - mapAt < (if (Store.saver) SAVER_PUSH_MS else 3 * 60_000L) || sig == mapSig)) return
         mapAt = now; mapSig = sig
         val doc = mapDoc(t, now)
         targets.forEach { (k, ref) -> mapWrote.add(k); ref.set(doc) }

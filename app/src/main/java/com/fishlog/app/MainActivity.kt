@@ -902,7 +902,14 @@ class MainActivity : Activity() {
             if (Store.watchMode) on.add("워치 ⏮1 ⏭2")
             if (on.isEmpty()) on.add("선택 안 됨")
             on.forEach { chips.addView(chip(it, it != "선택 안 됨"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }) }
-            chips.addView(chip(if (Store.saver) "배터리 절약" else "배터리 절약 꺼짐", Store.saver))
+            // v3.8: 칩을 누르면 바로 켜짐/꺼짐 (출조 중에도 바로 적용)
+            chips.addView(chip(if (Store.saver) "🔋 배터리 절약" else "배터리 절약 꺼짐", Store.saver).apply {
+                setOnClickListener {
+                    Store.saver = !Store.saver
+                    showMessage(if (Store.saver) "🔋 배터리 절약 켬 · 위치 3분 간격 · 서버 올리기 5분마다" else "배터리 절약 끔 · 원래대로")
+                    renderMethods()
+                }
+            })
             left.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
                 Ui.lp(this, MATCH, WRAP, top = 6))
             row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -979,10 +986,11 @@ class MainActivity : Activity() {
             Store.watchMode = !Store.watchMode
             if (Store.watchMode) showWatchGuide()
         }
-        option("배터리 절약", "이동 경로를 3분 간격으로", Store.saver, null, "🔋 배터리 절약이란?" to
+        option("배터리 절약", "위치 3분 간격 · 서버 올리기 5분마다", Store.saver, null, "🔋 배터리 절약이란?" to
             "출조 중 위치를 재는 간격을 3분으로 늘려서 배터리를 아껴요.\n\n" +
             "• 좋은 점: 하루 종일 타도 배터리가 오래가요. 보조배터리가 없을 때 추천해요.\n\n" +
-            "• 달라지는 점: 이동 경로가 듬성듬성 그려지고, 같이 출조 중인 사람들에게 보이는 내 위치가 덜 자주 바뀌어요.\n\n" +
+            "• 달라지는 점: 이동 경로가 듬성듬성 그려지고, 같이 출조 중인 사람들에게 보이는 내 위치가 덜 자주 바뀌어요. 서버에 올리는 것도 5분마다 모아서 해서, 친구 화면의 내 마릿수 · 칭호 알림이 최대 5분 늦게 보여요 (출조를 끝내면 남은 건 바로 올라가요).\n\n" +
+            "• 바꾸기: 출조 중에도 '배터리 절약' 칩을 한 번 누르면 바로 켜지고 꺼져요.\n\n" +
             "• 그대로인 것: 조과 위치는 정확해요. 카드나 리모컨을 누르면 그 뒤 1분 동안 GPS를 촘촘히 재서 그 자리를 잡아요.\n\n" +
             "• 추천: 배터리가 넉넉하면 끄고, 오래 탈 때나 배터리가 부족하면 켜세요.") { Store.saver = !Store.saver }
     }

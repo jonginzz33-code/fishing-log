@@ -607,8 +607,9 @@ object Zones {
             val total = counts.values.sum()
             val msg = if (total == 0) "아직 올린 구역이 없어요" else
                 TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}: ${counts[it.key] ?: 0}곳" } + "\n(올린 CSV 기준 · 직접 그린 구역 포함)"
-            val items = arrayOf("📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
-                "🗑 종류별로 CSV 구역 모두 지우기", "📌 어디서 데이터를 받나요?")
+            val items = arrayOf("🌐 API로 받기 · 어장정보 (마을어장 · 양식장)", "🌐 API로 받기 · 다른 API 주소",
+                "📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
+                "🗑 종류별로 CSV · API 구역 모두 지우기", "📌 어디서 데이터를 받나요?")
             // 안내 글 + 버튼 4개 (setMessage 와 setItems 를 같이 쓰면 버튼이 안 보여서 직접 만듦)
             fun dp(v: Int) = Ui.dp(a, v)
             val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(4)) }
@@ -618,10 +619,12 @@ object Zones {
                 box.addView(Ui.button(a, label) {
                     dlg?.dismiss()
                     when (i) {
-                        0 -> pickCsv(a)
-                        1 -> openAdminMap(a)
-                        2 -> askWipe(a)
-                        3 -> sources(a)
+                        0 -> fetchApi(a, FARM_API, "어장정보 (2023)")
+                        1 -> askApiPath(a)
+                        2 -> pickCsv(a)
+                        3 -> openAdminMap(a)
+                        4 -> askWipe(a)
+                        5 -> sources(a)
                     }
                 }.apply { textSize = 14f; minHeight = dp(48) }, Ui.lp(a, MATCH, WRAP, top = 8))
             }
@@ -640,7 +643,10 @@ object Zones {
                 "🦪 해양수산부_공동활용체계_어업면허양식장\n" +
                 "🐚 각 시·군 어업면허대장 (위도 · 경도 있는 것, 예: 부안군)\n" +
                 "🐟 수산자원관리수면 · 수산자원보호구역 (시·도 고시, 좌표 있는 파일)\n" +
-                "⚠ 해양경찰청_연안안전 예측분석모델 — 사고 위험 격자 (위험등급 골라서)\n\n" +
+                "⚠ 해양경찰청_연안안전 예측분석모델 — 사고 위험 격자 (위험등급 골라서)\n" +
+                "⚠ 해양수산부_공동활용체계_위험구역해수욕장 — 강한 조류 · 깊은 수심으로 출입 금지된 곳 ('모두 사고 위험 구역' → '더하기')\n\n" +
+                "🌐 API로 받기: 활용신청이 승인된 API는 파일을 안 받아도 버튼 한 번으로 받아요 (앱에 들어 있는 공공데이터 인증키 사용). " +
+                "다른 API는 '다른 API 주소'에 Swagger 화면의 /숫자/v1/uddi:… 부분을 붙여 넣어요\n\n" +
                 "• 좌표가 없는 파일(주소만 있는 면허대장 등)은 쓸 수 없어요 → 지도에서 직접 그리기\n" +
                 "• 같은 종류를 다시 올리면 그 종류의 예전 CSV 구역은 새것으로 바뀌고, 직접 그린 구역은 그대로예요")
             .setPositiveButton("확인", null).show()
@@ -749,6 +755,84 @@ object Zones {
 
     class Csv(val head: List<String>, val rows: List<List<String>>, val fileName: String)
 
+    // ---------------- 🌐 공공데이터포털 API로 받기 (v3.8) ----------------
+    /** 해양수산부_어장정보 (2023.06.02) — 활용신청 승인됨 */
+    const val FARM_API = "/15114195/v1/uddi:1899391e-d671-4438-b3a4-ed0f547fdc52"
+    private fun apiPrefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+
+    private fun askApiPath(a: Activity) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), dp(4)) }
+        box.addView(Ui.text(a, 12.5f, Ui.SUB, false,
+            "공공데이터포털 → 마이페이지 → 활용 신청한 API → Swagger 화면의 GET 옆 주소를 그대로 붙여 넣어요\n예: /15114195/v1/uddi:1899391e-…").apply { setLineSpacing(0f, 1.2f) })
+        val path = EditText(a).apply {
+            hint = "/숫자/v1/uddi:…"; setSingleLine(); setText(apiPrefs(a).getString("haeru_api_path", ""))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+        }
+        box.addView(path, Ui.lp(a, MATCH, WRAP, top = 8))
+        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("🌐 다른 API 주소로 받기")
+            .setView(box)
+            .setPositiveButton("받기") { _, _ ->
+                var p = path.text.toString().trim()
+                p = p.substringAfter("api.odcloud.kr/api", p).substringBefore("?")
+                if (!p.startsWith("/")) p = "/$p"
+                if (!p.contains("/v1/") && !p.contains("uddi")) { Ui.toast(a, "주소 모양이 달라요 (/숫자/v1/uddi:… 형식)"); return@setPositiveButton }
+                apiPrefs(a).edit().putString("haeru_api_path", p).apply()
+                fetchApi(a, p, p.split("/").getOrNull(1) ?: "API")
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    /** 페이지마다 1000줄씩 받아서 CSV와 같은 모양으로 → 그다음은 CSV 올리기와 똑같이 (종류 고르기 · 확인 · 바꾸기/더하기) */
+    fun fetchApi(a: Activity, path: String, label: String) {
+        val key = BuildConfig.KHOA_KEY
+        if (key.isBlank()) { Ui.toast(a, "앱에 공공데이터 인증키가 없어요 (GitHub 비밀값 KHOA_KEY)"); return }
+        val pd = progress(a, "🌐 $label 받는 중…")
+        Thread {
+            var err: String? = null
+            val head = LinkedHashSet<String>()
+            val maps = ArrayList<JSONObject>()
+            try {
+                var page = 1
+                var total = Int.MAX_VALUE
+                while (maps.size < total && page <= 60) {
+                    val url = "https://api.odcloud.kr/api$path?page=$page&perPage=1000&returnType=JSON&serviceKey=" +
+                        java.net.URLEncoder.encode(key, "UTF-8")
+                    val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                    c.connectTimeout = 15_000; c.readTimeout = 60_000
+                    val code = c.responseCode
+                    val body = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+                    if (code !in 200..299) { err = "API 오류 $code: " + body.take(200); break }
+                    val o = JSONObject(body)
+                    total = o.optInt("totalCount", o.optInt("matchCount", 0))
+                    val arr = o.optJSONArray("data") ?: JSONArray()
+                    if (arr.length() == 0) break
+                    for (i in 0 until arr.length()) {
+                        val r = arr.getJSONObject(i)
+                        r.keys().forEach { head.add(it) }
+                        maps.add(r)
+                    }
+                    page++
+                    main.post { pd.setMessage("🌐 $label 받는 중… ${maps.size} / ${if (total == Int.MAX_VALUE) "?" else total}") }
+                }
+            } catch (e: Exception) { err = "받지 못했어요: ${e.message}" }
+            val h = head.toList()
+            val rows = maps.map { m -> h.map { k -> if (m.isNull(k)) "" else m.opt(k)?.toString() ?: "" } }
+            main.post {
+                pd.dismiss()
+                if (rows.isEmpty()) {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("🌐 받지 못했어요")
+                        .setMessage((err ?: "받은 자료가 0줄이에요") + "\n\n• 활용신청이 '승인'인지 · 승인 뒤 1~2시간 지났는지 확인해 주세요\n• 이 화면을 캡처해서 보내 주시면 고칠게요")
+                        .setPositiveButton("확인", null).show()
+                    return@post
+                }
+                askImport(a, Csv(h, rows, "🌐 $label"))
+            }
+        }.start()
+    }
+
     private fun readCsv(a: Activity, uri: Uri): Csv {
         val bytes = a.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         var text = String(bytes, Charsets.UTF_8)
@@ -851,11 +935,16 @@ object Zones {
                 AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("서버에 올릴까요?")
                     .setMessage(by.entries.joinToString("\n") { "${typeIcon(it.key)} ${TYPES[it.key]}: ${it.value}곳" } +
-                        "\n못 쓴 줄: ${skipped}개\n\n" + types.joinToString(" · ") { TYPES[it] ?: it } +
-                        "의 예전 CSV 구역은 이걸로 바뀌어요 (직접 그린 구역은 그대로)")
-                    .setPositiveButton("올리기") { _, _ ->
+                        "\n못 쓴 줄: ${skipped}개" +
+                        "\n\n• 바꾸기: 이 종류의 예전 CSV · API 구역을 지우고 이걸로 (직접 그린 구역은 그대로)" +
+                        "\n• 더하기: 예전 구역은 그대로 두고 이걸 더함 (다른 자료를 합칠 때, 예: 위험구역 해수욕장 + 사고 위험 격자)")
+                    .setPositiveButton("바꾸기") { _, _ ->
                         val p2 = progress(a, "올리는 중… (구역이 많으면 1~2분)")
                         replaceAll(a, types, zones) { err -> p2.dismiss(); Ui.toast(a, err ?: "올렸어요 · ${zones.size}곳") }
+                    }
+                    .setNeutralButton("더하기") { _, _ ->
+                        val p2 = progress(a, "올리는 중… (구역이 많으면 1~2분)")
+                        replaceAll(a, emptySet(), zones) { err -> p2.dismiss(); Ui.toast(a, err ?: "더했어요 · ${zones.size}곳") }
                     }
                     .setNegativeButton("취소", null).show()
             }
@@ -879,7 +968,7 @@ object Zones {
         val cMonth = h.indexOfFirst { it.trim() == "월" || it.trim().equals("month", true) }
         val cGrade = col(h, "위험등급", "등급")
         val cKind = listOf(col(h, "어업면허명"), col(h, "어업방법명"), col(h, "어업종류"), col(h, "면허종류"), col(h, "구분"), col(h, "종류")).filter { it >= 0 }
-        val cName = listOf(col(h, "어장위치설명"), col(h, "명칭"), col(h, "이름"), col(h, "어장명"), col(h, "수면명"), col(h, "구역명"), col(h, "name"), col(h, "소재지"), col(h, "위치")).firstOrNull { it >= 0 } ?: -1
+        val cName = listOf(col(h, "어장위치설명"), col(h, "해양공간객체한글명"), col(h, "명칭"), col(h, "이름"), col(h, "어장명"), col(h, "수면명"), col(h, "구역명"), col(h, "name"), col(h, "소재지"), col(h, "위치")).firstOrNull { it >= 0 } ?: -1
         val cNote = listOf(col(h, "양식대상종명"), col(h, "어종"), col(h, "어장면허종료일자"), col(h, "면허기간"), col(h, "기간")).filter { it >= 0 }
         val cSigungu = col(h, "시군구명", "시군구")
         val cGrid = col(h, "격자번호")
