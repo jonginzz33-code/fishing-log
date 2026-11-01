@@ -74,6 +74,9 @@ object Inquiry {
 }
 
 class InquiryActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
     private fun dp(v: Int) = Ui.dp(this, v)
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
     private val tf = SimpleDateFormat("yyyy.M.d HH:mm", Locale.KOREA)

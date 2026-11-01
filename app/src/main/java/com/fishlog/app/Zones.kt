@@ -142,7 +142,7 @@ object Zones {
     fun setOn(c: Context, v: Boolean) { prefs(c).edit().putBoolean("haeru_ref", v).apply(); if (!v) insideIds.clear() }
 
     fun cellOf(lat: Double, lon: Double) = "${floor(lat * CELL).toInt()}_${floor(lon * CELL).toInt()}"
-    private fun cellsFor(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double, cap: Int = 36): List<String> {
+    fun cellsFor(minLat: Double, maxLat: Double, minLon: Double, maxLon: Double, cap: Int = 36): List<String> {
         val out = ArrayList<String>()
         var y = floor(minLat * CELL).toInt()
         while (y <= floor(maxLat * CELL).toInt()) {
@@ -352,17 +352,20 @@ object Zones {
             txt.textSize = 11 * d; halo.textSize = 11 * d; halo.strokeWidth = 3 * d
             list.forEach { z ->
                 val col = typeColor(z.type)
-                fill.color = Color.argb(if (z.type == "risk") 70 else 55, Color.red(col), Color.green(col), Color.blue(col))
-                edge.color = col; edge.strokeWidth = 1.6f * d
+                // v3.9.2 (163): 갯골 · 웅덩이는 가늘고 옅게 (지도 덜 가리게)
+                val tidal = z.id.startsWith("k") && z.type == "risk" && (z.name.startsWith("갯골") || z.name.startsWith("웅덩이"))
+                fill.color = Color.argb(if (tidal) 30 else if (z.type == "risk") 70 else 55, Color.red(col), Color.green(col), Color.blue(col))
+                edge.color = if (tidal) Color.argb(150, Color.red(col), Color.green(col), Color.blue(col)) else col
+                edge.strokeWidth = (if (tidal) 0.8f else 1.6f) * d
                 edge.pathEffect = if (z.type == "risk") android.graphics.DashPathEffect(floatArrayOf(6 * d, 4 * d), 0f) else null
                 var cx: Float; var cy: Float
                 if (z.center != null && z.id.startsWith("k")) {
                     // v3.9.1: 개방海 점(인명사고 등)은 큰 원 대신 작은 ⚠ 점 · 많이 확대했을 때만
                     if (map.zoomLevelDouble < 13.0) return@forEach
                     pj.toPixels(z.center, pt)
-                    fill.color = col; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 5 * d, fill)
-                    edge.pathEffect = null; edge.color = Color.WHITE; edge.strokeWidth = 1.2f * d
-                    c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 5 * d, edge)
+                    fill.color = col; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 3.5f * d, fill)
+                    edge.pathEffect = null; edge.color = Color.WHITE; edge.strokeWidth = 1f * d
+                    c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 3.5f * d, edge)
                     cx = pt.x.toFloat(); cy = pt.y.toFloat()
                 } else if (z.center != null) {
                     pj.toPixels(z.center, pt)
@@ -420,25 +423,71 @@ object Zones {
     }
 
     /** 지도 위 ☐ 해루질 참고용 칩 (지도 창마다) */
-    fun pill(a: Activity, map: MapView, after: () -> Unit = {}): TextView {
+    /** v3.9.2 (161): 칩 + 칩 아래 커튼 (보일 구역 체크 · 📥 미리 받기 · 끄기) — 커튼은 부르는 쪽이 버튼 줄 바로 아래에 붙임 */
+    class Bar(val pill: TextView, val curtain: LinearLayout)
+
+    fun bar(a: Activity, map: MapView, after: () -> Unit = {}): Bar {
         fun dp(v: Int) = Ui.dp(a, v)
         val v = Ui.text(a, 13f, Ui.TEXT, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
         }
+        val cur = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(10)); visibility = View.GONE
+            background = Ui.bg(a, Color.parseColor("#1F1A14"), 14, Color.parseColor("#FFB27A"))
+        }
+        val bar = Bar(v, cur)
+        var paintRef: () -> Unit = {}
+        fun paintCurtain() {
+            cur.removeAllViews()
+            cur.addView(Ui.text(a, 12f, Ui.SUB, false, "지도에 보일 구역 (누르면 바로 바뀌어요 · 참고용)"))
+            Khoa.GROUPS.forEach { (g, label) ->
+                val on = Khoa.groupOn(a, g)
+                cur.addView(Ui.text(a, 14f, if (on) Ui.TEXT else Ui.SUB, true, (if (on) "☑ " else "☐ ") + label).apply {
+                    setPadding(0, dp(7), 0, dp(7))
+                    setOnClickListener { Khoa.setGroupOn(a, g, !on); paintCurtain(); map.invalidate(); after() }
+                })
+            }
+            // 📥 미리 받기 (164)
+            val prog = Ui.text(a, 12f, Color.parseColor("#FFB27A"), false, "").apply { visibility = View.GONE }
+            cur.addView(Ui.button(a, "📥 이 화면 지역 미리 받기 (바다에서 인터넷 약할 때)") {
+                if (Khoa.key(a).isBlank()) { Ui.toast(a, "개방海 인증키가 아직 없어요 (관리자)"); return@button }
+                if (map.zoomLevelDouble < 9.0) { Ui.toast(a, "조금 더 확대해서 받을 지역을 골라 주세요"); return@button }
+                val box = map.boundingBox
+                val place = Area.name(a, box.centerLatitude, box.centerLongitude).ifBlank { "이 지역" }
+                prog.visibility = View.VISIBLE; prog.text = "📥 받는 중…"
+                Khoa.prefetch(a, box.latSouth, box.latNorth, box.lonWest, box.lonEast, place, { d, t -> prog.text = "📥 받는 중… $d / $t" }) { ok, fail ->
+                    prog.text = if (fail == 0) "📥 '$place' 받기 완료 · ⚙ 설정 '오프라인 지역'에서 관리" else "📥 받기 끝 · ${fail}곳 실패 (인터넷 확인 후 다시)"
+                    map.invalidate()
+                }
+            }.apply { textSize = 13f; minHeight = dp(42) }, Ui.lp(a, MATCH, WRAP, top = 6))
+            cur.addView(prog, Ui.lp(a, MATCH, WRAP, top = 4))
+            cur.addView(Ui.button(a, "해루질 참고용 끄기") {
+                setOn(a, false); cur.visibility = View.GONE; paintRef(); map.invalidate(); after()
+            }.apply { textSize = 13f; minHeight = dp(40); setTextColor(Color.parseColor("#FF8A92")) }, Ui.lp(a, MATCH, WRAP, top = 6))
+        }
         fun paint() {
             val o = on(a)
-            v.text = (if (o) "☑" else "☐") + " 해루질 참고용"
+            val open = cur.visibility == View.VISIBLE
+            v.text = (if (o) "☑" else "☐") + " 해루질 참고용" + if (o) (if (open) " ▴" else " ▾") else ""
             v.setTextColor(if (o) Color.parseColor("#1B0E02") else Color.parseColor("#FFB27A"))
             v.background = if (o) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FFB27A"))
         }
+        paintRef = { paint() }
         paint()
         v.setOnClickListener {
-            if (on(a)) { setOn(a, false); paint(); map.invalidate(); after(); return@setOnClickListener }
-            // v3.9 (157): 켤 때마다 '참고용' 안내 → [확인]을 눌러야 켜짐 · 볼 구역 고르기
-            confirmOn(a) { paint(); map.invalidate(); after() }
+            if (!on(a)) {
+                // v3.9 (157): 켤 때는 '참고용' 안내 → [확인]을 눌러야 켜짐 → 켜지면 커튼 펼침
+                confirmOn(a) { paintCurtain(); cur.visibility = View.VISIBLE; paint(); map.invalidate(); after() }
+                return@setOnClickListener
+            }
+            if (cur.visibility == View.VISIBLE) cur.visibility = View.GONE else { paintCurtain(); cur.visibility = View.VISIBLE }
+            paint()
         }
-        return v
+        return bar
     }
+
+    /** 예전 방식 (칩만) */
+    fun pill(a: Activity, map: MapView, after: () -> Unit = {}): TextView = bar(a, map, after).pill
 
     /** 켜기 전 안내창 (참고용) + 볼 구역 묶음 체크 → 확인이면 켬 */
     fun confirmOn(a: Activity, done: () -> Unit) {
@@ -507,7 +556,7 @@ object Zones {
                     }.timeInMillis
                     val days = (end - System.currentTimeMillis()) / 86_400_000L
                     val (label, col) = when {
-                        days < 0 -> "⛔ 면허 만료됨 (자료 기준 · 재면허를 받았을 수 있어요, 현장 확인)" to Color.parseColor("#FF8A92")
+                        days < 0 -> "⏳ 자료상 종료일 지남 (자료 기준 연도 확인 · 재면허 됐을 수 있어요 · 문의처에 확인)" to Ui.SUB
                         days < 60 -> "⏳ 면허 끝나기 ${days}일 전" to Color.parseColor("#F2C14E")
                         days < 730 -> "✅ 면허 남은 기간 약 ${days / 30}개월" to Ui.GREEN
                         else -> "✅ 면허 남은 기간 약 ${days / 365}년 ${(days % 365) / 30}개월" to Ui.GREEN

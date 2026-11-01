@@ -17,6 +17,9 @@ import java.util.Locale
 
 /** 그룹 공지: 그룹장만 쓰기·고치기·지우기, 그룹원은 보기. 열면 새 공지는 확인한 걸로 */
 class NoticeActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var box: LinearLayout
     private val df = SimpleDateFormat("M/d(E) HH:mm", Locale.KOREA)

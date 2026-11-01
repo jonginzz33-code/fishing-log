@@ -535,7 +535,8 @@ object MapDialog {
             map.invalidate()
         }
         addPill(pastBtn)
-        addPill(Zones.pill(a, map) { updateLegend() })
+        val zBar = Zones.bar(a, map) { updateLegend() }
+        addPill(zBar.pill)
 
         val toggle = pill(if (Store.satellite) "지도로 보기" else "위성으로 보기")
         toggle.setOnClickListener {
@@ -548,6 +549,8 @@ object MapDialog {
         close.setOnClickListener { dialog.dismiss() }
         addPill(close)
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
+        root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
 
         val frame = FrameLayout(a)

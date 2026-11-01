@@ -38,6 +38,23 @@ object Ui {
             if (stroke != 0) setStroke(dp(c, 1), stroke)
         }
 
+    /**
+     * v3.9.2 (166) 화면 크기 자동 맞춤: 화면을 켤 때 지금 화면 폭(dp)을 재서 전체 크기를 비율로 키우거나 줄임
+     *  - 기준 폭 400dp · 0.88 ~ 1.22배 · 기종 이름이 아니라 실제 화면 크기로 (처음 보는 폰도 맞음)
+     *  - 폴드를 접고 펴면 화면이 다시 만들어지면서 자동으로 다시 계산
+     */
+    fun fit(base: Context): Context {
+        return try {
+            val conf = android.content.res.Configuration(base.resources.configuration)
+            val w = conf.screenWidthDp
+            if (w <= 0) return base
+            val f = (w / 400f).coerceIn(0.88f, 1.22f)
+            if (kotlin.math.abs(f - 1f) < 0.03f) return base
+            conf.densityDpi = (conf.densityDpi * f).toInt()
+            base.createConfigurationContext(conf)
+        } catch (_: Exception) { base }
+    }
+
     fun toast(c: Context, msg: String) = android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
 
     fun text(c: Context, size: Float, color: Int = TEXT, bold: Boolean = false, value: String = ""): TextView =

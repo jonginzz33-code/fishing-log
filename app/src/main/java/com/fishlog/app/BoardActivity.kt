@@ -24,6 +24,9 @@ import java.util.Locale
 
 /** 전체 조황 · 포인트 도감 */
 class BoardActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var tabRow: LinearLayout
     private lateinit var catRow: LinearLayout

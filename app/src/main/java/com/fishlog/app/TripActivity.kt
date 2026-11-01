@@ -27,6 +27,9 @@ import kotlin.math.abs
 
 /** 출조 기록 화면 (디자인 시안 2번) */
 class TripActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private var tripId = 0L
     private lateinit var root: LinearLayout

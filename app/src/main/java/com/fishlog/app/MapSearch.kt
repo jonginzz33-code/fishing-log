@@ -24,6 +24,7 @@ import java.util.Locale
  * 🔍 지도 장소 검색 (v3.9.1 · 159)
  *  - 모든 지도 맨 위 왼쪽 칩 → 지명 입력 → 결과가 하나면 바로, 여럿이면 골라서 그곳으로 이동
  *  - 최근 검색 8곳 기억 (누르면 바로 이동 · ✕ 로 지우기)
+ *  - v3.9.2 (162): 치는 동안 비슷한 이름 목록 (해수욕장 · 항 · 해변 · 포구 붙여서도 찾기 · 물때 지점) · 친 글자 강조
  */
 object MapSearch {
     private val main = Handler(Looper.getMainLooper())
@@ -89,31 +90,77 @@ object MapSearch {
                 }
             }
         }
-        fun search() {
+        // v3.9.2 (162): 치는 동안 비슷한 이름을 커튼처럼 · 'q 해수욕장 · q항 · q 해변 · q 포구' 도 같이 찾기 · 물때 지점 이름
+        var seq = 0
+        fun hl(label: String, q: String): CharSequence {
+            val sp = android.text.SpannableString(label)
+            val i = label.indexOf(q)
+            if (q.isNotBlank() && i >= 0) {
+                sp.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFB27A")), i, i + q.length, 0)
+                sp.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), i, i + q.length, 0)
+            }
+            return sp
+        }
+        fun rowHl(label: String, q: String, sub: String, onClick: () -> Unit) {
+            row(label, sub, onClick)
+            ((list.getChildAt(list.childCount - 1) as? LinearLayout)?.getChildAt(0) as? LinearLayout)?.let { tb ->
+                (tb.getChildAt(0) as? TextView)?.text = hl(label, q)
+            }
+        }
+        fun search(auto: Boolean = false) {
             val q = et.text.toString().trim()
-            if (q.isBlank()) return
-            if (!Geocoder.isPresent()) { info.text = "이 폰은 장소 찾기를 지원하지 않아요"; return }
-            info.text = "찾는 중…"; list.removeAllViews()
+            if (q.isBlank()) { showRecent(); return }
+            val my = ++seq
+            if (!auto) info.text = "찾는 중…"
+            val stations = try { Tide.stations(a).filter { it.name.contains(q) }.take(4) } catch (_: Exception) { emptyList() }
             Thread {
-                val found = try {
-                    @Suppress("DEPRECATION")
-                    Geocoder(a, Locale.KOREA).getFromLocationName(q, 8, 32.5, 123.5, 39.5, 132.5) ?: emptyList()
-                } catch (_: Exception) { null }
+                val qs = linkedSetOf(q)
+                if (listOf("해수욕장", "항", "해변", "포구", "도").none { q.endsWith(it) }) { qs.add("$q 해수욕장"); qs.add("${q}항"); qs.add("$q 해변"); qs.add("$q 포구") }
+                var anyOk = false
+                val found = ArrayList<Pair<Place, String>>()
+                if (Geocoder.isPresent()) qs.forEach { qq ->
+                    if (my != seq) return@Thread
+                    try {
+                        @Suppress("DEPRECATION")
+                        val r = Geocoder(a, Locale.KOREA).getFromLocationName(qq, if (qq == q) 6 else 3, 32.5, 123.5, 39.5, 132.5) ?: emptyList()
+                        anyOk = true
+                        r.forEach { ad ->
+                            val nm = listOfNotNull(ad.featureName, ad.thoroughfare, ad.subLocality, ad.locality, ad.subAdminArea, ad.adminArea)
+                                .distinct().filter { it.isNotBlank() && !it.all { ch -> ch.isDigit() } }
+                            val full = (ad.getAddressLine(0) ?: nm.reversed().joinToString(" ")).removePrefix("대한민국 ")
+                            val name = (nm.firstOrNull() ?: qq).let { if (it.contains(q)) it else if (qq != q) qq else it }
+                            found.add(Place(name, ad.latitude, ad.longitude) to full)
+                        }
+                    } catch (_: Exception) {}
+                }
+                // 가까운 같은 곳(약 300m) 한 번만
+                val uniq = ArrayList<Pair<Place, String>>()
+                found.forEach { f -> if (uniq.none { Math.abs(it.first.lat - f.first.lat) < 0.003 && Math.abs(it.first.lon - f.first.lon) < 0.003 }) uniq.add(f) }
                 main.post {
-                    if (found == null) { info.text = "인터넷 연결을 확인해 주세요"; return@post }
-                    val places = found.map { ad ->
-                        val nm = listOfNotNull(ad.featureName, ad.thoroughfare, ad.subLocality, ad.locality, ad.subAdminArea, ad.adminArea)
-                            .distinct().filter { it.isNotBlank() && !it.all { ch -> ch.isDigit() } }
-                        val full = ad.getAddressLine(0) ?: nm.reversed().joinToString(" ")
-                        Place(nm.firstOrNull() ?: q, ad.latitude, ad.longitude) to full.removePrefix("대한민국 ")
+                    if (my != seq) return@post
+                    list.removeAllViews()
+                    stations.forEach { st -> rowHl("🌊 ${st.name}", q, "물때 지점", { dlg?.dismiss(); go(a, map, Place(st.name, st.lat, st.lon)) }) }
+                    uniq.take(10).forEach { (p, full) -> rowHl("📍 ${p.name}", q, full, { dlg?.dismiss(); go(a, map, Place(p.name.take(30), p.lat, p.lon)) }) }
+                    val n = stations.size + uniq.take(10).size
+                    info.text = when {
+                        n > 0 -> "비슷한 곳 ${n}곳 · 골라 주세요"
+                        !anyOk && Geocoder.isPresent() -> "인터넷 연결을 확인해 주세요"
+                        !Geocoder.isPresent() -> "이 폰은 장소 찾기를 지원하지 않아요"
+                        else -> "'$q'을(를) 못 찾았어요 · 시·군 이름을 같이 써 보세요 (예: 보령 오천항)"
                     }
-                    if (places.isEmpty()) { info.text = "'$q'을(를) 못 찾았어요 · 시·군 이름을 같이 써 보세요 (예: 보령 오천항)"; return@post }
-                    if (places.size == 1) { dlg?.dismiss(); go(a, map, Place(q, places[0].first.lat, places[0].first.lon)); return@post }
-                    info.text = "${places.size}곳을 찾았어요 · 골라 주세요"
-                    places.forEach { (p, full) -> row("📍 ${p.name}", full, { dlg?.dismiss(); go(a, map, Place("$q · ${p.name}".take(30), p.lat, p.lon)) }) }
                 }
             }.start()
         }
+        val typing = Runnable { search(true) }
+        et.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, af: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                main.removeCallbacks(typing)
+                val t = s?.toString()?.trim() ?: ""
+                if (t.isEmpty()) { seq++; showRecent() } else if (t.length >= 2) { info.text = "찾는 중…"; main.postDelayed(typing, 500) }
+            }
+        })
         et.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEARCH) { search(); true } else false }
         showRecent()
         dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)

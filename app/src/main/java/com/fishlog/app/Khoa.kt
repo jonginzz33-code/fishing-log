@@ -108,13 +108,14 @@ object Khoa {
                     if (mem.containsKey(mk) || mk in loading) return@forEach
                     if ((retryAt[mk] ?: 0L) > System.currentTimeMillis()) return@forEach
                     val f = File(dir(c), "${l.id}_$id.txt")
-                    if (f.exists() && System.currentTimeMillis() - f.lastModified() < KEEP_MS) {
+                    if (f.exists()) {
                         mem[mk] = try { f.readLines().mapNotNull { Zones.decodeLine(it) } } catch (_: Exception) { emptyList() }
-                        return@forEach
+                        // v3.9.2 (164): 오래된 파일도 먼저 보여 주고 (바다에서 인터넷 없어도) · 오래됐으면 뒤에서 새로 받음
+                        if (System.currentTimeMillis() - f.lastModified() < KEEP_MS) return@forEach
                     }
                     loading.add(mk)
                     pool.execute {
-                        val list = try { fetch(k, l, id) } catch (e: Exception) { lastErr = "${l.name}: ${e.message}"; null }
+                        val list = try { fetch(k, l, id) } catch (e: Exception) { lastErr = "${l.name}: ${friendly(e)}"; null }
                         main.post {
                             loading.remove(mk)
                             if (list != null) {
@@ -266,10 +267,91 @@ object Khoa {
                 val body = get(urlFor(k, "TL_DIST_FSHFRM", 34.758, 34.805, 125.983, 126.140))
                 val n = if (body.contains("FeatureCollection")) parse(body, LAYERS[0]).size else -1
                 if (n >= 0) "✅ 연결됐어요 · 시험 범위(신안)에서 어장 ${n}곳 받음" else "❌ 응답이 이상해요:\n" + body.take(400)
-            } catch (e: Exception) { "❌ 받지 못했어요: ${e.message}" }
+            } catch (e: Exception) { "❌ 받지 못했어요: ${friendly(e)}" }
             main.post { done(msg) }
         }
     }
+
+    /** v3.9.2 (163): 인터넷 오류를 한국어로 */
+    fun friendly(e: Exception): String {
+        val m = (e.message ?: "") + " " + e.javaClass.simpleName
+        return when {
+            e is java.net.UnknownHostException || m.contains("resolve host", true) || m.contains("abort", true) ||
+                e is java.net.SocketTimeoutException || m.contains("timeout", true) || m.contains("timed out", true) ||
+                e is java.net.ConnectException || m.contains("reset", true) || m.contains("unreachable", true) ->
+                "인터넷 연결이 끊겼어요 · 연결되면 자동으로 다시 받아요"
+            m.contains("ServiceKey", true) -> "인증키가 맞지 않아요 (관리자 확인)"
+            else -> e.message ?: "알 수 없는 오류"
+        }
+    }
+
+    // ---------------- 📥 오프라인 지역 (v3.9.2 · 164) ----------------
+    class Region(val id: String, val name: String, val s: Double, val n: Double, val w: Double, val e: Double, val at: Long, val cells: List<String>)
+
+    fun regions(c: Context): List<Region> {
+        val arr = try { org.json.JSONArray(prefs(c).getString("khoa_regions", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val cs = o.optJSONArray("cells")
+            Region(o.optString("id"), o.optString("name"), o.optDouble("s"), o.optDouble("n"), o.optDouble("w"), o.optDouble("e"), o.optLong("at"),
+                (0 until (cs?.length() ?: 0)).map { cs!!.optString(it) })
+        }.sortedByDescending { it.at }
+    }
+    private fun saveRegions(c: Context, list: List<Region>) {
+        val arr = org.json.JSONArray()
+        list.forEach { r ->
+            arr.put(org.json.JSONObject().put("id", r.id).put("name", r.name).put("s", r.s).put("n", r.n).put("w", r.w).put("e", r.e)
+                .put("at", r.at).put("cells", org.json.JSONArray(r.cells)))
+        }
+        prefs(c).edit().putString("khoa_regions", arr.toString()).apply()
+    }
+    private fun filesOf(c: Context, r: Region) = r.cells.flatMap { id -> LAYERS.map { File(dir(c), "${it.id}_$id.txt") } }.filter { it.exists() }
+    fun sizeOf(c: Context, r: Region) = filesOf(c, r).sumOf { it.length() }
+    fun totalSize(c: Context) = dir(c).listFiles()?.sumOf { it.length() } ?: 0L
+    fun sizeText(b: Long) = if (b < 1024 * 1024) "${(b + 1023) / 1024}KB" else String.format(Locale.KOREA, "%.1fMB", b / 1048576.0)
+
+    /** 지우기: 다른 저장 지역이 같이 쓰는 칸은 남김 */
+    fun deleteRegion(c: Context, r: Region) {
+        val rest = regions(c).filter { it.id != r.id }
+        val keep = rest.flatMap { it.cells }.toSet()
+        r.cells.filter { it !in keep }.forEach { id -> LAYERS.forEach { l -> File(dir(c), "${l.id}_$id.txt").delete(); mem.remove("${l.id}|$id") } }
+        saveRegions(c, rest)
+    }
+    fun deleteAll(c: Context) {
+        dir(c).listFiles()?.forEach { it.delete() }; mem.clear(); retryAt.clear()
+        saveRegions(c, emptyList())
+    }
+
+    /** 이 범위 미리 받기: 모든 레이어 (꺼 둔 묶음도 · 나중에 켜도 바로 보이게) · progress(받은, 전체) · done(성공, 실패) */
+    fun prefetch(c: Context, s: Double, n: Double, w: Double, e: Double, name: String,
+                 progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit, oldId: String? = null) {
+        val k = key(c)
+        if (k.isBlank()) return done(0, 0)
+        val app = c.applicationContext
+        val cells = Zones.cellsFor(s, n, w, e, 16)
+        val jobs = cells.flatMap { id -> LAYERS.map { it to id } }
+        var ok = 0; var fail = 0
+        pool.execute {
+            jobs.forEachIndexed { i, (l, id) ->
+                val list = try { fetch(k, l, id) } catch (ex: Exception) { lastErr = "${l.name}: ${friendly(ex)}"; null }
+                if (list != null) {
+                    ok++
+                    try { File(dir(app), "${l.id}_$id.txt").writeText(list.joinToString("\n") { it.encode() }) } catch (_: Exception) {}
+                    main.post { mem["${l.id}|$id"] = list; retryAt.remove("${l.id}|$id") }
+                } else fail++
+                main.post { progress(i + 1, jobs.size) }
+            }
+            main.post {
+                if (ok > 0) {
+                    val id = oldId ?: System.currentTimeMillis().toString()
+                    saveRegions(app, regions(app).filter { it.id != id } + Region(id, name, s, n, w, e, System.currentTimeMillis(), cells))
+                }
+                done(ok, fail)
+            }
+        }
+    }
+    fun redownload(c: Context, r: Region, progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) =
+        prefetch(c, r.s, r.n, r.w, r.e, r.name, progress, done, r.id)
 
     fun distanceOk(a: Double, b: Double) = abs(a - b) < 1e-9
 }

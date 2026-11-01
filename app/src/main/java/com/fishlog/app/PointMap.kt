@@ -60,6 +60,9 @@ object PointMap {
         root.addView(head)
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        // v3.9.2 (161) 해루질 참고용 커튼 · map 은 아래에서 만들기 때문에 자리만 잡아 둠
+        val zSlot = FrameLayout(a)
+        root.addView(zSlot, LinearLayout.LayoutParams(MATCH, WRAP).apply { setMargins(dp(12), 0, dp(12), dp(6)) })
         // 그룹 포인트 커튼 (그룹 목록 체크)
         val curtain = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(6), dp(12), dp(8)); visibility = View.GONE
@@ -70,6 +73,8 @@ object PointMap {
         val map = MapDialog.newMap(a)
         val dots = DotsOverlay(a, emptyList(), false) { MapDialog.openCluster(a, it) }.apply { icons = true; mergeDp = 34f }
         val circle = CircleOverlay(a)
+        val zBar = Zones.bar(a, map)
+        zSlot.addView(zBar.curtain, FrameLayout.LayoutParams(MATCH, WRAP))
         val zoneOv = Zones.ZoneOverlay(a) { Zones.on(a) }
         zoneOv.onTapZones = { Zones.showInfo(a, it, map) }
         map.overlays.add(zoneOv)
@@ -164,7 +169,8 @@ object PointMap {
                 setOnClickListener { circle.drawMode = !circle.drawMode; paintBar(); paintInfo(); map.invalidate() }
             })
             if (circle.center != null) add(pill("원 지우기", false) { circle.center = null; circle.drawMode = false; paintBar(); paintInfo(); map.invalidate() })
-            add(Zones.pill(a, map))
+            (zBar.pill.parent as? android.view.ViewGroup)?.removeView(zBar.pill)
+            add(zBar.pill)
             add(pill(if (Store.satellite) "지도로" else "위성으로", false) { MapDialog.setSatellite(map, !Store.satellite); paintBar() })
             paintCurtain()
         }

@@ -25,6 +25,9 @@ import java.util.Locale
  *  - 출조 횟수, 어종별 합계, 많이 잡은 사람 순위, 출조 카드(도장 포함)
  */
 class GroupTripsActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var account: AccountUi
     private lateinit var periodRow: LinearLayout

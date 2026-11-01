@@ -16,6 +16,9 @@ import java.util.Locale
 
 /** 지난 출조 · 내 기록 보관함 */
 class HistoryActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var summary: LinearLayout
     private lateinit var sunBox: LinearLayout

@@ -18,6 +18,9 @@ import java.util.Locale
 
 /** 관리자 전용: 신고 누적 기준 · 신고 누적 목록 · 정지 관리 · 사용자 목록 */
 class AdminActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     /** 지금 채우는 칸 (section 이 바꿈) */
     private lateinit var listBox: LinearLayout

@@ -22,6 +22,9 @@ import java.util.Locale
 
 /** 그룹 화면: 그룹 이름·초대 코드, 멤버, 달력(출조한 날 강조), 그날 출조 카드 */
 class GroupActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var account: AccountUi
     private lateinit var root: LinearLayout

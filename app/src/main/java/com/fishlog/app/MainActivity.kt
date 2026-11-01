@@ -33,6 +33,9 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private val timeFmt = SimpleDateFormat("HH:mm:ss", Locale.KOREA)
 
@@ -132,7 +135,8 @@ class MainActivity : Activity() {
         val g = if (Cloud.user == null) null else Cloud.active
         if (g == null) { headIcon.visibility = View.GONE; headGroupName.visibility = View.GONE; return }
         headIcon.visibility = View.VISIBLE
-        headIcon.addView(GroupIcon.view(this, g, 36, GroupBand.catIcon(GroupBand.currentCat(g))), android.widget.FrameLayout.LayoutParams(dp(36), dp(36)))
+        // v3.9.2 (165): 그룹 이미지 크게 (36 → 48)
+        headIcon.addView(GroupIcon.view(this, g, 48, GroupBand.catIcon(GroupBand.currentCat(g))), android.widget.FrameLayout.LayoutParams(dp(48), dp(48)))
         headGroupName.text = g.title; headGroupName.visibility = View.VISIBLE
     }
     private fun paintInquiry() {
@@ -362,7 +366,7 @@ class MainActivity : Activity() {
         headIcon = android.widget.FrameLayout(this).apply { setOnClickListener { openGroupPanel() } }
         header.addView(headIcon, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL }
-        headGroupName = Ui.text(this, 10f, Ui.GREEN, true, "").apply {
+        headGroupName = Ui.text(this, 12.5f, Ui.GREEN, true, "").apply {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; visibility = View.GONE
             setOnClickListener { openGroupPanel() }
         }

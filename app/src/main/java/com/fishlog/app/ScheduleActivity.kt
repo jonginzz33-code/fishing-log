@@ -23,6 +23,9 @@ import java.util.Locale
 
 /** 그룹 일정: 몇 월 며칠 어디로 가는지. 그룹원 누구나 올리고 모두 같은 내용을 봄 */
 class ScheduleActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var listBox: LinearLayout
     private var events: List<Cloud.Event> = emptyList()

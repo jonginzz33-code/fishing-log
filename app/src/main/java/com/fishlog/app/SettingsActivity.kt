@@ -16,6 +16,9 @@ import com.fishlog.app.Ui.WRAP
 
 /** 개인 설정 (⚙): 잠금 화면·AOD 표시, 친구 돌파 알림, 닉네임 */
 class SettingsActivity : Activity() {
+    /** v3.9.2: 화면 크기 자동 맞춤 (Ui.fit) */
+    override fun attachBaseContext(newBase: android.content.Context) { super.attachBaseContext(Ui.fit(newBase)) }
+
 
     private lateinit var box: LinearLayout
     private fun dp(v: Int) = Ui.dp(this, v)
@@ -99,6 +102,55 @@ class SettingsActivity : Activity() {
         box.addView(rr, Ui.lp(this, MATCH, WRAP, top = 6))
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "기본 1km · 해루질은 500m 넘게 떨어질 때도 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
             Ui.lp(this, MATCH, WRAP, top = 4))
+        renderOffline()
+    }
+
+    /** v3.9.2 (164): 📥 오프라인 지역 (해루질 참고용 구역 미리 받은 곳) · 커튼 */
+    private var offOpen = false
+    private fun renderOffline() {
+        section("📥 오프라인 지역")
+        val regs = Khoa.regions(this)
+        val head = Ui.text(this, 15f, Ui.TEXT, true, "해루질 참고용 미리 받은 지역 ${regs.size}곳 · ${Khoa.sizeText(Khoa.totalSize(this))} " + if (offOpen) "▴" else "▾").apply {
+            gravity = Gravity.CENTER; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+            setOnClickListener { offOpen = !offOpen; render() }
+        }
+        box.addView(head, Ui.lp(this, MATCH, WRAP, top = 6))
+        if (!offOpen) return
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(10), dp(14), dp(12))
+        }
+        box.addView(card, Ui.lp(this, MATCH, WRAP, top = 4))
+        card.addView(Ui.text(this, 12f, Ui.SUB, false, "지도 ▸ ☑ 해루질 참고용 ▾ ▸ 📥 이 화면 지역 미리 받기 로 추가해요\n바다에서 인터넷이 약해도 받아 둔 구역은 보여요 (오래되면 연결될 때 새로 받음)"))
+        if (regs.isEmpty()) card.addView(Ui.text(this, 14f, Ui.SUB, false, "아직 받은 지역이 없어요"), Ui.lp(this, MATCH, WRAP, top = 10))
+        val df = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.KOREA)
+        regs.forEach { r ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.BG, 12, Ui.LINE); setPadding(dp(12), dp(10), dp(12), dp(10)) }
+            row.addView(Ui.text(this, 15f, Ui.TEXT, true, "📍 ${r.name}"))
+            val info = Ui.text(this, 12f, Ui.SUB, false, "${df.format(java.util.Date(r.at))} 받음 · ${Khoa.sizeText(Khoa.sizeOf(this, r))}")
+            row.addView(info, Ui.lp(this, MATCH, WRAP, top = 2))
+            val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            btns.addView(Ui.button(this, "🔄 다시 받기") {
+                info.text = "📥 받는 중…"
+                Khoa.redownload(this, r, { d, t -> info.text = "📥 받는 중… $d / $t" }) { _, fail ->
+                    toast(if (fail == 0) "'${r.name}' 새로 받았어요" else "${fail}곳 실패 · 인터넷 확인 후 다시"); render()
+                }
+            }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            btns.addView(Ui.button(this, "✕ 지우기") {
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("'${r.name}' 지울까요?").setMessage("폰에 받아 둔 구역만 지워요 (인터넷 되면 다시 볼 수 있어요)")
+                    .setPositiveButton("지우기") { _, _ -> Khoa.deleteRegion(this, r); render() }
+                    .setNegativeButton("취소", null).show()
+            }.apply { minHeight = dp(40); textSize = 13f; setTextColor(Color.parseColor("#FF8A92")) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            row.addView(btns, Ui.lp(this, MATCH, WRAP, top = 8))
+            card.addView(row, Ui.lp(this, MATCH, WRAP, top = 8))
+        }
+        card.addView(Ui.text(this, 13f, Ui.TEXT, false, "전체 크기 ${Khoa.sizeText(Khoa.totalSize(this))} (지도에서 본 곳 기억 포함)").apply { gravity = Gravity.CENTER }, Ui.lp(this, MATCH, WRAP, top = 10))
+        card.addView(Ui.button(this, "🗑 모두 지우기") {
+            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("받아 둔 구역을 모두 지울까요?").setMessage("지도에서 본 곳 기억도 같이 지워져요")
+                .setPositiveButton("모두 지우기") { _, _ -> Khoa.deleteAll(this); render() }
+                .setNegativeButton("취소", null).show()
+        }.apply { minHeight = dp(42); textSize = 13f; setTextColor(Color.parseColor("#FF8A92")) }, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 
     /** 닉네임 (개인 설정 맨 위) */
