@@ -82,22 +82,31 @@ object Ui {
     }
 
     /** v3.9.3 (169): 옆으로 밀리는 줄 · 화면 밖에 더 있으면 작은 주황 › ‹ 표시 (누르면 그쪽으로 밀어 줌) */
-    fun hscroll(c: Context, content: View): android.widget.FrameLayout {
+    fun hscroll(c: Context, content: View, bg: Int = BG): android.widget.FrameLayout {
         val d = c.resources.displayMetrics.density
         val hs = android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(content) }
         val fr = android.widget.FrameLayout(c)
         fr.addView(hs, android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-        fun arrow(right: Boolean) = TextView(c).apply {
-            text = if (right) "›" else "‹"; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; includeFontPadding = false
-            setTextColor(Color.parseColor("#1B0E02")); gravity = Gravity.CENTER; visibility = View.GONE
-            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#FFB27A")); setStroke((1.5f * d).toInt(), BG) }
-            elevation = 4 * d
+        // v3.9.4 (171): 화살표는 끝을 흐리게 덮은 자리 안에 (버튼 글자를 직접 덮지 않게)
+        fun edge(right: Boolean) = android.widget.FrameLayout(c).apply {
+            visibility = View.GONE
+            background = GradientDrawable(if (right) GradientDrawable.Orientation.LEFT_RIGHT else GradientDrawable.Orientation.RIGHT_LEFT,
+                intArrayOf(Color.argb(0, Color.red(bg), Color.green(bg), Color.blue(bg)), Color.argb(235, Color.red(bg), Color.green(bg), Color.blue(bg)), bg))
+            val dot = TextView(c).apply {
+                text = if (right) "›" else "‹"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; includeFontPadding = false
+                setTextColor(Color.parseColor("#1B0E02")); gravity = Gravity.CENTER
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#FFB27A")) }
+            }
+            val sz = (20 * d).toInt()
+            addView(dot, android.widget.FrameLayout.LayoutParams(sz, sz, (if (right) Gravity.END else Gravity.START) or Gravity.CENTER_VERTICAL).apply {
+                if (right) rightMargin = (3 * d).toInt() else leftMargin = (3 * d).toInt()
+            })
             setOnClickListener { hs.smoothScrollBy(((if (right) 1 else -1) * hs.width * 0.6f).toInt(), 0) }
         }
-        val r = arrow(true); val l = arrow(false)
-        val sz = (22 * d).toInt()
-        fr.addView(r, android.widget.FrameLayout.LayoutParams(sz, sz, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = (2 * d).toInt() })
-        fr.addView(l, android.widget.FrameLayout.LayoutParams(sz, sz, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = (2 * d).toInt() })
+        val r = edge(true); val l = edge(false)
+        val w = (44 * d).toInt()
+        fr.addView(r, android.widget.FrameLayout.LayoutParams(w, android.view.ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+        fr.addView(l, android.widget.FrameLayout.LayoutParams(w, android.view.ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START))
         fun upd() {
             r.visibility = if (hs.canScrollHorizontally(1)) View.VISIBLE else View.GONE
             l.visibility = if (hs.canScrollHorizontally(-1)) View.VISIBLE else View.GONE

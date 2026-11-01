@@ -50,6 +50,8 @@ class MainActivity : Activity() {
     private var strengthAt = 0L
     private var strengthKey = ""
     private lateinit var tideSun: TextView
+    private lateinit var tideWarn: TextView
+    private var warnAt = 0L
     private lateinit var adminBtn: TextView
     private lateinit var speciesBtn: TextView
     // 맨 아래 그룹 칸 (새 소식 빨간 숫자)
@@ -387,6 +389,17 @@ class MainActivity : Activity() {
             setLineSpacing(0f, 0.95f)
             setPadding(dp(8), dp(2), dp(8), dp(2))
         }, LinearLayout.LayoutParams(WRAP, dp(48)))
+        // v3.9.4 (180): 📅 일정 (물때 달력) · 지도 바로 옆
+        header.addView(smallBtn("") { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }.apply {
+            text = android.text.SpannableStringBuilder("📅 일정\n").apply {
+                val s0 = length; append("물때 좋은 날")
+                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
+                setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFB27A")), s0, length, 0)
+            }
+            setLineSpacing(0f, 0.95f)
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            background = Ui.bg(this@MainActivity, Ui.CARD, 12, Color.parseColor("#FFB27A"))
+        }, LinearLayout.LayoutParams(WRAP, dp(48)).apply { leftMargin = dp(4) })
         // 채팅 버튼: '채팅' + 작은 글씨 '접속 N명', 안 읽은 글은 빨간 숫자
         // 빨간 숫자가 잘리지 않게: 위·오른쪽에 여유 칸을 두고 그 안에 숫자를 그림
         val chatBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
@@ -449,6 +462,11 @@ class MainActivity : Activity() {
         }
         tideCardView = tideCard
         val tideTexts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // v3.9.4 (177): ⚠ 기상특보 빨간 띠 (내 위치 바다 구역에 특보가 있을 때만)
+        tideWarn = Ui.text(this, 12.5f, Color.WHITE, true, "").apply {
+            visibility = View.GONE; setPadding(dp(8), dp(3), dp(8), dp(3)); background = Ui.bg(this@MainActivity, Color.parseColor("#8A1F28"), 8)
+        }
+        tideTexts.addView(tideWarn, Ui.lp(this, MATCH, WRAP).apply { bottomMargin = dp(4) })
         tideTitle = Ui.text(this, 17f, Ui.TEXT, true, "").apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         tideSub = Ui.text(this, 12f, Ui.SUB, false, "물때 불러오는 중…")
         tideSun = Ui.text(this, 12f, Ui.SUB, false, "")
@@ -1548,6 +1566,15 @@ class MainActivity : Activity() {
         paintTideTitle(now, loc)
         paintTideWeather(loc)
         paintSun(now, loc)
+        // ⚠ 기상특보 (30분마다)
+        if (loc != null && now - warnAt > 30 * 60_000L) {
+            warnAt = now
+            Warn.forPlace(loc.first, loc.second) { w ->
+                if (isFinishing) return@forPlace
+                if (w.isNullOrBlank()) tideWarn.visibility = View.GONE
+                else { tideWarn.text = "⚠ ${Warn.seaArea(loc.first, loc.second)} $w (기상청)"; tideWarn.visibility = View.VISIBLE }
+            }
+        }
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
         val st = Tide.stationFor(this, loc.first, loc.second)
         val key = (st?.code ?: "") + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now))

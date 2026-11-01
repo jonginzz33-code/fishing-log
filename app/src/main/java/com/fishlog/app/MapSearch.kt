@@ -53,9 +53,9 @@ object MapSearch {
     /** 지도 막대 맨 앞에 넣는 🔍 칩 */
     fun pill(a: Activity, map: MapView): TextView {
         fun dp(v: Int) = Ui.dp(a, v)
-        return Ui.text(a, 14f, Ui.TEXT, true, "🔍 장소").apply {
+        return Ui.text(a, 14f, Ui.TEXT, false, "🔍 장소").apply {
             gravity = Gravity.CENTER; minHeight = dp(40); setPadding(dp(14), 0, dp(14), 0)
-            background = Ui.bg(a, Color.parseColor("#1A2A38"), 99, Ui.BLUE)
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(Color.parseColor("#1A2A38")); setStroke(Ui.dp(a, 1), Ui.BLUE) }
             setOnClickListener { open(a, map) }
         }
     }

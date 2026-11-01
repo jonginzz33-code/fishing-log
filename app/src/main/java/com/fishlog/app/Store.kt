@@ -274,6 +274,14 @@ object Store {
         prefs.edit().putString("recentStations", l.joinToString(",")).apply()
     }
 
+    /** v3.9.4 (172): 밀물 시작 알림 · (173) 일출 · 일몰 30분 전 알림 (출조 중) */
+    var floodAlert: Boolean
+        get() = prefs.getBoolean("floodAlert", false)
+        set(v) { prefs.edit().putBoolean("floodAlert", v).apply(); fireChanged() }
+    var sunAlert: Boolean
+        get() = prefs.getBoolean("sunAlert", false)
+        set(v) { prefs.edit().putBoolean("sunAlert", v).apply(); fireChanged() }
+
     /** 만조·간조 몇 분 전 알람 (0 = 끔) */
     var tideAlarmMin: Int
         get() = prefs.getInt("tideAlarm", 0)

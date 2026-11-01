@@ -196,7 +196,7 @@ class GroupTripsActivity : Activity() {
                     chips.addView(pill(e.key, e.key == sp, Ui.BLUE) { rankSpecies = e.key; render() },
                         LinearLayout.LayoutParams(WRAP, dp(30)).apply { rightMargin = dp(6) })
                 }
-                card.addView(Ui.hscroll(this, chips), Ui.lp(this, MATCH, WRAP, top = 6))
+                card.addView(Ui.hscroll(this, chips, Ui.CARD), Ui.lp(this, MATCH, WRAP, top = 6))
             }
             val per = HashMap<String, Int>()
             list.forEach { t -> for (s in t.slots()) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }

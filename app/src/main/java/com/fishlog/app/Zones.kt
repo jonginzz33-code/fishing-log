@@ -428,8 +428,9 @@ object Zones {
 
     fun bar(a: Activity, map: MapView, after: () -> Unit = {}): Bar {
         fun dp(v: Int) = Ui.dp(a, v)
-        val v = Ui.text(a, 13f, Ui.TEXT, true, "").apply {
-            gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
+        // v3.9.4 (171): 다른 지도 버튼과 같은 크기 (글자 14 · 높이 40 · 좌우 14)
+        val v = Ui.text(a, 14f, Ui.TEXT, false, "").apply {
+            gravity = Gravity.CENTER; minHeight = dp(40); setPadding(dp(14), 0, dp(14), 0); maxLines = 1
         }
         val cur = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(6), dp(8), dp(6)); visibility = View.GONE
@@ -453,7 +454,7 @@ object Zones {
                     Khoa.setGroupOn(a, g, !on); paintCurtain(); map.invalidate(); after()
                 }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             }
-            cur.addView(Ui.hscroll(a, r1))
+            cur.addView(Ui.hscroll(a, r1, Color.parseColor("#1F1A14")))
             val prog = Ui.text(a, 11.5f, Color.parseColor("#FFB27A"), false, busy).apply { visibility = if (busy.isBlank()) View.GONE else View.VISIBLE }
             val r2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             fun setBusy(t: String) { busy = t; prog.text = t; prog.visibility = if (t.isBlank()) View.GONE else View.VISIBLE }
@@ -487,15 +488,18 @@ object Zones {
             r2.addView(chip("끄기", false, Color.parseColor("#FF8A92")) {
                 setOn(a, false); cur.visibility = View.GONE; paintRef(); map.invalidate(); after()
             })
-            cur.addView(Ui.hscroll(a, r2), Ui.lp(a, MATCH, WRAP, top = 6))
+            cur.addView(Ui.hscroll(a, r2, Color.parseColor("#1F1A14")), Ui.lp(a, MATCH, WRAP, top = 6))
             cur.addView(prog, Ui.lp(a, MATCH, WRAP, top = 4))
         }
         fun paint() {
             val o = on(a)
             val open = cur.visibility == View.VISIBLE
             v.text = (if (o) "☑" else "☐") + " 해루질 참고용" + if (o) (if (open) " ▴" else " ▾") else ""
-            v.setTextColor(if (o) Color.parseColor("#1B0E02") else Color.parseColor("#FFB27A"))
-            v.background = if (o) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FFB27A"))
+            v.setTextColor(if (o) Color.parseColor("#1B0E02") else Color.WHITE)
+            v.typeface = if (o) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
+            // 꺼져 있을 땐 다른 버튼과 똑같이 · 켜지면 주황으로 채움
+            v.background = if (o) android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(Color.parseColor("#FFB27A")) }
+                else android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), Color.parseColor("#3A5A70")) }
         }
         paintRef = { paint() }
         paint()
@@ -1074,6 +1078,31 @@ object Zones {
                 .setNegativeButton("취소", null).show()
         }
         card.addView(lim, Ui.lp(a, MATCH, WRAP, top = 8))
+        // v3.9.4 (174 · 175): 갯벌체험지수 · 바다낚시지수 연결 확인 · 주소 바꾸기
+        val ir = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        ir.addView(Ui.button(a, "📈 지수 연결 확인") {
+            Ui.toast(a, "갯벌체험지수 · 바다낚시지수 물어보는 중…")
+            Idx.test(a) { msg ->
+                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📈 지수 API 연결 확인")
+                    .setMessage(msg + "\n\n(❌가 나오면 이 화면을 캡처해서 보내 주세요)").setPositiveButton("확인", null).show()
+            }
+        }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        ir.addView(Ui.button(a, "✎ 지수 주소") {
+            val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
+            box.addView(Ui.text(a, 12f, Ui.SUB, false, "Swagger 화면의 요청 주소 (? 앞까지) · 비우면 기본값"))
+            box.addView(Ui.text(a, 12.5f, Ui.TEXT, true, "바다낚시지수"), Ui.lp(a, MATCH, WRAP, top = 6))
+            val f1 = EditText(a).apply { setText(Idx.fishUrl(a)); textSize = 12f }
+            box.addView(f1)
+            box.addView(Ui.text(a, 12.5f, Ui.TEXT, true, "갯벌체험지수"), Ui.lp(a, MATCH, WRAP, top = 6))
+            val f2 = EditText(a).apply { setText(Idx.mudUrl(a)); textSize = 12f }
+            box.addView(f2)
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("✎ 지수 API 주소")
+                .setView(box)
+                .setPositiveButton("저장") { _, _ -> Idx.saveUrls(a, f1.text.toString(), f2.text.toString()); Ui.toast(a, "저장했어요 · '📈 지수 연결 확인'으로 확인해 보세요") }
+                .setNeutralButton("기본값") { _, _ -> Idx.saveUrls(a, "", ""); Ui.toast(a, "기본 주소로 돌렸어요") }
+                .setNegativeButton("취소", null).show()
+        }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        card.addView(ir, Ui.lp(a, MATCH, WRAP, top = 8))
         return card
     }
 

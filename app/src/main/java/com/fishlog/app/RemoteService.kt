@@ -69,8 +69,51 @@ class RemoteService : Service() {
         }.start()
     }
 
+    /** v3.9.4 (172 · 173): 밀물 시작 · 일출 · 일몰 30분 전 */
+    private fun notifyTide(title: String, text: String) {
+        val open = PendingIntent.getActivity(this, 5, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(this, CHANNEL_TIDE)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title).setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(open).setAutoCancel(true)
+            .setCategory(Notification.CATEGORY_ALARM).setVisibility(Notification.VISIBILITY_PUBLIC)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(TIDE_ID + 1, n)
+        Haptics.undo(this)
+    }
+    private fun checkExtraAlerts(now: Long) {
+        if (Store.current == null) return
+        if (Store.floodAlert) {
+            // 간조 시각이 막 지났으면 (0~10분) = 물이 들어오기 시작
+            tideExt.firstOrNull { !it.high && now - it.time in 0..10 * 60_000L && -it.time !in alarmed }?.let { e ->
+                alarmed.add(-e.time)
+                notifyTide("🌊 밀물 시작 · 물이 들어와요", "간조(${java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(e.time))})가 지났어요. 갯벌 · 갯바위에 있으면 지금 나오세요 (고립 주의)")
+            }
+        }
+        if (Store.sunAlert) {
+            val loc = Tracker.last?.let { it.latitude to it.longitude } ?: Store.current?.anyLocation()
+            Sun.times(now, loc?.first, loc?.second)?.let { s ->
+                listOf(s.rise to "일출", s.set to "일몰").forEach { (t, label) ->
+                    val key = t / 60_000L * 10 + 7
+                    if (t - now in 0..30 * 60_000L && key !in alarmed) {
+                        alarmed.add(key)
+                        notifyTide("🌅 $label ${((t - now) / 60_000L).coerceAtLeast(1)}분 전", "$label ${java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(t))}" +
+                            if (label == "일몰") " · 곧 어두워져요 (랜턴 · 귀가 준비)" else " · 곧 밝아져요")
+                    }
+                }
+            }
+        }
+    }
+
     private fun checkTideAlarm() {
         val min = Store.tideAlarmMin
+        val now0 = System.currentTimeMillis()
+        if (Store.current != null && (Store.floodAlert || Store.sunAlert)) {
+            if (Store.floodAlert && ((tideExt.isEmpty() && now0 - tideLoadedAt > 5 * 60_000L) || now0 - tideLoadedAt > 3 * 3600_000L)) loadTide()
+            checkExtraAlerts(now0)
+        }
         if (Store.current == null || min <= 0) return
         val now = System.currentTimeMillis()
         if ((tideExt.isEmpty() && now - tideLoadedAt > 5 * 60_000L) || now - tideLoadedAt > 3 * 3600_000L) loadTide()

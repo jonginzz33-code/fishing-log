@@ -64,8 +64,13 @@ object TideDialog {
     /** 만조·간조 알람 고르기 (출조 중에만 울림) */
     fun pickAlarm(a: Activity, done: () -> Unit) {
         val mins = listOf(0, 10, 20, 30, 40, 50, 60)
-        val labels = mins.map { (if (it == Store.tideAlarmMin) "✓ " else "") + if (it == 0) "끄기" else "만조·간조 ${it}분 전" }
+        val labels = mins.map { (if (it == Store.tideAlarmMin) "✓ " else "") + if (it == 0) "끄기" else "만조·간조 ${it}분 전" } +
+            listOf((if (Store.floodAlert) "✓ " else "") + "🌊 밀물 시작 알림 (간조 지나 물 들어올 때) · " + (if (Store.floodAlert) "켜짐 (누르면 끄기)" else "꺼짐 (누르면 켜기)"),
+                (if (Store.sunAlert) "✓ " else "") + "🌅 일출 · 일몰 30분 전 알림 · " + (if (Store.sunAlert) "켜짐 (누르면 끄기)" else "꺼짐 (누르면 켜기)"))
         BigList.show(a, "만조·간조 알람 (출조 중에만 울려요)", labels, emptyList()) { i, _ ->
+            // v3.9.4 (172 · 173)
+            if (i == mins.size) { Store.floodAlert = !Store.floodAlert; Ui.toast(a, if (Store.floodAlert) "출조 중 간조가 지나 물이 들어오기 시작하면 알려드려요" else "밀물 시작 알림을 껐어요"); done(); return@show }
+            if (i == mins.size + 1) { Store.sunAlert = !Store.sunAlert; Ui.toast(a, if (Store.sunAlert) "출조 중 일출 · 일몰 30분 전에 알려드려요" else "일출 · 일몰 알림을 껐어요"); done(); return@show }
             Store.tideAlarmMin = mins[i]
             android.widget.Toast.makeText(a, if (mins[i] == 0) "알람을 껐어요" else "출조 중 만조·간조 ${mins[i]}분 전에 알려드려요",
                 android.widget.Toast.LENGTH_SHORT).show()
@@ -212,6 +217,9 @@ object TideDialog {
         // ☀ 자외선지수 (v3.8 · 기상청 생활기상지수 · 시·도 단위 · 받을 수 있는 날만)
         val uvLine = Ui.text(a, 13f, Ui.TEXT, true, "").apply { visibility = View.GONE }
         col.addView(uvLine, Ui.lp(a, MATCH, WRAP, top = 4))
+        // v3.9.4: ⚠ 특보 · 🌙 달 · 🌫 안개 · 🦶 갯벌체험지수 · 🎣 바다낚시지수
+        val extraBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(extraBox, Ui.lp(a, MATCH, WRAP, top = 2))
         // [오늘 시간별] [주간 (7일)] 탭
         val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
@@ -403,6 +411,26 @@ object TideDialog {
             // v3.8: 맨 위 제목과 날씨 칸 제목에도 지금 보는 날짜
             titleView.text = titleText(a, lat, lon, cur)
             uvLine.visibility = View.GONE
+            extraBox.removeAllViews()
+            fun ex(t: CharSequence, color: Int = Ui.TEXT, bold: Boolean = false) =
+                extraBox.addView(Ui.text(a, 12.5f, color, bold, "").apply { text = t }, Ui.lp(a, MATCH, WRAP, top = 3))
+            if (isToday(cur)) Warn.forPlace(lat, lon) { w -> if (id == loadId && !w.isNullOrBlank()) ex("⚠ ${Warn.seaArea(lat, lon)} $w (기상청 특보)", Color.parseColor("#FF8A92"), true) }
+            ex(Moon.line(cur, lat, lon), Ui.SUB)
+            Fog.fetch(lat, lon, cur) { f -> if (id == loadId && f != null) Fog.line(f).takeIf { it.isNotBlank() }?.let { ex(it, if (f.badHours.isEmpty()) Ui.SUB else Color.parseColor("#F2C14E"), f.badHours.isNotEmpty()) } }
+            val ahead = ((cur - Sun.dayStart(System.currentTimeMillis())) / 86_400_000L).toInt()
+            if (ahead in 0..6) listOf(true, false).forEach { mud ->
+                Idx.near(a, mud, cur, lat, lon) { items ->
+                    if (id != loadId || items.isNullOrEmpty()) return@near
+                    val sb = android.text.SpannableStringBuilder((if (mud) "🦶 갯벌체험지수" else "🎣 바다낚시지수") + " · ${items.first().name}: ")
+                    items.take(4).forEachIndexed { i, it2 ->
+                        if (i > 0) sb.append(" · ")
+                        val s0 = sb.length
+                        sb.append(listOf(it2.extra, it2.index).filter { x -> x.isNotBlank() }.joinToString(" "))
+                        sb.setSpan(android.text.style.ForegroundColorSpan(Idx.color(it2.index)), s0, sb.length, 0)
+                    }
+                    ex(sb)
+                }
+            }
             Uv.fetch(lat, lon) { uv ->
                 if (id != loadId || uv == null) return@fetch
                 val mx = uv.maxOn(cur) ?: return@fetch
