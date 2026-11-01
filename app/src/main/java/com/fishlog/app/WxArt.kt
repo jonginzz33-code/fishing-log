@@ -54,8 +54,8 @@ object WxArt {
             clip.reset(); clip.addRoundRect(rect, r, r, Path.Direction.CW)
             cv.save(); cv.clipPath(clip)
             val h = rect.height()
-            // 그림 자리: 가운데 오른쪽 (글씨 · '물때 보기' 버튼과 겹쳐도 흐리게)
-            val cx = rect.left + rect.width() * 0.66f
+            // 그림 자리: 오른쪽 ('물때 보기' 버튼 쪽 · 글씨와 덜 겹치게)
+            val cx = rect.left + rect.width() * 0.76f
             val cy = rect.top + h * 0.48f
             val u = h / 2.4f
             when (kind) {
@@ -81,12 +81,18 @@ object WxArt {
             }
         }
 
+        /** 구름: 동그라미 3개 + 바닥을 한 덩어리 모양으로 합쳐 한 번에 칠함 (겹친 곳이 진해지지 않게 · v3.7.3) */
+        private val soft by lazy { android.graphics.BlurMaskFilter(2.5f * d, android.graphics.BlurMaskFilter.Blur.NORMAL) }
         private fun cloud(cv: Canvas, x: Float, y: Float, s: Float, col: Int) {
-            p.style = Paint.Style.FILL; p.color = col
-            cv.drawCircle(x - s * 0.55f, y + s * 0.1f, s * 0.42f, p)
-            cv.drawCircle(x, y - s * 0.15f, s * 0.6f, p)
-            cv.drawCircle(x + s * 0.6f, y + s * 0.08f, s * 0.45f, p)
-            cv.drawRoundRect(RectF(x - s * 0.95f, y + s * 0.05f, x + s * 1.05f, y + s * 0.5f), s * 0.22f, s * 0.22f, p)
+            val shape = Path()
+            shape.addCircle(x - s * 0.55f, y + s * 0.1f, s * 0.42f, Path.Direction.CW)
+            fun add(part: Path) { shape.op(part, Path.Op.UNION) }
+            add(Path().apply { addCircle(x, y - s * 0.15f, s * 0.6f, Path.Direction.CW) })
+            add(Path().apply { addCircle(x + s * 0.6f, y + s * 0.08f, s * 0.45f, Path.Direction.CW) })
+            add(Path().apply { addRoundRect(RectF(x - s * 0.95f, y + s * 0.05f, x + s * 1.05f, y + s * 0.5f), s * 0.22f, s * 0.22f, Path.Direction.CW) })
+            p.style = Paint.Style.FILL; p.color = col; p.maskFilter = soft
+            cv.drawPath(shape, p)
+            p.maskFilter = null
         }
 
         private fun rain(cv: Canvas, x: Float, y: Float, s: Float) {

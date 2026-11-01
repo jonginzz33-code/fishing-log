@@ -131,6 +131,8 @@ object Zones {
     private val loading = HashSet<String>()
     private var serverVer = -1L
     private var verAt = 0L
+    /** 구역을 저장할 때마다 +1 → 열린 지도들이 다시 불러옴 (v3.7.3) */
+    @Volatile var gen = 0
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     /** ☐ 해루질 참고용 (기본 꺼짐) */
@@ -312,7 +314,7 @@ object Zones {
             if (map.zoomLevelDouble < MIN_ZOOM) { say("🦀 해루질 참고 구역은 조금 더 확대하면 보여요"); return }
             val box = map.boundingBox
             val want = cellsFor(box.latSouth, box.latNorth, box.lonWest, box.lonEast)
-            val key = want.joinToString(",")
+            val key = want.joinToString(",") + "#" + gen
             if (key != lastKey) {
                 lastKey = key
                 ensure(a, want) { map.invalidate() }
@@ -547,12 +549,23 @@ object Zones {
     }
 
     /** 판 번호 올리기 + 종류별 개수 */
-    private fun bumpVer(counts: Map<String, Int>?, done: (String?) -> Unit) {
-        val data = HashMap<String, Any>()
-        data["ver"] = System.currentTimeMillis()
-        if (counts != null) data["counts"] = counts
-        db.collection("haeruMeta").document("info").set(data, SetOptions.merge())
-            .addOnSuccessListener { done(null) }.addOnFailureListener { done("저장 실패: ${it.message}") }
+    private fun bumpVer(counts: Map<String, Int>?, delta: Map<String, Int> = emptyMap(), done: (String?) -> Unit) {
+        val ver = System.currentTimeMillis()
+        val ref = db.collection("haeruMeta").document("info")
+        val fin = { err: String? ->
+            if (err == null) { serverVer = ver; verAt = System.currentTimeMillis() }
+            done(err)
+        }
+        if (counts != null) {
+            ref.set(mapOf("ver" to ver, "counts" to counts), SetOptions.merge())
+                .addOnSuccessListener { fin(null) }.addOnFailureListener { fin("저장 실패: ${it.message}") }
+        } else {
+            // 직접 그린 구역: 종류별 개수도 같이 올리고 내림 (관리 창 '몇 곳' 표시)
+            val inc = HashMap<String, Any>()
+            delta.filterValues { it != 0 }.forEach { (t, n) -> inc[t] = com.google.firebase.firestore.FieldValue.increment(n.toLong()) }
+            ref.set(mapOf("ver" to ver, "counts" to inc), SetOptions.merge())
+                .addOnSuccessListener { fin(null) }.addOnFailureListener { fin("저장 실패: ${it.message}") }
+        }
     }
 
     /** 구역 하나 추가 / 수정 / 삭제 (new = null 이면 삭제) */
@@ -569,10 +582,15 @@ object Zones {
             }
             batch.commit().addOnSuccessListener {
                 ids.forEach { cells.remove(it); File(dir(a), "$it.txt").delete() }
-                bumpVer(null) { err ->
-                    prefs(a).edit().putLong("haeru_ver", serverVer).apply()
-                    verAt = 0L
-                    done(err)
+                val delta = HashMap<String, Int>()
+                old?.let { delta[it.type] = (delta[it.type] ?: 0) - 1 }
+                new?.let { delta[it.type] = (delta[it.type] ?: 0) + 1 }
+                bumpVer(null, delta) { err ->
+                    // 방금 저장한 판 번호를 폰에도 기억 → 다른 칸 기억은 그대로 두고 바뀐 칸만 다시 받음
+                    if (err == null) prefs(a).edit().putLong("haeru_ver", serverVer).apply()
+                    gen++
+                    // 바뀐 칸을 바로 다시 받아 놓고 → 지도에 바로 보이게
+                    ensure(a, ids) { gen++; main.post { done(err) } }
                 }
             }.addOnFailureListener { done("저장 실패: ${it.message}") }
         }
@@ -695,7 +713,11 @@ object Zones {
             fun next() {
                 if (idx >= parts.size) {
                     cells.clear(); dir(a).listFiles()?.forEach { it.delete() }
-                    bumpVer(counts) { err -> verAt = 0L; serverVer = -1L; main.post { done(err) } }
+                    bumpVer(counts) { err ->
+                        if (err == null) prefs(a).edit().putLong("haeru_ver", serverVer).apply() else { verAt = 0L; serverVer = -1L }
+                        gen++
+                        main.post { done(err) }
+                    }
                     return
                 }
                 val batch = db.batch()
