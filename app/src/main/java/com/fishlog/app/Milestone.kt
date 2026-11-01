@@ -145,5 +145,5 @@ fun stampRow(c: android.content.Context, names: List<String>, counts: List<Int>)
         row.addView(Ui.chip(c, "🏅 $txt", if (tier >= 7) android.graphics.Color.parseColor("#F07AA0") else Milestone.tierColor(tier)),
             android.widget.LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { rightMargin = Ui.dp(c, 6) })
     }
-    return android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(row) }
+    return Ui.hscroll(c, row)
 }

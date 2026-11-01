@@ -432,38 +432,63 @@ object Zones {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
         }
         val cur = LinearLayout(a).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(8), dp(14), dp(10)); visibility = View.GONE
-            background = Ui.bg(a, Color.parseColor("#1F1A14"), 14, Color.parseColor("#FFB27A"))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(6), dp(8), dp(6)); visibility = View.GONE
+            background = Ui.bg(a, Color.parseColor("#1F1A14"), 12, Color.parseColor("#FFB27A"))
         }
         val bar = Bar(v, cur)
         var paintRef: () -> Unit = {}
+        // v3.9.3 (167): 작게 · 두 줄 (칩 한 줄 + 작은 버튼 한 줄) · 받는 중일 때만 진행 글
+        var busy = ""
+        fun chip(label: String, on: Boolean, col: Int, onClick: () -> Unit) = Ui.text(a, 12.5f, if (on) Color.parseColor("#1B0E02") else col, true, label).apply {
+            gravity = Gravity.CENTER; maxLines = 1; setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = if (on) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, col)
+            setOnClickListener { onClick() }
+        }
         fun paintCurtain() {
             cur.removeAllViews()
-            cur.addView(Ui.text(a, 12f, Ui.SUB, false, "지도에 보일 구역 (누르면 바로 바뀌어요 · 참고용)"))
-            Khoa.GROUPS.forEach { (g, label) ->
+            val r1 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            Khoa.GROUPS.keys.forEach { g ->
                 val on = Khoa.groupOn(a, g)
-                cur.addView(Ui.text(a, 14f, if (on) Ui.TEXT else Ui.SUB, true, (if (on) "☑ " else "☐ ") + label).apply {
-                    setPadding(0, dp(7), 0, dp(7))
-                    setOnClickListener { Khoa.setGroupOn(a, g, !on); paintCurtain(); map.invalidate(); after() }
-                })
+                r1.addView(chip((if (on) "☑ " else "☐ ") + (Khoa.SHORT[g] ?: g), on, Color.parseColor("#FFB27A")) {
+                    Khoa.setGroupOn(a, g, !on); paintCurtain(); map.invalidate(); after()
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             }
-            // 📥 미리 받기 (164)
-            val prog = Ui.text(a, 12f, Color.parseColor("#FFB27A"), false, "").apply { visibility = View.GONE }
-            cur.addView(Ui.button(a, "📥 이 화면 지역 미리 받기 (바다에서 인터넷 약할 때)") {
-                if (Khoa.key(a).isBlank()) { Ui.toast(a, "개방海 인증키가 아직 없어요 (관리자)"); return@button }
-                if (map.zoomLevelDouble < 9.0) { Ui.toast(a, "조금 더 확대해서 받을 지역을 골라 주세요"); return@button }
+            cur.addView(Ui.hscroll(a, r1))
+            val prog = Ui.text(a, 11.5f, Color.parseColor("#FFB27A"), false, busy).apply { visibility = if (busy.isBlank()) View.GONE else View.VISIBLE }
+            val r2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            fun setBusy(t: String) { busy = t; prog.text = t; prog.visibility = if (t.isBlank()) View.GONE else View.VISIBLE }
+            // 📥 이 화면 지역 (164 · 1인당 제한 170)
+            r2.addView(chip("📥 이 지역 받기", false, Ui.TEXT) {
+                if (Khoa.key(a).isBlank()) { Ui.toast(a, "개방海 인증키가 아직 없어요 (관리자)"); return@chip }
+                if (map.zoomLevelDouble < 9.0) { Ui.toast(a, "조금 더 확대해서 받을 지역을 골라 주세요"); return@chip }
                 val box = map.boundingBox
                 val place = Area.name(a, box.centerLatitude, box.centerLongitude).ifBlank { "이 지역" }
-                prog.visibility = View.VISIBLE; prog.text = "📥 받는 중…"
-                Khoa.prefetch(a, box.latSouth, box.latNorth, box.lonWest, box.lonEast, place, null, { d, t -> prog.text = "📥 받는 중… $d / $t" }) { ok, fail ->
-                    prog.text = if (fail == 0) "📥 '$place' 받기 완료 · ⚙ 설정 '오프라인 지역'에서 관리" else "📥 받기 끝 · ${fail}곳 실패 (인터넷 확인 후 다시)"
+                setBusy("📥 받는 중…")
+                Khoa.prefetchChecked(a, box.latSouth, box.latNorth, box.lonWest, box.lonEast, place, { d, t -> setBusy("📥 $d / $t") }) { _, fail, err ->
+                    if (err != null) { setBusy(""); Ui.toast(a, err) }
+                    else setBusy(if (fail == 0) "📥 '$place' 받기 완료 · ⚙ 설정 '오프라인 지역'" else "📥 ${fail}곳 실패 · 인터넷 확인 후 다시")
                     map.invalidate()
                 }
-            }.apply { textSize = 13f; minHeight = dp(42) }, Ui.lp(a, MATCH, WRAP, top = 6))
-            cur.addView(prog, Ui.lp(a, MATCH, WRAP, top = 4))
-            cur.addView(Ui.button(a, "해루질 참고용 끄기") {
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+            // 🇰🇷 전국 (관리자만 · 170)
+            if (Cloud.isAdmin) r2.addView(chip("🇰🇷 전국 받기", false, Ui.TEXT) {
+                if (Khoa.nationalRunning) { Ui.toast(a, "전국 받기가 이미 진행 중이에요"); return@chip }
+                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("🇰🇷 전국 해안 미리 받기 (관리자)")
+                    .setMessage("우리나라 해안 · 섬 ${Khoa.nationalCells().size}칸을 받아요.\n이미 받은 곳은 건너뛰고, 끊기면 다시 누를 때 이어서 받아요.\n데이터가 많이 들어요 (와이파이 권장) · 시간이 꽤 걸려요.")
+                    .setPositiveButton("받기") { _, _ ->
+                        setBusy("🇰🇷 전국 받는 중…")
+                        Khoa.prefetchNational(a, { d, t -> setBusy("🇰🇷 전국 $d / $t") }) { ok, fail ->
+                            setBusy(if (fail == 0) "🇰🇷 전국 받기 완료 (새로 받은 ${ok})" else "🇰🇷 전국 · ${fail}곳 실패 · 다시 누르면 이어 받기")
+                            map.invalidate()
+                        }
+                    }.setNegativeButton("취소", null).show()
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+            r2.addView(chip("끄기", false, Color.parseColor("#FF8A92")) {
                 setOn(a, false); cur.visibility = View.GONE; paintRef(); map.invalidate(); after()
-            }.apply { textSize = 13f; minHeight = dp(40); setTextColor(Color.parseColor("#FF8A92")) }, Ui.lp(a, MATCH, WRAP, top = 6))
+            })
+            cur.addView(Ui.hscroll(a, r2), Ui.lp(a, MATCH, WRAP, top = 6))
+            cur.addView(prog, Ui.lp(a, MATCH, WRAP, top = 4))
         }
         fun paint() {
             val o = on(a)
@@ -486,8 +511,6 @@ object Zones {
         return bar
     }
 
-    /** 예전 방식 (칩만) */
-    fun pill(a: Activity, map: MapView, after: () -> Unit = {}): TextView = bar(a, map, after).pill
 
     /** 켜기 전 안내창 (참고용) + 볼 구역 묶음 체크 → 확인이면 켬 */
     fun confirmOn(a: Activity, done: () -> Unit) {
@@ -1026,6 +1049,31 @@ object Zones {
             }
         }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         card.addView(r, Ui.lp(a, MATCH, WRAP, top = 8))
+        // v3.9.3 (170): 1인당 미리 받기 제한 (관리자는 제한 없음)
+        val lim = Ui.button(a, "📏 1인당 미리 받기 제한: 하루 ${Khoa.dayLimit(a)}지역 · 최대 ${Khoa.maxRegions(a)}곳") {}.apply { textSize = 13f; minHeight = dp(42) }
+        lim.setOnClickListener {
+            val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
+            fun num(h: String, v: Int) = EditText(a).apply { hint = h; setText(v.toString()); inputType = InputType.TYPE_CLASS_NUMBER; setSingleLine() }
+            box.addView(Ui.text(a, 12.5f, Ui.SUB, false, "하루에 미리 받을 수 있는 지역 수"))
+            val d1 = num("예: 10", Khoa.dayLimit(a)); box.addView(d1)
+            box.addView(Ui.text(a, 12.5f, Ui.SUB, false, "한 사람이 저장해 둘 수 있는 지역 수"), Ui.lp(a, MATCH, WRAP, top = 8))
+            val d2 = num("예: 20", Khoa.maxRegions(a)); box.addView(d2)
+            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📏 1인당 미리 받기 제한")
+                .setView(box)
+                .setPositiveButton("저장") { _, _ ->
+                    val x = d1.text.toString().toIntOrNull()?.coerceIn(1, 999) ?: Khoa.dayLimit(a)
+                    val y = d2.text.toString().toIntOrNull()?.coerceIn(1, 999) ?: Khoa.maxRegions(a)
+                    Khoa.saveLimits(a, x, y) { err ->
+                        Ui.toast(a, err ?: "저장했어요 · 하루 ${x}지역 · 최대 ${y}곳")
+                        lim.text = "📏 1인당 미리 받기 제한: 하루 ${Khoa.dayLimit(a)}지역 · 최대 ${Khoa.maxRegions(a)}곳"
+                    }
+                }
+                .setNeutralButton("기본값 (10 · 20)") { _, _ ->
+                    Khoa.saveLimits(a, 10, 20) { err -> Ui.toast(a, err ?: "기본값으로 돌렸어요"); lim.text = "📏 1인당 미리 받기 제한: 하루 10지역 · 최대 20곳" }
+                }
+                .setNegativeButton("취소", null).show()
+        }
+        card.addView(lim, Ui.lp(a, MATCH, WRAP, top = 8))
         return card
     }
 
@@ -1507,7 +1555,7 @@ object Zones {
         val info = Ui.text(a, 12f, Ui.SUB, false, "").apply { setPadding(dp(16), dp(2), dp(16), dp(6)) }
         root.addView(info)
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), 0, dp(12), dp(8)) }
-        val hs = android.widget.HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) }
+        val hs = Ui.hscroll(a, bar)
         root.addView(hs)
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(MATCH, MATCH))

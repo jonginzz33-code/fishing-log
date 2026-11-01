@@ -46,6 +46,8 @@ object MapSearch {
         val l = recent(c); l.removeAll { it.name == p.name }; l.add(0, p); saveRecent(c, l)
         map.controller.setZoom(14.0)
         map.controller.animateTo(GeoPoint(p.lat, p.lon))
+        // v3.9.3 (170): 해루질 참고용을 켠 사람은 검색한 곳 주변을 미리 받아 둠 (바다에서 인터넷 약할 때)
+        Khoa.autoPrefetch(c, p.lat, p.lon, p.name.removePrefix("🌊 ").substringBefore(" · ").take(20))
     }
 
     /** 지도 막대 맨 앞에 넣는 🔍 칩 */

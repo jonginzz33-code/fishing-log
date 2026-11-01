@@ -914,7 +914,7 @@ class MainActivity : Activity() {
                     renderMethods()
                 }
             })
-            left.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
+            left.addView(Ui.hscroll(this, chips),
                 Ui.lp(this, MATCH, WRAP, top = 6))
             row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
             row.addView(Ui.text(this, 13f, Ui.TEXT, true, "바꾸기 ▼").apply {
@@ -1596,7 +1596,7 @@ class MainActivity : Activity() {
         val t = Store.current
         if (t == null) {
             MapDialog.show(this, "🗺 지도 · 내 위치", emptyList(),
-                "출조 중이 아니에요 · 지난 조과는 '지난 기록 겹치기'를 켜면 보여요 · 지난 출조 하나는 ☰ 메뉴 → 지난 출조에서")
+                "출조 중 아님 · 지난 조과는 '지난 기록'을 누르면 보여요")
             return
         }
         MapDialog.showTrip(this, t)

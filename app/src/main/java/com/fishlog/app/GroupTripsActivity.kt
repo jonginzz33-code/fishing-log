@@ -69,7 +69,7 @@ class GroupTripsActivity : Activity() {
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 14))
         peopleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(peopleRow) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        col.addView(Ui.hscroll(this, peopleRow), Ui.lp(this, MATCH, WRAP, top = 8))
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(body, Ui.lp(this, MATCH, WRAP, top = 6))
         // 맨 아래 고정 띠 (꾹 눌러 고를 때만)
@@ -196,7 +196,7 @@ class GroupTripsActivity : Activity() {
                     chips.addView(pill(e.key, e.key == sp, Ui.BLUE) { rankSpecies = e.key; render() },
                         LinearLayout.LayoutParams(WRAP, dp(30)).apply { rightMargin = dp(6) })
                 }
-                card.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, Ui.lp(this, MATCH, WRAP, top = 6))
+                card.addView(Ui.hscroll(this, chips), Ui.lp(this, MATCH, WRAP, top = 6))
             }
             val per = HashMap<String, Int>()
             list.forEach { t -> for (s in t.slots()) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }

@@ -454,7 +454,7 @@ object MapDialog {
                 outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
             }
             map.overlays.add(testLine)
-            val testBtn = pill("📍 내 위치 기록 확인")
+            val testBtn = pill("📍 내 기록")
             val clearBtn = pill("🗑 지우기")
             fun paintTest() {
                 testLine.setPoints(TestTrack.points.map { GeoPoint(it.lat, it.lon) })
@@ -464,7 +464,7 @@ object MapDialog {
                     testBtn.text = "■ 기록 끄기 · ${min}분 · " + (if (m >= 1000) String.format(Locale.KOREA, "%.1fkm", m / 1000) else "${m.toInt()}m")
                     (testBtn.background as GradientDrawable).setColor(Color.parseColor("#1E5E7A"))
                 } else {
-                    testBtn.text = "📍 내 위치 기록 확인"
+                    testBtn.text = "📍 내 기록"
                     (testBtn.background as GradientDrawable).setColor(Color.TRANSPARENT)
                 }
                 clearBtn.visibility = if (TestTrack.points.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
@@ -484,7 +484,7 @@ object MapDialog {
             paintTest()
         }
 
-        val pastBtn = pill("지난 기록 겹치기")
+        val pastBtn = pill("지난 기록")
         var pastLoaded = false
         // 맨 위 한 줄: 지금 어떤 기록을 겹쳐 보는지 + 보기 바꾸기
         val pastBar = TextView(a).apply {
@@ -548,7 +548,7 @@ object MapDialog {
         val close = pill("닫기")
         close.setOnClickListener { dialog.dismiss() }
         addPill(close)
-        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(Ui.hscroll(a, bar))
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
@@ -779,6 +779,8 @@ object MapDialog {
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
+        // v3.9.3: 포인트 지도에도 🦀 해루질 참고 구역 (맨 아래)
+        map.overlays.add(Zones.ZoneOverlay(a) { Zones.on(a) }.apply { onTapZones = { Zones.showInfo(a, it, map) } })
         addCircles(a, map, dots, radiusOf)
         map.overlays.add(DotsOverlay(a, dots, false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f })
         val targets = dots.map { it.point }.distinctBy { "${it.latitude},${it.longitude}" }
@@ -797,6 +799,7 @@ object MapDialog {
             background = GradientDrawable().apply { cornerRadius = dp(a, 20).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
             setOnClickListener { onClick(this) }
         }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
+        bar.addView(MapSearch.pill(a, map), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         pill("내 위치로") { v -> liveMe.goToMe(v) }
         pill("나와 포인트 같이") { _ ->
             val p = liveMe.position
@@ -804,13 +807,16 @@ object MapDialog {
             else LiveMe.fitMeAnd(map, p, targets)
         }
         pill("포인트 전체") { fit(map, dots.map { it.point }) }
+        val zBar = Zones.bar(a, map)
+        bar.addView(zBar.pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
             Store.satellite = !Store.satellite
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
         }
         pill("닫기") { dialog.dismiss() }
-        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(Ui.hscroll(a, bar))
+        root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(a, 12), 0, dp(a, 12), dp(a, 6)) })
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addStatus(a, frame, liveMe)
@@ -850,6 +856,7 @@ object MapDialog {
         }
         val pEdge = route(7, ROUTE_EDGE); val pLine = route(4, ROUTE)
         val pDots = DotsOverlay(a, emptyList(), false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f }
+        map.overlays.add(Zones.ZoneOverlay(a) { Zones.on(a) }.apply { onTapZones = { Zones.showInfo(a, it, map) } })   // v3.9.3
         map.overlays.add(pEdge); map.overlays.add(pLine); map.overlays.add(pDots)
         val liveMe = LiveMe.attach(a, map, listOf(pt), name, autoFit = false)
         map.overlays.add(PersonOverlay(a, pt, name))
@@ -872,6 +879,7 @@ object MapDialog {
             }
             setOnClickListener { onClick(this) }
         }.also { bar.addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) }) }
+        bar.addView(MapSearch.pill(a, map), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         pill("📍 $name 위치로", true) { goPerson() }
         pill("내 위치로") { v -> liveMe.goToMe(v) }
         pill("둘 다 보기") { _ ->
@@ -887,8 +895,11 @@ object MapDialog {
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
         }
+        val zBar = Zones.bar(a, map)
+        bar.addView(zBar.pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         pill("닫기") { dialog.dismiss() }
-        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(Ui.hscroll(a, bar))
+        root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(a, 12), 0, dp(a, 12), dp(a, 6)) })
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addStatus(a, frame, liveMe)

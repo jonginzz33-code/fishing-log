@@ -141,7 +141,7 @@ class BoardActivity : Activity() {
         col.addView(tabRow, Ui.lp(this, MATCH, WRAP, top = 10))
         // 종류 칩: 글자가 줄바꿈되지 않게 가로로 밀어서 보기
         catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        col.addView(android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(catRow) },
+        col.addView(Ui.hscroll(this, catRow),
             Ui.lp(this, MATCH, WRAP, top = 10))
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -494,7 +494,7 @@ class BoardActivity : Activity() {
         // 📸 사진 (맨 위): 대표 사진 크게 + 나머지는 옆으로 밀어서
         if (t.mthumb.isNotBlank() || t.photoCount > 0) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            box.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row) }, Ui.lp(this, MATCH, WRAP, top = 4))
+            box.addView(Ui.hscroll(this, row), Ui.lp(this, MATCH, WRAP, top = 4))
             val caption = "${t.nick} · ${dayFmt.format(Date(t.start))}"
             MainPhoto.decode(t.mthumb)?.let { th ->
                 row.addView(ImageView(this).apply {
@@ -693,7 +693,7 @@ class BoardActivity : Activity() {
             chips.addView(pill("${PublicBoard.keyLabel(e.key)} ${e.value}", e.key == species, 13f) { species = e.key; render() },
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         }
-        listBox.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, Ui.lp(this, MATCH, WRAP, top = 12))
+        listBox.addView(Ui.hscroll(this, chips), Ui.lp(this, MATCH, WRAP, top = 12))
 
         val me = myLocation()
         val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }

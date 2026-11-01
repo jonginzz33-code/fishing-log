@@ -43,16 +43,69 @@ object Ui {
      *  - 기준 폭 400dp · 0.88 ~ 1.22배 · 기종 이름이 아니라 실제 화면 크기로 (처음 보는 폰도 맞음)
      *  - 폴드를 접고 펴면 화면이 다시 만들어지면서 자동으로 다시 계산
      */
+    /** v3.9.3 (168): 개인 설정 '화면 크기' 막대 (70~120 · 100 = 자동) */
+    fun userScale(c: Context): Int = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE).getInt("ui_scale", 100).coerceIn(70, 120)
+    fun setUserScale(c: Context, v: Int) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putInt("ui_scale", v.coerceIn(70, 120)).apply()
+
+    /** 화면이 만들어질 때 쓴 크기 → 설정에서 바꾸고 돌아오면 그 화면을 다시 그림 */
+    private val madeScale = java.util.WeakHashMap<android.app.Activity, Int>()
+    @Volatile private var hooked = false
+    private fun hook(base: Context) {
+        if (hooked) return
+        val app = base.applicationContext as? android.app.Application ?: return
+        hooked = true
+        app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) { madeScale[a] = userScale(a) }
+            override fun onActivityResumed(a: android.app.Activity) {
+                val m = madeScale[a] ?: return
+                if (m != userScale(a)) { madeScale[a] = userScale(a); a.recreate() }
+            }
+            override fun onActivityStarted(a: android.app.Activity) {}
+            override fun onActivityPaused(a: android.app.Activity) {}
+            override fun onActivityStopped(a: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
+            override fun onActivityDestroyed(a: android.app.Activity) { madeScale.remove(a) }
+        })
+    }
+
     fun fit(base: Context): Context {
         return try {
+            hook(base)
             val conf = android.content.res.Configuration(base.resources.configuration)
             val w = conf.screenWidthDp
             if (w <= 0) return base
-            val f = (w / 400f).coerceIn(0.88f, 1.22f)
+            val f = (w / 400f).coerceIn(0.88f, 1.22f) * (userScale(base) / 100f)
             if (kotlin.math.abs(f - 1f) < 0.03f) return base
             conf.densityDpi = (conf.densityDpi * f).toInt()
             base.createConfigurationContext(conf)
         } catch (_: Exception) { base }
+    }
+
+    /** v3.9.3 (169): 옆으로 밀리는 줄 · 화면 밖에 더 있으면 작은 주황 › ‹ 표시 (누르면 그쪽으로 밀어 줌) */
+    fun hscroll(c: Context, content: View): android.widget.FrameLayout {
+        val d = c.resources.displayMetrics.density
+        val hs = android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(content) }
+        val fr = android.widget.FrameLayout(c)
+        fr.addView(hs, android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
+        fun arrow(right: Boolean) = TextView(c).apply {
+            text = if (right) "›" else "‹"; textSize = 15f; typeface = Typeface.DEFAULT_BOLD; includeFontPadding = false
+            setTextColor(Color.parseColor("#1B0E02")); gravity = Gravity.CENTER; visibility = View.GONE
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.parseColor("#FFB27A")); setStroke((1.5f * d).toInt(), BG) }
+            elevation = 4 * d
+            setOnClickListener { hs.smoothScrollBy(((if (right) 1 else -1) * hs.width * 0.6f).toInt(), 0) }
+        }
+        val r = arrow(true); val l = arrow(false)
+        val sz = (22 * d).toInt()
+        fr.addView(r, android.widget.FrameLayout.LayoutParams(sz, sz, Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = (2 * d).toInt() })
+        fr.addView(l, android.widget.FrameLayout.LayoutParams(sz, sz, Gravity.START or Gravity.CENTER_VERTICAL).apply { leftMargin = (2 * d).toInt() })
+        fun upd() {
+            r.visibility = if (hs.canScrollHorizontally(1)) View.VISIBLE else View.GONE
+            l.visibility = if (hs.canScrollHorizontally(-1)) View.VISIBLE else View.GONE
+        }
+        hs.setOnScrollChangeListener { _, _, _, _, _ -> upd() }
+        hs.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> hs.post { upd() } }
+        content.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> hs.post { upd() } }
+        return fr
     }
 
     fun toast(c: Context, msg: String) = android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
@@ -610,7 +663,7 @@ object TideLayers {
             }
         }
         paint()
-        box.addView(android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
+        box.addView(hscroll(c, chips),
             android.widget.LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
         return box
     }

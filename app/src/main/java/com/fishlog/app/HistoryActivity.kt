@@ -123,7 +123,7 @@ class HistoryActivity : Activity() {
         Store.history.firstOrNull()?.let { cal.month.timeInMillis = it.start }
 
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) },
+        col.addView(Ui.hscroll(this, chips),
             Ui.lp(this, MATCH, WRAP, top = 14))
         // 선택 모드 줄: 목록 바로 위 (체크하는 곳 가까이)
         selBar = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

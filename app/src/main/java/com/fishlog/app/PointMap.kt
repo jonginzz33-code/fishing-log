@@ -59,7 +59,7 @@ object PointMap {
         })
         root.addView(head)
         val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
-        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(bar) })
+        root.addView(Ui.hscroll(a, bar))
         // v3.9.2 (161) 해루질 참고용 커튼 · map 은 아래에서 만들기 때문에 자리만 잡아 둠
         val zSlot = FrameLayout(a)
         root.addView(zSlot, LinearLayout.LayoutParams(MATCH, WRAP).apply { setMargins(dp(12), 0, dp(12), dp(6)) })
@@ -169,7 +169,6 @@ object PointMap {
                 setOnClickListener { circle.drawMode = !circle.drawMode; paintBar(); paintInfo(); map.invalidate() }
             })
             if (circle.center != null) add(pill("원 지우기", false) { circle.center = null; circle.drawMode = false; paintBar(); paintInfo(); map.invalidate() })
-            (zBar.pill.parent as? android.view.ViewGroup)?.removeView(zBar.pill)
             add(zBar.pill)
             add(pill(if (Store.satellite) "지도로" else "위성으로", false) { MapDialog.setSatellite(map, !Store.satellite); paintBar() })
             paintCurtain()
@@ -347,8 +346,8 @@ object PointMap {
             box.addView(Ui.text(a, 15f, Ui.TEXT, true, "📊 조건별 자세히"), Ui.lp(a, MATCH, WRAP, top = 16))
             val spRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            box.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(spRow) }, Ui.lp(a, MATCH, WRAP, top = 6))
-            box.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(tabRow) }, Ui.lp(a, MATCH, WRAP, top = 6))
+            box.addView(Ui.hscroll(a, spRow), Ui.lp(a, MATCH, WRAP, top = 6))
+            box.addView(Ui.hscroll(a, tabRow), Ui.lp(a, MATCH, WRAP, top = 6))
             val detail = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
             box.addView(detail, Ui.lp(a, MATCH, WRAP, top = 6))
             var spI = 0; var condI = 0

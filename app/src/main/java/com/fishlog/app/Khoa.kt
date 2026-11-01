@@ -40,6 +40,9 @@ object Khoa {
         "ban" to "🚫 낚시금지 · 낚시제한 · 수중레저금지 구역"
     )
 
+    /** v3.9.3 (167): 커튼 칩용 짧은 이름 */
+    val SHORT = mapOf("farm" to "🐚 어장", "tidal" to "⚠ 갯골", "accident" to "⚠ 인명사고", "ban" to "🚫 금지구역")
+
     private const val URL = "https://www.khoa.go.kr/oceanmap/otmsWfsApi.do"
     private const val KEEP_MS = 30L * 24 * 3600_000L
     private val main = Handler(Looper.getMainLooper())
@@ -60,6 +63,9 @@ object Khoa {
         db.collection("haeruMeta").document("khoa").get()
             .addOnSuccessListener { d ->
                 val k = d.getString("key") ?: ""
+                // v3.9.3 (170): 1인당 미리 받기 제한 (관리자가 정함)
+                prefs(c).edit().putInt("khoa_day_limit", (d.getLong("dayLimit") ?: 10L).toInt())
+                    .putInt("khoa_max_regions", (d.getLong("maxRegions") ?: 20L).toInt()).apply()
                 if (k != key(c)) { prefs(c).edit().putString("khoa_key", k).apply(); mem.clear() }
                 done()
             }
@@ -324,12 +330,25 @@ object Khoa {
 
     /** 이 범위 미리 받기: 모든 레이어 (꺼 둔 묶음도 · 나중에 켜도 바로 보이게) · progress(받은, 전체) · done(성공, 실패) */
     fun prefetch(c: Context, s: Double, n: Double, w: Double, e: Double, name: String, oldId: String?,
+                 progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) =
+        prefetchCells(c, Zones.cellsFor(s, n, w, e, 16), s, n, w, e, name, oldId, oldId != null, progress, done)
+
+    private fun fresh(c: Context, l: Layer, id: String): Boolean {
+        val f = File(dir(c), "${l.id}_$id.txt")
+        return f.exists() && System.currentTimeMillis() - f.lastModified() < KEEP_MS
+    }
+
+    private fun prefetchCells(c: Context, cells: List<String>, s: Double, n: Double, w: Double, e: Double, name: String, oldId: String?, force: Boolean,
                  progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) {
         val k = key(c)
         if (k.isBlank()) return done(0, 0)
         val app = c.applicationContext
-        val cells = Zones.cellsFor(s, n, w, e, 16)
-        val jobs = cells.flatMap { id -> LAYERS.map { it to id } }
+        // 새로 받을 땐 이미 받아 둔(30일 안) 칸은 건너뜀 (이어 받기 · 데이터 절약) · '다시 받기'는 모두 새로
+        val jobs = cells.flatMap { id -> LAYERS.map { it to id } }.filter { (l, id) -> force || !fresh(app, l, id) }
+        if (jobs.isEmpty()) {
+            if (!force && regions(app).none { it.name == name }) saveRegions(app, regions(app) + Region(System.currentTimeMillis().toString(), name, s, n, w, e, System.currentTimeMillis(), cells))
+            return done(0, 0)
+        }
         var ok = 0; var fail = 0
         pool.execute {
             jobs.forEachIndexed { i, (l, id) ->
@@ -350,8 +369,67 @@ object Khoa {
             }
         }
     }
+    // ---------------- 1인당 제한 (v3.9.3 · 170) ----------------
+    fun dayLimit(c: Context) = prefs(c).getInt("khoa_day_limit", 10)
+    fun maxRegions(c: Context) = prefs(c).getInt("khoa_max_regions", 20)
+    private fun today() = java.text.SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(java.util.Date())
+    fun usedToday(c: Context) = if (prefs(c).getString("khoa_pf_day", "") == today()) prefs(c).getInt("khoa_pf_n", 0) else 0
+    /** 받기 전에 확인 · 안 되면 안내 글 (관리자는 제한 없음) */
+    fun quotaError(c: Context, newRegion: Boolean): String? {
+        if (Cloud.isAdmin) return null
+        if (usedToday(c) >= dayLimit(c)) return "오늘 미리 받기를 다 썼어요 (하루 ${dayLimit(c)}지역) · 내일 다시 받을 수 있어요"
+        if (newRegion && regions(c).size >= maxRegions(c)) return "받아 둔 지역이 ${maxRegions(c)}곳으로 가득 찼어요 · ⚙ 개인 설정 '📥 오프라인 지역'에서 안 쓰는 곳을 지워 주세요"
+        return null
+    }
+    private fun countUse(c: Context) { prefs(c).edit().putString("khoa_pf_day", today()).putInt("khoa_pf_n", usedToday(c) + 1).apply() }
+    /** 관리자: 제한 숫자 바꾸기 */
+    fun saveLimits(c: Context, day: Int, max: Int, done: (String?) -> Unit) {
+        db.collection("haeruMeta").document("khoa").set(mapOf("dayLimit" to day, "maxRegions" to max), SetOptions.merge())
+            .addOnSuccessListener { prefs(c).edit().putInt("khoa_day_limit", day).putInt("khoa_max_regions", max).apply(); done(null) }
+            .addOnFailureListener { done("저장 실패: ${it.message}") }
+    }
+
+    /** 이 범위가 이미 다 받아져 있나 */
+    fun allFresh(c: Context, s: Double, n: Double, w: Double, e: Double) =
+        Zones.cellsFor(s, n, w, e, 16).all { id -> LAYERS.all { fresh(c, it, id) } }
+
+    /** 제한 확인 + 횟수 세기 + 받기 (사용자가 누른 것 · 검색 자동) */
+    fun prefetchChecked(c: Context, s: Double, n: Double, w: Double, e: Double, name: String,
+                        progress: (Int, Int) -> Unit, done: (Int, Int, String?) -> Unit) {
+        if (allFresh(c, s, n, w, e)) { prefetch(c, s, n, w, e, name, null, progress) { a, b -> done(a, b, null) }; return }
+        val err = quotaError(c, regions(c).none { it.name == name })
+        if (err != null) return done(0, 0, err)
+        countUse(c)
+        prefetch(c, s, n, w, e, name, null, progress) { a, b -> done(a, b, null) }
+    }
+
+    /** 🔍 장소 검색으로 옮겨 가면 그 주변(사방 약 13km)을 뒤에서 미리 받기 (해루질 참고용을 켠 사람만) */
+    fun autoPrefetch(c: Context, lat: Double, lon: Double, name: String) {
+        if (!Zones.on(c) || key(c).isBlank()) return
+        val s = lat - 0.12; val n = lat + 0.12; val w = lon - 0.15; val e = lon + 0.15
+        if (allFresh(c, s, n, w, e)) return
+        val app = c.applicationContext
+        Ui.toast(app, "📥 '$name' 주변 해루질 구역을 미리 받는 중이에요 (바다에서 인터넷 약할 때 대비)")
+        prefetchChecked(app, s, n, w, e, name, { _, _ -> }) { _, fail, err ->
+            Ui.toast(app, err ?: if (fail == 0) "📥 '$name' 주변 받기 완료 · ⚙ 설정 '오프라인 지역'에서 관리" else "📥 '$name' 주변 받기 끝 · ${fail}곳 실패 (인터넷 확인)")
+        }
+    }
+
+    // ---------------- 🇰🇷 전국 미리 받기 (관리자만) ----------------
+    /** 우리나라 해안 · 섬 칸 (0.25° · 해안선 근처만) */
+    private const val COAST = "132_504,132_505,132_506,132_507,133_504,133_505,133_506,133_507,134_504,134_505,134_506,134_507,135_500,135_504,135_505,135_508,135_509,136_500,136_503,136_504,136_505,136_506,136_507,136_508,136_509,137_503,137_504,137_505,137_506,137_507,137_508,137_509,137_510,137_511,138_500,138_501,138_502,138_503,138_504,138_505,138_506,138_507,138_508,138_509,138_510,138_511,138_512,138_513,138_514,139_500,139_501,139_502,139_503,139_504,139_505,139_510,139_511,139_512,139_513,139_514,140_505,140_510,140_511,140_512,140_514,140_515,140_516,140_517,141_505,141_506,141_516,141_517,141_518,142_504,142_505,142_506,142_517,142_518,143_505,143_506,143_517,143_518,144_503,144_504,144_505,144_506,144_517,144_518,145_504,145_505,145_506,145_517,145_518,146_501,146_502,146_504,146_505,146_506,146_517,147_504,147_505,147_506,147_507,147_517,147_518,148_504,148_505,148_506,148_507,148_516,148_517,148_518,148_527,149_504,149_505,149_506,149_515,149_516,149_517,149_523,149_527,150_502,150_503,150_505,150_506,150_515,150_516,150_517,150_523,151_498,151_499,151_502,151_503,151_505,151_506,151_514,151_515,151_516,152_498,152_499,152_513,152_514,152_515,153_513,153_514,154_513,154_514"
+    fun nationalCells() = COAST.split(",")
+    @Volatile var nationalRunning = false
+    fun prefetchNational(c: Context, progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) {
+        if (!Cloud.isAdmin || nationalRunning) return done(0, 0)
+        nationalRunning = true
+        prefetchCells(c, nationalCells(), 33.0, 38.7, 124.5, 132.0, "🇰🇷 전국", regions(c).firstOrNull { it.name == "🇰🇷 전국" }?.id, false, progress) { a, b ->
+            nationalRunning = false; done(a, b)
+        }
+    }
+
     fun redownload(c: Context, r: Region, progress: (Int, Int) -> Unit, done: (Int, Int) -> Unit) =
-        prefetch(c, r.s, r.n, r.w, r.e, r.name, r.id, progress, done)
+        prefetchCells(c, r.cells, r.s, r.n, r.w, r.e, r.name, r.id, true, progress, done)
 
     fun distanceOk(a: Double, b: Double) = abs(a - b) < 1e-9
 }

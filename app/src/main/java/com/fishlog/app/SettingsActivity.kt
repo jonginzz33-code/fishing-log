@@ -71,6 +71,7 @@ class SettingsActivity : Activity() {
         box.removeAllViews()
         renderNick()
         section("화면 표시")
+        renderScale()
         switchRow("꺼진 화면(AOD)·잠금 화면에 표시", "출조 중 주꾸미 아이콘, 마릿수, +1 버튼을 잠금 해제 없이 보여줘요",
             Store.lockScreenShow) { Store.lockScreenShow = it; if (Store.current != null) RemoteService.start(this) }
         section("알림")
@@ -105,6 +106,63 @@ class SettingsActivity : Activity() {
         renderOffline()
     }
 
+    /** v3.9.3 (168): 📐 화면 크기 막대 (70~120% · 가운데 100 = 자동) · 손을 떼면 앱 전체에 적용 */
+    private fun renderScale() {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        val orange = Color.parseColor("#FFB27A")
+        val cur = Ui.userScale(this)
+        fun label(v: Int) = if (v == 100) "자동 (100%)" else "$v%"
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(Ui.text(this, 15f, Ui.TEXT, true, "📐 화면 크기"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val valTv = Ui.text(this, 15f, orange, true, label(cur))
+        head.addView(valTv)
+        card.addView(head)
+        card.addView(Ui.text(this, 12f, Ui.SUB, false, "왼쪽 = 작게 · 가운데 = 자동(폰 화면에 맞춤) · 오른쪽 = 크게\n손을 떼면 앱 전체에 바로 적용돼요"), Ui.lp(this, MATCH, WRAP, top = 2))
+        val preview = Ui.text(this, 14f * cur / 100f, Ui.TEXT, false, "🎣 미리보기 · 주꾸미 23 · 갑오징어 4")
+        val sb = android.widget.SeekBar(this).apply {
+            max = 50; progress = cur - 70
+            val h = dp(10)
+            val bgD = android.graphics.drawable.GradientDrawable().apply { setColor(Color.parseColor("#3A4E63")); cornerRadius = h.toFloat(); setSize(0, h) }
+            val fgD = android.graphics.drawable.ClipDrawable(android.graphics.drawable.GradientDrawable().apply { setColor(orange); cornerRadius = h.toFloat(); setSize(0, h) },
+                Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)
+            progressDrawable = android.graphics.drawable.LayerDrawable(arrayOf(bgD, fgD)).apply {
+                setId(0, android.R.id.background); setId(1, android.R.id.progress)
+                setLayerHeight(0, h); setLayerHeight(1, h); setLayerGravity(0, Gravity.CENTER_VERTICAL); setLayerGravity(1, Gravity.CENTER_VERTICAL)
+            }
+            thumb = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(orange); setStroke(dp(3), Color.WHITE); setSize(dp(26), dp(26))
+            }
+            splitTrack = false
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, fromUser: Boolean) {
+                    var v = p + 70
+                    if (fromUser && kotlin.math.abs(v - 100) <= 2) { v = 100 }   // 가운데(자동) 근처면 딱 맞춤
+                    valTv.text = label(v); preview.textSize = 14f * v / 100f
+                }
+                override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(s: android.widget.SeekBar?) {
+                    var v = (s?.progress ?: 30) + 70
+                    if (kotlin.math.abs(v - 100) <= 2) v = 100
+                    if (v != Ui.userScale(this@SettingsActivity)) { Ui.setUserScale(this@SettingsActivity, v); recreate() }
+                }
+            })
+        }
+        card.addView(sb, Ui.lp(this, MATCH, WRAP, top = 6))
+        val marks = android.widget.FrameLayout(this)
+        marks.addView(Ui.text(this, 11f, Ui.SUB, false, "70%"), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.START))
+        marks.addView(Ui.text(this, 11f, orange, true, "▲ 자동"), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER_HORIZONTAL).apply { leftMargin = dp(40) })
+        marks.addView(Ui.text(this, 11f, Ui.SUB, false, "120%"), android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END))
+        card.addView(marks, Ui.lp(this, MATCH, WRAP))
+        card.addView(preview, Ui.lp(this, MATCH, WRAP, top = 8))
+        card.addView(Ui.button(this, "↺ 자동으로 되돌리기") {
+            if (Ui.userScale(this) != 100) { Ui.setUserScale(this, 100); recreate() } else toast("지금 자동이에요")
+        }.apply { minHeight = dp(42); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 10))
+        box.addView(card, Ui.lp(this, MATCH, WRAP, top = 6))
+    }
+
     /** v3.9.2 (164): 📥 오프라인 지역 (해루질 참고용 구역 미리 받은 곳) · 커튼 */
     private var offOpen = false
     private fun renderOffline() {
@@ -120,7 +178,9 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(10), dp(14), dp(12))
         }
         box.addView(card, Ui.lp(this, MATCH, WRAP, top = 4))
-        card.addView(Ui.text(this, 12f, Ui.SUB, false, "지도 ▸ ☑ 해루질 참고용 ▾ ▸ 📥 이 화면 지역 미리 받기 로 추가해요\n바다에서 인터넷이 약해도 받아 둔 구역은 보여요 (오래되면 연결될 때 새로 받음)"))
+        card.addView(Ui.text(this, 12f, Ui.SUB, false, "지도 ▸ ☑ 해루질 참고용 ▾ ▸ 📥 이 지역 받기, 또는 🔍 장소로 검색하면 그 주변을 자동으로 받아요\n바다에서 인터넷이 약해도 받아 둔 구역은 보여요 (오래되면 연결될 때 새로 받음)"))
+        if (!Cloud.isAdmin) card.addView(Ui.text(this, 12f, Color.parseColor("#F2C14E"), false,
+            "오늘 받은 지역 ${Khoa.usedToday(this)} / ${Khoa.dayLimit(this)} · 저장한 지역 ${regs.size} / ${Khoa.maxRegions(this)}"), Ui.lp(this, MATCH, WRAP, top = 4))
         if (regs.isEmpty()) card.addView(Ui.text(this, 14f, Ui.SUB, false, "아직 받은 지역이 없어요"), Ui.lp(this, MATCH, WRAP, top = 10))
         val df = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.KOREA)
         regs.forEach { r ->
