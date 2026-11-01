@@ -21,7 +21,9 @@ class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: S
              /** 0 = 내 기록, 1 = 그룹 친구, 2 = 전체 게시판 */
              val src: Int = 0,
              /** 게시판 기록: 대략 위치 범위(m), 0 = 정확한 점 */
-             val radiusM: Double = 0.0)
+             val radiusM: Double = 0.0,
+             /** GPS가 아닌 대략 위치로 잡힌 조과 (흐리게 + 오차 원 radiusM) */
+             val rough: Boolean = false)
 
 /**
  * 조과 점 그리기. 화면에서 가까이 겹치는 점은 하나로 묶어서
@@ -59,9 +61,18 @@ class DotsOverlay(
                 edge.color = Color.argb(140, 185, 166, 255); edge.strokeWidth = 1 * d; c.drawCircle(cl.x, cl.y, rr, edge)
             }
         }
+        // 대략 위치 조과: 오차 범위 원 (옅은 주황)
+        val allRough = cl.items.all { it.rough }
+        if (allRough) cl.items.firstOrNull { it.radiusM > 0 }?.let { p ->
+            val rr = map.projection.metersToPixels(p.radiusM.toFloat())
+            if (rr > 14 * d) {
+                area.color = Color.argb(40, 242, 140, 56); c.drawCircle(cl.x, cl.y, rr, area)
+                edge.color = Color.argb(130, 242, 140, 56); edge.strokeWidth = 1 * d; c.drawCircle(cl.x, cl.y, rr, edge)
+            }
+        }
         val rad = (17 + min(n, 60) * 0.12f) * d
         val bg = cl.items.groupingBy { it.color }.eachCount().maxByOrNull { it.value }!!.key
-        fill.color = bg; fill.alpha = 235
+        fill.color = bg; fill.alpha = if (allRough) 110 else 235   // 대략 위치는 흐리게
         c.drawCircle(cl.x, cl.y, rad, fill)
         edge.color = when (src) { 1 -> PINK; 2 -> PURPLE; else -> Color.WHITE }
         edge.strokeWidth = (if (src == 0) 2f else 3f) * d

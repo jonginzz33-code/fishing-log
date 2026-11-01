@@ -86,11 +86,30 @@ object Tracker {
         override fun onProviderDisabled(provider: String) {}
     }
 
+    /** 정확한 위치로 쓸 기준: GPS + 오차 50m 이내 */
+    private const val GOOD_ACC = 50f
+    /** 이보다 빠르게 움직인 것처럼 튄 점은 버림 (약 50노트) */
+    private const val MAX_SPEED_MS = 25f
+    /** GPS를 못 잡을 때의 대략 위치 (와이파이·기지국) — 경로·지도엔 안 씀, 조과 '대략'에만 */
+    var rough: Location? = null
+        private set
+
+    private fun isGood(loc: Location): Boolean =
+        loc.provider == LocationManager.GPS_PROVIDER && (!loc.hasAccuracy() || loc.accuracy <= GOOD_ACC)
+
     private fun onLocation(loc: Location) {
+        if (!isGood(loc)) {
+            // 와이파이·기지국·오차 큰 위치: 경로·내 위치·보정에 안 씀 → 위치가 아예 없던 조과에만 '대략'으로
+            rough = loc
+            Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else -1f, false)
+            return
+        }
+        // 순간이동(말이 안 되는 속도로 튄 점) 버리기
         val prev = last
-        if (prev != null && loc.provider != LocationManager.GPS_PROVIDER &&
-            prev.provider == LocationManager.GPS_PROVIDER && loc.time - prev.time < 120_000L
-        ) return
+        if (prev != null && isGood(prev)) {
+            val dt = (loc.time - prev.time) / 1000f
+            if (dt > 0f && dt < 600f && loc.distanceTo(prev) / dt > MAX_SPEED_MS) return
+        }
         last = loc
 
         // 움직이는지 판단: 40m 넘게 벗어나거나 속도가 1m/s 이상이면 이동 중, 3분 넘게 제자리면 정지
@@ -103,9 +122,8 @@ object Tracker {
             moving = false
         }
         if (wasMoving != moving || longStill()) reapply()
-        // 조과 버튼을 누른 뒤 1분 안에 잡힌 위치 → 그 조과 위치로 (GPS면 정확, 아니면 위치 없던 것만 대략)
-        Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else -1f,
-            loc.provider == LocationManager.GPS_PROVIDER)
+        // 조과 버튼을 누른 뒤 1분 안에 잡힌 정확한 GPS → 그 조과 위치로
+        Store.fillCatchLoc(loc.time, loc.latitude, loc.longitude, if (loc.hasAccuracy()) loc.accuracy else -1f, true)
 
         val saved = lastSaved
         if (saved == null || loc.time - saved.time >= saveEvery() || loc.distanceTo(saved) >= 30f) {
@@ -150,6 +168,8 @@ object Tracker {
     fun approx(now: Long): Location? {
         if (!Store.appLoc) return null
         val m = lm ?: return null
+        val r0 = rough
+        if (r0 != null && now - r0.time < 10 * 60_000L) return r0
         return try {
             listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER, LocationManager.GPS_PROVIDER)
                 .mapNotNull { p: String -> try { m.getLastKnownLocation(p) } catch (_: Exception) { null } }
@@ -195,7 +215,7 @@ object Tracker {
     }
 
     /** 앱 설정에서 '내 위치 사용'을 껐을 때: 기억하던 위치도 지움 */
-    fun forget() { stop(); last = null }
+    fun forget() { stop(); last = null; rough = null }
 
     fun stop() {
         try { lm?.removeUpdates(listener) } catch (_: Exception) {}

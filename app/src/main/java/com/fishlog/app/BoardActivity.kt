@@ -663,6 +663,19 @@ class BoardActivity : Activity() {
 
     private fun renderPoints() {
         val list = filtered()
+        // 🗺 지도: 전체 포인트 · 나만의 포인트 체크 + 원 그려서 분석
+        listBox.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = Ui.bg(this@BoardActivity, android.graphics.Color.parseColor("#2A1023"), 14, android.graphics.Color.parseColor("#FF4FA8"))
+            addView(Ui.text(this@BoardActivity, 15f, android.graphics.Color.parseColor("#FFD0E8"), true, "🗺 포인트 지도 · ⭕ 원 그려서 분석").apply { gravity = Gravity.CENTER })
+            addView(Ui.text(this@BoardActivity, 11f, Ui.SUB, false, "☑ 전체 포인트 · ☑ 나만의 포인트(안 올린 내 기록, 나만 보여요)").apply { gravity = Gravity.CENTER })
+            isClickable = true
+            setOnClickListener {
+                val day = 86_400_000L
+                val since = when (period) { 0 -> System.currentTimeMillis() - 31 * day; 1 -> System.currentTimeMillis() - 92 * day; else -> 0L }
+                PointMap.open(this@BoardActivity, list, cat, since)
+            }
+        }, Ui.lp(this, MATCH, WRAP, top = 10))
         // 어종 칩 (많이 잡힌 순)
         val counts = list.flatMap { t -> t.catches.filter { it.cell != null }.map { t.key(it.slot) } }
             .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }

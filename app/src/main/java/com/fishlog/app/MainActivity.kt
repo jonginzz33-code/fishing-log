@@ -776,12 +776,12 @@ class MainActivity : Activity() {
 
     /** 돌파하는 순간: 금색 띠 + 색종이 (2~3초) */
     private val milestoneListener: (Int, Int, Int) -> Unit = lambda@{ slot, count, tier ->
-        if (slot > 2) { showMessage("${Store.current?.name(slot) ?: ""} ${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"); return@lambda }
+        if (slot > 2) { showMessage("${Store.current?.name(slot) ?: ""} " + if (count == 1) "첫 손맛!" else "${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"); return@lambda }
         val banner = if (slot == 1) banner1 else banner2
         val conf = if (slot == 1) confetti1 else confetti2
-        banner.text = "${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"
+        banner.text = if (count == 1) "🎉 ${Milestone.titleWithCrown(tier)}!" else "${count}마리 돌파! ${Milestone.titleWithCrown(tier)}"
         banner.visibility = View.VISIBLE
-        conf.start(if (tier >= 7) 90 else if (tier >= 4) 60 else 30)
+        conf.start(if (tier >= 8) 90 else if (tier >= 5) 60 else 30)
         handler.postDelayed({ banner.visibility = View.GONE }, 3000)
     }
 
@@ -923,7 +923,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(WRAP, dp(34)))
         methodBox.addView(head)
 
-        fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, onToggle: () -> Unit) {
+        fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, help: Pair<String, String>? = null, onToggle: () -> Unit) {
             val r = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(10), dp(10), dp(10), dp(10))
@@ -944,6 +944,15 @@ class MainActivity : Activity() {
                 background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 8, Ui.LINE)
                 setOnClickListener { Store.methodsChosen = true; action(); renderMethods() }
             }, LinearLayout.LayoutParams(WRAP, dp(34)))
+            // ? = 이 기록 방식 설명 창
+            if (help != null) r.addView(Ui.text(this, 15f, Ui.BLUE, true, "?").apply {
+                gravity = Gravity.CENTER
+                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.BLUE)
+                setOnClickListener {
+                    AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle(help.first).setMessage(help.second).setPositiveButton("알겠어요", null).show()
+                }
+            }, LinearLayout.LayoutParams(dp(32), dp(32)).apply { leftMargin = dp(8) })
             methodBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
         }
         val nKeys = (1..Store.MAX_REMOTE).count { Store.key(it) != null }
@@ -955,7 +964,12 @@ class MainActivity : Activity() {
             Store.watchMode = !Store.watchMode
             if (Store.watchMode) showWatchGuide()
         }
-        option("배터리 절약", "이동 경로를 3분 간격으로", Store.saver, null) { Store.saver = !Store.saver }
+        option("배터리 절약", "이동 경로를 3분 간격으로", Store.saver, null, "🔋 배터리 절약이란?" to
+            "출조 중 위치를 재는 간격을 3분으로 늘려서 배터리를 아껴요.\n\n" +
+            "• 좋은 점: 하루 종일 타도 배터리가 오래가요. 보조배터리가 없을 때 추천해요.\n\n" +
+            "• 달라지는 점: 이동 경로가 듬성듬성 그려지고, 같이 출조 중인 사람들에게 보이는 내 위치가 덜 자주 바뀌어요.\n\n" +
+            "• 그대로인 것: 조과 위치는 정확해요. 카드나 리모컨을 누르면 그 뒤 1분 동안 GPS를 촘촘히 재서 그 자리를 잡아요.\n\n" +
+            "• 추천: 배터리가 넉넉하면 끄고, 오래 탈 때나 배터리가 부족하면 켜세요.") { Store.saver = !Store.saver }
     }
 
     // ---------------- 동작 ----------------
@@ -1734,7 +1748,8 @@ class MainActivity : Activity() {
                         if (hasLoc) {
                             val ago = if (m.at > 0) MapDialog.agoText((System.currentTimeMillis() - m.at) / 1000) else ""
                             MapDialog.showPerson(this@MainActivity, m.name, m.lat!!, m.lon!!,
-                                listOf(Store.catShort(m.cat).ifBlank { "출조" }, m.line, if (ago.isNotBlank()) "위치 $ago" else null).filterNotNull().joinToString(" · "))
+                                listOf(Store.catShort(m.cat).ifBlank { "출조" }, m.line, if (ago.isNotBlank()) "위치 $ago" else null).filterNotNull().joinToString(" · "),
+                                m.uid, m.gids, m.pub)
                         } else showMessage(if (m.pub && m.groups.isEmpty()) "전체 공유는 위치 대신 동네 이름만 보여요" else "${m.name}님은 위치 공유를 꺼 두었어요")
                     }
                 }
@@ -1857,6 +1872,23 @@ class MainActivity : Activity() {
                 else "끄면 '출조 중'과 마릿수만 보이고 지도엔 안 나와요"))
             r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
             box.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
+            // 전체 공유일 때: 정확한 위치·조과 지도까지 공유할지 (기본은 동네 이름만)
+            if (scope == "public" && on) {
+                val ex = Store.livePubExact
+                val r2 = Ui.row(this).apply {
+                    setPadding(dp(30), dp(6), 0, dp(2)); isClickable = true
+                    setOnClickListener { Store.livePubExact = !ex; Live.scopeChanged(); redraw() }
+                }
+                r2.addView(Ui.text(this, 12f, if (ex) Ui.BG else Ui.SUB, true, if (ex) "✓" else "").apply {
+                    gravity = Gravity.CENTER
+                    background = if (ex) Ui.bg(this@MainActivity, Ui.ORANGE, 4) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 4, Ui.SUB)
+                }, LinearLayout.LayoutParams(dp(20), dp(20)))
+                val t2 = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                t2.addView(Ui.text(this, 13f, Ui.TEXT, true, "🗺 전체에도 정확한 위치 · 조과 지도 공유"))
+                t2.addView(Ui.text(this, 11f, Ui.SUB, false, "끄면 전체 사용자에겐 동네 이름만 · 지도는 관리자가 권한 준 사람만 볼 수 있어요"))
+                r2.addView(t2, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+                box.addView(r2, Ui.lp(this, MATCH, WRAP, top = 2))
+            }
         }
     }
 

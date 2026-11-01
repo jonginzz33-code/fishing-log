@@ -365,6 +365,10 @@ object Store {
     var liveLoc: Boolean
         get() = prefs.getBoolean("liveLoc", true)
         set(v) { prefs.edit().putBoolean("liveLoc", v).apply() }
+    /** 전체 공유일 때도 정확한 위치·조과 지도 공유 (기본 꺼짐 = 동네 이름만) */
+    var livePubExact: Boolean
+        get() = prefs.getBoolean("livePubExact", false)
+        set(v) { prefs.edit().putBoolean("livePubExact", v).apply() }
     fun liveScopeLabel(): String = when (liveScope) { "none" -> "알리지 않기"; "public" -> "전체 사용자에게 공유"; else -> "체크한 그룹에 알리기" }
 
     var mateRange: Int

@@ -37,7 +37,9 @@ import java.util.Locale
 /** 지도에 그릴 한 사람(또는 한 출조)의 경로와 조과 */
 class MapLayer(val color: Int, val track: List<GeoPoint>, val catches: List<MapCatch>)
 class MapCatch(val point: GeoPoint, val color: Int, val title: String, val kind: String = "",
-               val time: Long = 0L, val who: String = "", val species: String = "", val paid: Boolean = false)
+               val time: Long = 0L, val who: String = "", val species: String = "", val paid: Boolean = false,
+               /** 대략 위치(GPS 아님) · 오차(m) */
+               val rough: Boolean = false, val accM: Double = 0.0)
 
 object MapDialog {
 
@@ -63,6 +65,19 @@ object MapDialog {
                 MapTileIndex.getY(pMapTileIndex) + "/" + MapTileIndex.getX(pMapTileIndex)
     }
 
+    /** 다른 화면에서 쓰는 지도 하나 (설정 · 위성 여부 그대로) */
+    fun newMap(a: Activity): MapView {
+        configure(a)
+        return MapView(a).apply {
+            setMultiTouchControls(true)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
+            isTilesScaledToDpi = true
+        }
+    }
+    fun setSatellite(map: MapView, on: Boolean) { Store.satellite = on; map.setTileSource(if (on) satelliteSource else TileSourceFactory.MAPNIK) }
+    fun openCluster(a: Activity, items: List<MapDot>) = showCluster(a, items)
+
     private fun configure(a: Activity) {
         if (configured) return
         val c = Configuration.getInstance()
@@ -74,7 +89,7 @@ object MapDialog {
 
     private fun dp(a: Context, v: Int) = (v * a.resources.displayMetrics.density).toInt()
 
-    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }, it.time, it.who, it.species, it.paid) }
+    private fun toDots(cs: List<MapCatch>) = cs.map { MapDot(it.point, it.color, it.title, it.kind.ifBlank { it.title }, it.time, it.who, it.species, it.paid, 0, it.accM, it.rough) }
 
     /** 해루질에서 유료로 적은 출조만 지도에 "유료" 표시 (선상낚시는 원래 다 유료라 표시 안 함) */
     fun paidMark(cat: String, paid: Boolean?): Boolean = cat == "night" && paid == true
@@ -660,7 +675,7 @@ object MapDialog {
             t.catches.filter { it.lat != null && it.lon != null }.map {
                 MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                     "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
-                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0)
+                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0, if (it.q == 1 && it.acc > 0f) it.acc.toDouble() else 0.0, it.q == 1)
             }
         }
         val myId = Cloud.uid
@@ -803,7 +818,8 @@ object MapDialog {
      *  - 그 사람 위치가 가운데 · 초록 점 + 이름표, 내 위치(파란 점)와 점선·거리도 같이
      *  - 위 버튼: 📍 ○○ 위치로 · 내 위치로 · 둘 다 보기 · 위성 · 닫기
      */
-    fun showPerson(a: Activity, name: String, lat: Double, lon: Double, info: String) {
+    fun showPerson(a: Activity, name: String, lat: Double, lon: Double, info: String,
+                   uid: String? = null, gids: List<String> = emptyList(), pub: Boolean = false) {
         configure(a)
         val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
         val pt = GeoPoint(lat, lon)
@@ -813,6 +829,14 @@ object MapDialog {
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
+        // 그 사람의 경로 + 잡은 자리 (관리자가 권한 준 사람만 받을 수 있음)
+        fun route(w: Int, c: Int) = Polyline(map).apply {
+            outlinePaint.color = c; outlinePaint.strokeWidth = dp(a, w).toFloat(); outlinePaint.isAntiAlias = true
+            outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND; outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+        }
+        val pEdge = route(7, ROUTE_EDGE); val pLine = route(4, ROUTE)
+        val pDots = DotsOverlay(a, emptyList(), false) { showCluster(a, it) }
+        map.overlays.add(pEdge); map.overlays.add(pLine); map.overlays.add(pDots)
         val liveMe = LiveMe.attach(a, map, listOf(pt), name, autoFit = false)
         map.overlays.add(PersonOverlay(a, pt, name))
         fun goPerson() { map.controller.setZoom(16.0); map.controller.animateTo(pt) }
@@ -855,13 +879,35 @@ object MapDialog {
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addStatus(a, frame, liveMe)
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        root.addView(TextView(a).apply {
+        val legend = TextView(a).apply {
             text = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치 · 점선 = $name 까지 방향·거리\n지도 © OpenStreetMap · 위성 © Esri"
             textSize = 12f; setTextColor(Color.parseColor("#9FB4C2"))
             setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
-        })
+        }
+        root.addView(legend)
+        var stopMap: () -> Unit = {}
+        if (uid != null) {
+            val tf = SimpleDateFormat("HH:mm", Locale.KOREA)
+            stopMap = Live.watchMap(uid, gids, pub) { m ->
+                if (m == null) {
+                    legend.text = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치\n(이동 경로 · 잡은 자리는 관리자가 권한 준 사람만 보여요)\n지도 © OpenStreetMap · 위성 © Esri"
+                    return@watchMap
+                }
+                val pts = m.track.map { GeoPoint(it.lat, it.lon) }
+                pEdge.setPoints(pts); pLine.setPoints(pts)
+                fun nm(slot: Int) = m.names.getOrElse(slot - 1) { "${slot}번" }
+                pDots.dots = m.catches.map { c ->
+                    MapDot(GeoPoint(c.lat!!, c.lon!!), slotCol(c.slot), "$name · ${tf.format(Date(c.time))} · ${nm(c.slot)}" + if (c.q == 1) " (대략 위치)" else "",
+                        nm(c.slot), c.time, name, nm(c.slot), false, 1, 0.0, c.q == 1)
+                }
+                val counts = m.catches.groupingBy { nm(it.slot) }.eachCount().entries.joinToString(" · ") { "${it.key} ${it.value}" }
+                legend.text = info + "\n지도에 보이는 조과: " + counts.ifBlank { "아직 없음" } +
+                    "\n초록 점 = $name · 분홍 선 = 이동 경로 · 숫자 = 그 자리 마릿수 · 파란 점 = 내 위치\n지도 © OpenStreetMap · 위성 © Esri"
+                map.invalidate()
+            }
+        }
         dialog.setContentView(root)
-        dialog.setOnDismissListener { liveMe.stop(); map.onPause(); map.onDetach() }
+        dialog.setOnDismissListener { stopMap(); liveMe.stop(); map.onPause(); map.onDetach() }
         dialog.show()
         map.onResume()
         map.post { goPerson() }
@@ -1021,7 +1067,8 @@ object MapDialog {
                     1 -> " (대략 위치" + (if (it.acc > 0f) " ±${it.acc.toInt()}m" else "") + ")"
                     2 -> " (경로로 계산한 위치)"
                     else -> if (it.acc > 0f) " (±${it.acc.toInt()}m)" else ""
-                }, t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid))
+                }, t.name(it.slot), it.time, "", t.name(it.slot), paidMark(t.cat, t.paid),
+                it.q == 1, if (it.q == 1 && it.acc > 0f) it.acc.toDouble() else 0.0)
         }
         return MapLayer(trackColor, track, catches)
     }

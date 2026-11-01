@@ -45,7 +45,7 @@ object Live {
     private val prevCounts = HashMap<String, Pair<Int, Int>>()
 
     /** 직전 갱신 때보다 늘어난 사이에 넘은 가장 큰 단계 */
-    private fun crossed(old: Int, now: Int): Int? = Milestone.STEPS.filter { it in (old + 1)..now }.maxOrNull()
+    private fun crossed(old: Int, now: Int): Int? = Milestone.STEPS.filter { it > 1 && it in (old + 1)..now }.maxOrNull()   // 첫 1마리는 친구 알림 안 함
 
     private fun checkCheers(list: List<Mate>) {
         list.forEach { m ->
@@ -117,7 +117,8 @@ object Live {
 
     // ---------------- 전체 사용자에게 공유 (publicLive/{uid}) ----------------
     /** 전체 게시판 맨 위 '지금 출조 중' 한 사람 (정확한 위치는 안 올림, 동네 이름만) */
-    class PubNow(val uid: String, val name: String, val cat: String, val start: Long, val line: String, val area: String)
+    class PubNow(val uid: String, val name: String, val cat: String, val start: Long, val line: String, val area: String,
+                 val lat: Double? = null, val lon: Double? = null, val at: Long = 0L)
     private var pubWrote = false
     private var pubCleaned = false   // 앱을 다시 켠 뒤 한 번은 지워 둠 (예전에 전체 공유하다 바꾼 경우)
     private fun writePublic(t: Store.Trip, now: Long) {
@@ -128,7 +129,11 @@ object Live {
         }
         val doc = hashMapOf<String, Any>("owner" to me, "name" to PublicBoard.nickShown(), "t" to now, "start" to t.start,
             "cat" to t.cat, "line" to t.line())
-        myLocation()?.let { (la, lo) -> Area.name(Cloud.appContext, la, lo).takeIf { it.isNotBlank() }?.let { doc["area"] = it } }
+        val loc = myLocation()
+        loc?.let { (la, lo) -> Area.name(Cloud.appContext, la, lo).takeIf { it.isNotBlank() }?.let { doc["area"] = it } }
+        // '정확한 위치 공유'를 켠 사람만 전체에도 정확한 위치 (아니면 지움)
+        if (Store.livePubExact && Store.liveLoc && Store.appLoc && loc != null) { doc["lat"] = loc.first; doc["lon"] = loc.second }
+        else { doc["lat"] = com.google.firebase.firestore.FieldValue.delete(); doc["lon"] = com.google.firebase.firestore.FieldValue.delete() }
         pubWrote = true
         db.collection("publicLive").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge())
     }
@@ -142,7 +147,8 @@ object Live {
             val now = System.currentTimeMillis()
             val l = q.documents.filter { d -> now - (d.getLong("t") ?: 0L) < STALE_MS && !Moderation.isBlocked(d.id) }
                 .map { d -> PubNow(d.id, if (d.id == Cloud.uid) "나" else d.getString("name") ?: "익명", d.getString("cat") ?: "",
-                    d.getLong("start") ?: 0L, d.getString("line") ?: "", d.getString("area") ?: "") }
+                    d.getLong("start") ?: 0L, d.getString("line") ?: "", d.getString("area") ?: "",
+                    d.getDouble("lat"), d.getDouble("lon"), d.getLong("t") ?: 0L) }
                 .sortedBy { it.start }
             pubCache = now to l
             done(l)
@@ -159,7 +165,7 @@ object Live {
         val keep = shareGroups().map { it.id }.toSet()
         wroteTo.filter { it !in keep }.forEach { gid -> db.collection("groups").document(gid).collection("live").document(me).delete() }
         wroteTo.retainAll(keep)
-        Store.current?.let { writePublic(it, System.currentTimeMillis()) }
+        Store.current?.let { writePublic(it, System.currentTimeMillis()); writeMap(it, true) }
         pubCache = null
         sync(true)
     }
@@ -190,6 +196,7 @@ object Live {
         if (sharedGid == null) sharedGid = Cloud.active?.id
         shareGroups().forEach { g -> wroteTo.add(g.id); db.collection("groups").document(g.id).collection("live").document(me).set(doc, com.google.firebase.firestore.SetOptions.merge()) }
         writePublic(t, now)
+        writeMap(t)
         if (watching.isNotEmpty()) return  // 화면을 보고 있으면 실시간으로 이미 받는 중
         val gotDocs = HashMap<String, List<com.google.firebase.firestore.DocumentSnapshot>>()
         var left = groups.size
@@ -228,7 +235,9 @@ object Live {
 
     /** 한 사람 (여러 그룹에 같이 있으면 하나로) · groups = 어느 그룹에서 보이는지 · pub = 전체 공유 */
     class AnyNow(val uid: String, val name: String, val cat: String, val start: Long, val line: String,
-                 val lat: Double?, val lon: Double?, val at: Long, val groups: List<String>, val pub: Boolean, val area: String)
+                 val lat: Double?, val lon: Double?, val at: Long, val groups: List<String>, val pub: Boolean, val area: String,
+                 /** 보이는 그룹 id (조과 지도 받을 때) */
+                 val gids: List<String> = emptyList())
     private var allCache: List<AnyNow> = emptyList()
     fun allCached(): List<AnyNow> = allCache
     /** 내 그룹 모두 + 전체 공유에서 지금 출조 중인 사람 (나는 빼고) */
@@ -243,15 +252,15 @@ object Live {
             gs.forEach { g ->
                 got[g.id].orEmpty().forEach { n ->
                     val o = out[n.uid]
-                    out[n.uid] = if (o == null) AnyNow(n.uid, n.name, n.cat, n.start, n.line, n.lat, n.lon, n.at, listOf(g.title), false, "")
+                    out[n.uid] = if (o == null) AnyNow(n.uid, n.name, n.cat, n.start, n.line, n.lat, n.lon, n.at, listOf(g.title), false, "", listOf(g.id))
                     else AnyNow(o.uid, o.name, o.cat, o.start, if (n.at > o.at) n.line else o.line,
-                        o.lat ?: n.lat, o.lon ?: n.lon, maxOf(o.at, n.at), o.groups + g.title, false, "")
+                        o.lat ?: n.lat, o.lon ?: n.lon, maxOf(o.at, n.at), o.groups + g.title, false, "", o.gids + g.id)
                 }
             }
             pubL.filter { it.uid != me }.forEach { p ->
                 val o = out[p.uid]
-                out[p.uid] = if (o == null) AnyNow(p.uid, p.name, p.cat, p.start, p.line, null, null, 0L, emptyList(), true, p.area)
-                else AnyNow(o.uid, o.name, o.cat, o.start, o.line, o.lat, o.lon, o.at, o.groups, true, p.area)
+                out[p.uid] = if (o == null) AnyNow(p.uid, p.name, p.cat, p.start, p.line, p.lat, p.lon, p.at, emptyList(), true, p.area)
+                else AnyNow(o.uid, o.name, o.cat, o.start, o.line, o.lat ?: p.lat, o.lon ?: p.lon, maxOf(o.at, p.at), o.groups, true, p.area, o.gids)
             }
             allCache = out.values.sortedBy { it.start }
             done(allCache)
@@ -352,6 +361,78 @@ object Live {
                 .set(doc, com.google.firebase.firestore.SetOptions.merge())
         }
         writePublic(t, System.currentTimeMillis())
+        writeMap(t, true)
+    }
+
+    // ---------------- 실시간 조과 지도 (경로 + 잡은 자리) ----------------
+    //  groups/{gid}/liveMap/{uid} · publicLiveMap/{uid}  — 보는 건 관리자가 권한(liveMap) 준 사람만 (Firestore 규칙)
+    //  서버 절약: 잡을 때(+1)와 3분마다만 씀 · 보는 사람은 그 지도를 열어 둔 동안만 받음
+    private var mapAt = 0L
+    private var mapSig = ""
+    private val mapWrote = HashSet<String>()   // "g:gid" / "pub"
+    class LiveMap(val names: List<String>, val catches: List<Store.Catch>, val track: List<Store.Pt>, val upd: Long)
+
+    private fun mapDoc(t: Store.Trip, now: Long): HashMap<String, Any> {
+        fun f(v: Double) = String.format(java.util.Locale.US, "%.5f", v)
+        val cs = t.catches.filter { it.lat != null && it.lon != null }
+            .joinToString(";") { "${it.time / 1000},${it.slot},${f(it.lat!!)},${f(it.lon!!)},${it.q}" }
+        // 경로: 최근 500점까지 (많으면 솎아서)
+        val tr0 = t.track
+        val step = if (tr0.size > 500) (tr0.size + 499) / 500 else 1
+        val tr = tr0.filterIndexed { i, _ -> i % step == 0 || i == tr0.size - 1 }
+            .joinToString(";") { "${it.time / 1000},${f(it.lat)},${f(it.lon)}" }
+        return hashMapOf("owner" to (Cloud.uid ?: ""), "names" to t.names.toList(), "c" to cs, "tr" to tr, "t" to now, "start" to t.start, "cat" to t.cat)
+    }
+
+    /** force = 잡았을 때 (바로) · 아니면 3분마다 */
+    fun writeMap(t: Store.Trip, force: Boolean = false) {
+        val me = Cloud.uid ?: return
+        val share = Store.liveLoc && Store.appLoc
+        val targets = mutableListOf<Pair<String, com.google.firebase.firestore.DocumentReference>>()
+        if (share) {
+            shareGroups().forEach { g -> targets.add("g:${g.id}" to db.collection("groups").document(g.id).collection("liveMap").document(me)) }
+            if (sharePublic() && Store.livePubExact) targets.add("pub" to db.collection("publicLiveMap").document(me))
+        }
+        // 빠진 곳(범위를 바꿨거나 위치 공유를 끔)은 지움
+        val keep = targets.map { it.first }.toSet()
+        mapWrote.filter { it !in keep }.forEach { k -> mapRef(k, me)?.delete() }
+        mapWrote.retainAll(keep)
+        if (targets.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val sig = "${t.catches.size}:${t.track.size}"
+        if (!force && (now - mapAt < 3 * 60_000L || sig == mapSig)) return
+        mapAt = now; mapSig = sig
+        val doc = mapDoc(t, now)
+        targets.forEach { (k, ref) -> mapWrote.add(k); ref.set(doc) }
+    }
+    private fun mapRef(k: String, me: String) =
+        if (k == "pub") db.collection("publicLiveMap").document(me)
+        else if (k.startsWith("g:")) db.collection("groups").document(k.removePrefix("g:")).collection("liveMap").document(me) else null
+
+    private fun parseMap(d: com.google.firebase.firestore.DocumentSnapshot): LiveMap? {
+        if (!d.exists()) return null
+        val names = (d.get("names") as? List<*>)?.map { it.toString() } ?: emptyList()
+        val cs = (d.getString("c") ?: "").split(";").mapNotNull { p ->
+            val a = p.split(","); if (a.size < 4) return@mapNotNull null
+            val q = a.getOrNull(4)?.toIntOrNull() ?: 3
+            Store.Catch((a[0].toLongOrNull() ?: return@mapNotNull null) * 1000, a[1].toIntOrNull() ?: 1, a[2].toDoubleOrNull(), a[3].toDoubleOrNull(), -1f, q)
+        }.filter { it.lat != null && it.lon != null }
+        val tr = (d.getString("tr") ?: "").split(";").mapNotNull { p ->
+            val a = p.split(","); if (a.size < 3) return@mapNotNull null
+            Store.Pt((a[0].toLongOrNull() ?: return@mapNotNull null) * 1000, a[1].toDoubleOrNull() ?: return@mapNotNull null, a[2].toDoubleOrNull() ?: return@mapNotNull null)
+        }
+        return LiveMap(names, cs, tr, d.getLong("t") ?: 0L)
+    }
+
+    /** 다른 사람의 조과 지도 지켜보기 (지도 창을 열어 둔 동안만) — 권한 없으면 null 한 번 */
+    fun watchMap(uid: String, gids: List<String>, pub: Boolean, on: (LiveMap?) -> Unit): () -> Unit {
+        if (!Cloud.can("liveMap") || Cloud.uid == null) { on(null); return {} }
+        val refs = gids.map { db.collection("groups").document(it).collection("liveMap").document(uid) } +
+            (if (pub) listOf(db.collection("publicLiveMap").document(uid)) else emptyList())
+        val regs = refs.map { ref ->
+            ref.addSnapshotListener { d, _ -> d?.let { parseMap(it) }?.let { m -> main.post { on(m) } } }
+        }
+        return { regs.forEach { try { it.remove() } catch (_: Exception) {} } }
     }
 
     /** 출조 종료: 내 정보 지우기 */
@@ -369,6 +450,9 @@ object Live {
         mates = emptyList(); endedMates = emptyList(); updatedAt = 0L; prevCounts.clear(); cheer = null; reason = ""
         unwatch(); liveDocs.clear(); main.removeCallbacks(pushRunnable); pushPending = false
         wroteTo.clear(); sharedGid = null
+        // 조과 지도는 끝나면 지움
+        Cloud.uid?.let { u -> mapWrote.forEach { k -> mapRef(k, u)?.delete() } }
+        mapWrote.clear(); mapAt = 0L; mapSig = ""
         // 전체 공유는 끝나면 바로 지움
         if (pubWrote || Store.liveScope == "public") { db.collection("publicLive").document(me).delete(); pubWrote = false }
         pubCache = null

@@ -18,24 +18,24 @@ import android.view.View
 import kotlin.random.Random
 
 /**
- * 돌파 이스터에그: 어종마다 10/30/50/70/100/120/150/200/250/300 마리를 넘는 순간
+ * 돌파 이스터에그: 어종마다 1/10/30/50/70/100/120/150/200/250/300 마리를 넘는 순간
  *  - 칭호 · 카드 테두리 · 색종이 · 특별 진동 · 출조 도장
  */
 object Milestone {
 
-    val STEPS = listOf(10, 30, 50, 70, 100, 120, 150, 200, 250, 300)
-    private val TITLES = listOf("첫 손맛", "손맛 봤다", "오늘 좀 되네", "물 만났다", "백마리 클럽",
+    val STEPS = listOf(1, 10, 30, 50, 70, 100, 120, 150, 200, 250, 300)
+    private val TITLES = listOf("첫 손맛", "손맛 봤다", "오늘 좀 되네", "물 만났다", "줄 터졌다", "백마리 클럽",
         "장인", "명인", "전설", "살아있는 전설", "바다의 신")
-    private val BORDERS = listOf("#9ADBFF", "#C88A5A", "#D7DEE4", "#F5D98A", "#F2C14E", "#F2C14E", "#E0A526")
+    private val BORDERS = listOf("#BFE6FF", "#9ADBFF", "#C88A5A", "#D7DEE4", "#F5D98A", "#F2C14E", "#F2C14E", "#E0A526")
     private val RAINBOW = intArrayOf(Color.parseColor("#F07AA0"), Color.parseColor("#F2C14E"), Color.parseColor("#5FD39A"),
         Color.parseColor("#5BC8DF"), Color.parseColor("#B9A6FF"))
 
-    /** 마릿수 → 단계 (0~9), 10마리 미만이면 -1 */
+    /** 마릿수 → 단계 (0~10): 1마리 첫 손맛 · 10 손맛 봤다 … (0마리면 -1) */
     fun tier(count: Int): Int = STEPS.indexOfLast { count >= it }
 
     fun title(tier: Int): String = TITLES.getOrNull(tier) ?: ""
     /** "♛ 장인" (120마리 이상은 왕관) */
-    fun titleWithCrown(tier: Int): String = if (tier < 0) "" else (if (tier >= 5) "♛ " else "") + title(tier)
+    fun titleWithCrown(tier: Int): String = if (tier < 0) "" else (if (tier >= 6) "♛ " else "") + title(tier)
     /** 출조 도장: "주꾸미 장인 120" */
     fun stamp(species: String, count: Int): String? {
         val t = tier(count); if (t < 0) return null
@@ -52,8 +52,8 @@ object Milestone {
         val d = c.resources.displayMetrics.density
         val r = 22 * d
         if (tier < 0) return GradientDrawable().apply { setColor(color); cornerRadius = r }
-        val w = ((if (tier >= 5) 5 else if (tier >= 3) 4 else 3) * d).toInt()
-        val outer = if (tier >= 7) GradientDrawable(GradientDrawable.Orientation.TL_BR, RAINBOW).apply { cornerRadius = r }
+        val w = ((if (tier >= 6) 5 else if (tier >= 4) 4 else if (tier >= 1) 3 else 2) * d).toInt()
+        val outer = if (tier >= 8) GradientDrawable(GradientDrawable.Orientation.TL_BR, RAINBOW).apply { cornerRadius = r }
         else GradientDrawable().apply { setColor(tierColor(tier)); cornerRadius = r }
         val inner = GradientDrawable().apply { setColor(color); cornerRadius = r - w }
         return LayerDrawable(arrayOf(outer, inner)).apply { setLayerInset(1, w, w, w, w) }
@@ -76,8 +76,8 @@ object Milestone {
     /** 특별 진동: 단계가 높을수록 길고 화려하게 (화면이 꺼져 있어도 느낄 수 있게) */
     fun vibrate(c: Context, tier: Int) {
         val pattern = when {
-            tier >= 7 -> longArrayOf(0, 120, 80, 120, 80, 120, 200, 500, 150, 500)
-            tier >= 4 -> longArrayOf(0, 150, 90, 150, 90, 400)
+            tier >= 8 -> longArrayOf(0, 120, 80, 120, 80, 120, 200, 500, 150, 500)
+            tier >= 5 -> longArrayOf(0, 150, 90, 150, 90, 400)
             else -> longArrayOf(0, 90, 70, 90, 70, 250)
         }
         try {
