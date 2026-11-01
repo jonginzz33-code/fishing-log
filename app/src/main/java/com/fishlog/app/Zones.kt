@@ -591,17 +591,25 @@ object Zones {
                 TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}: ${counts[it.key] ?: 0}곳" } + "\n(올린 CSV 기준 · 직접 그린 구역 포함)"
             val items = arrayOf("📄 CSV 올리기 (공공데이터포털에서 받은 파일)", "✏ 지도에서 직접 그리기 · 고치기 · 지우기",
                 "🗑 종류별로 CSV 구역 모두 지우기", "📌 어디서 데이터를 받나요?")
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("🦀 해루질 참고 구역 · 관리")
-                .setMessage(msg)
-                .setItems(items) { _, i ->
+            // 안내 글 + 버튼 4개 (setMessage 와 setItems 를 같이 쓰면 버튼이 안 보여서 직접 만듦)
+            fun dp(v: Int) = Ui.dp(a, v)
+            val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(4)) }
+            box.addView(Ui.text(a, 13f, Ui.SUB, false, msg).apply { setLineSpacing(0f, 1.2f) })
+            var dlg: AlertDialog? = null
+            items.forEachIndexed { i, label ->
+                box.addView(Ui.button(a, label) {
+                    dlg?.dismiss()
                     when (i) {
                         0 -> pickCsv(a)
                         1 -> openAdminMap(a)
                         2 -> askWipe(a)
                         3 -> sources(a)
                     }
-                }
+                }.apply { textSize = 14f; minHeight = dp(48) }, Ui.lp(a, MATCH, WRAP, top = 8))
+            }
+            dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("🦀 해루질 참고 구역 · 관리")
+                .setView(ScrollView(a).apply { addView(box) })
                 .setNegativeButton("닫기", null).show()
         }
     }
@@ -782,7 +790,7 @@ object Zones {
         val keys = listOf("auto") + TYPES.keys
         val labels = listOf("🤖 자동 (어업면허명 · 어업방법으로 마을어장 · 양식장 · 기타 구분)") + TYPES.entries.map { "${typeIcon(it.key)} 모두 ${it.value}" }
         AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("${csv.fileName} · ${csv.rows.size}줄\n어떤 구역인가요?")
+            .setTitle("어떤 구역인가요? (${csv.rows.size}줄)")
             .setItems(labels.toTypedArray()) { _, i ->
                 val type = keys[i]
                 if (cGrade >= 0) {
