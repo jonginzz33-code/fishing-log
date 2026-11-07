@@ -1,4 +1,4 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style></head><body><title>쭈꾸미 손맛</title>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style></head><body><title>쭈꾸미 선상낚시</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Dodum&display=swap">
 <style>
@@ -16,17 +16,17 @@ body{background:var(--deep);color:var(--ink);font-family:var(--f-body);overflow:
   -webkit-user-select:none;user-select:none;touch-action:manipulation}
 .app{max-width:460px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:8px;padding-block:10px;box-sizing:border-box}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-h1{font-family:var(--f-display);font-weight:400;font-size:22px;margin:0}
+h1{font-family:var(--f-display);font-weight:400;font-size:21px;margin:0;white-space:nowrap}
 h1 span{color:var(--egi)}
-.chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.chip{border:1px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:99px;padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+.chips{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.chip{border:1px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:99px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .chip.on{border-color:var(--egi);color:var(--egi)}
 .chip:focus-visible{outline:2px solid var(--line)}
 .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
 .row b{color:var(--ink)}
 .stage{position:relative;flex:1;min-height:0;border-radius:18px;overflow:hidden;background:var(--water)}
 canvas{display:block;width:100%;height:100%}
-.msg{position:absolute;left:0;right:0;top:10px;text-align:center;font-family:var(--f-display);font-size:25px;text-shadow:0 2px 0 rgba(0,0,0,.5);pointer-events:none}
+.msg{position:absolute;left:0;right:0;top:10px;padding:0 8px;text-align:center;font-family:var(--f-display);font-size:21px;text-shadow:0 2px 0 rgba(0,0,0,.5);pointer-events:none}
 .sig{position:absolute;right:12px;top:48px;font-size:13px;background:rgba(8,22,29,.8);border-radius:10px;padding:6px 9px;pointer-events:none}
 .rhythm{position:absolute;left:12px;top:48px;width:110px;font-size:11.5px;color:var(--sub);pointer-events:none}
 .rbar{height:8px;border-radius:99px;background:#1B3B46;margin-top:4px;position:relative;overflow:hidden}
@@ -53,11 +53,23 @@ canvas{display:block;width:100%;height:100%}
 .b2{background:#E0457B;box-shadow:0 6px 0 #9C2752}.b2.down{transform:translateY(5px);box-shadow:0 1px 0 #9C2752}
 .b2[disabled]{opacity:.45}
 .wide{grid-column:1/-1}
+[hidden]{display:none!important}
+.cond{font-size:12px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 10px}
+.cond b{color:var(--ink)}.cond .ban{color:var(--bad);font-weight:700}
+.prep{position:absolute;inset:0;background:rgba(5,14,18,.94);padding:16px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.prep h3{margin:0;font-family:var(--f-display);font-weight:400;font-size:21px}
+.cap{background:var(--panel);border-radius:12px;padding:10px 12px;font-size:13.5px;line-height:1.55}
+.cap b{color:var(--line)}
+.sinkers{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sk{border:1.5px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:12px;padding:10px 0;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.sk.rec{border-color:var(--ok)}.sk.on{background:var(--egi);border-color:var(--egi);color:#200}
+.sk small{display:block;font-size:10.5px;font-weight:400;color:var(--sub)}
+.sk.on small{color:#401}
 </style>
 
 <div class="app">
   <header>
-    <h1>🐙 <span>쭈꾸미</span> 손맛</h1>
+    <h1>🐙 <span>쭈꾸미</span> 선상</h1>
     <div class="chips">
       <button class="chip" id="flClose" type="button" hidden>✕ 닫기</button>
       <button class="chip" id="rankBtn" type="button" hidden>🏆 랭킹</button>
@@ -65,33 +77,43 @@ canvas{display:block;width:100%;height:100%}
       <button class="chip" id="helpBtn" type="button">? 방법</button>
     </div>
   </header>
-  <div class="row"><span id="sensTxt">센서 확인 중…</span><span>오늘 <b id="cnt">0</b>마리 · <b id="kg">0</b>g</span></div>
+  <div class="cond" id="cond"></div>
+  <div class="row"><span id="sensTxt">센서 확인 중…</span><span>오늘 <b id="cnt">0</b>마리 · <b id="kg">0</b>g · 잃은 채비 <b id="lost">0</b></span></div>
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
-    <div class="msg" id="msg">'채비 내리기'를 눌러요</div>
-    <div class="rhythm" id="rhy" hidden>리듬 <b id="rhyT">-</b><div class="rbar"><i id="rhyB"></i></div></div>
+    <div class="msg" id="msg">봉돌을 고르고 채비를 내려요</div>
+    <div class="rhythm" id="rhy" hidden>기다림 <b id="rhyT">-</b><div class="rbar"><i id="rhyB"></i></div></div>
     <div class="sig" id="sig" hidden></div>
     <div class="card" id="card" hidden>
       <div class="ic" id="cIc">🐙</div>
       <div><h2 id="cName">주꾸미</h2><div class="w" id="cW">120g</div><p id="cNote"></p></div>
     </div>
+    <div class="prep" id="prep">
+      <h3>🚤 오늘 선상 쭈꾸미</h3>
+      <div class="cap" id="capTxt"></div>
+      <b style="font-size:14px">봉돌 고르기</b>
+      <div class="sinkers" id="sinkers"></div>
+      <div style="font-size:12px;color:var(--sub);line-height:1.5">가벼우면 바닥 느낌이 잘 오지만 물살에 채비가 떠요 · 무거우면 바닥은 잘 잡지만 신호가 둔하고 밑걸림이 잦아요</div>
+    </div>
     <div class="sheet" id="help" hidden>
-      <h3>하는 법</h3>
+      <h3>하는 법 (서해 선상)</h3>
       <ol>
-        <li>화면(바닷속 그림)을 톡 누르면 채비 내리기 · 고패질 중 톡 = 챔질 · 걸린 뒤 꾹 = 감기.</li>
-        <li>폰을 낚싯대처럼 잡고 들었다 내리기(고패질). <b>높이 들면 에기가 높이, 살짝 들면 살짝</b> 떠요. 내리면 가라앉아 바닥을 <b>콩</b> 찍고 진동이 와요.</li>
-        <li>리듬이 중요해요. 1~2초에 한 번, 가끔은 2~3초 멈춰서(스테이) 기다리기.</li>
-        <li>바닥 찍을 때 진동이 <b>평소와 다르면</b> 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 화면 톡 · '챔질' 버튼). 3~7번 안에 챔질 안 하면 도망가요.</li>
-        <li>걸리면 <b>화면 아무 데나 꾹</b> 누르면 릴이 감겨요 (폰을 들어 올려도 감겨요). 오래 멈추면 털려요.</li>
+        <li>선장 안내를 보고 <b>봉돌</b>을 골라요. 물살이 셀수록(사리) 무겁게, 약할수록(무시·조금) 가볍게.</li>
+        <li>'삐-' 신호에 채비를 내려요. 바닥에 닿으면 <b>툭</b> 하고 줄이 멈춰요 → 화면을 <b>톡톡 2번</b> 눌러 줄을 팽팽하게 (안 하면 신호가 약해요).</li>
+        <li>계속 흔들지 말고 <b>바닥에 5~10초 가만히</b> 두었다가, 폰을 <b>살짝 들어</b> 무게감을 확인해요. 쭈꾸미는 가만히 있는 에기에 올라타요.</li>
+        <li>살짝 들 때 <b>묵직</b>하면 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 화면 톡). 3~7번 안에 챔질 안 하면 도망가요.</li>
+        <li>갑오징어는 에기가 바닥에서 조금 떠 있을 때 <b>툭</b> 쳐요 → 바로 챔질 (아주 짧아요).</li>
+        <li>걸리면 <b>화면 꾹</b> = 감기. 밑걸림이면 꾹 2초 당겨 바늘을 펴서 빼요 (못 빼면 채비를 잃어요).</li>
+        <li>선장이 "채비 걷으세요" 하면 걷고 다음 포인트에서 다시 내려요.</li>
       </ol>
       <div class="sig-t">
-        <span>콩</span><span>평소 바닥 (빈 바닥)</span>
-        <span>드득</span><span>돌 · 조개껍데기 (속지 말기!)</span>
-        <span>…</span><span>진동 없음 = 무언가 올라탐 (주꾸미 · 문어)</span>
-        <span>부르르</span><span>미세하게 떨림 = 주꾸미가 감싸 쥠</span>
-        <span>콩·툭</span><span>한 번 더 떨림 = 갑오징어가 덮침</span>
+        <span>툭</span><span>채비가 바닥에 닿음 (줄 멈춤)</span>
+        <span>콩</span><span>빈 바닥</span>
+        <span>드득</span><span>돌 · 조개껍데기</span>
+        <span>묵직</span><span>들 때 길고 무거운 떨림 = 쭈꾸미(문어) 올라탐</span>
+        <span>툭!</span><span>떠 있을 때 짧고 날카롭게 = 갑오징어</span>
       </div>
-      <b>들어 올리는 양 → 에기 높이</b> (폰을 들어 보면 막대가 바로 움직여요 · 하얀 선 = 챔질)
+      <b>들어 올리는 양 → 에기 높이</b> (폰을 들어 보면 막대가 바로 움직여요)
       <div class="motion"><i id="mv"></i><span class="th" id="th"></span></div>
       <div class="sens"><span>조금만 뜨게</span><input id="sens" type="range" min="1" max="10" step="0.5" value="3"><span>많이 뜨게</span></div>
       <p id="sensNote" style="color:var(--sub);font-size:12.5px;margin:0"></p>
@@ -103,7 +125,6 @@ canvas{display:block;width:100%;height:100%}
     <button class="btn b2" id="b2" type="button" disabled>챔질!</button>
   </div>
 </div>
-
 <script>
 (()=>{
 if(window.FL&&FL.close){const c=document.getElementById("flClose");c.hidden=false;c.onclick=()=>FL.close()}
@@ -114,27 +135,45 @@ function size(){const d=Math.min(2,devicePixelRatio||1),r=cv.getBoundingClientRe
 addEventListener("resize",size);size();
 const say=(t,c)=>{msg.textContent=t;msg.style.color=c||"var(--ink)"};
 let canVib=!!(window.FL||navigator.vibrate);
+// 진동: 앱 안이면 앱 진동(세기까지), 아니면 브라우저 진동
 const buzz=(p,amp)=>{try{const arr=Array.isArray(p)?p:[p];if(window.FL&&FL.vibrate){FL.vibrate(arr.join(","),amp||255);return}if(navigator.vibrate&&!navigator.vibrate(arr))canVib=false}catch(e){canVib=false}};
 
-/* ---- 진동 신호 (바닥 찍을 때) ---- */
+/* ---- 오늘 조건: 물때(달 나이) · 계절 (v4.2.6 · 202) ---- */
+const SYN=29.530588853, NEW=Date.UTC(2000,0,6,18,14)/864e5;
+const age=((Date.now()/864e5-NEW)%SYN+SYN)%SYN, lunarDay=Math.floor(age)+1;
+const mul=((lunarDay-9)%15+15)%15+1;                    // 1~15 (14 무시 · 15 조금)
+const mulName=mul===15?"조금":mul===14?"무시":mul+"물";
+const cur=Math.max(0.2,Math.sin(((mul-1)/14)*Math.PI)); // 물살 세기 0.2~1 (사리 7~8물 = 1)
+const curName=cur>.85?"물살 셈 (사리)":cur>.55?"물살 보통":"물살 약함";
+const REC=cur>.85?16:cur>.7?14:cur>.5?12:cur>.35?10:8;  // 선장 권장 봉돌 (서해 8~20호)
+const now0=new Date(),MON=now0.getMonth()+1,DAY=now0.getDate();
+const BAN=(MON>5&&MON<9)||(MON===5&&DAY>=11);           // 주꾸미 금어기 5.11~8.31
+const SEASON=MON>=9&&MON<=11?"autumn":(MON>=3&&MON<=5)?"spring":"off";
+const SEASON_NAME={autumn:"가을 시즌 (잔챙이 · 마릿수)",spring:"봄 시즌 (산란기 · 큰 씨알)",off:"비시즌 (입질 뜸함)"}[SEASON];
+const seasonMul={autumn:1.3,spring:0.75,off:0.45}[SEASON];
+const tideMul=1.35-0.65*cur;                            // 물살 약할수록 잘 잡힘
+$("cond").innerHTML="오늘 <b>"+mulName+"</b> · "+curName+" · "+SEASON_NAME+(BAN?' · <span class="ban">금어기(5.11~8.31) · 연습 모드</span>':"");
+
+/* ---- 어종 ---- */
+const SQ={n:"주꾸미",ic:"🐙",min:SEASON==="spring"?120:SEASON==="autumn"?30:60,max:SEASON==="spring"?350:SEASON==="autumn"?140:200,weight:1};
+const CF={n:"갑오징어",ic:"🦑",min:300,max:1400,weight:1.6};
+const OC={n:"문어",ic:"🐙",min:600,max:2600,weight:2.4,big:true};
+
+/* ---- 진동 신호 ---- */
 const SIG={
-  bottom:{a:230,v:[45],t:"콩",c:"var(--sub)"},
-  rock:{a:150,v:[18,25,18,25,18],t:"드득",c:"var(--warn)"},
-  none:{v:0,t:"… (진동 없음)",c:"var(--egi)"},
-  micro:{a:70,v:[14,35,14,35,14,35,14],t:"부르르",c:"var(--egi)"},
-  extra:{a:230,v:[45,90,28],t:"콩·툭",c:"var(--egi)"}
+  land:{v:[60],a:255,t:"툭 (바닥)",c:"var(--ok)"},
+  bottom:{v:[35],a:200,t:"콩",c:"var(--sub)"},
+  rock:{v:[18,25,18,25,18],a:150,t:"드득",c:"var(--warn)"},
+  heavy:{v:[260],a:90,t:"묵직…",c:"var(--egi)"},
+  cuttle:{v:[22],a:255,t:"툭!",c:"var(--egi)"}
 };
-const TARGET=[ // 올라타는 녀석: 신호 · 무게(g) · 비율 · 무게감(가라앉는 속도)
-  {n:"주꾸미",ic:"🐙",sig:["none","micro"],min:40,max:220,w:70,weight:1},
-  {n:"갑오징어",ic:"🦑",sig:["extra"],min:250,max:1300,w:24,weight:1.6},
-  {n:"문어",ic:"🐙",sig:["none"],min:600,max:2600,w:6,weight:2.4,big:true}
-];
 let eye=false;try{eye=localStorage.getItem("jj_eye")==="1"}catch(e){}
 const paintEye=()=>{$("eyeBtn").classList.toggle("on",eye);$("eyeBtn").textContent=eye?"👀 화면 신호":"🙈 진동만"};paintEye();
 $("eyeBtn").onclick=()=>{eye=!eye;try{localStorage.setItem("jj_eye",eye?"1":"0")}catch(e){};paintEye()};
 if(window.FL&&FL.openRank){$("rankBtn").hidden=false;$("rankBtn").onclick=()=>FL.openRank("jj")}
 let sigT=0;
-function feel(k){const s=SIG[k];if(s.v)buzz(s.v,s.a);if(eye||!canVib){sig.hidden=false;sig.textContent="바닥: "+s.t;sig.style.color=s.c;sigT=performance.now()+900}}
+function feel(k,weak){const s=SIG[k];buzz(s.v,Math.round(s.a*(weak?0.45:1)));
+  if(eye||!canVib){sig.hidden=false;sig.textContent=s.t;sig.style.color=s.c;sigT=performance.now()+900}}
 
 /* ---- 소리 ---- */
 let ac=null;
@@ -142,68 +181,90 @@ function audio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)
 function tone(f,dur,vol,type,slide){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type||"sine";o.frequency.setValueAtTime(f,a.currentTime);
   if(slide)o.frequency.exponentialRampToValueAtTime(slide,a.currentTime+dur);g.gain.setValueAtTime(vol,a.currentTime);g.gain.exponentialRampToValueAtTime(.001,a.currentTime+dur);o.connect(g).connect(a.destination);o.start();o.stop(a.currentTime+dur)}
 
-/* ---- 상태 ----
-   idle → sink(내려가는 중) → jig(고패질: 에기 높이를 폰 움직임으로 실시간) → hooked(감기) → result
-   egiH = 바닥에서 에기까지 높이(m) */
-const DEPTH=18, MAXH=3.2;
-let st="idle",sinkY=0,egiH=0,lastLift=0,ivals=[],rhythm=0.5,bite=null,stayStart=0,
-    landings=0,reel=0,reelIdle=0,catchN=0,totalG=0,cur=null,shake=0,wasUp=false,hookCool=0;
-function setBtns(a,b,bOn){b1.textContent=a;b2.textContent=b;b2.disabled=!bOn}
-function drop(){
-  $("card").hidden=true;st="sink";sinkY=0;egiH=0;bite=null;landings=0;ivals=[];rhythm=.5;
-  say("채비 내리는 중…","var(--sub)");setBtns("들기 (꾹)","챔질!",false);$("rhy").hidden=true;
+/* ---- 봉돌 고르기 ---- */
+let sinker=REC;
+$("capTxt").innerHTML="🧑‍✈️ 선장: \"오늘 <b>"+mulName+"</b>, "+curName+"이에요. 봉돌 <b>"+REC+"호</b> 쓰세요."+
+  (cur>.85?" 물이 세니 채비 뜨면 무겁게 바꾸고요.":cur<.4?" 물이 약해서 바닥 느낌 좋을 거예요.":"")+"\"<br>"+
+  "📅 "+SEASON_NAME+(BAN?"<br>⛔ 지금은 주꾸미 금어기라 실제로는 못 잡아요 · 연습 모드":"");
+function paintSinkers(){
+  $("sinkers").innerHTML=[8,10,12,14,16,20].map(n=>`<button class="sk${n===sinker?" on":""}${n===REC?" rec":""}" data-n="${n}" type="button">${n}호<small>${n===REC?"선장 권장":n<REC?"가벼움":"무거움"}</small></button>`).join("");
+  [...document.querySelectorAll(".sk")].forEach(b=>b.onclick=()=>{sinker=+b.dataset.n;paintSinkers()});
 }
-function liftOff(){ // 바닥에서 떠오르는 순간 (= 고패질 1번)
-  const now=performance.now();
-  if(lastLift){ivals.push((now-lastLift)/1000);if(ivals.length>5)ivals.shift()}
-  lastLift=now;
-  tone(380,.05,.04,"triangle");
+paintSinkers();
+// 봉돌과 물살: diff<0 = 가벼움(채비 뜸) · diff>0 = 무거움(둔함 · 밑걸림)
+const diff=()=>(sinker-REC)/2;
+
+/* ---- 상태 ----
+   prep(봉돌) → sink(입수) → slack(줄 정리) → jig(운용) → hooked(감기) / snag(밑걸림) → result
+   egiH = 바닥에서 에기까지(m) */
+const DEPTH=18, MAXH=2.2;
+let st="prep",sinkY=0,egiH=0,wasUp=false,stayStart=0,lastLift=0,stays=[],waitScore=.5,
+    grab=null,grabT=0,cuttleT=0,tight=0,floatOff=false,floatT=0,
+    reel=0,reelIdle=0,catchN=0,totalG=0,lost=0,catchCur=null,shake=0,hookCool=0,
+    snagHold=0,tideTurnUntil=0,nextTurn=0,moveAt=0,moveWarn=0;
+function setBtns(a,b,bOn){b1.textContent=a;b2.textContent=b;b2.disabled=!bOn}
+// 센서가 없으면 큰 버튼 = 들기(꾹) · 있으면 채비 걷기
+const walk=()=>motionOK?"채비 걷기":"들기 (꾹)";
+function prep(){st="prep";$("prep").hidden=false;$("card").hidden=true;$("rhy").hidden=true;setBtns("채비 내리기","챔질!",false);say("봉돌을 고르고 채비를 내려요","var(--sub)")}
+function drop(){
+  $("prep").hidden=true;$("card").hidden=true;st="sink";sinkY=0;egiH=0;grab=null;tight=0;floatOff=false;stays=[];
+  tone(1400,.35,.08,"square");say("삐- 채비 내리세요!","var(--line)");setBtns(walk(),"챔질!",false);$("rhy").hidden=true;
+  const t=performance.now();moveAt=t+(150+Math.random()*120)*1000;moveWarn=0;   // 2.5~4.5분 뒤 포인트 이동
+  if(!nextTurn)nextTurn=t+(60+Math.random()*90)*1000;
+}
+function pickTarget(){
+  const r=Math.random();
+  return r<0.03?OC:r<(SEASON==="autumn"?0.28:0.2)?CF:SQ;
 }
 function hookSet(){
-  const now=performance.now();if(now<hookCool)return;hookCool=now+900;
+  const now=performance.now();if(now<hookCool)return;hookCool=now+800;
+  if(st==="snag"){return}
   if(st!=="jig")return;
-  if(bite){
-    st="hooked";cur=bite.t;cur.g=Math.round(cur.min+(cur.max-cur.min)*Math.pow(Math.random(),1.4));
-    reel=DEPTH;reelIdle=0;buzz([90,40,90]);tone(160,.15,.15,"square");
-    say(cur.big?"묵직하다!! 대물?":"걸었다!","var(--egi)");setBtns("감기 (꾹)","—",false);sig.hidden=false;sig.textContent="화면 아무 데나 꾹 = 감기";sig.style.color="var(--ok)";sigT=performance.now()+2500;
+  const t=grab&&(grab.t!==CF||now<cuttleT)?grab.t:null;
+  if(t){
+    st="hooked";catchCur=Object.assign({},t);catchCur.g=Math.round(t.min+(t.max-t.min)*Math.pow(Math.random(),1.4));
+    reel=DEPTH-egiH;reelIdle=0;grab=null;buzz([90,40,90]);tone(160,.15,.15,"square");
+    say(t.big?"묵직하다!! 대물?":"걸었다!","var(--egi)");setBtns("감기 (꾹)","—",false);
+    sig.hidden=false;sig.textContent="화면 꾹 = 감기";sig.style.color="var(--ok)";sigT=now+2500;
   }else{
-    shake=8;buzz([30,30,30]);tone(220,.25,.12,"sine",110);
-    say(Math.random()<.3?"밑걸림! 살살 풀었어요":"헛챔질…","var(--bad)");rhythm=Math.max(0,rhythm-.25);
+    grab=null;
+    // 빈 챔질: 무거운 봉돌 · 바닥에서 당기면 밑걸림이 잘 남
+    const snagP=0.12+Math.max(0,diff())*0.12;
+    if(egiH<0.1&&Math.random()<snagP){st="snag";snagHold=0;shake=6;buzz([200]);say("밑걸림! 꾹 2초 당겨 바늘 펴기","var(--warn)");setBtns("꾹 당기기","—",false);return}
+    shake=8;buzz([30,30,30]);tone(220,.25,.12,"sine",110);say("헛챔질…","var(--bad)");waitScore=Math.max(0,waitScore-.15);
   }
 }
-function land(){ // 에기가 바닥에 닿는 순간 → 진동 신호
-  landings++;const now=performance.now();
-  if(st==="sink"){st="jig";feel("bottom");say("바닥! 폰을 들었다 내려요","var(--ok)");setBtns("들기 (꾹)","챔질!",true);$("rhy").hidden=false;stayStart=now;return}
-  if(bite){
-    bite.left--;
-    if(bite.left<=0){ // 챔질을 끝까지 안 함 → 도망
-      bite=null;feel("bottom");say("놓쳤어요… 챔질을 안 해서 도망갔어요","var(--warn)");tone(260,.3,.1,"sine",130);
-    }else feel(bite.s);
-    stayStart=now;return;
-  }
-  if(ivals.length>=2){
-    const m=ivals.reduce((a,b)=>a+b,0)/ivals.length;
-    const sc=m<.6?.15:m<.9?.55:m<=2.2?1:m<=3.2?.65:.3;rhythm=rhythm*.6+sc*.4;
-  }
-  const p=landings<3?.015:(.027+.093*rhythm);            // v4.2.5: 예전보다 약 3배 드물게
-  if(Math.random()<p){
-    let s=TARGET.reduce((a,t)=>a+t.w,0)*Math.random(),t=TARGET[0];for(const x of TARGET){if((s-=x.w)<0){t=x;break}}
-    const k=t.sig[Math.floor(Math.random()*t.sig.length)];bite={t,s:k,left:3+Math.floor(Math.random()*5)};feel(k);   // 3~7번 고패질 안에 챔질해야 함
-  }else feel(Math.random()<.12?"rock":"bottom");
+function liftOff(){ // 바닥에서 뜨는 순간 (= 살짝 들어 무게감 확인)
+  const now=performance.now();
+  if(lastLift){stays.push((now-stayStart)/1000);if(stays.length>5)stays.shift()}
+  lastLift=now;
+  // 바닥에 가만히 있던 동안 올라탔으면 → 묵직
+  if(grab&&grab.t!==CF){feel("heavy",tight<2||diff()>1);grab.left--;if(grab.left<=0){grab=null;say("놓쳤어요… 챔질을 안 해서 도망갔어요","var(--warn)")}}
+}
+function land(){ // 에기가 바닥에 닿는 순간
+  const now=performance.now();
+  if(st==="sink"){st="slack";feel("land");say("툭! 바닥 · 톡톡 2번 = 줄 정리","var(--ok)");setBtns("줄 정리 (톡톡)","챔질!",true);stayStart=now;return}
+  const weak=tight<2||diff()>1;
+  if(grab&&grab.t!==CF){/* 올라탄 채로 내려옴: 바닥 느낌 없음 */ }
+  else feel(Math.random()<0.1+Math.max(0,diff())*0.05?"rock":"bottom",weak);
   stayStart=now;
+  // 기다림 점수: 바닥에 둔 시간이 4~10초면 좋음 (계속 흔들면 나쁨)
+  if(stays.length>=2){const m=stays.reduce((a,b)=>a+b,0)/stays.length;const sc=m<1.5?.1:m<3?.45:m<=10?1:m<=15?.7:.4;waitScore=waitScore*.6+sc*.4}
 }
 function end(ok,note){
   st="result";$("rhy").hidden=true;
   if(ok){
-    catchN++;totalG+=cur.g;$("cnt").textContent=catchN;$("kg").textContent=totalG.toLocaleString();
-    $("cIc").textContent=cur.ic;$("cName").textContent=cur.n;$("cW").textContent=cur.g.toLocaleString()+"g";
-    $("cNote").textContent=cur.n==="문어"?"🎉 문어 손님!":cur.g>(cur.min+cur.max)/2?"씨알 좋아요":"한 마리 추가";
+    catchN++;totalG+=catchCur.g;$("cnt").textContent=catchN;$("kg").textContent=totalG.toLocaleString();
+    $("cIc").textContent=catchCur.ic;$("cName").textContent=catchCur.n;$("cW").textContent=catchCur.g.toLocaleString()+"g";
+    $("cNote").textContent=(catchCur.n==="문어"?"🎉 문어 손님! ":catchCur.g>(catchCur.min+catchCur.max)/2?"씨알 좋아요 · ":"")+
+      (cur<.5?"물살이 약해 바닥 느낌이 좋았어요":sinker===REC?"선장 말대로 봉돌을 잘 골랐어요":"오늘 물엔 "+REC+"호가 딱이에요");
     [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.16,.15,"triangle"),i*90));buzz([40,50,40]);say("올렸다!","var(--line)");
-    try{if(window.FL&&FL.gameCatch)FL.gameCatch("jj",cur.n,cur.g)}catch(e){}
-  }else{$("cIc").textContent="💨";$("cName").textContent="털렸어요";$("cW").textContent="";$("cNote").textContent=note||""}
+    try{if(window.FL&&FL.gameCatch)FL.gameCatch("jj",catchCur.n,catchCur.g)}catch(e){}
+  }else{$("cIc").textContent="💨";$("cName").textContent="놓쳤어요";$("cW").textContent="";$("cNote").textContent=note||""}
   $("card").hidden=false;setBtns("다시 내리기","챔질!",false);
 }
-
+function lose(note){lost++;$("lost").textContent=lost;$("cIc").textContent="🪝";$("cName").textContent="채비를 잃었어요";$("cW").textContent="";
+  $("cNote").textContent=note;$("card").hidden=false;st="result";setBtns("다시 내리기","챔질!",false)}
 /* ---- 센서: 폰을 얼마나 들었는지 실시간으로 ----
    ① 기울기: 낚싯대 끝을 드는 것처럼 폰 앞쪽이 올라간 각도
    ② 들어 올림: 위쪽 방향 가속도를 적분한 짧은 높이 변화 (금방 0으로 돌아옴)
@@ -236,7 +297,7 @@ function onMotion(e){
   const raw=Math.max(tilt,raise);
   lift=raw<0.15?0:Math.min(1.4,(raw-0.15)/0.85*(gain/5));   // 15% 아래 = 손떨림 → 0
   // 확 들기 = 챔질 / 걸린 뒤엔 들어 올리면 감기
-  if(st==="jig"&&upVel>2.2)hookSet();                  // 보통 고패질은 1m/s 안팎, 챔질은 3m/s 넘게
+  if((st==="jig"||st==="snag")&&upVel>2.2)hookSet();                  // 보통 고패질은 1m/s 안팎, 챔질은 3m/s 넘게
 }
 function startSensor(){
   try{
@@ -248,100 +309,132 @@ function startSensor(){
 startSensor();
 setTimeout(()=>{if(!motionOK)$("sensTxt").textContent="센서 없음 → 버튼으로 (들기 꾹 · 떼면 가라앉음)"},2500);
 
-/* ---- 버튼 (센서 없을 때) ---- */
-let btnHold=false,btnLift=0;
+/* ---- 버튼 · 화면 터치 ---- */
+let btnHold=false,btnLift=0,stageHold=false,tapAt=0;
+function primary(){ // 큰 파란 버튼 · 화면 톡
+  if(st==="prep"){drop();return true}
+  if(st==="result"){prep();return true}
+  if(st==="slack"){tight++;tone(900,.04,.05,"square");if(tight>=2){st="jig";setBtns(walk(),"챔질!",true);say("줄 정리 끝 · 기다렸다 살짝 들기","var(--ok)");$("rhy").hidden=false;stayStart=performance.now()}return true}
+  return false;
+}
 b1.addEventListener("pointerdown",e=>{
   e.preventDefault();audio();b1.classList.add("down");
-  if(st==="idle"||st==="result"){drop();return}
+  if(st==="prep"||st==="result"||st==="slack"){primary();return}
+  if(st==="sink"||st==="slack"||st==="jig"){ if(b1.textContent==="채비 걷기"){prep();say("채비를 걷었어요","var(--sub)");return} }
   btnHold=true;
 });
 const b1up=()=>{b1.classList.remove("down");btnHold=false};
-addEventListener("pointerup",b1up);addEventListener("pointercancel",b1up);
+addEventListener("pointerup",b1up);addEventListener("pointercancel",b1up);b1.addEventListener("pointerup",b1up);b1.addEventListener("pointerleave",b1up);
 b2.addEventListener("pointerdown",e=>{e.preventDefault();b2.classList.add("down");hookSet()});
-// 걸린 뒤엔 화면(바닷속 그림) 아무 데나 꾹 눌러도 감기
-let stageHold=false;
-let tapAt=0;
+addEventListener("pointerup",()=>b2.classList.remove("down"));
 cv.addEventListener("pointerdown",e=>{e.preventDefault();audio();tapAt=performance.now();
-  if(st==="hooked")stageHold=true;else if(st==="idle"||st==="result")drop()});
+  if(st==="hooked"||st==="snag")stageHold=true;else if(primary())tapAt=0});   // 내리기 · 줄 정리 톡은 챔질로 안 셈
 cv.addEventListener("pointerup",()=>{if(st==="jig"&&tapAt&&performance.now()-tapAt<350)hookSet();tapAt=0});
 addEventListener("pointerup",()=>stageHold=false);addEventListener("pointercancel",()=>stageHold=false);
-addEventListener("pointerup",()=>b2.classList.remove("down"));
 $("helpBtn").onclick=()=>$("help").hidden=false;$("helpClose").onclick=()=>$("help").hidden=true;
 
 /* ---- 매 프레임 ---- */
 let last=performance.now(),reelTick=0,prevLift=0;
 function frame(now){
   const dt=Math.min(50,now-last)/1000;last=now;
-  btnLift=btnHold?Math.min(1,btnLift+dt*1.8):Math.max(0,btnLift-dt*4);
-  const L=Math.max(lift,btnLift);   // 지금 들어 올린 양
-  if(st==="sink"){sinkY+=dt*(DEPTH/2.2);if(sinkY>=DEPTH){sinkY=DEPTH;egiH=0;land()}}
-  if(st==="jig"){
-    const heavy=bite?bite.t.weight:1;
-    const target=L*MAXH/heavy*1.0;
-    if(target>egiH)egiH+=Math.min(target-egiH,dt*9);            // 들면 바로 따라 뜸
-    else egiH=Math.max(target,egiH-dt*2.85*(bite?1.25:1));       // 내리면 물속이라 천천히 가라앉음
-    if(target<0.1&&egiH<0.1&&egiH>0)egiH=0;                     // 바닥 10cm 안 = 바닥에 닿음
+  btnLift=btnHold&&st==="jig"?Math.min(1,btnLift+dt*1.8):Math.max(0,btnLift-dt*4);
+  const L=Math.max(lift,btnLift);
+  // 물돌이: 1~2.5분마다 40초 동안 입질 활발
+  if(nextTurn&&now>nextTurn&&(st==="jig"||st==="slack")){tideTurnUntil=now+40000;nextTurn=now+(60+Math.random()*90)*1000;say("🌊 물돌이! 입질 활발","var(--ok)");tone(660,.2,.08,"triangle")}
+  const turn=now<tideTurnUntil?2:1;
+  // 포인트 이동: 선장 "채비 걷으세요"
+  if((st==="jig"||st==="slack")&&moveAt&&now>moveAt&&!moveWarn){moveWarn=now;say("🧑‍✈️ 채비 걷으세요! 포인트 이동","var(--line)");tone(1200,.5,.08,"square");setBtns("채비 걷기","챔질!",true)}
+  if(moveWarn&&now-moveWarn>9000&&(st==="jig"||st==="slack")){moveWarn=0;moveAt=0;lose("배가 움직이는데 안 걷어서 옆 사람 줄과 엉켰어요");}
+  if(st==="sink"){
+    const rate=DEPTH/Math.max(1.6,3.4-sinker*0.09);       // 무거울수록 빨리 내려감
+    sinkY+=dt*rate*(diff()<-1.5?0.6:1);
+    if(diff()<-1.5&&sinkY>DEPTH*0.85&&Math.random()<dt*0.6){say("채비가 떠요… 봉돌이 가벼워요","var(--warn)")}
+    if(sinkY>=DEPTH){sinkY=DEPTH;egiH=0;land()}
+  }
+  if(st==="jig"||st==="slack"){
+    // 가벼운 봉돌 + 센 물살 → 가끔 채비가 떠서 바닥을 놓침
+    if(!floatOff&&diff()<0&&Math.random()<dt*(-diff())*cur*0.08){floatOff=true;floatT=now+4000;say("채비가 떴어요! 봉돌을 무겁게 (걷고 다시)","var(--warn)")}
+    if(floatOff&&now>floatT)floatOff=false;
+    const heavy=grab&&grab.t!==CF?grab.t.weight:1;
+    let target=L*MAXH/heavy+(floatOff?0.9:0);
+    if(st==="slack")target=Math.max(target,0);
+    if(target>egiH)egiH+=Math.min(target-egiH,dt*9);
+    else egiH=Math.max(target,egiH-dt*2.85*(heavy>1?1.25:1));
+    if(target<0.1&&egiH<0.1&&egiH>0)egiH=0;
     const up=egiH>0.08;
-    if(up&&!wasUp)liftOff();
-    if(!up&&wasUp&&egiH<=0.02){}                                // 착지는 아래에서
-    if(wasUp&&egiH<=0.001){egiH=0;land()}
+    if(st==="jig"){
+      if(up&&!wasUp)liftOff();
+      if(wasUp&&egiH<=0.001){egiH=0;land()}
+    }
     wasUp=up||(wasUp&&egiH>0.001);
-    // 오래 멈추면(스테이) 그 자리에서 올라탐
-    if(!wasUp&&!bite&&now-stayStart>2200&&now-stayStart<2250&&Math.random()<(.35*rhythm+.1)/3){
-      let s=TARGET.reduce((a,t)=>a+t.w,0)*Math.random(),t=TARGET[0];for(const x of TARGET){if((s-=x.w)<0){t=x;break}}
-      bite={t,s:"micro",left:3+Math.floor(Math.random()*5)};feel("micro");stayStart=now+600;
+    if(st==="jig"&&!floatOff){
+      const base=0.02*seasonMul*tideMul*turn*(0.4+waitScore)*(tight>=2?1:0.6)*(diff()<-1?0.5:1);
+      // 쭈꾸미 · 문어: 바닥에 가만히 있는 에기에 올라탐 (가만히 둔 시간이 길수록 잘)
+      if(!wasUp&&!grab){const still=(now-stayStart)/1000;if(still>1.5&&Math.random()<dt*base*Math.min(2.2,still/4)){const t=pickTarget();if(t!==CF)grab={t,left:3+Math.floor(Math.random()*5)}}}
+      // 갑오징어: 바닥에서 15~20cm 이상 떠 있는 에기를 툭 침 (짧은 순간)
+      if(wasUp&&egiH>0.15&&!grab&&SEASON!=="off"&&Math.random()<dt*base*0.9){grab={t:CF,left:1};cuttleT=now+700;feel("cuttle",diff()>1)}
+      if(grab&&grab.t===CF&&now>cuttleT){grab=null}
     }
   }
+  if(st==="snag"){ // 꾹 2초 = 바늘 펴서 빼기
+    if(stageHold||btnHold){snagHold+=dt;if(Math.random()<dt*6)buzz(20,200)}else snagHold=Math.max(0,snagHold-dt);
+    if(snagHold>=2){if(Math.random()<0.6-Math.max(0,diff())*0.1){st="jig";egiH=0;say("바늘이 펴져서 빠졌어요!","var(--ok)");setBtns(walk(),"챔질!",true);stayStart=now}
+      else{SND_lost();lose("밑걸림을 못 빼서 채비가 터졌어요 · 무거운 봉돌일수록 잘 걸려요")}}
+  }
   if(st==="hooked"){
-    // 감기: 버튼이나 화면 아무 데나 꾹 = 초당 약 4m, 폰을 들어 올려도 든 만큼 감김
     const dL=(btnHold||stageHold?dt*4.2:0)+Math.max(0,L-prevLift)*22;
-    if(dL>0.002){reel-=dL/Math.sqrt(cur.weight);reelIdle=0;if(now>reelTick){tone(950,.025,.035,"square");reelTick=now+70;buzz(14,Math.round(60*cur.weight))}}
-    else{reelIdle+=dt;if(reelIdle>1.6&&Math.random()<dt*1.2)end(false,"감다가 오래 멈추면 털려요 · 들었다 내리며 계속 감기")}
+    if(dL>0.002){reel-=dL/Math.sqrt(catchCur.weight);reelIdle=0;if(now>reelTick){tone(950,.025,.035,"square");reelTick=now+70;buzz(14,Math.round(60*catchCur.weight))}}
+    else{reelIdle+=dt;if(reelIdle>1.6&&Math.random()<dt*1.2)end(false,"감다가 오래 멈추면 털려요 · 일정하게 감기")}
     if(reel<=0&&st==="hooked")end(true);
   }
   prevLift=L;
   if(!sig.hidden&&now>sigT)sig.hidden=true;
   if(!$("rhy").hidden){
-    const m=ivals.length?ivals.reduce((a,b)=>a+b,0)/ivals.length:0;
-    $("rhyT").textContent=!m?"-":m<.9?"너무 빨라요":m<=2.2?"좋아요":"느려요";
-    $("rhyB").style.width=Math.round(rhythm*100)+"%";$("rhyB").style.background=rhythm>.7?"var(--ok)":rhythm>.4?"var(--warn)":"var(--bad)";
+    const m=stays.length?stays.reduce((a,b)=>a+b,0)/stays.length:0;
+    $("rhyT").textContent=!m?"-":m<3?"너무 자주 흔들어요":m<=10?"좋아요":"너무 오래";
+    $("rhyB").style.width=Math.round(waitScore*100)+"%";$("rhyB").style.background=waitScore>.7?"var(--ok)":waitScore>.4?"var(--warn)":"var(--bad)";
   }
   if(!$("help").hidden){$("mv").style.width=Math.min(100,L/1.4*100)+"%";$("th").style.left="92%";
     $("sensNote").textContent=motionOK?"들어 올림 "+Math.round(L*100)+"% · 위로 속도 "+upVel.toFixed(1):"이 화면에선 센서를 못 써요 (버튼으로 해요)"}
   shake*=.85;draw(now,L);
   requestAnimationFrame(frame);
 }
+function SND_lost(){tone(1800,.25,.15,"triangle",300)}
 function draw(now,L){
   ctx.save();ctx.translate((Math.random()-.5)*shake,0);
   const top=H*.14,bot=H*.86,yOf=d=>top+(bot-top)*(d/DEPTH);
   ctx.fillStyle="#0B1E2A";ctx.fillRect(-20,0,W+40,top);
   const g=ctx.createLinearGradient(0,top,0,bot);g.addColorStop(0,"#1E5568");g.addColorStop(1,"#0B2029");ctx.fillStyle=g;ctx.fillRect(-20,top,W+40,bot-top);
+  // 물살 (선)
+  ctx.strokeStyle="rgba(234,243,242,.07)";ctx.lineWidth=1;
+  for(let i=0;i<6;i++){const y=top+20+i*(bot-top)/6,off=(now/1000*cur*40+i*37)%W;ctx.beginPath();ctx.moveTo(off-40,y);ctx.lineTo(off,y);ctx.stroke()}
   ctx.fillStyle="#5A4A36";ctx.beginPath();ctx.moveTo(-20,bot);for(let x=-20;x<=W+20;x+=20)ctx.lineTo(x,bot+Math.sin(x/30)*3);ctx.lineTo(W+20,H);ctx.lineTo(-20,H);ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,.08)";for(let i=0;i<14;i++){const x=(i*73)%W,y=bot+6+(i*37)%(H-bot-8);ctx.fillRect(x,y,3,2)}
   ctx.fillStyle="rgba(234,243,242,.35)";ctx.font="11px sans-serif";ctx.textAlign="left";
   for(let d=0;d<=DEPTH;d+=6){const y=yOf(d);ctx.fillRect(6,y,8,1);ctx.fillText(d+"m",16,y+4)}
-  // 바닥 위 1m · 2m 눈금 (에기 높이 보기)
-  ctx.strokeStyle="rgba(234,243,242,.12)";ctx.setLineDash([4,6]);
-  [1,2,3].forEach(h=>{const y=yOf(DEPTH-h);ctx.beginPath();ctx.moveTo(40,y);ctx.lineTo(W-10,y);ctx.stroke();ctx.fillText(h+"m",W-34,y-3)});ctx.setLineDash([]);
-  const bx=W*.5,by=top;
+  const bx=W*.42,by=top;
   ctx.fillStyle="#D9D2C3";ctx.beginPath();ctx.moveTo(bx-60,by-4);ctx.lineTo(bx+60,by-4);ctx.lineTo(bx+44,by+12);ctx.lineTo(bx-44,by+12);ctx.fill();
-  const tipX=bx+30,tipY=by-20-L*26;   // 폰 든 만큼 낚싯대 끝도 올라감
+  ctx.fillStyle="#fff";ctx.font="10px sans-serif";ctx.fillText("봉돌 "+sinker+"호",bx-24,by+8);
+  const tipX=bx+30,tipY=by-20-L*26;
   ctx.strokeStyle="#C9B48A";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(bx-10,by-2);ctx.lineTo(tipX,tipY);ctx.stroke();
-  const d=st==="idle"?0:st==="sink"?sinkY:st==="hooked"||st==="result"?Math.max(0,reel):DEPTH-egiH;
-  const ey=st==="idle"?top+10:yOf(d)-8;
-  const ex=tipX+Math.sin(now/600)*3;
-  ctx.strokeStyle="#F2C14E";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.lineTo(ex,ey);ctx.stroke();
-  ctx.save();ctx.translate(ex,ey);ctx.rotate(st==="jig"&&egiH>0.1?-.35:.15);
+  const d=st==="prep"?0:st==="sink"?sinkY:(st==="hooked"||st==="result")?Math.max(0,reel):DEPTH-egiH;
+  const ey=st==="prep"?top+10:yOf(st==="result"?0:d)-8;
+  // 물살에 줄이 비스듬히 (배 흘림) · 가벼운 봉돌일수록 더 기울어짐
+  const drift=(cur*60+(diff()<0?-diff()*18:0))*(d/DEPTH);
+  const ex=tipX+drift+Math.sin(now/600)*3;
+  ctx.strokeStyle="#F2C14E";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.quadraticCurveTo(tipX+drift*0.2,(tipY+ey)/2,ex,ey);ctx.stroke();
+  ctx.save();ctx.translate(ex,ey);ctx.rotate(egiH>0.1?-.35:.15);
   ctx.fillStyle="#FF7AB6";ctx.beginPath();ctx.ellipse(0,0,12,5,0,0,7);ctx.fill();
   ctx.fillStyle="#fff";ctx.fillRect(-12,-1,6,2);ctx.strokeStyle="#FFD3E8";ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(18,-4);ctx.moveTo(12,0);ctx.lineTo(18,4);ctx.stroke();
+  ctx.fillStyle="#9AA7AD";ctx.beginPath();ctx.arc(-14,6,3+sinker/8,0,7);ctx.fill();   // 봉돌
   ctx.restore();
-  const rider=st==="hooked"&&cur?cur:(bite&&eye?bite.t:null);
+  const rider=st==="hooked"&&catchCur?catchCur:(grab&&eye?grab.t:null);
   if(rider){ctx.globalAlpha=st==="hooked"?1:.45;ctx.font=(rider.big?34:26)+"px serif";ctx.textAlign="center";ctx.fillText(rider.ic,ex,ey+18);ctx.globalAlpha=1}
-  if(st==="jig"&&egiH<0.05){ctx.fillStyle="rgba(140,120,90,.25)";ctx.beginPath();ctx.ellipse(ex,bot,16+Math.sin(now/200)*2,4,0,0,7);ctx.fill()}
-  // 지금 에기 높이
+  if((st==="jig"||st==="slack")&&egiH<0.05){ctx.fillStyle="rgba(140,120,90,.25)";ctx.beginPath();ctx.ellipse(ex,bot,16+Math.sin(now/200)*2,4,0,0,7);ctx.fill()}
   if(st==="jig"){ctx.fillStyle="#FF7AB6";ctx.font="12px sans-serif";ctx.textAlign="left";ctx.fillText("바닥 위 "+egiH.toFixed(1)+"m",ex+22,ey+4)}
+  if(now<tideTurnUntil){ctx.fillStyle="#5FD39A";ctx.font="bold 12px sans-serif";ctx.textAlign="right";ctx.fillText("🌊 물돌이",W-10,top+16)}
   ctx.restore();
 }
+prep();
 requestAnimationFrame(frame);
 })();
 </script>

@@ -1,4 +1,4 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style></head><body><title>찌낚시 손맛</title>
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}[hidden]{display:none!important}</style></head><body><title>바다찌낚시 손맛</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Gowun+Dodum&display=swap">
 <style>
@@ -16,9 +16,9 @@ body{background:var(--deep);color:var(--ink);font-family:var(--f-body);overflow:
   -webkit-user-select:none;user-select:none;touch-action:manipulation}
 .app{max-width:460px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:8px;padding-block:10px;box-sizing:border-box}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-h1{font-family:var(--f-display);font-weight:400;font-size:22px;margin:0;color:var(--foam)}
-.hbtns{display:flex;gap:6px}
-.chip{border:1px solid #2B5468;background:var(--panel);color:var(--ink);border-radius:99px;padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+h1{font-family:var(--f-display);font-weight:400;font-size:21px;margin:0;color:var(--foam);white-space:nowrap}
+.hbtns{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.chip{border:1px solid #2B5468;background:var(--panel);color:var(--ink);border-radius:99px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .chip:focus-visible{outline:2px solid var(--line)}
 .tide{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
 .tide b{color:var(--line)}
@@ -60,7 +60,7 @@ canvas{display:block;width:100%;height:100%}
 
 <div class="app">
   <header>
-    <h1>🎣 찌낚시 손맛</h1>
+    <h1>🎣 바다찌낚시</h1>
     <div class="hbtns">
       <button class="chip" id="flClose" type="button" hidden>✕ 닫기</button>
       <button class="chip" id="rankBtn" type="button" hidden>🏆 랭킹</button>
@@ -72,7 +72,7 @@ canvas{display:block;width:100%;height:100%}
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
     <div class="msg" id="msg">아래 버튼으로 던지기</div>
-    <div class="hint" id="hint">찌가 '쑥' 들어가면 바로 챔질!</div>
+    <div class="hint" id="hint">어종마다 찌 움직임이 달라요 · 진짜 입질에 챔질!</div>
     <div class="card" id="card" hidden>
       <div class="ic" id="cIc">🐟</div>
       <div><h2 id="cName">우럭</h2><div class="size" id="cSize">32cm</div><p id="cNote"></p></div>
@@ -97,19 +97,82 @@ canvas{display:block;width:100%;height:100%}
 <script>
 (()=>{
 if(window.FL&&FL.close){const c=document.getElementById("flClose");c.hidden=false;c.onclick=()=>FL.close()}
-/* 어종: 크기 범위 · 힘 · 비율 · 당기는 방식
-   steady 묵직하게 버팀 / dive 바닥으로 처박음 / run 갑자기 확 째고 쉼 / shake 머리 흔들기 */
+/* v4.2.6 바다찌낚시 어종 (갯바위 · 방파제 찌낚시에 실제로 나오는 어종)
+   st = 걸린 뒤 힘 쓰는 방식: steady 버팀 / dive 바닥으로 처박음 / run 확 째고 쉼 / shake 머리 흔들기
+   bite = 입질 모양 (찌 움직임) · w = 기본 비율 · night/dawn/season = 시간 · 계절 가중치 */
 const FISH=[
-  {n:"주꾸미",ic:"🐙",min:8,max:22,pow:1,w:22,st:"steady",tip:"묵직하게 버티기만 해요"},
-  {n:"갑오징어",ic:"🦑",min:12,max:30,pow:2,w:15,st:"steady",tip:"먹물 쏘며 버텨요"},
-  {n:"놀래미",ic:"🐟",min:15,max:38,pow:2,w:17,st:"shake",tip:"머리를 흔들어요"},
-  {n:"우럭",ic:"🐟",min:18,max:45,pow:3,w:15,st:"dive",tip:"바위 틈으로 처박아요"},
-  {n:"광어",ic:"🐟",min:30,max:75,pow:3.4,w:10,st:"dive",tip:"바닥에 납작 붙어요"},
-  {n:"농어",ic:"🐟",min:40,max:90,pow:4,w:7,st:"run",tip:"확 째고 바늘털이"},
-  {n:"감성돔",ic:"🐟",min:25,max:55,pow:4.2,w:6,st:"dive",tip:"처박는 힘이 세요"},
-  {n:"참돔",ic:"🐠",min:30,max:80,pow:4.6,w:4,st:"run",tip:"세 번 째요"},
-  {n:"장화",ic:"🥾",min:26,max:28,pow:0.6,w:2,st:"steady",tip:"…"}
+  {n:"감성돔",ic:"🐟",min:25,max:55,pow:4.2,w:9,st:"dive",bite:"gamseong",
+   tip:"예신(살짝 잠겨 멈춤) 뒤 본신(천천히 쭉)에서 챔질",dawn:1.8,night:.6,season:[10,11,12,1,2,3,4]},
+  {n:"벵에돔",ic:"🐟",min:20,max:45,pow:3.8,w:7,st:"dive",bite:"fast",
+   tip:"순식간에 쏙 · 아주 빨리 챔질",dawn:1.8,night:.4,season:[5,6,7,8,9,10,11]},
+  {n:"참돔",ic:"🐠",min:30,max:80,pow:4.6,w:3,st:"run",bite:"run",
+   tip:"찌가 단번에 사라지고 원줄이 확 풀림",dawn:1.4,night:.7,season:[4,5,6,9,10,11]},
+  {n:"볼락",ic:"🐟",min:13,max:28,pow:1.6,w:9,st:"shake",bite:"blink",
+   tip:"톡톡 깜빡이다 쏙 · 깜빡일 땐 기다리기",dawn:1.2,night:3,season:[11,12,1,2,3,4,5]},
+  {n:"우럭",ic:"🐟",min:20,max:45,pow:3,w:9,st:"dive",bite:"heavy",
+   tip:"묵직하게 천천히 잠김 · 여유 있게 챔질",dawn:1,night:1.5,season:[]},
+  {n:"놀래미",ic:"🐟",min:18,max:40,pow:2.4,w:9,st:"shake",bite:"tug",
+   tip:"툭툭 건드리다 끌고 들어감",dawn:1,night:.8,season:[11,12,1,2,3,4]},
+  {n:"망상어",ic:"🐟",min:15,max:28,pow:1.4,w:8,st:"shake",bite:"small",
+   tip:"깜빡깜빡 작은 입질 · 살짝 잠길 때",dawn:1,night:.7,season:[3,4,5,6]},
+  {n:"숭어",ic:"🐟",min:35,max:70,pow:3.4,w:5,st:"run",bite:"side",
+   tip:"잠기지 않고 옆으로 슬금슬금 끌고 감",dawn:1.2,night:.5,season:[11,12,1,2,3]},
+  {n:"학꽁치",ic:"🐟",min:20,max:38,pow:1,w:7,st:"shake",bite:"lay",
+   tip:"수면 근처 · 찌가 눕거나 솟음(찌올림)",dawn:1.2,night:.3,season:[10,11,12,1,2]},
+  {n:"고등어",ic:"🐟",min:22,max:40,pow:2.6,w:7,st:"run",bite:"school",
+   tip:"떼로 와서 바로 확 · 연달아 입질",dawn:1.5,night:.5,season:[7,8,9,10,11]},
+  {n:"전갱이",ic:"🐟",min:15,max:30,pow:1.6,w:7,st:"shake",bite:"school",
+   tip:"떼로 와서 바로 확 · 연달아 입질",dawn:1.3,night:1.2,season:[7,8,9,10,11]},
+  {n:"복어",ic:"🐡",min:15,max:25,pow:1,w:6,st:"steady",bite:"thief",
+   tip:"톡톡 건드리기만 · 미끼 도둑",dawn:1,night:.6,season:[]},
+  {n:"장화",ic:"🥾",min:26,max:28,pow:0.6,w:1,st:"steady",bite:"heavy",tip:"…",dawn:1,night:1,season:[]}
 ];
+/* 입질 모양 → 찌 움직임 순서 (ms) · 챔질 창 [win0, win1] · 그 전에 당기면 헛챔질
+   ev: {t 시작, d 길이, k 종류(blink 깜빡 / dip 살짝 잠김 / sink 쭉 잠김 / fast 쏙 / side 옆으로 / lay 눕기 / rise 솟음), a 크기} */
+function makeBite(f){
+  const R=(a,b)=>a+Math.random()*(b-a), ev=[];let t=0,w0=0,w1=0,pre="";
+  switch(f.bite){
+    case "gamseong": // 예신 → 멈춤 → 본신
+      ev.push({t:0,d:400,k:"dip",a:8});ev.push({t:400,d:R(700,1400),k:"hold",a:8});t=400+ev[1].d;
+      ev.push({t,d:1100,k:"sink",a:28});w0=t+250;w1=t+1600;pre="예신에 당겼어요 · 감성돔은 본신(쭉 잠길 때)까지 기다려요";break;
+    case "fast":
+      ev.push({t:0,d:120,k:"blink",a:4});ev.push({t:350,d:120,k:"blink",a:4});t=R(700,1100);
+      ev.push({t,d:160,k:"fast",a:30});w0=t;w1=t+420;pre="깜빡임에 당겼어요";break;
+    case "run":
+      ev.push({t:0,d:150,k:"fast",a:32});w0=0;w1=650;break;
+    case "blink": {
+      const n=3+Math.floor(Math.random()*3);for(let i=0;i<n;i++)ev.push({t:i*R(380,520),d:150,k:"blink",a:6});
+      t=n*450+R(100,400);ev.push({t,d:300,k:"sink",a:26});w0=t+50;w1=t+700;pre="톡톡 깜빡일 때 당겼어요 · 볼락은 쏙 들어갈 때";break;}
+    case "heavy":
+      ev.push({t:0,d:1700,k:"sink",a:26});w0=600;w1=2600;pre="너무 빨리 당겼어요";break;
+    case "tug":
+      ev.push({t:0,d:180,k:"dip",a:7});ev.push({t:550,d:180,k:"dip",a:8});t=R(1100,1600);
+      ev.push({t,d:700,k:"sink",a:26});w0=t+150;w1=t+1100;pre="툭툭 건드릴 때 당겼어요 · 끌고 들어갈 때까지";break;
+    case "small": {
+      const n=2+Math.floor(Math.random()*3);for(let i=0;i<n;i++)ev.push({t:i*400,d:140,k:"blink",a:5});
+      t=n*400+R(100,300);ev.push({t,d:500,k:"dip",a:14});w0=t+80;w1=t+900;pre="깜빡일 때 당겼어요";break;}
+    case "side":
+      ev.push({t:0,d:300,k:"dip",a:4});t=R(400,700);ev.push({t,d:1500,k:"side",a:34});w0=t+250;w1=t+1700;pre="너무 빨리 당겼어요 · 옆으로 끌고 갈 때";break;
+    case "lay":
+      ev.push({t:0,d:200,k:"blink",a:3});t=R(400,800);ev.push({t,d:1200,k:Math.random()<.5?"lay":"rise",a:1});w0=t+150;w1=t+1300;pre="너무 빨리 당겼어요 · 찌가 누울 때";break;
+    case "school":
+      ev.push({t:0,d:180,k:"fast",a:30});w0=0;w1=600;break;
+    case "thief": // 복어: 톡톡만 · 챔질 창 없음
+      for(let i=0;i<7;i++)ev.push({t:i*R(300,480),d:120,k:"blink",a:5});w0=-1;w1=-1;t=3200;pre="복어였어요 · 톡톡 건드리기만 해요";break;
+  }
+  const end=Math.max(w1, ...ev.map(e=>e.t+e.d))+200;
+  return {ev,w0,w1,pre,end:f.bite==="thief"?3300:end};
+}
+/* 지금 시각 · 오늘 달로 어종 고르기 */
+const HOUR=new Date().getHours(), MONTH=new Date().getMonth()+1;
+const TIMEZ=(HOUR>=19||HOUR<5)?"night":(HOUR<8||HOUR>=16)?"dawn":"day";
+let streak=null; // 고등어 · 전갱이 떼: 한 마리 잡으면 다음에도 잘 붙음
+function weightOf(f){
+  let w=f.w*(TIMEZ==="night"?f.night:TIMEZ==="dawn"?f.dawn:1);
+  if(f.season.length)w*=f.season.includes(MONTH)?1.8:0.45;
+  if(streak&&streak===f.n)w*=6;
+  return w;
+}
 const $=id=>document.getElementById(id);
 const cv=$("cv"),ctx=cv.getContext("2d"),btn=$("btn"),dragBtn=$("drag"),msg=$("msg"),hint=$("hint");
 let W=0,H=0;
@@ -123,7 +186,7 @@ const mul=((lunarDay-9)%15+15)%15+1; // 1~15 (15 = 조금)
 const mulName=mul===15?"조금":mul===14?"무시":mul+"물";
 const strength=Math.max(0.25,Math.sin(((mul-1)/14)*Math.PI)); // 사리(7~8물)에 가까울수록 1
 const tideLabel=strength>.85?"사리 · 입질 활발":strength>.55?"중물 · 입질 보통":"조금 · 입질 뜸함";
-$("tideTxt").innerHTML="오늘 <b>"+mulName+"</b> · "+tideLabel;
+$("tideTxt").innerHTML="오늘 <b>"+mulName+"</b> · "+tideLabel+" · "+(TIMEZ==="night"?"🌙 밤 (볼락 · 우럭)":TIMEZ==="dawn"?"🌅 아침저녁 (감성돔 · 벵에돔)":"☀ 낮");
 // 사리일수록 입질 빨리 · 큰 고기 조금 더
 const biteWait=()=>1800+Math.random()*(7000-3500*strength);
 
@@ -149,31 +212,36 @@ let reelTick=0;
 let canVib=true;const buzz=(p,amp)=>{try{const arr=Array.isArray(p)?p:[p];if(window.FL&&FL.vibrate){FL.vibrate(arr.join(","),amp||255);return}if(navigator.vibrate&&!navigator.vibrate(arr))canVib=false}catch(e){canVib=false}};
 
 /* ---- 상태 ---- */
-let st="idle",t0=0,biteAt=0,nibbles=[],fish=null,tension=0,dist=0,holding=false,dragging=false,slack=0,pull=0,pullT=0,fx=0,shake=0,hookQ=1,runLeft=0,landT=0;
+let st="idle",t0=0,biteAt=0,nibbles=[],fish=null,bitePlan=null,floatSide=0,floatTilt=0,tension=0,dist=0,holding=false,dragging=false,slack=0,pull=0,pullT=0,fx=0,shake=0,hookQ=1,runLeft=0,landT=0;
 const say=(t,c)=>{msg.textContent=t;msg.style.color=c||"var(--foam)"};
-function pickFish(){let s=FISH.reduce((a,f)=>a+f.w,0)*Math.random();for(const f of FISH){if((s-=f.w)<0)return f}return FISH[0]}
+function pickFish(){const ws=FISH.map(weightOf);let s=ws.reduce((a,b)=>a+b,0)*Math.random();for(let i=0;i<FISH.length;i++){if((s-=ws[i])<0)return FISH[i]}return FISH[0]}
 function mode(m){ // 버튼 모양
   const fight=m==="fight";$("btns").classList.toggle("fight",fight);dragBtn.hidden=!fight;
   btn.classList.toggle("reel",fight);btn.textContent=m==="cast"?"던지기":m==="hook"?"챔질!":m==="again"?"다시 던지기":"꾹 눌러 감기";
 }
 function cast(){
   $("card").hidden=true;$("meter").hidden=true;st="cast";t0=performance.now();SND.cast();
-  say("휘익~");hint.textContent="찌가 '쑥' 들어가면 바로 챔질! (깔짝은 가짜 입질)";mode("hook");
+  say("휘익~");hint.textContent="어종마다 찌 움직임이 달라요 · 진짜 입질에 챔질!";mode("hook");
 }
 function startWait(now){
   st="wait";t0=now;biteAt=now+biteWait();SND.plop();
-  nibbles=[];const n=Math.floor(Math.random()*4);for(let i=0;i<n;i++)nibbles.push(now+800+Math.random()*Math.max(200,biteAt-now-1200));
+  // 어떤 고기가 올지 미리 정하고, 그 고기의 입질 모양을 만듦
+  fish=Object.assign({},pickFish());bitePlan=makeBite(fish);
+  nibbles=[];const n=Math.floor(Math.random()*3);for(let i=0;i<n;i++)nibbles.push(now+800+Math.random()*Math.max(200,biteAt-now-1500)); // 물결 · 잔챙이 깔짝
   say("기다리는 중…","var(--sub)");
 }
 function hookSet(now){
-  if(st==="wait"){say("헛챔질! 고기가 놀랐어요","var(--bad)");shake=8;SND.miss();end(false,"너무 일찍 당겼어요 · 찌가 완전히 들어갈 때까지 기다려요");return}
+  if(st==="wait"){say("헛챔질! 고기가 놀랐어요","var(--bad)");shake=8;SND.miss();end(false,"아직 입질 전이에요 · 찌를 잘 보세요");return}
   if(st!=="bite")return;
-  const dt=now-biteAt;fish=Object.assign({},pickFish());
+  const dt=now-biteAt,P=bitePlan;
+  if(P.w0<0){say("헛챔질!","var(--bad)");SND.miss();end(false,P.pre);return}            // 복어
+  if(dt<P.w0){say("헛챔질! 예신이었어요","var(--bad)");shake=8;SND.miss();end(false,P.pre);return}
+  if(dt>P.w1)return;
   const bonus=0.15*strength; // 사리면 조금 더 큰 고기
   fish.size=Math.round(fish.min+(fish.max-fish.min)*Math.min(1,Math.pow(Math.random(),1.6)+bonus));
   fish.big=fish.n!=="장화"&&fish.size>=fish.min+(fish.max-fish.min)*0.85;
   // 챔질 등급: 완벽(0.25초 안) · 좋음 · 늦음 → 바늘 걸림 정도
-  hookQ=dt<250?1:dt<450?0.75:0.5;
+  const q=(dt-P.w0)/Math.max(1,P.w1-P.w0);hookQ=q<.35?1:q<.7?0.75:0.5;
   fish.hp=100;fish.tired=false;
   // 힘이 빠지는 속도: 작은 고기일수록 빨리 (약 8~25초)
   fish.drain=7/((0.55+fish.pow*0.22)*(0.7+0.6*(fish.size-fish.min)/Math.max(1,fish.max-fish.min)));
@@ -188,10 +256,11 @@ function end(ok,note){
     count++;$("cnt").textContent=count;SND.win();buzz([40,60,40]);
     $("cIc").textContent=fish.ic;$("cName").textContent=(fish.big?"👑 ":"")+fish.n;$("cSize").textContent=fish.size+"cm";
     const d=dex[fish.n]||{c:0,b:0};const nb=fish.size>d.b;d.c++;if(nb)d.b=fish.size;dex[fish.n]=d;saveDex();
-    $("cNote").textContent=fish.n==="장화"?"…누가 바다에 버렸나요":nb&&d.c>1?"🏆 "+fish.n+" 최고 기록 경신!":d.c===1?"📖 도감에 새로 올렸어요":fish.tip;
+    $("cNote").textContent=(fish.n==="장화"?"…누가 바다에 버렸나요":nb&&d.c>1?"🏆 "+fish.n+" 최고 기록 경신! ":d.c===1?"📖 도감에 새로 올렸어요 ":"")+(fish.n!=="장화"?"입질: "+fish.tip:"");
+    streak=fish.bite==="school"?fish.n:null;
     say("낚았다!","var(--line)");
     try{if(window.FL&&FL.gameCatch)FL.gameCatch("bobber",fish.n,fish.size)}catch(e){}
-  }else{$("cIc").textContent="💨";$("cName").textContent="놓쳤어요";$("cSize").textContent="";$("cNote").textContent=note||""}
+  }else{streak=null;$("cIc").textContent="💨";$("cName").textContent=fish&&st==="result"&&note&&note.indexOf("복어")>=0?"🐡 복어":"놓쳤어요";$("cSize").textContent="";$("cNote").textContent=note||""}
   $("card").hidden=false;
 }
 
@@ -229,9 +298,27 @@ function frame(now){
   if(st==="cast"&&now-t0>700)startWait(now);
   if(st==="wait"){
     for(const nb of nibbles){const d=now-nb;if(d>0&&d<260){sink=Math.sin(d/260*Math.PI)*7;if(d<20){SND.plop();buzz(8)}}}
-    if(now>=biteAt){st="bite";say("쑥!","var(--float)");SND.bite();buzz(30)}
+    if(now>=biteAt){st="bite";SND.bite();buzz(20)}
   }
-  if(st==="bite"){const d=now-biteAt;sink=Math.min(26,d/9);if(d>650){say("늦었어요…","var(--warn)");SND.miss();end(false,"찌가 들어가면 0.6초 안에 챔질!")}}
+  floatSide*=0.9;floatTilt*=0.9;
+  if(st==="bite"){
+    const d=now-biteAt,P=bitePlan;
+    for(const e of P.ev){const u=(d-e.t)/e.d;if(u<0)continue;
+      const done=u>=1,k=Math.min(1,u);
+      if(e.k==="blink"&&!done)sink=Math.max(sink,Math.sin(k*Math.PI)*e.a);
+      if(e.k==="dip"&&!done)sink=Math.max(sink,Math.sin(k*Math.PI/2)*e.a);
+      if(e.k==="hold")sink=Math.max(sink,done?0:e.a);
+      if(e.k==="sink"||e.k==="fast")sink=Math.max(sink,k*e.a);
+      if(e.k==="side"){floatSide=k*e.a;sink=Math.max(sink,3)}
+      if(e.k==="lay"&&!done)floatTilt=Math.min(1,k*3);
+      if(e.k==="rise"&&!done)sink=Math.min(sink,-Math.min(1,k*3)*7);
+      if(Math.abs(d-e.t)<17){buzz(e.k==="blink"?6:12);if(e.k!=="hold")SND.plop()}
+    }
+    if(d>P.end){
+      if(fish.bite==="thief"){say("미끼를 따 먹혔어요","var(--warn)");SND.miss();end(false,"🐡 복어였어요 · 톡톡 건드리기만 하고 미끼만 훔쳐 가요")}
+      else{say("늦었어요…","var(--warn)");SND.miss();const c=fish.n.charCodeAt(fish.n.length-1)-0xAC00;end(false,fish.n+(c>=0&&c%28?"이었어요":"였어요")+" · "+fish.tip)}
+    }
+  }
   if(st==="fight"){
     // 어종별 당기기
     if(now>pullT){
@@ -280,8 +367,14 @@ function draw(now,bob,sink){
   const sky=ctx.createLinearGradient(0,0,0,H*0.36);sky.addColorStop(0,"#0E2A44");sky.addColorStop(1,"#2B5876");
   ctx.fillStyle=sky;ctx.fillRect(-20,0,W+40,H*0.36);
   // 달: 오늘 달 모양(밝은 쪽 크기)
-  const ph=age/SYN;ctx.fillStyle="#F6E7B8";ctx.beginPath();ctx.arc(W*0.18,H*0.13,14,0,7);ctx.fill();
-  ctx.fillStyle="#0E2A44";ctx.beginPath();ctx.arc(W*0.18+(ph<.5?-1:1)*28*Math.abs(Math.cos(ph*Math.PI)),H*0.13,14,0,7);ctx.fill();
+  { // 오늘 달 모양 (밝은 부분만 그림)
+    const ph=age/SYN,mx=W*0.18,my=H*0.13,r=14,k=Math.cos(ph*2*Math.PI),wax=ph<.5,P=Math.PI;
+    ctx.fillStyle="rgba(246,231,184,.12)";ctx.beginPath();ctx.arc(mx,my,r,0,7);ctx.fill();
+    ctx.fillStyle="#F6E7B8";ctx.beginPath();
+    if(wax){ctx.arc(mx,my,r,-P/2,P/2,false);ctx.ellipse(mx,my,Math.abs(k)*r,r,0,P/2,-P/2,k>0)}
+    else{ctx.arc(mx,my,r,P/2,3*P/2,false);ctx.ellipse(mx,my,Math.abs(k)*r,r,0,3*P/2,P/2,k>0)}
+    ctx.fill();
+  }
   const sea=ctx.createLinearGradient(0,H*0.36,0,H);sea.addColorStop(0,"#1C5F86");sea.addColorStop(1,"#061521");
   ctx.fillStyle=sea;ctx.fillRect(-20,H*0.36,W+40,H);
   ctx.strokeStyle="rgba(217,241,242,.18)";ctx.lineWidth=1.5;
@@ -297,7 +390,9 @@ function draw(now,bob,sink){
   ctx.beginPath();ctx.moveTo(-6,H+6);ctx.quadraticCurveTo(rodX-10,rodY+30-bend*40,rodX,rodY);ctx.stroke();
   if(st==="fight"){ctx.fillStyle="rgba(0,0,0,.35)";ctx.beginPath();ctx.ellipse(fxp,fyp+8,14+fish.pow*4+(fish.big?8:0),6,0,0,7);ctx.fill()}
   else if(st!=="idle"&&st!=="result"){
-    const y=fyp+bob+sink;
+    const y=fyp+bob+sink;fxp+=floatSide;
+    if(floatTilt>0.05){ctx.save();ctx.translate(fxp,fyp);ctx.rotate(floatTilt*1.45);ctx.fillStyle="#FF5A3C";ctx.beginPath();ctx.ellipse(0,-6,6,11,0,0,7);ctx.fill();
+      ctx.fillStyle="#fff";ctx.fillRect(-6,-2,12,3);ctx.fillStyle="#FF5A3C";ctx.fillRect(-1.2,-28,2.4,14);ctx.restore();ctx.restore();return}
     if(sink>3){ctx.strokeStyle="rgba(217,241,242,.5)";ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(fxp,fyp+6,10+sink,3+sink/4,0,0,7);ctx.stroke()}
     ctx.save();ctx.beginPath();ctx.rect(fxp-20,0,40,fyp+6);ctx.clip();
     ctx.fillStyle="#FF5A3C";ctx.beginPath();ctx.ellipse(fxp,y-8,6,11,0,0,7);ctx.fill();

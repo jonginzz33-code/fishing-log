@@ -25,7 +25,7 @@ import java.util.Locale
  */
 object GameRank {
     /** game: "bobber" 찌낚시 (cm) · "jj" 쭈꾸미 (g) */
-    val GAMES = listOf("bobber" to "🎣 찌낚시", "jj" to "🐙 쭈꾸미")
+    val GAMES = listOf("bobber" to "🎣 바다찌낚시", "jj" to "🐙 쭈꾸미")
     private fun unit(game: String) = if (game == "jj") "g" else "cm"
     private fun today() = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)

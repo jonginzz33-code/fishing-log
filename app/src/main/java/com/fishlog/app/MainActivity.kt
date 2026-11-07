@@ -52,8 +52,6 @@ class MainActivity : Activity() {
     private lateinit var tideSun: TextView
     private lateinit var tideWarn: TextView
     private var warnAt = 0L
-    private lateinit var adminBtn: TextView
-    private lateinit var speciesBtn: TextView
     // 맨 아래 그룹 칸 (새 소식 빨간 숫자)
     private lateinit var groupBtn: TextView
     private lateinit var groupDot: TextView
@@ -661,12 +659,10 @@ class MainActivity : Activity() {
 
         // 메뉴 창 안에 들어갈 내용 (창을 열 때 붙임)
         menuBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        menuBox.addView(Ui.button(this, "⚙ 개인 설정 (닉네임 · 알림 · 같이 출조 거리)") {
-            startActivity(Intent(this, SettingsActivity::class.java))
-        }, Ui.lp(this, MATCH, WRAP))
+        // v4.2.6 (203): ⚙ 개인 설정은 메인 오른쪽 위 ⚙ 버튼으로 (중복이라 메뉴에선 뺌)
         menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
             startActivity(Intent(this, HelpActivity::class.java))
-        }, Ui.lp(this, MATCH, WRAP, top = 10))
+        }, Ui.lp(this, MATCH, WRAP))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
@@ -701,17 +697,6 @@ class MainActivity : Activity() {
         acc.addView(accountBtn, Ui.lp(this, MATCH, WRAP, top = 10))
         acc.addView(hideRouteBox, Ui.lp(this, MATCH, WRAP, top = 4))
         menuBox.addView(acc, Ui.lp(this, MATCH, WRAP, top = 16))
-        speciesBtn = Ui.button(this, "어종 관리 (관리자)") {
-            val cats = Store.CATS
-            BigList.show(this, "어느 종류의 어종을 관리할까요?", cats.map { Store.catLabel(it) }, emptyList()) { i, _ ->
-                cats.getOrNull(i)?.let { manageSpecies(it) }
-            }
-        }.apply { minHeight = dp(44); textSize = 14f; visibility = View.GONE }
-        menuBox.addView(speciesBtn, Ui.lp(this, MATCH, WRAP, top = 12))
-        adminBtn = Ui.button(this, "관리자 · 사용자 목록") {
-            startActivity(Intent(this, AdminActivity::class.java))
-        }.apply { minHeight = dp(44); textSize = 14f; visibility = View.GONE }
-        menuBox.addView(adminBtn, Ui.lp(this, MATCH, WRAP, top = 12))
         versionText = Ui.text(this, 12f, Ui.SUB, false, "버전 ${BuildConfigInfo.VERSION}").apply {
             minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
             setOnClickListener { if (Updater.latestCode != null) { menuDialog?.dismiss(); Updater.showDialog(this@MainActivity, forceUpdate) } }
@@ -2142,22 +2127,26 @@ class MainActivity : Activity() {
     /** 총관리자 메뉴 */
     private fun openAdminMenu() {
         if (!Cloud.isAdmin) return
-        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제", "🎮 미니게임 (찌낚시 · 쭈꾸미 · 랭킹)")
+        // v4.2.6 (203): 1:1 문의함은 메인 '✉ 관리자 문의' · 미니게임은 메인 '🎮 게임' 칸으로 (중복이라 뺌)
+        val items = listOf("👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제")
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
                 when (i) {
-                    0 -> startActivity(Intent(this, InquiryActivity::class.java))
-                    1 -> startActivity(Intent(this, AdminActivity::class.java))
-                    2 -> speciesBtn.performClick()
-                    3 -> AlertDialog.Builder(this, R.style.FlAlert)
+                    0 -> startActivity(Intent(this, AdminActivity::class.java))
+                    1 -> {
+                        val cats = Store.CATS
+                        BigList.show(this, "어느 종류의 어종을 관리할까요?", cats.map { Store.catLabel(it) }, emptyList()) { j, _ ->
+                            cats.getOrNull(j)?.let { manageSpecies(it) }
+                        }
+                    }
+                    2 -> AlertDialog.Builder(this, R.style.FlAlert)
                         .setTitle("전체 채팅방을 초기화할까요?")
                         .setMessage("전체 채팅방 글만 모두 지워요. 그룹 채팅방과 1:1 문의방은 그대로예요. 되돌릴 수 없어요.")
                         .setPositiveButton("초기화") { _, _ -> Chat.resetAll { err -> showMessage(err ?: "전체 채팅방을 초기화했어요") } }
                         .setNegativeButton("취소", null).show()
-                    4 -> Zones.openAdmin(this)
-                    5 -> StationAdmin.open(this)
-                    6 -> MiniGame.pick(this)
+                    3 -> Zones.openAdmin(this)
+                    4 -> StationAdmin.open(this)
                     else -> {}
                 }
             }
@@ -2497,8 +2486,6 @@ class MainActivity : Activity() {
         }
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         // 관리자 기능은 '🛠 관리자' 메뉴로 (일반 메뉴는 모두 같게)
-        adminBtn.visibility = View.GONE
-        speciesBtn.visibility = View.GONE
         if (::adminMenuBtn.isInitialized) adminMenuBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         gameCell?.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         GroupNews.startLive(newsLive)

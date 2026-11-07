@@ -63,7 +63,7 @@ object MiniGame {
     }
 
     fun pick(a: Activity) {
-        val items = arrayOf("🎣 찌낚시 손맛 (던지기 · 챔질 · 감기)", "🐙 쭈꾸미 손맛 (폰 들었다 내리기 · 진동)", "🏆 랭킹 보기")
+        val items = arrayOf("🎣 바다찌낚시 (갯바위 · 방파제)", "🐙 쭈꾸미 선상 (폰 들었다 내리기 · 진동)", "🏆 랭킹 보기")
         AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🎮 미니게임")
             .setItems(items) { _, i -> when (i) { 0 -> open(a, "bobber.html"); 1 -> open(a, "jjukkumi.html"); else -> GameRank.show(a) } }
