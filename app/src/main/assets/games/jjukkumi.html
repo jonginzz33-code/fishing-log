@@ -80,7 +80,7 @@ canvas{display:block;width:100%;height:100%}
         <li>폰을 낚싯대처럼 잡고 들었다 내리기(고패질). <b>높이 들면 에기가 높이, 살짝 들면 살짝</b> 떠요. 내리면 가라앉아 바닥을 <b>콩</b> 찍고 진동이 와요.</li>
         <li>리듬이 중요해요. 1~2초에 한 번, 가끔은 2~3초 멈춰서(스테이) 기다리기.</li>
         <li>바닥 찍을 때 진동이 <b>평소와 다르면</b> 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 '챔질' 버튼).</li>
-        <li>걸리면 폰을 계속 들어 올리며 감아요 (또는 '감기' 꾹). 오래 멈추면 털려요.</li>
+        <li>걸리면 <b>화면 아무 데나 꾹</b> 누르면 릴이 감겨요 (폰을 들어 올려도 감겨요). 오래 멈추면 털려요.</li>
       </ol>
       <div class="sig-t">
         <span>콩</span><span>평소 바닥 (빈 바닥)</span>
@@ -91,7 +91,7 @@ canvas{display:block;width:100%;height:100%}
       </div>
       <b>들어 올리는 양 → 에기 높이</b> (폰을 들어 보면 막대가 바로 움직여요 · 하얀 선 = 챔질)
       <div class="motion"><i id="mv"></i><span class="th" id="th"></span></div>
-      <div class="sens"><span>조금만 뜨게</span><input id="sens" type="range" min="1" max="10" step="0.5" value="5"><span>많이 뜨게</span></div>
+      <div class="sens"><span>조금만 뜨게</span><input id="sens" type="range" min="1" max="10" step="0.5" value="3"><span>많이 뜨게</span></div>
       <p id="sensNote" style="color:var(--sub);font-size:12.5px;margin:0"></p>
       <button class="chip" id="helpClose" type="button" style="width:100%;margin-top:12px">닫기</button>
     </div>
@@ -162,7 +162,7 @@ function hookSet(){
   if(bite){
     st="hooked";cur=bite.t;cur.g=Math.round(cur.min+(cur.max-cur.min)*Math.pow(Math.random(),1.4));
     reel=DEPTH;reelIdle=0;buzz([90,40,90]);tone(160,.15,.15,"square");
-    say(cur.big?"묵직하다!! 대물?":"걸었다!","var(--egi)");setBtns("감기 (꾹)","—",false);
+    say(cur.big?"묵직하다!! 대물?":"걸었다!","var(--egi)");setBtns("감기 (꾹)","—",false);sig.hidden=false;sig.textContent="화면 아무 데나 꾹 = 감기";sig.style.color="var(--ok)";sigT=performance.now()+2500;
   }else{
     shake=8;buzz([30,30,30]);tone(220,.25,.12,"sine",110);
     say(Math.random()<.3?"밑걸림! 살살 풀었어요":"헛챔질…","var(--bad)");rhythm=Math.max(0,rhythm-.25);
@@ -198,10 +198,10 @@ function end(ok,note){
    ① 기울기: 낚싯대 끝을 드는 것처럼 폰 앞쪽이 올라간 각도
    ② 들어 올림: 위쪽 방향 가속도를 적분한 짧은 높이 변화 (금방 0으로 돌아옴)
    둘 중 큰 쪽 → 들어 올린 양(0~1) → 에기 목표 높이 */
-let gain=5,motionOK=false;
-try{gain=+localStorage.getItem("jj_gain")||5}catch(e){}
+let gain=3,motionOK=false;
+try{gain=+localStorage.getItem("jj_gain2")||3}catch(e){}
 $("sens").value=gain;
-$("sens").oninput=e=>{gain=+e.target.value;try{localStorage.setItem("jj_gain",gain)}catch(e){}};
+$("sens").oninput=e=>{gain=+e.target.value;try{localStorage.setItem("jj_gain2",gain)}catch(e){}};
 let gx=0,gy=0,gz=9.8,gInit=false,vz=0,pz=0,lastT=0,pitch=0,pitchBase=null,lift=0,upVel=0;
 function onMotion(e){
   const g=e.accelerationIncludingGravity;if(!g||g.x==null)return;
@@ -213,16 +213,18 @@ function onMotion(e){
   const gm=Math.hypot(gx,gy,gz)||9.8;
   // ② 위쪽 가속도 → 속도 → 높이 (새는 적분: 멈추면 0으로)
   const az=(g.x*gx+g.y*gy+g.z*gz)/gm-gm;
-  vz+=az*dt;vz*=Math.max(0,1-1.2*dt);pz+=vz*dt;pz*=Math.max(0,1-0.8*dt);
+  vz+=az*dt;vz*=Math.max(0,1-1.2*dt);pz+=vz*dt;
+  const still=Math.abs(vz)<0.18&&Math.abs(az)<0.6;           // 손이 거의 안 움직임
+  pz*=Math.max(0,1-(still?3.0:0.8)*dt);if(still&&Math.abs(pz)<0.03)pz=0;
   upVel=vz;
   // ① 기울기: 폰 위쪽(y축)이 하늘을 향한 정도 (세로로 쥐고 앞을 들면 커짐)
-  const p=Math.atan2(g.y,Math.hypot(g.x,g.z))*57.3;pitch=pitch*.6+p*.4;
-  if(pitchBase===null)pitchBase=pitch;
+  const p=Math.atan2(g.y,Math.hypot(g.x,g.z))*57.3;if(pitchBase===null){pitch=p;pitchBase=p}else pitch=pitch*.6+p*.4;
   // 기준각: 내려간 쪽으로는 바로, 올라간 쪽으로는 아주 천천히 (손이 지치면 자연스럽게 따라감)
-  if(pitch<pitchBase)pitchBase=pitch;else pitchBase+=(pitch-pitchBase)*dt*.15;
+  if(pitch<pitchBase)pitchBase=pitch;else pitchBase+=(pitch-pitchBase)*dt*(still?0.9:0.15);  // 가만히 들고 있으면 그 자세가 새 "내린 상태"
   const tilt=Math.max(0,(pitch-pitchBase)/35);          // 35도 들면 1
   const raise=Math.max(0,pz/0.2);                        // 약 30cm 들면 1 (센서 값이 실제보다 작게 나옴)
-  lift=Math.min(1.4,Math.max(tilt,raise)*(gain/5));
+  const raw=Math.max(tilt,raise);
+  lift=raw<0.15?0:Math.min(1.4,(raw-0.15)/0.85*(gain/5));   // 15% 아래 = 손떨림 → 0
   // 확 들기 = 챔질 / 걸린 뒤엔 들어 올리면 감기
   if(st==="jig"&&upVel>2.2)hookSet();                  // 보통 고패질은 1m/s 안팎, 챔질은 3m/s 넘게
 }
@@ -246,6 +248,10 @@ b1.addEventListener("pointerdown",e=>{
 const b1up=()=>{b1.classList.remove("down");btnHold=false};
 addEventListener("pointerup",b1up);addEventListener("pointercancel",b1up);
 b2.addEventListener("pointerdown",e=>{e.preventDefault();b2.classList.add("down");hookSet()});
+// 걸린 뒤엔 화면(바닷속 그림) 아무 데나 꾹 눌러도 감기
+let stageHold=false;
+cv.addEventListener("pointerdown",e=>{e.preventDefault();audio();if(st==="hooked")stageHold=true;else if(st==="idle"||st==="result")drop()});
+addEventListener("pointerup",()=>stageHold=false);addEventListener("pointercancel",()=>stageHold=false);
 addEventListener("pointerup",()=>b2.classList.remove("down"));
 $("helpBtn").onclick=()=>$("help").hidden=false;$("helpClose").onclick=()=>$("help").hidden=true;
 
@@ -260,7 +266,8 @@ function frame(now){
     const heavy=bite?bite.t.weight:1;
     const target=L*MAXH/heavy*1.0;
     if(target>egiH)egiH+=Math.min(target-egiH,dt*9);            // 들면 바로 따라 뜸
-    else egiH=Math.max(target,egiH-dt*1.7*(bite?1.25:1));       // 내리면 물속이라 천천히 가라앉음
+    else egiH=Math.max(target,egiH-dt*1.9*(bite?1.25:1));       // 내리면 물속이라 천천히 가라앉음
+    if(target<0.1&&egiH<0.1&&egiH>0)egiH=0;                     // 바닥 10cm 안 = 바닥에 닿음
     const up=egiH>0.08;
     if(up&&!wasUp)liftOff();
     if(!up&&wasUp&&egiH<=0.02){}                                // 착지는 아래에서
@@ -273,8 +280,9 @@ function frame(now){
     }
   }
   if(st==="hooked"){
-    const dL=Math.max(0,L-prevLift)+(btnHold?dt*.6:0);         // 들어 올린 만큼 감김
-    if(dL>0.002){reel-=dL*7/cur.weight;reelIdle=0;if(now>reelTick){tone(950,.025,.035,"square");reelTick=now+80;buzz(14,Math.round(60*cur.weight))}}
+    // 감기: 버튼이나 화면 아무 데나 꾹 = 초당 약 4m, 폰을 들어 올려도 든 만큼 감김
+    const dL=(btnHold||stageHold?dt*4.2:0)+Math.max(0,L-prevLift)*22;
+    if(dL>0.002){reel-=dL/Math.sqrt(cur.weight);reelIdle=0;if(now>reelTick){tone(950,.025,.035,"square");reelTick=now+70;buzz(14,Math.round(60*cur.weight))}}
     else{reelIdle+=dt;if(reelIdle>1.6&&Math.random()<dt*1.2)end(false,"감다가 오래 멈추면 털려요 · 들었다 내리며 계속 감기")}
     if(reel<=0&&st==="hooked")end(true);
   }
