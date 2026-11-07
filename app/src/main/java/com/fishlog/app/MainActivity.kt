@@ -125,6 +125,7 @@ class MainActivity : Activity() {
     /** 관리자가 막은 옛날 버전인지 (출조 중엔 막지 않고, 끝난 뒤에) */
     private var forceUpdate = false
     private lateinit var chatBtn: TextView
+    private var gameCell: View? = null
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
     private var stationsSynced = false
@@ -436,6 +437,12 @@ class MainActivity : Activity() {
         btnRow.addView(cell(styled(smallBtn("") { Inventory.show(this) }, Color.parseColor("#12301F"), Ui.GREEN, Color.parseColor("#BFF5D8")).apply {
             text = two("🎒 가방", "재고표", Ui.GREEN)
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        // 🎮 미니게임 (v4.2.5 · 200) — 테스트하는 동안은 관리자에게만 보임
+        val gc = cell(styled(smallBtn("") { MiniGame.pick(this) }, Color.parseColor("#3A1840"), Color.parseColor("#E07AD8"), Color.parseColor("#FFD3F5")).apply {
+            text = two("🎮 게임", "미니게임", Color.parseColor("#E07AD8"))
+        }).apply { visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE }
+        gameCell = gc
+        btnRow.addView(gc, LinearLayout.LayoutParams(0, WRAP, 1f))
         // 🗺 지도 (바다색으로 채워 강조 · 182)
         btnRow.addView(cell(styled(smallBtn("") { openMap() }, Color.parseColor("#1F6E96"), Color.parseColor("#7FD3E8"), Color.WHITE).apply {
             text = two("🗺 지도", "현위치", Color.parseColor("#D6F3FF"))
@@ -2135,7 +2142,7 @@ class MainActivity : Activity() {
     /** 총관리자 메뉴 */
     private fun openAdminMenu() {
         if (!Cloud.isAdmin) return
-        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제", "🧪 미니게임 테스트 (찌낚시 · 쭈꾸미)")
+        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제", "🎮 미니게임 (찌낚시 · 쭈꾸미 · 랭킹)")
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
@@ -2493,6 +2500,7 @@ class MainActivity : Activity() {
         adminBtn.visibility = View.GONE
         speciesBtn.visibility = View.GONE
         if (::adminMenuBtn.isInitialized) adminMenuBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        gameCell?.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         GroupNews.startLive(newsLive)
         // 그룹 목록이 오면 같이 출조 중 실시간 연결 바로 다시 붙이기
         if (Store.current != null) Live.watch()

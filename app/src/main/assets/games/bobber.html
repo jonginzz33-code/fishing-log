@@ -29,6 +29,8 @@ canvas{display:block;width:100%;height:100%}
 .meter{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
 .bar{height:14px;border-radius:99px;background:#16384C;position:relative;overflow:hidden}
 .bar i{position:absolute;inset:0 auto 0 0;width:0;border-radius:99px;background:var(--ok)}
+.bar.hp i{background:linear-gradient(90deg,#FF6B6B,#FFB27A,#5FD39A)}
+.meter{row-gap:6px}
 .bar .zone{position:absolute;top:0;bottom:0;left:30%;width:50%;border-left:2px dashed rgba(255,255,255,.35);border-right:2px dashed rgba(255,255,255,.35)}
 .dist{font-variant-numeric:tabular-nums;min-width:52px;text-align:right;color:var(--ink)}
 .btns{display:grid;grid-template-columns:1fr;gap:8px}
@@ -61,6 +63,7 @@ canvas{display:block;width:100%;height:100%}
     <h1>🎣 찌낚시 손맛</h1>
     <div class="hbtns">
       <button class="chip" id="flClose" type="button" hidden>✕ 닫기</button>
+      <button class="chip" id="rankBtn" type="button" hidden>🏆 랭킹</button>
       <button class="chip" id="dexBtn" type="button">📖 도감</button>
       <button class="chip" id="sndBtn" type="button">🔊 소리 켬</button>
     </div>
@@ -83,6 +86,7 @@ canvas{display:block;width:100%;height:100%}
   </div>
   <div class="meter" id="meter" hidden>
     <span>줄 장력</span><div class="bar"><div class="zone"></div><i id="ten"></i></div><span class="dist" id="dist">20.0m</span>
+    <span>고기 힘</span><div class="bar hp"><i id="hp"></i></div><span class="dist" id="hpT">100%</span>
   </div>
   <div class="btns" id="btns">
     <button class="btn drag" id="drag" type="button" hidden>드랙<br>풀기</button>
@@ -170,6 +174,9 @@ function hookSet(now){
   fish.big=fish.n!=="장화"&&fish.size>=fish.min+(fish.max-fish.min)*0.85;
   // 챔질 등급: 완벽(0.25초 안) · 좋음 · 늦음 → 바늘 걸림 정도
   hookQ=dt<250?1:dt<450?0.75:0.5;
+  fish.hp=100;fish.tired=false;
+  // 힘이 빠지는 속도: 작은 고기일수록 빨리 (약 8~25초)
+  fish.drain=7/((0.55+fish.pow*0.22)*(0.7+0.6*(fish.size-fish.min)/Math.max(1,fish.max-fish.min)));
   st="fight";tension=35;dist=12+fish.pow*4+Math.random()*6;slack=0;pull=0;pullT=now+500;runLeft=fish.st==="run"?3:0;
   $("meter").hidden=false;mode("fight");SND.hook();buzz(60);
   say(hookQ===1?"완벽한 챔질!":hookQ>.6?"좋은 챔질!":"살짝 걸렸어요…",hookQ===1?"var(--line)":hookQ>.6?"var(--ok)":"var(--warn)");
@@ -183,6 +190,7 @@ function end(ok,note){
     const d=dex[fish.n]||{c:0,b:0};const nb=fish.size>d.b;d.c++;if(nb)d.b=fish.size;dex[fish.n]=d;saveDex();
     $("cNote").textContent=fish.n==="장화"?"…누가 바다에 버렸나요":nb&&d.c>1?"🏆 "+fish.n+" 최고 기록 경신!":d.c===1?"📖 도감에 새로 올렸어요":fish.tip;
     say("낚았다!","var(--line)");
+    try{if(window.FL&&FL.gameCatch)FL.gameCatch("bobber",fish.n,fish.size)}catch(e){}
   }else{$("cIc").textContent="💨";$("cName").textContent="놓쳤어요";$("cSize").textContent="";$("cNote").textContent=note||""}
   $("card").hidden=false;
 }
@@ -193,7 +201,9 @@ function openDex(){
   $("dexGrid").innerHTML=FISH.map(f=>{const d=dex[f.n];return `<div class="${d?"":"no"}"><span class="ic">${f.ic}</span>${d?f.n:"???"}<b>${d?d.b+"cm · "+d.c+"마리":"-"}</b></div>`}).join("");
   $("dex").hidden=false;
 }
-$("dexBtn").onclick=openDex;$("dexClose").onclick=()=>$("dex").hidden=true;
+$("dexBtn").onclick=openDex;
+// 🏆 랭킹 (앱 안에서만)
+if(window.FL&&FL.openRank){$("rankBtn").hidden=false;$("rankBtn").onclick=()=>FL.openRank("bobber")}$("dexClose").onclick=()=>$("dex").hidden=true;
 
 /* ---- 입력 ---- */
 function down(e){
@@ -234,14 +244,21 @@ function frame(now){
         else{pull=0.3;pullT=now+700+r*900}
       }
     }
-    const p=pull*(30+fish.pow*7);
+    // 고기 힘: 당기거나 드랙으로 버틸수록 빨리 빠짐 · 0이면 기진맥진
+    if(!fish.tired){
+      fish.hp-=dt*fish.drain*(0.6+pull*0.8+(dragging?0.6:0)+(tension>60?0.4:0));
+      if(fish.hp<=0){fish.hp=0;fish.tired=true;pull=0.08;pullT=Infinity;runLeft=0;say("기진맥진! 힘없이 끌려와요","var(--ok)");buzz([30,40,30])}
+    }
+    if(fish.tired)pull=0.08;
+    const hpF=0.35+0.65*fish.hp/100;
+    const p=pull*hpF*(30+fish.pow*7);
     let dT=(holding?42:-38)+p-(holding?0:p*0.4);
     if(dragging)dT-=95; // 드랙: 장력은 확 줄지만 고기가 줄을 가져감
     tension=Math.max(0,Math.min(110,tension+dT*dt));
-    if(holding&&!dragging&&tension<100)dist-=dt*(2.6-fish.pow*0.25)*(tension>30?1:0.4);
+    if(holding&&!dragging&&tension<100)dist-=dt*(2.6-fish.pow*0.25)*(tension>30||fish.tired?1:0.4)*(fish.tired?1.8:1);
     if(!holding)dist+=dt*pull*1.4;
     if(dragging)dist+=dt*(1+pull*1.8);
-    if(tension<12)slack+=dt*(2-hookQ);else slack=Math.max(0,slack-dt*2);
+    if(tension<12&&!fish.tired)slack+=dt*(2-hookQ);else slack=Math.max(0,slack-dt*2);
     if(holding&&!dragging&&now>reelTick){tone(900+Math.random()*80,.03,"square",.04);reelTick=now+90}
     if(tension>85&&Math.random()<dt*4)buzz(15);
     if(tension>=100){shake=10;SND.snap();buzz(200);say("팅! 줄이 터졌어요","var(--bad)");end(false,"장력이 빨개지면 '드랙 풀기'나 손 떼기")}
@@ -251,6 +268,7 @@ function frame(now){
     const ti=$("ten");ti.style.width=Math.min(100,tension)+"%";
     ti.style.background=tension>80?"var(--bad)":tension>30?"var(--ok)":"var(--warn)";
     $("dist").textContent=Math.max(0,dist).toFixed(1)+"m";
+    $("hp").style.width=Math.max(0,fish.hp)+"%";$("hpT").textContent=fish.tired?"0% 💤":Math.ceil(fish.hp)+"%";
     fx=Math.sin(now/(fish.st==="shake"?60:90))*pull*6;
   }
   shake*=0.85;

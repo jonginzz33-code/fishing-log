@@ -36,6 +36,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // v4.2.5 🏆 미니게임 랭킹 (로그인하면 모두 읽기 · 내 기록만 쓰기)
+    match /gameRank/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       // 권한(perms)은 관리자만 바꿈

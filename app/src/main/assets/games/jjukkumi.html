@@ -60,7 +60,8 @@ canvas{display:block;width:100%;height:100%}
     <h1>🐙 <span>쭈꾸미</span> 손맛</h1>
     <div class="chips">
       <button class="chip" id="flClose" type="button" hidden>✕ 닫기</button>
-      <button class="chip on" id="eyeBtn" type="button">👀 화면 신호</button>
+      <button class="chip" id="rankBtn" type="button" hidden>🏆 랭킹</button>
+      <button class="chip" id="eyeBtn" type="button">🙈 진동만</button>
       <button class="chip" id="helpBtn" type="button">? 방법</button>
     </div>
   </header>
@@ -77,9 +78,10 @@ canvas{display:block;width:100%;height:100%}
     <div class="sheet" id="help" hidden>
       <h3>하는 법</h3>
       <ol>
+        <li>화면(바닷속 그림)을 톡 누르면 채비 내리기 · 고패질 중 톡 = 챔질 · 걸린 뒤 꾹 = 감기.</li>
         <li>폰을 낚싯대처럼 잡고 들었다 내리기(고패질). <b>높이 들면 에기가 높이, 살짝 들면 살짝</b> 떠요. 내리면 가라앉아 바닥을 <b>콩</b> 찍고 진동이 와요.</li>
         <li>리듬이 중요해요. 1~2초에 한 번, 가끔은 2~3초 멈춰서(스테이) 기다리기.</li>
-        <li>바닥 찍을 때 진동이 <b>평소와 다르면</b> 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 '챔질' 버튼).</li>
+        <li>바닥 찍을 때 진동이 <b>평소와 다르면</b> 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 화면 톡 · '챔질' 버튼). 3~7번 안에 챔질 안 하면 도망가요.</li>
         <li>걸리면 <b>화면 아무 데나 꾹</b> 누르면 릴이 감겨요 (폰을 들어 올려도 감겨요). 오래 멈추면 털려요.</li>
       </ol>
       <div class="sig-t">
@@ -127,8 +129,10 @@ const TARGET=[ // 올라타는 녀석: 신호 · 무게(g) · 비율 · 무게�
   {n:"갑오징어",ic:"🦑",sig:["extra"],min:250,max:1300,w:24,weight:1.6},
   {n:"문어",ic:"🐙",sig:["none"],min:600,max:2600,w:6,weight:2.4,big:true}
 ];
-let eye=true;
-$("eyeBtn").onclick=()=>{eye=!eye;$("eyeBtn").classList.toggle("on",eye);$("eyeBtn").textContent=eye?"👀 화면 신호":"🙈 진동만"};
+let eye=false;try{eye=localStorage.getItem("jj_eye")==="1"}catch(e){}
+const paintEye=()=>{$("eyeBtn").classList.toggle("on",eye);$("eyeBtn").textContent=eye?"👀 화면 신호":"🙈 진동만"};paintEye();
+$("eyeBtn").onclick=()=>{eye=!eye;try{localStorage.setItem("jj_eye",eye?"1":"0")}catch(e){};paintEye()};
+if(window.FL&&FL.openRank){$("rankBtn").hidden=false;$("rankBtn").onclick=()=>FL.openRank("jj")}
 let sigT=0;
 function feel(k){const s=SIG[k];if(s.v)buzz(s.v,s.a);if(eye||!canVib){sig.hidden=false;sig.textContent="바닥: "+s.t;sig.style.color=s.c;sigT=performance.now()+900}}
 
@@ -153,7 +157,6 @@ function liftOff(){ // 바닥에서 떠오르는 순간 (= 고패질 1번)
   const now=performance.now();
   if(lastLift){ivals.push((now-lastLift)/1000);if(ivals.length>5)ivals.shift()}
   lastLift=now;
-  if(bite&&Math.random()<.55){bite=null;say("앗, 떨어졌나…","var(--warn)")}
   tone(380,.05,.04,"triangle");
 }
 function hookSet(){
@@ -171,15 +174,21 @@ function hookSet(){
 function land(){ // 에기가 바닥에 닿는 순간 → 진동 신호
   landings++;const now=performance.now();
   if(st==="sink"){st="jig";feel("bottom");say("바닥! 폰을 들었다 내려요","var(--ok)");setBtns("들기 (꾹)","챔질!",true);$("rhy").hidden=false;stayStart=now;return}
-  if(bite){feel(bite.s);bite.left--;if(bite.left<=0)bite=null;stayStart=now;return}
+  if(bite){
+    bite.left--;
+    if(bite.left<=0){ // 챔질을 끝까지 안 함 → 도망
+      bite=null;feel("bottom");say("놓쳤어요… 챔질을 안 해서 도망갔어요","var(--warn)");tone(260,.3,.1,"sine",130);
+    }else feel(bite.s);
+    stayStart=now;return;
+  }
   if(ivals.length>=2){
     const m=ivals.reduce((a,b)=>a+b,0)/ivals.length;
     const sc=m<.6?.15:m<.9?.55:m<=2.2?1:m<=3.2?.65:.3;rhythm=rhythm*.6+sc*.4;
   }
-  const p=landings<3?.05:(.08+.28*rhythm);
+  const p=landings<3?.015:(.027+.093*rhythm);            // v4.2.5: 예전보다 약 3배 드물게
   if(Math.random()<p){
     let s=TARGET.reduce((a,t)=>a+t.w,0)*Math.random(),t=TARGET[0];for(const x of TARGET){if((s-=x.w)<0){t=x;break}}
-    const k=t.sig[Math.floor(Math.random()*t.sig.length)];bite={t,s:k,left:2};feel(k);
+    const k=t.sig[Math.floor(Math.random()*t.sig.length)];bite={t,s:k,left:3+Math.floor(Math.random()*5)};feel(k);   // 3~7번 고패질 안에 챔질해야 함
   }else feel(Math.random()<.12?"rock":"bottom");
   stayStart=now;
 }
@@ -190,6 +199,7 @@ function end(ok,note){
     $("cIc").textContent=cur.ic;$("cName").textContent=cur.n;$("cW").textContent=cur.g.toLocaleString()+"g";
     $("cNote").textContent=cur.n==="문어"?"🎉 문어 손님!":cur.g>(cur.min+cur.max)/2?"씨알 좋아요":"한 마리 추가";
     [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.16,.15,"triangle"),i*90));buzz([40,50,40]);say("올렸다!","var(--line)");
+    try{if(window.FL&&FL.gameCatch)FL.gameCatch("jj",cur.n,cur.g)}catch(e){}
   }else{$("cIc").textContent="💨";$("cName").textContent="털렸어요";$("cW").textContent="";$("cNote").textContent=note||""}
   $("card").hidden=false;setBtns("다시 내리기","챔질!",false);
 }
@@ -250,7 +260,10 @@ addEventListener("pointerup",b1up);addEventListener("pointercancel",b1up);
 b2.addEventListener("pointerdown",e=>{e.preventDefault();b2.classList.add("down");hookSet()});
 // 걸린 뒤엔 화면(바닷속 그림) 아무 데나 꾹 눌러도 감기
 let stageHold=false;
-cv.addEventListener("pointerdown",e=>{e.preventDefault();audio();if(st==="hooked")stageHold=true;else if(st==="idle"||st==="result")drop()});
+let tapAt=0;
+cv.addEventListener("pointerdown",e=>{e.preventDefault();audio();tapAt=performance.now();
+  if(st==="hooked")stageHold=true;else if(st==="idle"||st==="result")drop()});
+cv.addEventListener("pointerup",()=>{if(st==="jig"&&tapAt&&performance.now()-tapAt<350)hookSet();tapAt=0});
 addEventListener("pointerup",()=>stageHold=false);addEventListener("pointercancel",()=>stageHold=false);
 addEventListener("pointerup",()=>b2.classList.remove("down"));
 $("helpBtn").onclick=()=>$("help").hidden=false;$("helpClose").onclick=()=>$("help").hidden=true;
@@ -266,7 +279,7 @@ function frame(now){
     const heavy=bite?bite.t.weight:1;
     const target=L*MAXH/heavy*1.0;
     if(target>egiH)egiH+=Math.min(target-egiH,dt*9);            // 들면 바로 따라 뜸
-    else egiH=Math.max(target,egiH-dt*1.9*(bite?1.25:1));       // 내리면 물속이라 천천히 가라앉음
+    else egiH=Math.max(target,egiH-dt*2.85*(bite?1.25:1));       // 내리면 물속이라 천천히 가라앉음
     if(target<0.1&&egiH<0.1&&egiH>0)egiH=0;                     // 바닥 10cm 안 = 바닥에 닿음
     const up=egiH>0.08;
     if(up&&!wasUp)liftOff();
@@ -274,9 +287,9 @@ function frame(now){
     if(wasUp&&egiH<=0.001){egiH=0;land()}
     wasUp=up||(wasUp&&egiH>0.001);
     // 오래 멈추면(스테이) 그 자리에서 올라탐
-    if(!wasUp&&!bite&&now-stayStart>2200&&now-stayStart<2250&&Math.random()<.35*rhythm+.1){
+    if(!wasUp&&!bite&&now-stayStart>2200&&now-stayStart<2250&&Math.random()<(.35*rhythm+.1)/3){
       let s=TARGET.reduce((a,t)=>a+t.w,0)*Math.random(),t=TARGET[0];for(const x of TARGET){if((s-=x.w)<0){t=x;break}}
-      bite={t,s:"micro",left:1};feel("micro");stayStart=now+600;
+      bite={t,s:"micro",left:3+Math.floor(Math.random()*5)};feel("micro");stayStart=now+600;
     }
   }
   if(st==="hooked"){
