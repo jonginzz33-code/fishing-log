@@ -249,7 +249,7 @@ object TideDialog {
         titleBox.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 3))
         titleBox.isClickable = true
 
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlertRight)
             .setCustomTitle(titleBox)
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
@@ -497,7 +497,7 @@ object TideDialog {
                     flow.set(day, st)
                     flowNote.text = "막대 = 시간별 물흐름 세기 (물이 빨리 들고 나는 때일수록 높고 주황)" +
                         (if (cur == today) " · 초록 테두리 = 지금" else "") +
-                        (if (st.estimated) "\n물세기는 물때(달 나이)로 짐작한 값이에요" else "\n물세기 = 그날 조차 ÷ 가까운 사리(7물) 때 조차")
+                        (if (st.estimated) "\n물세기는 물때(달 나이)로 짐작한 값이에요" else if (st.annual) "\n물세기 = 그날 조차 ÷ 이 관측소 1년 중 가장 큰 사리 때 조차 (100%)" else "\n물세기 = 그날 조차 ÷ 가까운 사리(7물) 때 조차 (1년 기준을 아직 못 받음)")
                 }
             }
             Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }
@@ -649,7 +649,7 @@ object TideDialog {
         todayBtn.setOnClickListener { cur = today; load() }
         dateText.setOnClickListener {
             val c = Calendar.getInstance().apply { timeInMillis = cur }
-            DatePickerDialog(a, android.R.style.Theme_DeviceDefault_Dialog_Alert, { _, y, m, d ->
+            DatePickerDialog(a, R.style.FlAlert, { _, y, m, d ->
                 cur = Calendar.getInstance().apply { set(y, m, d, 0, 0, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
                 load()
             }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()

@@ -163,7 +163,7 @@ class GroupActivity : Activity() {
             gravity = android.view.Gravity.CENTER; setPadding(0, dp(14), 0, dp(14))
             background = Ui.bg(this@GroupActivity, Color.parseColor("#B3262F"), 14)
             setOnClickListener {
-                AlertDialog.Builder(this@GroupActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this@GroupActivity, R.style.FlAlert)
                     .setTitle("'${g.title}'에서 탈퇴할까요?")
                     .setMessage("그룹 채팅에 탈퇴 알림이 남고, 이 그룹의 공지·일정·출조 기록을 더 볼 수 없어요. 내 폰 기록은 그대로예요.\n다시 들어오려면 초대 코드가 필요해요.")
                     .setPositiveButton("탈퇴") { _, _ -> Cloud.leaveGroup(g) { err -> toast(err ?: "탈퇴했어요"); load() } }
@@ -344,7 +344,7 @@ class GroupActivity : Activity() {
             setText(cur); setSelection(cur.length); hint = "예: 11/2(토) 새벽 5시 ○○항 집합"
             inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("그룹 공지 (그룹 화면 맨 위에 고정)")
             .setView(input)
             .setPositiveButton("저장") { _, _ ->
@@ -361,7 +361,7 @@ class GroupActivity : Activity() {
         if (others.isEmpty()) { toast(if (members.isEmpty()) "멤버를 불러오는 중이에요. 잠시 후 다시 눌러주세요" else "넘겨줄 다른 멤버가 없어요"); return }
         BigList.show(this, "누구에게 그룹장을 넘길까요?", others.map { it.name }) { i, _ ->
             val m = others[i]
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("${m.name}님에게 그룹장을 넘길까요?")
                 .setMessage("왕관과 그룹장 권한(이름·종류·공지·초대 코드·내보내기·삭제)이 넘어가요. 되돌리려면 새 그룹장이 다시 넘겨줘야 해요.")
                 .setPositiveButton("넘겨주기") { _, _ ->
@@ -373,12 +373,12 @@ class GroupActivity : Activity() {
     }
 
     private fun askDeleteGroup(g: Cloud.Group) {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("'${g.name}' 그룹을 삭제할까요?")
             .setMessage("그룹에 올라간 모든 출조·사진·일정이 지워지고, 멤버 모두 이 그룹을 볼 수 없게 돼요.\n각자 폰에 있는 기록은 그대로예요.")
             .setPositiveButton("다음") { _, _ ->
                 val input = android.widget.EditText(this).apply { hint = g.name; inputType = android.text.InputType.TYPE_CLASS_TEXT }
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("정말 삭제하려면 그룹 이름을 똑같이 적어주세요")
                     .setView(input)
                     .setPositiveButton("삭제") { _, _ ->
@@ -401,7 +401,7 @@ class GroupActivity : Activity() {
             setText(cur); setSelection(cur.length)
             inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("그룹 이름 바꾸기")
             .setView(input)
             .setPositiveButton("저장") { _, _ ->
@@ -413,7 +413,7 @@ class GroupActivity : Activity() {
     }
 
     private fun askNewCode() {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("초대 코드를 새로 만들까요?")
             .setMessage("예전 코드로는 더 이상 가입할 수 없어요. 이미 가입한 멤버는 그대로예요.")
             .setPositiveButton("새로 만들기") { _, _ ->
@@ -438,7 +438,7 @@ class GroupActivity : Activity() {
             isChecked = true
         }
         box.addView(delTrips); box.addView(newCode)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("'${m.name}'님을 내보낼까요?")
             .setView(box)
             .setPositiveButton("내보내기") { _, _ ->
@@ -569,14 +569,14 @@ class GroupActivity : Activity() {
         if (mine) items.add("그룹에서 내리기")
         else if (Cloud.isOwner) items.add("그룹에서 내리기 (그룹장)")
         else if (Cloud.isAdmin) items.add("그룹에서 내리기 (관리자)")
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${t.ownerName} · ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->
                 when {
                     items[i].startsWith("함께한") -> account.showTogether(t)
                     items[i].startsWith("사진") -> account.showPhotos(t)
                     items[i].startsWith("🌡") -> WxView.showDialog(this, "${t.ownerName} 그때 날씨", t.wx, t.start, t.end)
-                    items[i].startsWith("그룹에서") -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    items[i].startsWith("그룹에서") -> AlertDialog.Builder(this, R.style.FlAlert)
                         .setTitle(if (mine) "이 출조를 그룹에서 내릴까요?" else "${t.ownerName}님의 이 출조를 그룹에서 내릴까요?")
                         .setMessage(if (mine) "친구들 화면에서 사라지고, 내 폰 기록은 그대로예요"
                             else "그룹 화면에서만 사라지고, ${t.ownerName}님 폰의 기록은 그대로예요")

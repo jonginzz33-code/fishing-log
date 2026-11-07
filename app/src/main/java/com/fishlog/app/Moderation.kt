@@ -251,7 +251,7 @@ object Moderation {
     fun showBlockedList(a: Activity, onChange: () -> Unit) {
         val list = blocked()
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(a, 16), Ui.dp(a, 4), Ui.dp(a, 16), Ui.dp(a, 4)) }
-        val dlg = android.app.AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = android.app.AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("내가 차단한 사람 ${list.size}명")
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
@@ -267,7 +267,7 @@ object Moderation {
                 (if (b.time > 0) "\n" + df.format(java.util.Date(b.time)) + " 차단" else "")),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
             r.addView(Ui.button(a, "해제") {
-                android.app.AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                android.app.AlertDialog.Builder(a, R.style.FlAlert)
                     .setTitle("차단을 해제할까요?")
                     .setMessage("이 사람이 올린 출조가 다시 내 조황·포인트 계산에 들어가요")
                     .setPositiveButton("해제") { _, _ ->

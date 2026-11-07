@@ -96,7 +96,7 @@ class BoardActivity : Activity() {
 
     private fun confirmRemoveSelected() {
         val ts = all.filter { it.id in selected }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${ts.size}개 공개 출조를 내릴까요?")
             .setMessage("전체 게시판과 포인트 도감 계산에서 빠져요. 각자의 폰 기록과 그룹 공유는 그대로예요.")
             .setPositiveButton("${ts.size}개 내리기") { _, _ ->
@@ -171,7 +171,7 @@ class BoardActivity : Activity() {
     private fun askNick() {
         val items = arrayOf((if (Store.nick != "") "✓ " else "") + "내 닉네임으로 (${Cloud.nick ?: "아직 없음"})",
             (if (Store.nick == "") "✓ " else "") + "익명으로", "닉네임 정하기 · 바꾸기 (개인 설정)")
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("전체 게시판에 보일 이름")
             .setItems(items) { _, w ->
                 when (w) {
@@ -592,7 +592,7 @@ class BoardActivity : Activity() {
             }
         }
         val mine = t.owner == Cloud.uid
-        val b = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val b = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${t.nick} · ${dateFmt.format(Date(t.start))}")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("닫기", null)
@@ -614,7 +614,7 @@ class BoardActivity : Activity() {
     private fun askBlock(t: PublicBoard.PTrip) {
         if (Cloud.user == null) { toast("로그인이 필요해요"); return }
         val label = "${t.nick} · ${dayFmt.format(Date(t.start))}" + regionOf(t).takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty() + " 글에서 차단"
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("이 사람을 차단할까요?")
             .setMessage("이 사람이 올린 출조가 내 조황 목록, 어종 마릿수, 지도, 포인트 계산에서 모두 빠져요.\n" +
                 "익명이어도 같은 사람이 올린 글은 모두 빠지고, 앞으로 올리는 글도 빠져요.\n" +
@@ -631,7 +631,7 @@ class BoardActivity : Activity() {
 
     private fun askRemove(t: PublicBoard.PTrip) {
         val mine = t.owner == Cloud.uid
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(if (mine) "내 출조 공개를 내릴까요?" else "관리자: 이 글을 지울까요?")
             .setMessage("전체 게시판에서만 사라지고, 폰의 기록은 그대로예요")
             .setPositiveButton("내리기") { _, _ ->
@@ -790,7 +790,7 @@ class BoardActivity : Activity() {
         val monFmt = SimpleDateFormat("M월", Locale.KOREA)
         barRows("잘 나온 달", cs.groupingBy { monFmt.format(Date(it.time)) }.eachCount()
             .entries.sortedByDescending { it.value }.map { it.key to it.value })
-        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("$title · $spLabel")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("닫기", null)

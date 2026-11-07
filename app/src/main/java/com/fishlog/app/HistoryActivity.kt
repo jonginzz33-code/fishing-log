@@ -69,7 +69,7 @@ class HistoryActivity : Activity() {
     private fun confirmDeleteSelected() {
         val trips = Store.history.filter { it.id in selected }
         if (trips.isEmpty()) return
-        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${trips.size}개 출조를 지울까요?")
             .setMessage("내 폰 · 서버 백업 · 올린 모든 그룹(사진 포함) · 전체 게시판에서 같이 지워져요.\n휴지통(☰ 메뉴 → 🗑 휴지통)에 30일 보관돼서 그 안에는 복구할 수 있어요.")
             .setPositiveButton("${trips.size}개 삭제") { _, _ ->
@@ -335,7 +335,7 @@ class HistoryActivity : Activity() {
         val titleView = Ui.text(this, 19f, Ui.TEXT, true, "공유한 그룹").apply {
             setPadding(Ui.dp(this@HistoryActivity, 22), Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 22), Ui.dp(this@HistoryActivity, 4))
         }
-        val dlg = android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = android.app.AlertDialog.Builder(this, R.style.FlAlert)
             .setCustomTitle(titleView)
             .setView(android.widget.ScrollView(this).apply { addView(col) })
             .setNeutralButton("공유 그룹 바꾸기") { _, _ -> changeShared(t) }
@@ -374,7 +374,7 @@ class HistoryActivity : Activity() {
                 isChecked = g.id in now
             }.also { box.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
         }
-        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("공유 그룹 바꾸기")
             .setView(android.widget.ScrollView(this).apply { addView(box) })
             .setPositiveButton("저장") { _, _ ->

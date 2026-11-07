@@ -126,7 +126,7 @@ object Updater {
         box.addView(later, Ui.lp(a, MATCH, WRAP, top = 4))
         box.addView(Ui.text(a, 11f, Ui.SUB, false, "기록은 그대로 남아요").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 2))
 
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setView(ScrollView(a).apply { addView(box) })
             .setCancelable(false)
             .create()

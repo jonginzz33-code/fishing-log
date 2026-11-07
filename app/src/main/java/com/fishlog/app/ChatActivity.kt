@@ -182,7 +182,7 @@ class ChatActivity : Activity() {
                 box.addView(Ui.text(this, 12f, Color.parseColor("#FF8A92"), true, "🗑 그룹 채팅방 비우기 (그룹장)").apply {
                     setPadding(0, dp(6), 0, 0)
                     setOnClickListener {
-                        AlertDialog.Builder(this@ChatActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        AlertDialog.Builder(this@ChatActivity, R.style.FlAlert)
                             .setTitle("${groupLabel(g)} 채팅방을 비울까요?")
                             .setMessage("이 그룹 채팅방의 글을 모두 지워요. 되돌릴 수 없어요.")
                             .setPositiveButton("비우기") { _, _ -> Chat.clearGroup(g.id) { err -> toast(err ?: "그룹 채팅방을 비웠어요") } }
@@ -218,7 +218,7 @@ class ChatActivity : Activity() {
             setText(Chat.chatName ?: ""); hint = "2~12자 (예: 바다의왕)"
             setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB)
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("전체 채팅방 이름")
             .setMessage("전체 채팅방에서만 이 이름으로 보여요. 그룹방과 다른 화면은 닉네임 그대로예요.")
             .setView(LinearLayout(this).apply { setPadding(dp(20), dp(4), dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
@@ -315,7 +315,7 @@ class ChatActivity : Activity() {
                 })
                 else items.add("채팅 금지 (글을 못 써요)" to {
                     val real = Chat.realNames[m.uid] ?: m.name
-                    AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(this, R.style.FlAlert)
                         .setTitle("채팅 금지")
                         .setMessage("$real (채팅 이름: ${m.name}) 님이 모든 채팅방에 글을 못 쓰게 할까요? 나중에 풀 수 있어요.")
                         .setPositiveButton("금지") { _, _ ->
@@ -329,14 +329,14 @@ class ChatActivity : Activity() {
             val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("chat", m.text)); toast("복사했어요")
         })
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
             .show()
     }
 
     private fun editMsg(m: Chat.Msg) {
         val et = EditText(this).apply { setText(m.text); setTextColor(Ui.TEXT); setSelection(text.length) }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("글 수정")
             .setView(LinearLayout(this).apply { setPadding(dp(20), dp(4), dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
             .setPositiveButton("저장") { _, _ -> Chat.edit(m, et.text.toString()) { err -> if (err != null) toast(err) } }
@@ -344,7 +344,7 @@ class ChatActivity : Activity() {
     }
 
     private fun confirmDelete(m: Chat.Msg) {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setMessage("이 글을 지울까요?")
             .setPositiveButton("삭제") { _, _ -> Chat.delete(m) { err -> if (err != null) toast(err) } }
             .setNegativeButton("취소", null).show()

@@ -535,7 +535,7 @@ object Zones {
                 if (map.zoomLevelDouble < 9.0) { Ui.toast(a, "조금 더 확대해서 받을 지역을 골라 주세요"); return@chip }
                 // v4.1 (185): 모바일 데이터면 먼저 물어보기
                 if (Ui.metered(a) && !confirmedMobile) {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📶 모바일 데이터예요")
+                    AlertDialog.Builder(a, R.style.FlAlert).setTitle("📶 모바일 데이터예요")
                         .setMessage("구역 자료는 데이터가 꽤 들어요. 와이파이에서 받는 걸 추천해요.\n그래도 지금 받을까요?")
                         .setPositiveButton("받기") { _, _ -> confirmedMobile = true; Ui.toast(a, "한 번 더 '📥 이 지역 받기'를 눌러 주세요") }
                         .setNegativeButton("취소", null).show()
@@ -554,7 +554,7 @@ object Zones {
             if (Cloud.isAdmin) r2.addView(chip("🇰🇷 전국 받기", false, Ui.TEXT) {
                 if (Khoa.nationalRunning) { Ui.toast(a, "전국 받기가 이미 진행 중이에요"); return@chip }
                 if (Ui.metered(a)) { Ui.toast(a, "📶 전국 받기는 와이파이에서만 할 수 있어요"); return@chip }
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(a, R.style.FlAlert)
                     .setTitle("🇰🇷 전국 해안 미리 받기 (관리자)")
                     .setMessage("우리나라 해안 · 섬 ${Khoa.nationalCells().size}칸을 받아요.\n이미 받은 곳은 건너뛰고, 끊기면 다시 누를 때 이어서 받아요.\n데이터가 많이 들어요 (와이파이 권장) · 시간이 꽤 걸려요.")
                     .setPositiveButton("받기") { _, _ ->
@@ -621,7 +621,7 @@ object Zones {
         }
         box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "어장 · 갯골 · 금지구역은 국립해양조사원 '개방海' 자료 (관리자가 인증키를 넣었을 때) + 관리자가 올린 구역이에요."),
             Ui.lp(a, MATCH, WRAP, top = 6))
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🦀 해루질 참고용 — 꼭 읽어 주세요")
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("확인 — 참고용으로 켜기") { _, _ ->
@@ -633,7 +633,7 @@ object Zones {
 
     /** 처음 켤 때 · ? 설명 */
     fun explain(a: Activity) {
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🦀 해루질 참고용")
             .setMessage("지도에 이런 곳을 색으로 보여줘요 (확대하면 보여요)\n\n" +
                 TYPES.entries.joinToString("\n") { "${typeIcon(it.key)} ${it.value}" } +
@@ -689,7 +689,7 @@ object Zones {
                     }
                 }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.button(a, "🗑 삭제") {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(a, R.style.FlAlert)
                         .setTitle("이 구역을 지울까요?")
                         .setMessage("${TYPES[z.type]} ${z.name}")
                         .setPositiveButton("삭제") { _, _ ->
@@ -705,7 +705,7 @@ object Zones {
         col.addView(Ui.text(a, 11.5f, Color.parseColor("#F2C14E"), false,
             "※ 참고용이에요. 실제 경계 · 허용 여부는 현장 안내판 · 어촌계 · 지자체가 우선이에요. 낚시는 할 수 있어요."),
             Ui.lp(a, MATCH, WRAP, top = 10))
-        dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🦀 해루질 참고 구역")
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null).show()
@@ -733,7 +733,7 @@ object Zones {
         val name = EditText(a).apply { hint = "이름 (예: OO리 마을어장)"; setText(name0); inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
         val note = EditText(a).apply { hint = "메모 (예: 어촌계 연락처 · 기간)"; setText(note0); inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
         box.addView(name, Ui.lp(a, MATCH, WRAP, top = 10)); box.addView(note, Ui.lp(a, MATCH, WRAP, top = 4))
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle(title)
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("저장") { _, _ -> done(type, name.text.toString().trim(), note.text.toString().trim()) }
@@ -870,7 +870,7 @@ object Zones {
                     }
                 }.apply { textSize = 14f; minHeight = dp(48) }, Ui.lp(a, MATCH, WRAP, top = 8))
             }
-            dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            dlg = AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("🦀 해루질 참고 구역 · 관리")
                 .setView(ScrollView(a).apply { addView(box) })
                 .setNegativeButton("닫기", null).show()
@@ -878,7 +878,7 @@ object Zones {
     }
 
     private fun sources(a: Activity) {
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("📌 데이터 받는 곳 (공공데이터포털 data.go.kr)")
             .setMessage("검색창에 아래 이름을 넣고 [다운로드] → 이 메뉴의 'CSV 올리기'\n\n" +
                 "🐚🦪 해양수산부_공동활용체계_어장정보 (최신 연도) — 마을어업 · 양식 면허 어장 (종류 자동 구분)\n" +
@@ -910,11 +910,11 @@ object Zones {
 
     private fun askWipe(a: Activity) {
         val keys = TYPES.keys.toList()
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("어떤 종류의 CSV 구역을 지울까요?")
             .setItems(keys.map { "${typeIcon(it)} ${TYPES[it]}" }.toTypedArray()) { _, i ->
                 val t = keys[i]
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(a, R.style.FlAlert)
                     .setTitle("${TYPES[t]} CSV 구역을 모두 지울까요?")
                     .setMessage("직접 그린 구역은 남아요. 되돌릴 수 없어요.")
                     .setPositiveButton("지우기") { _, _ ->
@@ -925,7 +925,7 @@ object Zones {
     }
 
     private fun progress(a: Activity, msg: String): AlertDialog =
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setMessage(msg).setCancelable(false).show()
+        AlertDialog.Builder(a, R.style.FlAlert).setMessage(msg).setCancelable(false).show()
 
     /** 이 종류들의 CSV 구역을 통째로 새것으로 (직접 그린 것은 그대로) */
     /** 마지막으로 올릴 때 중복이라 건너뛴 개수 */
@@ -1049,7 +1049,7 @@ object Zones {
                 r.addView(Ui.text(a, 16f, Ui.TEXT, true, "✎").apply { setPadding(dp(10), dp(4), dp(6), dp(4)); setOnClickListener {
                     editApi(a, it0) { ni -> val all = apis(a); all[idx] = ni; saveApis(a, all); paint() } } })
                 r.addView(Ui.text(a, 16f, Color.parseColor("#FF8A92"), true, "✕").apply { setPadding(dp(6), dp(4), 0, dp(4)); setOnClickListener {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("'${it0.name}'을(를) 목록에서 지울까요?")
+                    AlertDialog.Builder(a, R.style.FlAlert).setTitle("'${it0.name}'을(를) 목록에서 지울까요?")
                         .setMessage("목록에서만 지워져요. 이미 올린 구역은 그대로예요.")
                         .setPositiveButton("지우기") { _, _ -> val all = apis(a); all.removeAt(idx); saveApis(a, all); paint() }
                         .setNegativeButton("취소", null).show() } })
@@ -1091,7 +1091,7 @@ object Zones {
             }
         }
         paintChips(); box.addView(chips)
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle(if (old == null) "＋ API 추가" else "✎ API 수정")
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("저장") { _, _ ->
@@ -1121,7 +1121,7 @@ object Zones {
         val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         r.addView(Ui.button(a, "🔑 인증키 넣기") {
             val et = EditText(a).apply { hint = "개방海 '해양공간정보' 인증키"; setSingleLine(); setText(Khoa.key(a)) }
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("🔑 개방海 인증키")
                 .setMessage("khoa.go.kr → 오픈 API 신청 → 사용구분 '해양공간정보'의 인증키를 붙여 넣어요 (해아름 키 말고). 모든 사용자가 같이 써요.")
                 .setView(LinearLayout(a).apply { setPadding(dp(20), 0, dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
@@ -1132,7 +1132,7 @@ object Zones {
         r.addView(Ui.button(a, "🔌 연결 확인") {
             Ui.toast(a, "개방海에 물어보는 중…")
             Khoa.test(a) { msg ->
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("🌊 개방海 연결 확인")
+                AlertDialog.Builder(a, R.style.FlAlert).setTitle("🌊 개방海 연결 확인")
                     .setMessage(msg + "\n\n(❌가 나오면 이 화면을 캡처해서 보내 주세요)").setPositiveButton("확인", null).show()
             }
         }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
@@ -1146,7 +1146,7 @@ object Zones {
             val d1 = num("예: 10", Khoa.dayLimit(a)); box.addView(d1)
             box.addView(Ui.text(a, 12.5f, Ui.SUB, false, "한 사람이 저장해 둘 수 있는 지역 수"), Ui.lp(a, MATCH, WRAP, top = 8))
             val d2 = num("예: 20", Khoa.maxRegions(a)); box.addView(d2)
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📏 1인당 미리 받기 제한")
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle("📏 1인당 미리 받기 제한")
                 .setView(box)
                 .setPositiveButton("저장") { _, _ ->
                     val x = d1.text.toString().toIntOrNull()?.coerceIn(1, 999) ?: Khoa.dayLimit(a)
@@ -1167,7 +1167,7 @@ object Zones {
         ir.addView(Ui.button(a, "📈 지수 연결 확인") {
             Ui.toast(a, "갯벌체험지수 · 바다낚시지수 물어보는 중…")
             Idx.test(a) { msg ->
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📈 지수 API 연결 확인")
+                AlertDialog.Builder(a, R.style.FlAlert).setTitle("📈 지수 API 연결 확인")
                     .setMessage(msg + "\n\n(❌가 나오면 이 화면을 캡처해서 보내 주세요)").setPositiveButton("확인", null).show()
             }
         }.apply { textSize = 13f; minHeight = dp(42) }, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -1180,7 +1180,7 @@ object Zones {
             box.addView(Ui.text(a, 12.5f, Ui.TEXT, true, "갯벌체험지수"), Ui.lp(a, MATCH, WRAP, top = 6))
             val f2 = EditText(a).apply { setText(Idx.mudUrl(a)); textSize = 12f }
             box.addView(f2)
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("✎ 지수 API 주소")
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle("✎ 지수 API 주소")
                 .setView(box)
                 .setPositiveButton("저장") { _, _ -> Idx.saveUrls(a, f1.text.toString(), f2.text.toString()); Ui.toast(a, "저장했어요 · '📈 지수 연결 확인'으로 확인해 보세요") }
                 .setNeutralButton("기본값") { _, _ -> Idx.saveUrls(a, "", ""); Ui.toast(a, "기본 주소로 돌렸어요") }
@@ -1200,7 +1200,7 @@ object Zones {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
         }
         box.addView(path, Ui.lp(a, MATCH, WRAP, top = 8))
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🌐 다른 API 주소로 받기")
             .setView(box)
             .setPositiveButton("받기") { _, _ ->
@@ -1252,7 +1252,7 @@ object Zones {
             main.post {
                 pd.dismiss()
                 if (rows.isEmpty()) {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(a, R.style.FlAlert)
                         .setTitle("🌐 받지 못했어요")
                         .setMessage((err ?: "받은 자료가 0줄이에요") + "\n\n• 활용신청이 '승인'인지 · 승인 뒤 1~2시간 지났는지 확인해 주세요\n• 이 화면을 캡처해서 보내 주시면 고칠게요")
                         .setPositiveButton("확인", null).show()
@@ -1316,7 +1316,7 @@ object Zones {
         // v3.8.1: 칸 이름 말고 값으로 확인 (도형 칸 또는 위경도 · 평면좌표를 읽을 수 있는 줄이 하나라도 있는지)
         val loc = locator(csv)
         if (geomCol(csv) < 0 && sampleRows(csv).none { loc(it) != null }) {
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("좌표를 찾지 못했어요")
                 .setMessage("도형(공간정보)이나 위도 · 경도 값을 읽을 수 있는 칸이 없어요.\n이 화면을 캡처해서 보내 주시면 맞춰 고칠게요 ↓ 받은 자료 첫 줄\n\n" + sampleText(csv))
                 .setPositiveButton("확인", null).show()
@@ -1330,7 +1330,7 @@ object Zones {
                         .entries.sortedBy { it.key }.take(12)
                     val names = vals.map { "${it.key} (${it.value})" }.toTypedArray()
                     val checked = BooleanArray(vals.size) { idx -> vals[idx].key.contains("높") || vals[idx].key.contains("위험") || vals[idx].key == vals.last().key }
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(a, R.style.FlAlert)
                         .setTitle("어느 위험등급만 넣을까요?")
                         .setMultiChoiceItems(names, checked) { _, w, on -> checked[w] = on }
                         .setPositiveButton("다음") { _, _ ->
@@ -1341,7 +1341,7 @@ object Zones {
         }
         // v3.9 (155): API 목록에 종류를 정해 둔 경우엔 바로
         if (preset != null && preset in keys) return go(preset)
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("어떤 구역인가요? (${csv.rows.size}줄)")
             .setItems(labels.toTypedArray()) { _, i -> go(keys[i]) }
             .setNegativeButton("취소", null).show()
@@ -1357,14 +1357,14 @@ object Zones {
                 val (zones, skipped) = r
                 val by = zones.groupingBy { it.type }.eachCount()
                 if (zones.isEmpty()) {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(a, R.style.FlAlert)
                         .setTitle("그릴 수 있는 구역이 없어요")
                         .setMessage("못 쓴 줄 ${skipped}개 (좌표가 비었거나 한국 밖)\n\n이 화면을 캡처해서 보내 주시면 맞춰 고칠게요 ↓ 받은 자료 첫 줄\n\n" + sampleText(csv))
                         .setPositiveButton("확인", null).show()
                     return@post
                 }
                 val types = if (type == "auto") setOf("village", "farm", "etc") else setOf(type)
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(a, R.style.FlAlert)
                     .setTitle("서버에 올릴까요?")
                     .setMessage(by.entries.joinToString("\n") { "${typeIcon(it.key)} ${TYPES[it.key]}: ${it.value}곳" } +
                         "\n못 쓴 줄: ${skipped}개" +
@@ -1659,7 +1659,7 @@ object Zones {
     // ---------------- 관리자: 지도에서 직접 그리기 ----------------
     fun openAdminMap(a: Activity) {
         fun dp(v: Int) = Ui.dp(a, v)
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFull)
         val map = MapDialog.newMap(a)
         val ov = ZoneOverlay(a) { true }
         map.overlays.add(ov)

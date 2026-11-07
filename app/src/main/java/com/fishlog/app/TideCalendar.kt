@@ -147,7 +147,7 @@ object TideCalendar {
     fun show(a: Activity, lat0: Double?, lon0: Double?) {
         fun dp(v: Int) = Ui.dp(a, v)
         val lat = lat0 ?: Sun.DEF_LAT; val lon = lon0 ?: Sun.DEF_LON
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFull)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(12), dp(10), dp(12), dp(8)) }
         val month = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
         var sel = Sun.dayStart(System.currentTimeMillis())
@@ -169,7 +169,7 @@ object TideCalendar {
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun nav(t: String) = Ui.text(a, 20f, Color.parseColor("#FFB27A"), true, t).apply { gravity = Gravity.CENTER; setPadding(dp(10), dp(4), dp(10), dp(4)) }
         val prev = nav("‹"); val next = nav("›")
-        val title = Ui.text(a, 16f, Ui.TEXT, true, "").apply { gravity = Gravity.CENTER; maxLines = 1 }
+        val title = Ui.text(a, 16f, Ui.TEXT, true, "").apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         top.addView(prev); top.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f)); top.addView(next)
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(6), dp(12), dp(6)); background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
@@ -230,7 +230,7 @@ object TideCalendar {
                             }
                             return@setOnLongClickListener true
                         }
-                        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("'$n' 달력에서 뺄까요?")
+                        AlertDialog.Builder(a, R.style.FlAlert).setTitle("'$n' 달력에서 뺄까요?")
                             .setPositiveButton("빼기") { _, _ -> list.remove(n); off.remove(n); saveChosen(a, list); saveOff(a, off); paintChips(); redraw() }
                             .setNegativeButton("취소", null).show(); true
                     }
@@ -346,7 +346,7 @@ object TideCalendar {
 
         fun paintGrid() {
             grid.removeAllViews()
-            title.text = "📅 ${month.get(Calendar.YEAR)}년 ${month.get(Calendar.MONTH) + 1}월" + if (station.isNotBlank()) " · $station" else ""
+            title.text = "🎣 출조 추천 · ${month.get(Calendar.YEAR)}.${month.get(Calendar.MONTH) + 1}" + if (station.isNotBlank()) " · $station" else ""
             val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, w ->
                 head.addView(Ui.text(a, 11f, when (i) { 0 -> Color.parseColor("#FF8A92"); 6 -> Color.parseColor("#7FB8FF"); else -> Ui.SUB }, false, w).apply { gravity = Gravity.CENTER },

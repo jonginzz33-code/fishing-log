@@ -34,7 +34,7 @@ class AccountUi(private val a: Activity) {
 
     private val handler = Handler(Looper.getMainLooper())
     private val mainExecutor = Executor { handler.post(it) }
-    private val theme = android.R.style.Theme_DeviceDefault_Dialog_Alert
+    private val theme = R.style.FlAlert
 
     private fun toast(msg: String) = Toast.makeText(a, msg, Toast.LENGTH_LONG).show()
 

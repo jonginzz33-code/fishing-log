@@ -122,14 +122,14 @@ class ScheduleActivity : Activity() {
             if (e.memo.isNotBlank()) append("\n").append(e.memo).append("\n")
             append("\n올린 사람: ").append(e.ownerName)
         }
-        val b = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val b = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("일정 상세")
             .setMessage(msg)
             .setPositiveButton("닫기", null)
         if (canEdit(e)) {
             b.setNeutralButton("수정") { _, _ -> editEvent(e) }
             b.setNegativeButton("삭제") { _, _ ->
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("이 일정을 지울까요?")
                     .setPositiveButton("지우기") { _, _ -> Cloud.deleteEvent(e.id) { err -> toast(err ?: "지웠어요"); load() } }
                     .setNegativeButton("취소", null)
@@ -191,7 +191,7 @@ class ScheduleActivity : Activity() {
         box.addView(dateBtn); box.addView(timeBtn, Ui.lp(this, MATCH, WRAP, top = 8))
         box.addView(catRow, Ui.lp(this, MATCH, WRAP, top = 10))
         box.addView(place); box.addView(boat); box.addView(memo)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(if (e == null) "일정 올리기" else "일정 수정")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("저장") { _, _ ->

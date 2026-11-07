@@ -49,7 +49,7 @@ object PointMap {
         val groupLoading = HashSet<String>()
         var groupOpen = false
 
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFull)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
         val head = Ui.row(a).apply { setPadding(dp(14), dp(10), dp(10), dp(4)) }
         head.addView(Ui.text(a, 17f, Ui.TEXT, true, "🗺 포인트 지도" + if (cat.isNotBlank()) " · ${Store.catShort(cat)}" else ""), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -309,7 +309,7 @@ object PointMap {
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(6), dp(14), dp(10)) }
         val loading = Ui.text(a, 13f, Ui.SUB, false, "계산하는 중…")
         box.addView(loading)
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("⭕ $place")
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("닫기", null).show()

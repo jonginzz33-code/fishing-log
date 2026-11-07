@@ -66,14 +66,14 @@ class TripActivity : Activity() {
     /** 이미 올린 글의 이름(익명/닉네임)·그룹 표시 바꾸기 → 다시 올리기 */
     private fun changeDisplay(t: Store.Trip) {
         val names = arrayOf("익명", "닉네임 (${Cloud.nick ?: "아직 없음"})")
-        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("게시판에 보일 이름")
             .setItems(names) { _, i ->
                 if (i == 1 && Cloud.nick == null) { Toast.makeText(this, "닉네임이 없어요 · ⚙ 개인 설정에서 먼저 정해 주세요", Toast.LENGTH_LONG).show(); return@setItems }
                 Store.nick = if (i == 0) "" else "me"
                 val gs = Cloud.groups
                 val items = arrayOf("그룹 표시 안 함") + gs.map { it.title }
-                android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                android.app.AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("같이 보일 그룹")
                     .setItems(items) { _, j -> Store.pubGroup = if (j == 0) "" else gs[j - 1].id; doPublish(t) }
                     .show()
@@ -132,7 +132,7 @@ class TripActivity : Activity() {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(8)) }
         col.addView(Ui.text(this, 15f, Ui.TEXT, true, "${t.line()} · 총 ${t.catches.size}마리"))
         t.catches.asReversed().forEach { c -> col.addView(catchRow(t, c)) }
-        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("전체 기록")
             .setView(ScrollView(this).apply { addView(col) })
             .setPositiveButton("닫기", null)
@@ -466,7 +466,7 @@ class TripActivity : Activity() {
     private fun pickMainFromTrip(t: Store.Trip) {
         val ps = t.photos.toList()
         val grid = GridLayout(this).apply { columnCount = 3; setPadding(dp(12), dp(8), dp(12), dp(8)) }
-        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("대표 사진 고르기").setView(ScrollView(this).apply { addView(grid) }).setNegativeButton("취소", null).create()
         val w = (resources.displayMetrics.widthPixels - dp(80)) / 3
         ps.forEach { p ->
@@ -520,7 +520,7 @@ class TripActivity : Activity() {
         val progressText = Ui.text(this, 15f, Ui.TEXT, false, "0 / ${uris.size}장").apply {
             setPadding(dp(24), dp(16), dp(24), dp(8))
         }
-        val progress = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val progress = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("사진 가져오는 중")
             .setView(progressText)
             .setCancelable(false)
@@ -554,7 +554,7 @@ class TripActivity : Activity() {
             }
         }
         val matched = list.count { it.catchTime != null }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("사진 ${list.size}장 중 ${matched}장 자동 매칭")
             .setMessage(sb.toString().trim() + if (picked > list.size) "\n\n(${picked - list.size}장은 읽지 못했어요)" else "")
             .setPositiveButton("확정") { _, _ -> Store.addPhotos(tripId, list) }
@@ -575,7 +575,7 @@ class TripActivity : Activity() {
             setImageBitmap(bmp)
             setOnClickListener { ZoomImageView.show(this@TripActivity, bmp, title) }
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(title)
             .setView(iv)
             .setPositiveButton("닫기", null)
@@ -591,7 +591,7 @@ class TripActivity : Activity() {
         if (t.catches.isEmpty()) return
         val sorted = if (p.time > 0) t.catches.sortedBy { abs(it.time - p.time) } else t.catches.toList()
         val labels = sorted.map { "${tf.format(Date(it.time))} ${t.name(it.slot)}" + if (t.photoOf(it) != null) " (사진 있음)" else "" } + "조과에서 떼기"
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("어느 조과의 사진인가요?")
             .setItems(labels.toTypedArray()) { _, i ->
                 p.catchTime = if (i < sorted.size) sorted[i].time else null
@@ -614,7 +614,7 @@ class TripActivity : Activity() {
             setOnClickListener { showDropDown() }
         }
         box.addView(boat); box.addView(port)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("배와 항구")
             .setView(box)
             .setPositiveButton("저장") { _, _ -> Store.setPlace(t.id, boat.text.toString(), port.text.toString()) }
@@ -628,7 +628,7 @@ class TripActivity : Activity() {
         BigList.show(this, "버튼 $slot 어종 (${Store.catLabel(cat)})", list, listOf("+ 새 어종 추가")) { i, label ->
             if (i < list.size) { Store.renameInTrip(t.id, slot, label); return@show }
             val input = EditText(this).apply { hint = "어종 이름"; inputType = InputType.TYPE_CLASS_TEXT }
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("${Store.catLabel(cat)} 어종 추가")
                 .setView(input)
                 .setPositiveButton("추가") { _, _ ->
@@ -643,7 +643,7 @@ class TripActivity : Activity() {
     private fun askUnpublish(t: Store.Trip) {
         val myId = Cloud.uid
         if (myId == null || Cloud.active == null) { Toast.makeText(this, "로그인하고 그룹을 선택해 주세요", Toast.LENGTH_LONG).show(); return }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("'${Cloud.active?.name}' 그룹에서 이 출조를 내릴까요?")
             .setMessage("친구들 화면에서 사라지고, 내 폰 기록과 백업은 그대로예요")
             .setPositiveButton("내리기") { _, _ ->
@@ -656,7 +656,7 @@ class TripActivity : Activity() {
     }
 
     private fun askDelete(t: Store.Trip) {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("이 출조 기록을 삭제할까요?")
             .setMessage("내 폰 · 서버 백업 · 올린 그룹 · 전체 게시판에서 같이 지워져요.\n휴지통(☰ 메뉴 → 🗑 휴지통)에 30일 보관돼서 그 안에는 복구할 수 있어요.")
             .setPositiveButton("삭제") { _, _ ->

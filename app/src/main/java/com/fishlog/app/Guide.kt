@@ -31,14 +31,14 @@ object Guide {
         Page(R.drawable.guide_g4_end, "5. 출조 종료 → 기록 확인",
             "출조 중엔 버튼이 빨간 '출조 종료'로 바뀌어요.\n끝내면 기록 화면에서 이용료·준비물을 바로 적고, 시간대별로 몇 마리·사진 몇 장인지 봐요."),
         Page(R.drawable.guide_g5_menu, "6. 메뉴",
-            "맨 아래: 🌊 전체 조황 · 포인트 게시판, 🟢 지금 출조 중, 그룹, ☰ 메뉴(지난 출조 · 사용 설명서 · 📋 업데이트 내역 · 휴지통).\n맨 위: 그룹 · 조과기록 · ⚙ 개인 설정, 그 아래 줄: 🎒 가방(재고표) · 🗺 지도 · 📅 일정 · 💬 채팅 · ✉ 문의.\n새 버전이 나오면 큰 창으로 알려줘요.")
+            "맨 아래: 🌊 전체 조황 · 포인트 게시판, 🟢 지금 출조 중, 그룹, ☰ 메뉴(지난 출조 · 사용 설명서 · 📋 업데이트 내역 · 휴지통).\n맨 위: 그룹 · 조과기록 · ⚙ 개인 설정, 그 아래 줄: 🎒 가방(재고표) · 🗺 지도 · 🎣 출조추천(좋은 날 달력) · 💬 채팅 · ✉ 관리자 문의.\n새 버전이 나오면 큰 창으로 알려줘요.")
     )
 
     /** 처음 안내 (넘겨 보기). onDone = 다 봤을 때 */
     fun show(a: Activity, onDone: (() -> Unit)? = null) {
         if (a.isFinishing) return
         fun dp(v: Int) = Ui.dp(a, v)
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFullZoom)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(16), dp(16), dp(16), dp(14)) }
         val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val step = Ui.text(a, 13f, Ui.SUB, true, "")

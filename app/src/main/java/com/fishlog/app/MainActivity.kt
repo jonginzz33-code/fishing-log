@@ -127,6 +127,7 @@ class MainActivity : Activity() {
     private lateinit var chatBtn: TextView
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
+    private var stationsSynced = false
     private lateinit var inqBadge: TextView
     private lateinit var headIcon: android.widget.FrameLayout
     private lateinit var headGroupName: TextView
@@ -147,15 +148,47 @@ class MainActivity : Activity() {
     }
     private val chatListener: () -> Unit = { paintChat(); renderGroupPanel() }
 
+    /** 메인 둘째 줄 칸 글씨: 큰 이름 + 작은 설명 (191) · 기본 글씨 11 기준으로 이름 16.5 (4글자 이상 15) */
+    private fun headTwo(big: String, small: String, smallColor: Int?): CharSequence = android.text.SpannableStringBuilder("$big\n").apply {
+        val name = big.substringAfter(' ')
+        val e = length - 1
+        setSpan(android.text.style.RelativeSizeSpan(if (name.length >= 4) 15f / 11f else 16.5f / 11f), 0, e, 0)
+        setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, e, 0)
+        val s0 = length; append(small)
+        if (smallColor != null) setSpan(android.text.style.ForegroundColorSpan(smallColor), s0, length, 0)
+    }
+
+    /** 칸 폭보다 이름이 길면 (작은 폰 · 화면 크기 설정) 글씨만 조금씩 줄임 · 칸 크기는 그대로 */
+    private fun fitHead(t: TextView) {
+        var base = -1f
+        var lastW = -1
+        t.addOnLayoutChangeListener { v, l, _, r, _, _, _, _, _ ->
+            val tv = v as TextView
+            if (r - l == lastW) return@addOnLayoutChangeListener
+            lastW = r - l
+            if (base < 0) base = tv.textSize
+            tv.post {
+                tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, base)
+                fun shrink(n: Int) {
+                    val lay = tv.layout ?: return
+                    val avail = tv.width - tv.paddingLeft - tv.paddingRight
+                    var widest = 0f
+                    for (i in 0 until lay.lineCount) widest = maxOf(widest, lay.getLineWidth(i))
+                    val over = lay.lineCount > 2 || widest > avail + 0.5f || (0 until lay.lineCount).any { lay.getEllipsisCount(it) > 0 }
+                    if (over && n < 6) { tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, tv.textSize * 0.93f); tv.post { shrink(n + 1) } }
+                }
+                tv.post { shrink(0) }
+            }
+        }
+    }
+
     /** 채팅 버튼: 접속 인원 + 안 읽은 글 수 */
     private fun paintChat() {
         if (!::chatBtn.isInitialized) return
         val gold = Color.parseColor("#F2C14E")
-        chatBtn.text = android.text.SpannableStringBuilder("💬 채팅\n").apply {
+        chatBtn.text = android.text.SpannableStringBuilder(headTwo("💬 채팅",
+            if (Cloud.user == null) "로그인" else if (chatOnline > 0) "접속 ${chatOnline}명" else "실시간", gold)).apply {
             setSpan(android.text.style.ForegroundColorSpan(gold), 0, length, 0)
-            val s0 = length; append(if (Cloud.user == null) "로그인" else if (chatOnline > 0) "접속 ${chatOnline}명" else "실시간")
-            setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
-            setSpan(android.text.style.ForegroundColorSpan(gold), s0, length, 0)
         }
         val n = if (Cloud.user == null) 0 else Chat.totalUnread()
         chatBadge.text = if (n > 99) "99+" else "$n"
@@ -239,6 +272,7 @@ class MainActivity : Activity() {
         if (Cloud.user != null) {
             Chat.start(chatListener)
             Chat.startPresence { n -> chatOnline = n; paintChat() }
+            if (!stationsSynced) { stationsSynced = true; StationAdmin.sync(this) }
         }
         Milestone.addListener(milestoneListener)
         if (Store.current != null) { Live.sync(); Live.watch() }
@@ -387,17 +421,15 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(2) })
         col.addView(header)
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
-        fun two(big: String, small: String, smallColor: Int?) = android.text.SpannableStringBuilder("$big\n").apply {
-            val s0 = length; append(small)
-            setSpan(android.text.style.AbsoluteSizeSpan(9, true), s0, length, 0)
-            if (smallColor != null) setSpan(android.text.style.ForegroundColorSpan(smallColor), s0, length, 0)
-        }
+        // v4.2 (191): 칸 크기는 그대로 · 글씨만 크게 (이름 16.5 · 4글자 15 · 작은 글씨 11) · 칸보다 길면 알아서 줄임
+        fun two(big: String, small: String, smallColor: Int?) = headTwo(big, small, smallColor)
         fun cell(v: View, last: Boolean = false): android.widget.FrameLayout = android.widget.FrameLayout(this).apply {
             clipChildren = false; clipToPadding = false; setPadding(0, dp(8), if (last) 0 else dp(5), 0)
             addView(v, android.widget.FrameLayout.LayoutParams(MATCH, dp(50)))
         }
         fun styled(t: TextView, fill: Int, stroke: Int, textColor: Int = Ui.TEXT) = t.apply {
-            textSize = 13.5f; setTextColor(textColor); setLineSpacing(0f, 0.95f); setPadding(dp(2), dp(2), dp(2), dp(2)); maxLines = 2
+            textSize = 11f; setTextColor(textColor); setLineSpacing(0f, 0.92f); setPadding(dp(1), dp(1), dp(1), dp(1)); maxLines = 2
+            fitHead(this)
             background = Ui.bg(this@MainActivity, fill, 12, stroke)
         }
         // 🎒 가방 (나만의 재고표)
@@ -406,13 +438,13 @@ class MainActivity : Activity() {
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
         // 🗺 지도 (바다색으로 채워 강조 · 182)
         btnRow.addView(cell(styled(smallBtn("") { openMap() }, Color.parseColor("#1F6E96"), Color.parseColor("#7FD3E8"), Color.WHITE).apply {
-            text = two("🗺 지도", "그룹·현위치", Color.parseColor("#D6F3FF"))
+            text = two("🗺 지도", "현위치", Color.parseColor("#D6F3FF"))
             background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
                 intArrayOf(Color.parseColor("#2E8FB8"), Color.parseColor("#1C5F86"))).apply { cornerRadius = dp(12).toFloat(); setStroke(dp(1), Color.parseColor("#7FD3E8")) }
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
         // 📅 일정 (물때 달력)
         btnRow.addView(cell(styled(smallBtn("") { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }, Ui.CARD, Color.parseColor("#FFB27A")).apply {
-            text = two("📅 일정", "물때 좋은 날", Color.parseColor("#FFB27A"))
+            text = two("🎣 출조추천", "좋은 날", Color.parseColor("#FFB27A"))
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
         // 💬 채팅 (안 읽은 글은 빨간 숫자)
         chatBtn = styled(smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }, Color.parseColor("#2A2310"), Color.parseColor("#F2C14E"))
@@ -430,7 +462,7 @@ class MainActivity : Activity() {
         val inqBox = cell(styled(smallBtn("") {
             if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
             else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
-        }, Color.parseColor("#1E1A3A"), Color.parseColor("#7C6BD6"), purple).apply { text = two("✉ 문의", "관리자 1:1", null) }, last = true)
+        }, Color.parseColor("#1E1A3A"), Color.parseColor("#7C6BD6"), purple).apply { text = two("✉ 관리자", "문의", null) }, last = true)
         inqBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
@@ -487,7 +519,7 @@ class MainActivity : Activity() {
                 fun draw() { box.removeAllViews(); liveScopeViews(box) { draw() } }
                 draw()
                 val before = Store.liveScope + Store.liveGroups + Store.liveLoc
-                AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this@MainActivity, R.style.FlAlert)
                     .setTitle("내 출조 알리기")
                     .setView(ScrollView(this@MainActivity).apply { addView(box) })
                     .setPositiveButton("확인", null)
@@ -865,13 +897,13 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(WRAP, dp(32)))
             if (code != null) r.addView(small("✎") {
                 val e = android.widget.EditText(this).apply { setText(nm); hint = "예: 위 큰 버튼, 왼쪽 동그라미"; setSingleLine() }
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("리모컨 ${n}번 버튼 이름").setView(e)
                     .setPositiveButton("저장") { _, _ -> Store.setKeyName(n, e.text.toString().take(12)); renderMethods() }
                     .setNegativeButton("취소", null).show()
             }, LinearLayout.LayoutParams(dp(34), dp(32)).apply { leftMargin = dp(4) })
             if (code != null || (n == rows && n > 1)) r.addView(small("✕") {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle(if (code != null) "리모컨 ${n}번 등록을 지울까요?" else "${n}번 줄을 뺄까요?")
                     .setPositiveButton("지우기") { _, _ ->
                         if (code != null) { Store.setKey(n, null); Store.setKeyName(n, "") }
@@ -989,7 +1021,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER
                 background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.BLUE)
                 setOnClickListener {
-                    AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(this@MainActivity, R.style.FlAlert)
                         .setTitle(help.first).setMessage(help.second).setPositiveButton("알겠어요", null).show()
                 }
             }, LinearLayout.LayoutParams(dp(32), dp(32)).apply { leftMargin = dp(8) })
@@ -1183,7 +1215,7 @@ class MainActivity : Activity() {
                     pill(gLabel, pg != null) {
                         if (checked.isEmpty()) { showMessage("위에서 올릴 그룹을 먼저 체크해 주세요"); return@pill }
                         if (checked.size == 1) { pubChoice = checked[0].id; return@pill }
-                        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        AlertDialog.Builder(this, R.style.FlAlert)
                             .setTitle("게시판에 보일 그룹 (올릴 그룹 중)")
                             .setItems(checked.map { it.title }.toTypedArray()) { _, i -> pubChoice = checked[i].id; drawOpts() }
                             .show()
@@ -1225,7 +1257,7 @@ class MainActivity : Activity() {
             // 제목이 길어도 잘리지 않게 직접 만든 제목
             val titleView = Ui.text(this, 19f, Ui.TEXT, true, titleText0()).apply { setPadding(dp(22), dp(20), dp(22), dp(4)) }
             titleRef = titleView
-            val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            val dlg = AlertDialog.Builder(this, R.style.FlAlert)
                 .setCustomTitle(titleView)
                 .setView(ScrollView(this).apply { addView(box) })
                 .setPositiveButton(okLabel()) { _, _ ->
@@ -1275,7 +1307,7 @@ class MainActivity : Activity() {
             r.addView(Ui.text(this, 13f, if (on) Ui.GREEN else Color.parseColor("#FF8A92"), true, if (on) "켜짐" else "꺼짐"))
             box.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
         }
-        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("📍 위치가 꺼져 있어요")
             .setView(box)
             .setPositiveButton("켜러 가기") { _, _ ->
@@ -1326,21 +1358,79 @@ class MainActivity : Activity() {
             setOnFocusChangeListener { _, has -> if (has && items.isNotEmpty()) post { showDropDown() } }
         }
 
-    /** 배·항구 입력. tripId == null 이면 새 출조 시작 */
+    private fun tripPrefs() = getSharedPreferences("fishlog", MODE_PRIVATE)
+    /** 위치 공유 쓸 수 있나 (앱 위치 사용 + 위치 권한) */
+    private fun locShareOk() = Store.appLoc && Tracker.granted(this)
+
+    /**
+     * 배·항구 입력. tripId == null 이면 새 출조 시작 (v4.2 · 193 · 194)
+     *  - 순서: 버튼(취소 · 건너뛰기 · ▶ 출조 시작) → 배 · 항구 (나란히) → 출조 종류 → 내 출조 알리기
+     *  - 처음: 그룹에 알리기 + 내 그룹 모두 체크 · 위치 권한이 있으면 📍 위치 공유 자동 체크, 없으면 자동 해제
+     *  - 한 번 출조를 시작하면 이 창 내용(종류 · 알리기 · 그룹 · 위치 공유 · 배 · 항구)을 다음 기본값으로 기억
+     */
     private fun askPlace(tripId: Long?) {
         val t = tripId?.let { Store.find(it) }
+        val tp = tripPrefs()
+        val saved = tp.getBoolean("tripSetupSaved", false)
+        if (tripId == null) {
+            if (!saved) {
+                Store.liveScope = "groups"
+                if (Store.liveGroups == null) Store.liveGroups = setOf("*")
+            }
+            // 위치 공유는 열 때마다 권한을 다시 확인: 권한 있으면 내가 고른 값(처음엔 체크), 없으면 해제
+            Store.liveLoc = if (locShareOk()) tp.getBoolean("liveLocWant", true) else false
+        }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
+            setPadding(dp(20), dp(8), dp(20), dp(8))
         }
-        // 출조 시작: 지금 그룹의 출조 종류를 눌러서 고르기
+        var dlg: AlertDialog? = null
+        // 칸 위 작은 제목 + 칸 안 흐린 예시 (새 출조면 지난번 적은 배 · 항구)
+        val boat0 = t?.boat ?: (if (saved) tp.getString("lastBoat", null) else null) ?: Store.boats().firstOrNull() ?: ""
+        val port0 = t?.port ?: (if (saved) tp.getString("lastPort", null) else null) ?: Store.ports().firstOrNull() ?: ""
+        val boat = suggestField("예: 테티스호", Store.boats(), boat0)
+        val port = suggestField("예: 영흥도 진두항", Store.ports(), port0)
+
+        fun remember(b: String?, p: String?) {
+            tp.edit().apply {
+                putBoolean("tripSetupSaved", true)
+                if (locShareOk()) putBoolean("liveLocWant", Store.liveLoc)
+                if (b != null) { putString("lastBoat", b); putString("lastPort", p ?: "") }
+            }.apply()
+            if (Store.liveScope != "none") Consent.setShareLive(this, true)
+        }
+
         if (tripId == null) {
+            // ① 버튼 맨 위
+            val br = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            br.addView(Ui.button(this, "취소") { dlg?.dismiss() }.apply { minHeight = dp(46); textSize = 14f },
+                LinearLayout.LayoutParams(0, WRAP, 0.85f))
+            br.addView(Ui.button(this, "건너뛰기") { dlg?.dismiss(); remember(null, null); startTrip("", "") }.apply { minHeight = dp(46); textSize = 14f },
+                LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
+            br.addView(Ui.button(this, "▶ 출조 시작", filled = true) {
+                val bt = boat.text.toString().trim(); val pt = port.text.toString().trim()
+                dlg?.dismiss(); remember(bt, pt); startTrip(bt, pt)
+            }.apply { minHeight = dp(46); textSize = 15f; background = Ui.bg(this@MainActivity, Ui.GREEN, 14) },
+                LinearLayout.LayoutParams(0, WRAP, 1.4f).apply { leftMargin = dp(6) })
+            box.addView(br)
+            // ② 배 · 항구 나란히
+            val pr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            fun fieldCol(label: String, f: View) = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(Ui.text(this@MainActivity, 12f, Ui.SUB, false, label))
+                addView(f, Ui.lp(this@MainActivity, MATCH, WRAP))
+            }
+            pr.addView(fieldCol("🚤 배 이름 · 포인트", boat), LinearLayout.LayoutParams(0, WRAP, 1f))
+            pr.addView(fieldCol("⚓ 항구 · 주요 장소", port), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+            box.addView(pr, Ui.lp(this, MATCH, WRAP, top = 14))
+            box.addView(Ui.text(this, 11f, Ui.SUB, false, "한 번 적은 이름은 목록에 저장돼서 다음부터 눌러서 골라요"), Ui.lp(this, MATCH, WRAP, top = 2))
+            // ③ 출조 종류
             val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             val g = if (Cloud.user == null) null else Cloud.active
             if (g != null) head.addView(GroupIcon.view(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(8) })
             head.addView(Ui.text(this, 14f, Ui.TEXT, true, "출조 종류"))
             head.addView(Ui.text(this, 12f, Ui.SUB, false, if (g != null) "  · ${g.title}의 종류" else "  · 전체 종류"))
-            box.addView(head)
+            box.addView(head, Ui.lp(this, MATCH, WRAP, top = 14))
             val cats = visibleCats()
             val chipBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             fun drawChips() {
@@ -1361,42 +1451,41 @@ class MainActivity : Activity() {
             }
             drawChips()
             box.addView(chipBox, Ui.lp(this, MATCH, WRAP, top = 2))
+            // ④ 🟢 내 출조 알리기
+            if (Cloud.user != null && Cloud.groups.isNotEmpty()) {
+                val scopeBox = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(10), dp(10), dp(10))
+                    background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.GREEN)
+                }
+                fun drawScope() {
+                    scopeBox.removeAllViews()
+                    scopeBox.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "🟢 내 출조 알리기"))
+                    liveScopeViews(scopeBox) { drawScope() }
+                    scopeBox.addView(Ui.text(this, 11f, Ui.SUB, false,
+                        (if (saved) "지난번 출조 때 고른 대로 맞춰 놨어요" else "처음엔 그룹에 알리기 · 내 그룹 모두 체크") +
+                            " · 출조 시작을 누르면 다음에도 이대로 · 출조 중에 메인에서 바로 바꾸기"), Ui.lp(this, MATCH, WRAP, top = 6))
+                }
+                drawScope()
+                box.addView(scopeBox, Ui.lp(this, MATCH, WRAP, top = 14))
+            }
+            dlg = AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("🎣 출조 시작")
+                .setView(ScrollView(this).apply { addView(box) })
+                .show()
+            return
         }
-        // 🟢 내 출조 알리기 (출조 시작 때만)
-        val scopeBox = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.GREEN)
-        }
-        fun drawScope() {
-            scopeBox.removeAllViews()
-            scopeBox.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "🟢 내 출조 알리기"))
-            liveScopeViews(scopeBox) { drawScope() }
-            scopeBox.addView(Ui.text(this, 11f, Ui.SUB, false, "지난번 고른 대로 기억 · 출조 중에 메인에서 바로 바꾸기"), Ui.lp(this, MATCH, WRAP, top = 6))
-        }
-        if (tripId == null && Cloud.user != null && Cloud.groups.isNotEmpty()) {
-            drawScope()
-            box.addView(scopeBox, Ui.lp(this, MATCH, WRAP, top = 12))
-        }
-        // 칸 위 작은 제목 + 칸 안 흐린 예시
-        val boat = suggestField("예: 테티스호, 하나개 포인트", Store.boats(), t?.boat ?: Store.boats().firstOrNull() ?: "")
-        val port = suggestField("예: 영흥도 진두항, 하나개 주차장", Store.ports(), t?.port ?: Store.ports().firstOrNull() ?: "")
-        box.addView(Ui.text(this, 12f, Ui.SUB, false, "배 이름 · 포인트"), Ui.lp(this, MATCH, WRAP, top = if (tripId == null) 14 else 0))
+        // 출조 중 · 지난 출조: 배와 항구 수정
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "🚤 배 이름 · 포인트"))
         box.addView(boat)
-        box.addView(Ui.text(this, 12f, Ui.SUB, false, "항구 · 주요 장소"), Ui.lp(this, MATCH, WRAP, top = 10))
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "⚓ 항구 · 주요 장소"), Ui.lp(this, MATCH, WRAP, top = 10))
         box.addView(port)
-        val b = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(if (tripId == null) "출조 시작 · 배와 항구" else "배와 항구 수정")
+        AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle("배와 항구 수정")
             .setMessage("한 번 적은 이름은 목록에 저장돼서 다음부터 고를 수 있어요")
             .setView(ScrollView(this).apply { addView(box) })
-        if (tripId == null) {
-            b.setPositiveButton("출조 시작") { _, _ -> startTrip(boat.text.toString(), port.text.toString()) }
-            b.setNeutralButton("건너뛰기") { _, _ -> startTrip("", "") }
-            b.setNegativeButton("취소", null)
-        } else {
-            b.setPositiveButton("저장") { _, _ -> Store.setPlace(tripId, boat.text.toString(), port.text.toString()) }
-            b.setNegativeButton("취소", null)
-        }
-        b.show()
+            .setPositiveButton("저장") { _, _ -> Store.setPlace(tripId, boat.text.toString(), port.text.toString()) }
+            .setNegativeButton("취소", null)
+            .show()
     }
 
     /** 버튼 어종: 지금 출조 종류의 어종 목록에서 고르기 */
@@ -1414,7 +1503,7 @@ class MainActivity : Activity() {
 
     private fun askNewSpecies(cat: String, then: ((String) -> Unit)? = null) {
         val input = EditText(this).apply { hint = "어종 이름"; inputType = InputType.TYPE_CLASS_TEXT }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${Store.catLabel(cat)} 어종 추가" + if (Cloud.isAdmin) " (모든 사용자)" else " (내 목록)")
             .setView(input)
             .setPositiveButton("추가") { _, _ ->
@@ -1435,7 +1524,7 @@ class MainActivity : Activity() {
         BigList.show(this, "${Store.catLabel(cat)} 어종 (눌러서 순서·삭제)", list, listOf("+ 새 어종 추가")) { i, label ->
             if (i >= list.size) { askNewSpecies(cat) { manageSpecies(cat) }; return@show }
             val opts = arrayOf("위로 올리기", "아래로 내리기", "삭제")
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle(label)
                 .setItems(opts) { _, w ->
                     val l = Store.adminSpecies(cat).toMutableList()
@@ -1463,7 +1552,7 @@ class MainActivity : Activity() {
         if (hidden.isNotEmpty()) tail.add("↺ 지운 어종 다시 보이기 (${hidden.size})")
         BigList.show(this, "내 ${Store.catLabel(cat)} 어종 (눌러서 지우기)", labels, tail) { i, _ ->
             when {
-                i < list.size -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                i < list.size -> AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("'${list[i]}'을(를) 내 목록에서 지울까요?")
                     .setMessage("내 폰에서만 안 보여요 · 다른 사람 목록과 지난 기록은 그대로 · 나중에 다시 보이게 할 수 있어요")
                     .setPositiveButton("지우기") { _, _ -> Store.removeMySpecies(cat, list[i]); manageMySpecies(cat) }
@@ -1770,7 +1859,7 @@ class MainActivity : Activity() {
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(8)) }
         (content.parent as? android.view.ViewGroup)?.removeView(content)
         wrap.addView(content, Ui.lp(this, MATCH, WRAP))
-        val dlg = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(title)
             .setView(ScrollView(this).apply { addView(wrap) })
             .setPositiveButton("닫기", null)
@@ -1892,7 +1981,7 @@ class MainActivity : Activity() {
             box.addView(Ui.text(this, 11f, Ui.SUB, false, "출조를 알리기로 한 사람만 보여요 · 📍 = 위치 공유 중 (누르면 그 사람 위치 지도)"), Ui.lp(this, MATCH, WRAP, top = 10))
         }
         draw(Live.allCached())
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🟢 지금 출조 중")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("닫기", null).show()
@@ -1965,9 +2054,9 @@ class MainActivity : Activity() {
             val r = Ui.row(this).apply {
                 setPadding(dp(4), dp(10), 0, dp(2)); isClickable = true
                 setOnClickListener {
-                    if (on) { Store.liveLoc = false; redraw() }
+                    if (on) { Store.liveLoc = false; tripPrefs().edit().putBoolean("liveLocWant", false).apply(); redraw() }
                     // 켤 때 위치가 꺼져 있으면 안내 → 켜고 돌아오면 체크
-                    else checkLocation("위치 없이 마릿수만 공유", { Store.liveLoc = true; redraw() }) { Store.liveLoc = false; redraw() }
+                    else checkLocation("위치 없이 마릿수만 공유", { Store.liveLoc = true; tripPrefs().edit().putBoolean("liveLocWant", true).apply(); redraw() }) { Store.liveLoc = false; redraw() }
                 }
             }
             r.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.SUB, true, if (on) "✓" else "").apply {
@@ -1976,6 +2065,8 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(22), dp(22)))
             val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             tx.addView(Ui.text(this, 14f, Ui.TEXT, true, "📍 위치 공유하기"))
+            if (!locShareOk()) tx.addView(Ui.text(this, 11f, Color.parseColor("#FFB27A"), false,
+                if (!Store.appLoc) "앱 위치 사용이 꺼져 있어서 자동으로 해제했어요 · 누르면 켜러 가기" else "위치 권한이 없어서 자동으로 해제했어요 · 누르면 권한 허용하기"))
             tx.addView(Ui.text(this, 11f, Ui.SUB, false,
                 if (on) "그룹 사람들이 '지금 출조 중'에서 눌러 지도로 내 위치를 볼 수 있어요" + (if (scope == "public") " (전체 공유는 동네 이름만)" else "")
                 else "끄면 '출조 중'과 마릿수만 보이고 지도엔 안 나와요"))
@@ -2044,20 +2135,21 @@ class MainActivity : Activity() {
     /** 총관리자 메뉴 */
     private fun openAdminMenu() {
         if (!Cloud.isAdmin) return
-        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)")
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val items = listOf("✉ 1:1 문의함", "👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제")
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
                 when (i) {
                     0 -> startActivity(Intent(this, InquiryActivity::class.java))
                     1 -> startActivity(Intent(this, AdminActivity::class.java))
                     2 -> speciesBtn.performClick()
-                    3 -> AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    3 -> AlertDialog.Builder(this, R.style.FlAlert)
                         .setTitle("전체 채팅방을 초기화할까요?")
                         .setMessage("전체 채팅방 글만 모두 지워요. 그룹 채팅방과 1:1 문의방은 그대로예요. 되돌릴 수 없어요.")
                         .setPositiveButton("초기화") { _, _ -> Chat.resetAll { err -> showMessage(err ?: "전체 채팅방을 초기화했어요") } }
                         .setNegativeButton("취소", null).show()
                     4 -> Zones.openAdmin(this)
+                    5 -> StationAdmin.open(this)
                     else -> {}
                 }
             }
@@ -2214,7 +2306,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     if (on) return@setOnClickListener
                     if (Store.current != null && Store.current?.catches?.isNotEmpty() == true)
-                        AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        AlertDialog.Builder(this@MainActivity, R.style.FlAlert)
                             .setTitle("'${gr.name}' 그룹으로 바꿀까요?")
                             .setMessage("지금 출조는 종료할 때 바뀐 그룹에 올라가요")
                             .setPositiveButton("바꾸기") { _, _ -> groupSwitchOpen = false; Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요") }
@@ -2301,7 +2393,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER; minHeight = dp(46)
                 background = Ui.bg(this@MainActivity, Color.parseColor("#B3262F"), 99)
                 setOnClickListener {
-                    AlertDialog.Builder(this@MainActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(this@MainActivity, R.style.FlAlert)
                         .setTitle("'${g.title}'에서 탈퇴할까요?")
                         .setMessage("그룹 채팅에 탈퇴 알림이 남고, 이 그룹의 공지·일정·출조 기록을 더 볼 수 없어요. 내 폰 기록은 그대로예요.\n다시 들어오려면 초대 코드가 필요해요.")
                         .setPositiveButton("탈퇴") { _, _ -> Cloud.leaveGroup(g) { err -> showMessage(err ?: "탈퇴했어요"); renderGroupPanel() } }
@@ -2353,7 +2445,7 @@ class MainActivity : Activity() {
             String.format(Locale.KOREA, "%s · %s %d · %s %d · 약 %.0fm", m.name,
                 m.names.getOrElse(0) { "1번" }, m.c1, m.names.getOrElse(1) { "2번" }, m.c2, m.meters)
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("같이 출조 중")
             .setMessage(msg)
             .setPositiveButton("확인", null).show()
@@ -2361,7 +2453,7 @@ class MainActivity : Activity() {
 
     /** 워치 기록을 켰을 때: 워치 음악 화면 자동 실행 설정 안내 */
     private fun showWatchGuide() {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("갤럭시 워치로 기록")
             .setMessage("출조 중에 워치의 음악(미디어 컨트롤러) 화면에서\n⏮ (왼쪽) = 1번 어종 +1, ⏭ (오른쪽) = 2번 어종 +1\n\n" +
                 "출조를 시작하면 워치에 음악 화면이 자동으로 뜨게 하려면:\n" +

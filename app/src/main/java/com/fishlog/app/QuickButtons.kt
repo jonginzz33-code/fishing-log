@@ -151,7 +151,7 @@ class QuickButtons(
     /** 퀵 버튼 관리: 순서(▲▼) · 크기 · 색 · 어종 바꾸기 · 삭제 · 추가 */
     fun manage() {
         val wrap = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(4), dp(16), dp(8)) }
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("퀵 버튼 (${Store.catLabel(Store.category)})")
             .setView(ScrollView(a).apply { addView(wrap) })
             .setPositiveButton("닫기", null).create()
@@ -186,7 +186,7 @@ class QuickButtons(
                 r.addView(Ui.text(a, 14f, Color.parseColor("#FF8A92"), true, "🗑").apply {
                     gravity = Gravity.CENTER
                     setOnClickListener {
-                        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        AlertDialog.Builder(a, R.style.FlAlert)
                             .setMessage("'${q.name}' 퀵 버튼을 지울까요? (지난 기록은 그대로 남아요)")
                             .setPositiveButton("삭제") { _, _ -> l.remove(q); Store.saveQuick(l); draw(); render() }
                             .setNegativeButton("취소", null).show()

@@ -109,7 +109,7 @@ object WxView {
             box.addView(Ui.text(a, 14f, Ui.TEXT, true, summary(snap, start, end)))
             box.addView(table(a, snap, start, end), Ui.lp(a, MATCH, WRAP, top = 10))
         }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle(title).setView(ScrollView(a).apply { addView(box) }).setPositiveButton("닫기", null).show()
     }
 }

@@ -99,7 +99,7 @@ class InquiryActivity : Activity() {
         if (Cloud.isAdmin && room != null && room != Cloud.uid) top.addView(Ui.text(this, 13f, Color.parseColor("#FF8A92"), true, "방 지우기").apply {
             setPadding(dp(8), dp(6), dp(4), dp(6))
             setOnClickListener {
-                AlertDialog.Builder(this@InquiryActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this@InquiryActivity, R.style.FlAlert)
                     .setMessage("이 1:1 문의방을 통째로 지울까요? 되돌릴 수 없어요")
                     .setPositiveButton("지우기") { _, _ -> Inquiry.deleteRoom(room!!) { e -> toast(e ?: "지웠어요"); finish() } }
                     .setNegativeButton("취소", null).show()

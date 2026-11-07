@@ -104,7 +104,7 @@ object Inventory {
         fun dp(v: Int) = Ui.dp(a, v)
         var cats = load(a)
         var cur: Cat? = null
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         root.addView(top)
@@ -116,7 +116,7 @@ object Inventory {
             hint = h; setText(v); setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); setSingleLine()
             if (num) inputType = InputType.TYPE_CLASS_NUMBER
         }
-        fun confirm(msg: String, ok: () -> Unit) = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        fun confirm(msg: String, ok: () -> Unit) = AlertDialog.Builder(a, R.style.FlAlert)
             .setMessage(msg).setPositiveButton("삭제") { _, _ -> ok() }.setNegativeButton("취소", null).show()
 
         /** 카테고리 추가 · 수정 (이름 + 그림) */
@@ -138,7 +138,23 @@ object Inventory {
             }
             paintIcons()
             f.addView(Ui.hscroll(a, row, Color.parseColor("#2B2B2B")), Ui.lp(a, MATCH, WRAP, top = 8))
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(if (c == null) "＋ 카테고리 추가" else "카테고리 수정")
+            if (c != null) {
+                // 순서 바꾸기 (누르면 바로 옮겨짐)
+                val mv = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                mv.addView(Ui.text(a, 12.5f, Ui.SUB, false, "순서"), LinearLayout.LayoutParams(0, WRAP, 1f))
+                fun mvBtn(t: String, d: Int) = Ui.text(a, 13f, Ui.TEXT, true, t).apply {
+                    gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener {
+                        val i = cats.indexOf(c); val j = i + d
+                        if (i < 0 || j < 0 || j >= cats.size) { toast(a, if (d < 0) "맨 위예요" else "맨 아래예요"); return@setOnClickListener }
+                        cats.removeAt(i); cats.add(j, c); save(a, cats); render(); toast(a, if (d < 0) "위로 옮겼어요" else "아래로 옮겼어요")
+                    }
+                }
+                mv.addView(mvBtn("▲ 위로", -1), LinearLayout.LayoutParams(dp(84), dp(36)))
+                mv.addView(mvBtn("▼ 아래로", 1), LinearLayout.LayoutParams(dp(84), dp(36)).apply { leftMargin = dp(6) })
+                f.addView(mv, Ui.lp(a, MATCH, WRAP, top = 10))
+            }
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle(if (c == null) "＋ 카테고리 추가" else "카테고리 수정")
                 .setView(f)
                 .setPositiveButton("저장") { _, _ ->
                     val nm = n.text.toString().trim()
@@ -173,7 +189,7 @@ object Inventory {
             }
             it0?.subs?.forEach { addSub(it.name, it.qty) }
             f.addView(Ui.text(a, 13f, Ui.BLUE, true, "＋ 세부 추가").apply { setPadding(dp(4), dp(8), dp(4), dp(4)); setOnClickListener { addSub("", 0) } })
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(if (it0 == null) "＋ 항목 추가" else "항목 수정")
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle(if (it0 == null) "＋ 항목 추가" else "항목 수정")
                 .setView(ScrollView(a).apply { addView(f) })
                 .setPositiveButton("저장") { _, _ ->
                     val nm = n.text.toString().trim()
@@ -198,6 +214,10 @@ object Inventory {
             addView(pm("＋") { onDelta(1) }, LinearLayout.LayoutParams(dp(32), dp(32)))
         }
 
+        fun smallBtn(t: String, col: Int, onClick: () -> Unit) = Ui.text(a, 14f, col, true, t).apply {
+            gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 10, Ui.LINE); setOnClickListener { onClick() }
+        }
+
         fun renderCats() {
             top.removeAllViews()
             top.addView(Ui.text(a, 18f, Ui.TEXT, true, "🎒 내 가방"), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -211,18 +231,6 @@ object Inventory {
                     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12))
                     background = Ui.bg(a, Ui.CARD, 14)
                     setOnClickListener { cur = c; render() }
-                    setOnLongClickListener {
-                        val opts = arrayOf("✎ 이름 · 그림 바꾸기", "▲ 위로", "▼ 아래로", "🗑 삭제")
-                        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("${c.icon} ${c.name}")
-                            .setItems(opts) { _, w ->
-                                when (w) {
-                                    0 -> editCat(c)
-                                    1 -> if (i > 0) { cats.removeAt(i); cats.add(i - 1, c); save(a, cats); render() }
-                                    2 -> if (i < cats.size - 1) { cats.removeAt(i); cats.add(i + 1, c); save(a, cats); render() }
-                                    3 -> confirm("'${c.name}' 카테고리를 지울까요? (안의 항목 ${c.items.size}개도 같이)") { cats.remove(c); save(a, cats); render() }
-                                }
-                            }.show(); true
-                    }
                 }
                 r.addView(Ui.text(a, 22f, Ui.TEXT, false, c.icon).apply { gravity = Gravity.CENTER; background = Ui.bg(a, Color.parseColor("#0F2233"), 12) },
                     LinearLayout.LayoutParams(dp(42), dp(42)))
@@ -233,14 +241,18 @@ object Inventory {
                     if (lowN > 0) setTextColor(Color.parseColor("#FF8A92"))
                 })
                 r.addView(tc, LinearLayout.LayoutParams(0, WRAP, 1f))
-                r.addView(Ui.text(a, 20f, Color.parseColor("#FFB27A"), true, "›"))
+                r.addView(smallBtn("✎", Ui.TEXT) { editCat(c) }, LinearLayout.LayoutParams(dp(38), dp(36)))
+                r.addView(smallBtn("🗑", Color.parseColor("#FF8A92")) {
+                    confirm("'${c.name}' 카테고리를 지울까요? (안의 항목 ${c.items.size}개도 같이)") { cats.remove(c); save(a, cats); render() }
+                }, LinearLayout.LayoutParams(dp(38), dp(36)).apply { leftMargin = dp(6) })
+                r.addView(Ui.text(a, 20f, Color.parseColor("#FFB27A"), true, "›").apply { setPadding(dp(8), 0, 0, 0) })
                 box.addView(r, Ui.lp(a, MATCH, WRAP, top = 8))
             }
             box.addView(Ui.text(a, 14f, Ui.TEXT, true, "＋ 카테고리 추가").apply {
                 gravity = Gravity.CENTER; minHeight = dp(46); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.LINE)
                 setOnClickListener { editCat(null) }
             }, Ui.lp(a, MATCH, WRAP, top = 10))
-            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "카테고리를 꾹 누르면 이름 · 그림 바꾸기 / 순서 / 삭제").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
+            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "카테고리를 누르면 안의 항목 · ✎ = 이름 · 그림 · 순서 바꾸기 · 🗑 = 삭제").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
             // 서버 저장 · 불러오기
             val dirty = prefs(a).getBoolean("inv_dirty", false)
             val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
@@ -248,7 +260,7 @@ object Inventory {
                 minHeight = dp(44); setTextColor(Ui.GREEN); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.GREEN)
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             sr.addView(Ui.button(a, "서버에서 불러오기") {
-                AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(a, R.style.FlAlert)
                     .setMessage("서버에 저장해 둔 가방으로 바꿀까요? (지금 폰의 가방은 덮어써요)")
                     .setPositiveButton("불러오기") { _, _ -> download(a) { ok -> if (ok) { cats = load(a); cur = null; render() } } }
                     .setNegativeButton("취소", null).show()
@@ -274,7 +286,6 @@ object Inventory {
                     orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(10), dp(10))
                     background = Ui.bg(a, Ui.CARD, 14, if (it.isLow()) Color.parseColor("#E8505B") else Color.TRANSPARENT)
                     setOnClickListener { _ -> editItem(c, it) }
-                    setOnLongClickListener { _ -> confirm("'${it.name}'을(를) 지울까요?") { c.items.remove(it); save(a, cats); render() }; true }
                 }
                 val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 r.addView(Ui.text(a, 15.5f, Ui.TEXT, true, it.name), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -289,13 +300,25 @@ object Inventory {
                 }
                 val notes = listOfNotNull(it.note.takeIf { n -> n.isNotBlank() }, if (it.low > 0) (if (it.isLow()) "⚠ 부족 (${it.low}개 아래)" else "부족 기준 ${it.low}개") else null)
                 if (notes.isNotEmpty()) card.addView(Ui.text(a, 11.5f, if (it.isLow()) Color.parseColor("#FF8A92") else Ui.SUB, false, notes.joinToString(" · ")), Ui.lp(a, MATCH, WRAP, top = 4))
+                // 수정 · 삭제 (눈에 보이게)
+                val act = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+                val idx = c.items.indexOf(it)
+                if (idx > 0) act.addView(smallBtn("▲", Ui.SUB) { c.items.removeAt(idx); c.items.add(idx - 1, it); save(a, cats); render() },
+                    LinearLayout.LayoutParams(dp(34), dp(32)).apply { rightMargin = dp(6) })
+                if (idx < c.items.size - 1) act.addView(smallBtn("▼", Ui.SUB) { c.items.removeAt(idx); c.items.add(idx + 1, it); save(a, cats); render() },
+                    LinearLayout.LayoutParams(dp(34), dp(32)).apply { rightMargin = dp(6) })
+                act.addView(smallBtn("✎ 수정", Ui.TEXT) { editItem(c, it) }, LinearLayout.LayoutParams(dp(70), dp(32)))
+                act.addView(smallBtn("🗑 삭제", Color.parseColor("#FF8A92")) {
+                    confirm("'${it.name}'을(를) 지울까요?") { c.items.remove(it); save(a, cats); render() }
+                }, LinearLayout.LayoutParams(dp(70), dp(32)).apply { leftMargin = dp(6) })
+                card.addView(act, Ui.lp(a, MATCH, WRAP, top = 6))
                 box.addView(card, Ui.lp(a, MATCH, WRAP, top = 8))
             }
             box.addView(Ui.text(a, 14f, Ui.TEXT, true, "＋ 항목 추가").apply {
                 gravity = Gravity.CENTER; minHeight = dp(46); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.LINE)
                 setOnClickListener { editItem(c, null) }
             }, Ui.lp(a, MATCH, WRAP, top = 10))
-            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "항목을 누르면 이름 · 비고 · 세부(호수) · 부족 기준 수정 · 꾹 누르면 삭제").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
+            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "＋ − = 수량 · ✎ 수정 = 이름 · 비고 · 세부(호수) · 부족 기준 · 🗑 삭제 · ▲▼ 순서").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
         }
 
         render = {

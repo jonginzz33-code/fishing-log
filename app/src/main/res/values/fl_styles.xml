@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v4.2 (192) 창 열고 닫는 움직임: A 아래→위 (가방) · B 살짝 커지며 나타남 (확인 · 입력 창) · C 오른쪽→왼쪽 (지도 · 달력 · 물때 · 설정 · 게시판 등 큰 화면) -->
+<resources>
+    <style name="FlAnimUp">
+        <item name="android:windowEnterAnimation">@anim/fl_up_in</item>
+        <item name="android:windowExitAnimation">@anim/fl_down_out</item>
+    </style>
+    <style name="FlAnimZoom">
+        <item name="android:windowEnterAnimation">@anim/fl_zoom_in</item>
+        <item name="android:windowExitAnimation">@anim/fl_zoom_out</item>
+    </style>
+    <style name="FlAnimRight">
+        <item name="android:windowEnterAnimation">@anim/fl_right_in</item>
+        <item name="android:windowExitAnimation">@anim/fl_right_out</item>
+    </style>
+    <style name="FlAnimActivity" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/fl_right_in</item>
+        <item name="android:activityOpenExitAnimation">@anim/fl_stay_dim</item>
+        <item name="android:activityCloseEnterAnimation">@anim/fl_undim</item>
+        <item name="android:activityCloseExitAnimation">@anim/fl_right_out</item>
+    </style>
+
+    <style name="FlApp" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowAnimationStyle">@style/FlAnimActivity</item>
+    </style>
+    <style name="FlAlert" parent="@android:style/Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/FlAnimZoom</item>
+    </style>
+    <style name="FlAlertRight" parent="@android:style/Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowAnimationStyle">@style/FlAnimRight</item>
+    </style>
+    <style name="FlFull" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowAnimationStyle">@style/FlAnimRight</item>
+    </style>
+    <style name="FlFullUp" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowAnimationStyle">@style/FlAnimUp</item>
+    </style>
+    <style name="FlFullZoom" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowAnimationStyle">@style/FlAnimZoom</item>
+    </style>
+</resources>

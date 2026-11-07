@@ -168,7 +168,7 @@ class AdminActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 4))
         val r = Ui.row(this)
         r.addView(Ui.button(this, "내 버전보다 낮은 버전 막기", true) {
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("버전 ${BuildConfigInfo.VERSION}보다 옛날 앱을 막을까요?")
                 .setMessage("그 사람들은 업데이트해야 앱을 쓸 수 있어요. 새 버전이 GitHub에 올라간 뒤에 막아 주세요.")
                 .setPositiveButton("막기") { _, _ -> Cloud.setMinVersion(mine) { e -> toast(e ?: "막았어요"); load() } }
@@ -234,7 +234,7 @@ class AdminActivity : Activity() {
         val groups = Cloud.groups.count { cat.id in it.types }
         val warn = listOfNotNull(if (trips > 0) "내 폰의 출조 ${trips}개가 이 종류예요" else null,
             if (groups > 0) "이 종류를 쓰는 내 그룹이 ${groups}개 있어요" else null)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("'${cat.label}'을(를) 지울까요?")
             .setMessage((if (warn.isEmpty()) "" else warn.joinToString("\n") + "\n\n") +
                 "지운 뒤에도 지난 기록은 남고, 종류 이름만 '(지운 종류)'로 보여요.\n잠깐 빼 두려면 '숨기기'를 쓰세요.")
@@ -248,7 +248,7 @@ class AdminActivity : Activity() {
         val name = EditText(this).apply { hint = "이름 (예: 원투 낚시)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(); setText(old?.label ?: "") }
         val short = EditText(this).apply { hint = "짧은 이름 (예: 원투, 비우면 자동)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine(); setText(old?.short ?: "") }
         col.addView(name); col.addView(short)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(if (old == null) "출조 종류 추가" else "이름 바꾸기")
             .setView(col)
             .setPositiveButton("저장") { _, _ ->
@@ -311,7 +311,7 @@ class AdminActivity : Activity() {
                 LinearLayout.LayoutParams(0, WRAP, 1f))
             else btns.addView(Ui.text(this, 13f, Ui.ORANGE, true, "정지된 계정"), LinearLayout.LayoutParams(0, WRAP, 1f))
             btns.addView(Ui.button(this, "신고 초기화") {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("신고 수를 0으로 할까요?")
                     .setMessage("다시 모든 사용자의 집계에 들어가요. 각자 개인적으로 차단한 건 그대로예요.")
                     .setPositiveButton("초기화") { _, _ -> Moderation.resetReports(uid) { e -> toast(e ?: "초기화했어요"); load() } }
@@ -365,7 +365,7 @@ class AdminActivity : Activity() {
             }
             c.addView(Ui.button(this, "정지 해제") {
                 val all = listOf(b.uid) + linked.map { it.uid }
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("정지를 해제할까요?")
                     .setMessage("${b.name}" + (if (linked.isNotEmpty()) " 외 ${linked.size}개 계정" else "") +
                         (if (b.device.isNotBlank()) "과 이 폰" else "") + "의 정지가 풀려요. 앱을 다시 켜면 정상적으로 쓸 수 있어요.")
@@ -390,7 +390,7 @@ class AdminActivity : Activity() {
                 (if (extra.isNotEmpty()) "\n같은 폰으로 쓴 계정도 같이 정지: " + extra.joinToString(", ") { it.second } else "")))
         val input = EditText(this).apply { hint = "사유 메모 (선택)"; setTextColor(Ui.TEXT); inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(input, Ui.lp(this, MATCH, WRAP, top = 10))
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("$name 이용 정지")
             .setView(box)
             .setPositiveButton("정지") { _, _ ->

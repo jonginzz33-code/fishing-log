@@ -226,7 +226,7 @@ class SettingsActivity : Activity() {
                 }
             }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
             btns.addView(Ui.button(this, "✕ 지우기") {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("'${r.name}' 지울까요?").setMessage("폰에 받아 둔 구역만 지워요 (인터넷 되면 다시 볼 수 있어요)")
                     .setPositiveButton("지우기") { _, _ -> Khoa.deleteRegion(this, r); render() }
                     .setNegativeButton("취소", null).show()
@@ -236,7 +236,7 @@ class SettingsActivity : Activity() {
         }
         card.addView(Ui.text(this, 13f, Ui.TEXT, false, "전체 크기 ${Khoa.sizeText(Khoa.totalSize(this))} (지도에서 본 곳 기억 포함)").apply { gravity = Gravity.CENTER }, Ui.lp(this, MATCH, WRAP, top = 10))
         card.addView(Ui.button(this, "🗑 모두 지우기") {
-            AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("받아 둔 구역을 모두 지울까요?").setMessage("지도에서 본 곳 기억도 같이 지워져요")
                 .setPositiveButton("모두 지우기") { _, _ -> Khoa.deleteAll(this); render() }
                 .setNegativeButton("취소", null).show()
@@ -266,7 +266,7 @@ class SettingsActivity : Activity() {
                 Ui.lp(this, MATCH, WRAP, top = 6))
             card.addView(Ui.button(this, "이 닉네임으로 정하기", true) {
                 val v = input.text.toString().trim()
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("'$v'(으)로 정할까요?")
                     .setPositiveButton("정하기") { _, _ -> Cloud.setNick(v) { err -> toast(err ?: "닉네임을 '$v'(으)로 정했어요"); render() } }
                     .setNegativeButton("취소", null).show()
@@ -282,7 +282,7 @@ class SettingsActivity : Activity() {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
         val nn = EditText(this).apply { hint = "새 닉네임 (2~10자)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
         col.addView(nn)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("닉네임 바꾸기")
             .setMessage("앞으로 올리는 글·그룹·같이 출조 중에 새 이름이 보여요")
             .setView(col)

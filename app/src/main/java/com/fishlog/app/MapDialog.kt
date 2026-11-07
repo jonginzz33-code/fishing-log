@@ -115,7 +115,7 @@ object MapDialog {
             .sortedByDescending { g -> g.maxOf { it.time } }
         val days = groups.map { dayKey.format(Date(it[0].time)) }.distinct().size
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 4)) }
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("${items.size}마리 · ${days}일 · " + speciesLine(items))
             .setView(android.widget.ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
@@ -168,7 +168,7 @@ object MapDialog {
         val tv = Ui.text(a, 14f, Ui.TEXT, false, "물때 계산 중…").apply {
             setPadding(dp(a, 20), dp(a, 8), dp(a, 20), dp(a, 8)); setLineSpacing(0f, 1.35f); setTextIsSelectable(true)
         }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle(title)
             .setView(android.widget.ScrollView(a).apply { addView(tv) })
             .setPositiveButton("닫기", null)
@@ -214,7 +214,7 @@ object MapDialog {
         val counts = items.groupingBy { it.kind }.eachCount().entries.sortedByDescending { it.value }
         val title = if (items.size == 1) items[0].title
         else "${items.size}마리 · " + counts.joinToString(" · ") { "${it.key} ${it.value}" }
-        val b = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle(title)
+        val b = AlertDialog.Builder(a, R.style.FlAlert).setTitle(title)
         if (items.size > 1) b.setItems(items.map { it.title }.sorted().toTypedArray(), null)
         b.setPositiveButton("닫기", null).show()
     }
@@ -292,7 +292,7 @@ object MapDialog {
     fun show(a: Activity, title: String, layers: List<MapLayer>, legend: String,
              live: Store.Trip? = null, excludeId: Long? = null) {
         configure(a)
-        val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dialog = Dialog(a, R.style.FlFull)
         val handler = Handler(Looper.getMainLooper())
 
         val map = MapView(a).apply {
@@ -364,7 +364,7 @@ object MapDialog {
         map.overlays.add(dots)
         // 같이 출조 중인 그룹원 위치 (실시간)
         val matesOv = MatesOverlay(a) { m ->
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle(m.name + if (m.ended) " (출조 종료)" else "")
                 .setMessage("${m.names.getOrElse(0) { "1번" }} ${m.c1} · ${m.names.getOrElse(1) { "2번" }} ${m.c2}\n" +
                     (if (m.meters > 0) String.format(Locale.KOREA, "나와 약 %.0fm\n", m.meters) else "") +
@@ -519,7 +519,7 @@ object MapDialog {
             if (Cloud.groups.size > 1) modes.add("allg")
             if (Cloud.user != null) modes.add("public")
             val cur = pastModeNow()
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("지난 기록 보기")
                 .setItems(modes.map { (if (it == cur) "● " else "○ ") + pastModeLabel(it) }.toTypedArray()) { _, i ->
                     Store.pastMode = modes[i]
@@ -779,7 +779,7 @@ object MapDialog {
     fun showSpots(a: Activity, title: String, dots: List<MapDot>, radiusOf: (MapDot) -> Double, legend: String,
                   targetName: String = "가장 가까운 자리") {
         configure(a)
-        val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dialog = Dialog(a, R.style.FlFull)
         val map = MapView(a).apply {
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
@@ -849,7 +849,7 @@ object MapDialog {
     fun showPerson(a: Activity, name: String, lat: Double, lon: Double, info: String,
                    uid: String? = null, gids: List<String> = emptyList(), pub: Boolean = false) {
         configure(a)
-        val dialog = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dialog = Dialog(a, R.style.FlFull)
         val pt = GeoPoint(lat, lon)
         val map = MapView(a).apply {
             setMultiTouchControls(true)

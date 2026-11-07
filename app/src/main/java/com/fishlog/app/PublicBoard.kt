@@ -106,7 +106,7 @@ object PublicBoard {
         ensureNick(a) {
             askPrecision(a, t) { exact ->
                 if (t.photos.isEmpty()) publish(a, t, false, exact, done)
-                else AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                else AlertDialog.Builder(a, R.style.FlAlert)
                     .setTitle("사진도 같이 공개할까요?")
                     .setMessage("작은 사진 ${minOf(t.photos.size, 8)}장이 전체 게시판에 보여요. 사진 속 위치 정보는 올라가지 않아요.")
                     .setPositiveButton("사진도 공개") { _, _ -> publish(a, t, true, exact, done) }
@@ -140,7 +140,7 @@ object PublicBoard {
         group.addView(exactBtn); group.addView(approxBtn, android.widget.RadioGroup.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(a, 10) })
         group.check(if (Store.pubExact) exactBtn.id else approxBtn.id)
         box.addView(group)
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("위치를 어떻게 공개할까요?")
             .setView(box)
             .setPositiveButton("다음") { _, _ ->
@@ -155,7 +155,7 @@ object PublicBoard {
     /** 게시판 이름 = 내 닉네임 (개인 설정에서 정함) 또는 익명 */
     private fun ensureNick(a: Activity, then: () -> Unit) {
         if (Cloud.nick != null || Store.nick == "") { then(); return }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("전체 게시판에 보일 이름")
             .setMessage("아직 닉네임이 없어요. 개인 설정(⚙)에서 닉네임을 정하거나, 익명으로 올릴 수 있어요.")
             .setPositiveButton("닉네임 정하기") { _, _ -> a.startActivity(android.content.Intent(a, SettingsActivity::class.java)) }

@@ -94,7 +94,7 @@ class NoticeActivity : Activity() {
                 val r = Ui.row(this)
                 r.addView(Ui.button(this, "고치기") { edit(n) }.apply { minHeight = dp(38); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.button(this, "지우기") {
-                    AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(this, R.style.FlAlert)
                         .setTitle("이 공지를 지울까요?")
                         .setPositiveButton("지우기") { _, _ -> Cloud.deleteNotice(n.id) { e -> toast(e ?: "지웠어요"); load() } }
                         .setNegativeButton("취소", null).show()
@@ -113,7 +113,7 @@ class NoticeActivity : Activity() {
             minLines = 3; setText(old?.body ?: "")
         }
         col.addView(title); col.addView(body)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(if (old == null) "공지 쓰기" else "공지 고치기")
             .setMessage("그룹원 모두에게 빨간 숫자로 새 소식이 떠요")
             .setView(col)

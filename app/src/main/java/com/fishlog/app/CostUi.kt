@@ -93,7 +93,7 @@ object CostUi {
 
     private fun askGear(a: Activity, cat: String, then: (String) -> Unit) {
         val input = EditText(a).apply { hint = "예: 장화"; inputType = InputType.TYPE_CLASS_TEXT }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("필요한 물건 추가")
             .setMessage("다음부터 목록에 같이 나와요")
             .setView(input)
@@ -118,7 +118,7 @@ object CostUi {
     fun edit(a: Activity, t: Store.Trip, done: () -> Unit) {
         val ed = editor(a, t.cat.ifBlank { Store.category }, Store.Cost(t.paid, t.fee, t.gear.toList()))
         val wrap = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(a, 20), 0, Ui.dp(a, 20), 0); addView(ed.view) }
-        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("이용료 · 준비물")
             .setView(android.widget.ScrollView(a).apply { addView(wrap) })
             .setPositiveButton("저장") { _, _ -> save(t, ed.read()); done() }

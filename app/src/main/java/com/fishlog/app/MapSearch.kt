@@ -25,9 +25,47 @@ import java.util.Locale
  *  - 모든 지도 맨 위 왼쪽 칩 → 지명 입력 → 결과가 하나면 바로, 여럿이면 골라서 그곳으로 이동
  *  - 최근 검색 8곳 기억 (누르면 바로 이동 · ✕ 로 지우기)
  *  - v3.9.2 (162): 치는 동안 비슷한 이름 목록 (해수욕장 · 항 · 해변 · 포구 붙여서도 찾기 · 물때 지점) · 친 글자 강조
+ *  - v4.2: 폰 주소 찾기는 주소 위주라 호수 · 방파제 · 섬 이름을 잘 못 찾음 → 오픈스트리트맵 지명 검색도 같이 (예: 시화호)
+ *          (오픈스트리트맵 규칙: 1초에 1번까지 · 같은 검색어는 폰에 기억)
  */
 object MapSearch {
     private val main = Handler(Looper.getMainLooper())
+
+    // ---- 오픈스트리트맵(Nominatim) 지명 검색 ----
+    private val osmCache = HashMap<String, List<Pair<Place, String>>>()
+    @Volatile private var osmLast = 0L
+    private val osmLock = Any()
+
+    /** 백그라운드 스레드에서 호출. wait = true 면 1초 규칙을 기다려서라도 찾음, false 면 너무 빠르면 건너뜀 */
+    private fun osm(q: String, wait: Boolean): List<Pair<Place, String>>? {
+        synchronized(osmCache) { osmCache[q]?.let { return it } }
+        synchronized(osmLock) {
+            val gap = System.currentTimeMillis() - osmLast
+            if (gap < 1100) { if (!wait) return null; Thread.sleep(1100 - gap) }
+            osmLast = System.currentTimeMillis()
+        }
+        return try {
+            val url = "https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=kr&limit=8&accept-language=ko&q=" +
+                java.net.URLEncoder.encode(q, "UTF-8")
+            val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            c.connectTimeout = 10_000; c.readTimeout = 10_000
+            c.setRequestProperty("User-Agent", "FishLog/${BuildConfig.VERSION_NAME} (Android fishing log app)")
+            c.setRequestProperty("Accept-Language", "ko")
+            if (c.responseCode !in 200..299) return null
+            val arr = JSONArray(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+            val out = (0 until arr.length()).mapNotNull { i ->
+                val o = arr.getJSONObject(i)
+                val lat = o.optString("lat").toDoubleOrNull() ?: return@mapNotNull null
+                val lon = o.optString("lon").toDoubleOrNull() ?: return@mapNotNull null
+                val parts = o.optString("display_name").split(", ").map { it.trim() }
+                    .filter { it.isNotBlank() && it != "대한민국" && !it.all { ch -> ch.isDigit() || ch == '-' } }
+                val name = o.optString("name").ifBlank { parts.firstOrNull() ?: q }
+                Place(name, lat, lon) to parts.reversed().joinToString(" ")
+            }
+            synchronized(osmCache) { osmCache[q] = out }
+            out
+        } catch (_: Exception) { null }
+    }
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
     class Place(val name: String, val lat: Double, val lon: Double)
@@ -135,6 +173,12 @@ object MapSearch {
                         }
                     } catch (_: Exception) {}
                 }
+                // 오픈스트리트맵 지명 (호수 · 섬 · 방파제 등) — 직접 '찾기'를 눌렀거나, 폰 주소 찾기가 잘 못 찾았을 때
+                if (my != seq) return@Thread
+                if (!auto || found.size < 2) osm(q, wait = !auto)?.let { r ->
+                    anyOk = true
+                    found.addAll(0, r)   // 이름이 정확히 맞는 지명을 먼저
+                }
                 // 가까운 같은 곳(약 300m) 한 번만
                 val uniq = ArrayList<Pair<Place, String>>()
                 found.forEach { f -> if (uniq.none { Math.abs(it.first.lat - f.first.lat) < 0.003 && Math.abs(it.first.lon - f.first.lon) < 0.003 }) uniq.add(f) }
@@ -146,8 +190,7 @@ object MapSearch {
                     val n = stations.size + uniq.take(10).size
                     info.text = when {
                         n > 0 -> "비슷한 곳 ${n}곳 · 골라 주세요"
-                        !anyOk && Geocoder.isPresent() -> "인터넷 연결을 확인해 주세요"
-                        !Geocoder.isPresent() -> "이 폰은 장소 찾기를 지원하지 않아요"
+                        !anyOk -> "인터넷 연결을 확인해 주세요"
                         else -> "'$q'을(를) 못 찾았어요 · 시·군 이름을 같이 써 보세요 (예: 보령 오천항)"
                     }
                 }
@@ -165,7 +208,7 @@ object MapSearch {
         })
         et.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEARCH) { search(); true } else false }
         showRecent()
-        dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🔍 장소 찾기")
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("찾기", null)

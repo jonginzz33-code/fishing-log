@@ -758,7 +758,7 @@ object BigList {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(a, 16), Ui.dp(a, 4), Ui.dp(a, 16), Ui.dp(a, 4))
         }
-        val dlg = android.app.AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = android.app.AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle(title)
             .setView(android.widget.ScrollView(a).apply { addView(col) })
             .setNegativeButton("닫기", null)

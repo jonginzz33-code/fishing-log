@@ -170,7 +170,7 @@ object Trash {
         db.collection("notify").whereEqualTo("to", me).get().addOnSuccessListener { q ->
             if (q.isEmpty || a.isFinishing) return@addOnSuccessListener
             val text = q.documents.sortedBy { it.getLong("t") ?: 0L }.joinToString("\n\n") { it.getString("text") ?: "" }
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("🗑 내 조과가 삭제되었어요")
                 .setMessage(text)
                 .setPositiveButton("휴지통 보기") { _, _ -> show(a) }
@@ -191,7 +191,7 @@ object Trash {
         col.addView(Ui.text(a, 14f, Ui.TEXT, true, "다른 사람(운영자·그룹장)이 지운 내 조과"), Ui.lp(a, MATCH, WRAP, top = 14))
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         col.addView(box, Ui.lp(a, MATCH, WRAP, top = 8))
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("🗑 휴지통")
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
@@ -212,7 +212,7 @@ object Trash {
                     restoreMine(a, m) { msg -> Toast.makeText(a, msg, Toast.LENGTH_LONG).show(); drawMine() }
                 }.apply { minHeight = dp(40) }, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.button(a, "영구 삭제") {
-                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    AlertDialog.Builder(a, R.style.FlAlert)
                         .setMessage("완전히 버릴까요? 되돌릴 수 없어요")
                         .setPositiveButton("영구 삭제") { _, _ -> purgeMine(m); drawMine() }
                         .setNegativeButton("취소", null).show()
@@ -240,7 +240,7 @@ object Trash {
                         restore(it) { e -> Toast.makeText(a, e ?: "복구했어요", Toast.LENGTH_LONG).show(); load() }
                     }.apply { minHeight = dp(40) }, LinearLayout.LayoutParams(0, WRAP, 1f))
                     r.addView(Ui.button(a, "바로 버리기") {
-                        AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        AlertDialog.Builder(a, R.style.FlAlert)
                             .setMessage("완전히 버릴까요? 되돌릴 수 없어요")
                             .setPositiveButton("버리기") { _, _ -> purge(it) { load() } }
                             .setNegativeButton("취소", null).show()

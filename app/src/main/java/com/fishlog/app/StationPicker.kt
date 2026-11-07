@@ -40,7 +40,7 @@ object StationPicker {
         val list = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         box.addView(list, Ui.lp(a, MATCH, WRAP))
 
-        val dlg = AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val dlg = AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("물때 지역 (조위관측소)")
             .setView(ScrollView(a).apply { addView(box) })
             .setNegativeButton("닫기", null)

@@ -31,7 +31,7 @@ object LocOnce {
         val gpsOn = try { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) } catch (_: Exception) { false }
         val netOn = try { lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { false }
         if (!gpsOn && !netOn) {
-            AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("위치(GPS)가 꺼져 있어요")
                 .setMessage("내 위치를 보려면 위치를 켜 주세요")
                 .setPositiveButton("설정 열기") { _, _ -> a.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)) }

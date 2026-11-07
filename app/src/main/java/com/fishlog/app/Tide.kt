@@ -112,7 +112,7 @@ object Tide {
     @Volatile var lastError: String = ""
 
     class Station(val code: String, val name: String, val lat: Double, val lon: Double)
-    private var stations: List<Station>? = null
+    @Volatile private var stations: List<Station>? = null
 
     /** 가까운 순서로 관측소 목록 (위치 없으면 이름순) */
     fun stationsNear(ctx: Context, lat: Double?, lon: Double?): List<Station> {
@@ -139,9 +139,14 @@ object Tide {
                 Station(o.getString("code"), o.getString("name"), o.getDouble("lat"), o.getDouble("lng"))
             }
         } catch (_: Exception) { emptyList() }
-        stations = list
-        return list
+        // v4.2: 관리자가 추가한 관측소 (서버 config/stations)
+        val have = list.map { it.code }.toSet()
+        val all = list + StationAdmin.extras(ctx).filter { it.code !in have }
+        stations = all
+        return all
     }
+    /** 추가 관측소가 바뀌면 목록 다시 읽기 */
+    fun resetStations() { stations = null }
 
     private fun dist(aLat: Double, aLon: Double, bLat: Double, bLon: Double): Float {
         val r = FloatArray(1)
@@ -483,7 +488,7 @@ object Tide {
      * estimated: 사리 때 자료를 못 받아서 물때(달 나이)로 짐작한 값
      * hourly   : 0~23시 각 시간 동안 물높이가 바뀌는 양(m) = 물이 들고 나는 세기
      */
-    class Strength(val pct: Int, val estimated: Boolean, val range: Double?, val hourly: List<Double?>) {
+    class Strength(val pct: Int, val estimated: Boolean, val range: Double?, val hourly: List<Double?>, val annual: Boolean = false) {
         val maxRate: Double get() = hourly.filterNotNull().maxOrNull() ?: 0.0
         /** 그 시각 물흐름: 0 약함, 1 보통, 2 셈 (모르면 -1) */
         fun levelAt(d: Day, time: Long): Int {
@@ -548,7 +553,7 @@ object Tide {
         val code = d.stationCode
         if (today != null && code != null) {
             // v4.1 (186): 1년 중 큰 사리 조차 = 100% ('물때와 날씨' 같은 앱과 비슷하게)
-            annualRef(ctx, code)?.let { ref -> return Strength((today / maxOf(ref, today) * 100).toInt().coerceIn(5, 100), false, today, hourly) }
+            annualRef(ctx, code)?.let { ref -> return Strength((today / maxOf(ref, today) * 100).toInt().coerceIn(5, 100), false, today, hourly, annual = true) }
             // (못 받으면) 가까운 사리(7물) 날과 그다음 날의 조차 = 기준(100%)
             val noon = d.dateMillis + 12 * 3_600_000L
             val spring = (-8..8).map { noon + it * 86_400_000L }.filter { mulIndex(it) == 7 }

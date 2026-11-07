@@ -34,7 +34,7 @@ object Consent {
 
     fun show(a: Activity, readOnly: Boolean = false, onDone: () -> Unit) {
         fun dp(v: Int) = Ui.dp(a, v)
-        val dlg = Dialog(a, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+        val dlg = Dialog(a, R.style.FlFullZoom)
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(24), dp(20), dp(20)); setBackgroundColor(Ui.BG) }
         col.addView(Ui.text(a, 22f, Ui.TEXT, true, "🎣 조과기록 이용 동의"))
         col.addView(Ui.text(a, 13f, Ui.SUB, false, "앱을 쓰려면 아래 내용을 확인하고 동의해 주세요."), Ui.lp(a, MATCH, WRAP, top = 6))

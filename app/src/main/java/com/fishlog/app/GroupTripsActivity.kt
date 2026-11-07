@@ -290,7 +290,7 @@ class GroupTripsActivity : Activity() {
     private fun confirmRemove(list: List<Cloud.RemoteTrip>) {
         if (list.isEmpty()) return
         val others = list.count { it.owner != Cloud.uid }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${list.size}개를 그룹에서 내릴까요?")
             .setMessage("이 그룹 화면에서만 사라지고, 올린 사람 폰의 출조 기록은 그대로예요." +
                 if (others > 0) "\n남의 글 ${others}개는 휴지통에 30일 보관되고 올린 사람에게 알림이 가요." else "")
@@ -321,7 +321,7 @@ class GroupTripsActivity : Activity() {
         if (mine) items.add("🗑 그룹에서 내리기")
         else if (Cloud.isOwner) items.add("🗑 그룹에서 내리기 (그룹장)")
         else if (Cloud.isAdmin) items.add("🗑 그룹에서 내리기 (관리자)")
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("${t.ownerName} · ${dayFmt.format(Date(t.start))} ${hm.format(Date(t.start))} 출조")
             .setItems(items.toTypedArray()) { _, i ->
                 when {
