@@ -101,30 +101,43 @@ object StationPicker {
                 placeBox.addView(row("'$q' 지명 찾는 중…", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                 val id = ++searchId
                 Thread {
-                    val found = try {
-                        if (!Geocoder.isPresent()) null
-                        else {
+                    // 1) 폰 주소 찾기 (주소 · 동네)  2) 오픈스트리트맵 지명 (호수 · 섬 · 방파제 등, 예: 시화호) — v4.2
+                    var netOk = false
+                    val found = ArrayList<Triple<String, Double, Double>>()
+                    try {
+                        if (Geocoder.isPresent()) {
                             @Suppress("DEPRECATION")
-                            Geocoder(a, Locale.KOREA).getFromLocationName(q, 4, 33.0, 124.5, 38.7, 131.0)
+                            val r = Geocoder(a, Locale.KOREA).getFromLocationName(q, 4, 33.0, 124.5, 38.7, 131.0) ?: emptyList()
+                            netOk = true
+                            r.forEach { ad ->
+                                val name = listOfNotNull(ad.featureName, ad.locality ?: ad.subAdminArea, ad.adminArea)
+                                    .distinct().joinToString(" · ").ifBlank { q }
+                                found.add(Triple(name, ad.latitude, ad.longitude))
+                            }
                         }
-                    } catch (_: Exception) { null }
+                    } catch (_: Exception) {}
+                    if (id == searchId) MapSearch.osm(q, wait = true)?.let { r ->
+                        netOk = true
+                        r.take(4).forEach { (p, full) ->
+                            if (found.none { Math.abs(it.second - p.lat) < 0.01 && Math.abs(it.third - p.lon) < 0.01 })
+                                found.add(0, Triple(if (full.isBlank()) p.name else "${p.name} · ${full.split(" ").take(2).joinToString(" ")}", p.lat, p.lon))
+                        }
+                    }
                     main.post {
                         if (id != searchId || !dlg.isShowing) return@post
                         placeBox.removeAllViews()
-                        if (found == null) {
+                        if (!netOk && found.isEmpty()) {
                             placeBox.addView(row("지명 검색은 인터넷이 필요해요", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                             return@post
                         }
                         if (found.isEmpty()) {
-                            placeBox.addView(row("'$q' 지명을 찾지 못했어요", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
+                            placeBox.addView(row("'$q' 지명을 찾지 못했어요", "시 · 군 이름을 같이 써 보세요 (예: 시흥 시화호)", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                             return@post
                         }
-                        found.forEach { ad ->
-                            val name = listOfNotNull(ad.featureName, ad.locality ?: ad.subAdminArea, ad.adminArea)
-                                .distinct().joinToString(" · ").ifBlank { q }
+                        found.take(5).forEach { (name, la, lo) ->
                             placeBox.addView(row("$name 근처 관측소", onClick = null), Ui.lp(a, MATCH, WRAP, top = 10))
-                            Tide.stationsNear(a, ad.latitude, ad.longitude).take(3).forEach { s ->
-                                placeBox.addView(row("${s.name}  약 ${km(s, ad.latitude, ad.longitude)}",
+                            Tide.stationsNear(a, la, lo).take(3).forEach { s ->
+                                placeBox.addView(row("${s.name}  약 ${km(s, la, lo)}",
                                     "누르면 이 관측소로 물때를 봐요") { pick(s.code, s.name) }, Ui.lp(a, MATCH, WRAP, top = 6))
                             }
                         }

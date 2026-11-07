@@ -37,7 +37,7 @@ object MapSearch {
     private val osmLock = Any()
 
     /** 백그라운드 스레드에서 호출. wait = true 면 1초 규칙을 기다려서라도 찾음, false 면 너무 빠르면 건너뜀 */
-    private fun osm(q: String, wait: Boolean): List<Pair<Place, String>>? {
+    fun osm(q: String, wait: Boolean): List<Pair<Place, String>>? {
         synchronized(osmCache) { osmCache[q]?.let { return it } }
         synchronized(osmLock) {
             val gap = System.currentTimeMillis() - osmLast
@@ -173,9 +173,9 @@ object MapSearch {
                         }
                     } catch (_: Exception) {}
                 }
-                // 오픈스트리트맵 지명 (호수 · 섬 · 방파제 등) — 직접 '찾기'를 눌렀거나, 폰 주소 찾기가 잘 못 찾았을 때
+                // 오픈스트리트맵 지명 (호수 · 섬 · 방파제 등, 예: 시화호) — 항상 같이 (1초 규칙은 기다려서 지킴)
                 if (my != seq) return@Thread
-                if (!auto || found.size < 2) osm(q, wait = !auto)?.let { r ->
+                osm(q, wait = true)?.let { r ->
                     anyOk = true
                     found.addAll(0, r)   // 이름이 정확히 맞는 지명을 먼저
                 }
