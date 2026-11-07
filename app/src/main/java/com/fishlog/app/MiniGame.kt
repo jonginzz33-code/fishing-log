@@ -20,7 +20,7 @@ import android.widget.FrameLayout
 
 /**
  * 🧪 미니게임 테스트 (v4.2.2 · 관리자만)
- *  - 🎣 찌낚시 손맛 · 🐙 쭈꾸미 손맛 (assets/games/*.html 을 앱 안 화면으로)
+ *  - 🎣 찌낚시 손맛 · 🐙 쭈꾸미 손맛 (assets/games 폴더의 html 파일을 앱 안 화면으로)
  *  - 쭈꾸미: 폰 흔들기 센서(devicemotion)로 고패질 · 챔질 · 감기, 바닥 찍을 때 진동 (앱 진동으로 세기까지)
  *  - 해 보고 재밌으면 모든 사람 메뉴로 옮길 예정
  */
