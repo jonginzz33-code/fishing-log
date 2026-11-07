@@ -164,8 +164,6 @@ object Khoa {
     }
     /** 받은 양 세기용 */
     @Volatile var appCtx: Context? = null
-    /** v4.1 (185): 미리 받기는 켜 둔 구역 종류만 */
-    fun activeLayers(c: Context) = LAYERS.filter { groupOn(c, it.group) }
 
     private fun fetch(k: String, l: Layer, cellId: String): List<Zones.Zone> {
         val b = cellBox(cellId)
