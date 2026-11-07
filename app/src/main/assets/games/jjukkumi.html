@@ -54,6 +54,12 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .b2[disabled]{opacity:.45}
 .wide{grid-column:1/-1}
 [hidden]{display:none!important}
+.hud{position:absolute;left:50%;transform:translateX(-50%);top:46px;min-width:62%;max-width:92%;background:rgba(8,22,29,.88);border:1.5px solid var(--egi);
+  border-radius:12px;padding:7px 12px;text-align:center;font-size:14px;font-weight:700;pointer-events:none}
+.hud{top:80px}
+.hud small{display:block;font-size:11.5px;font-weight:400;color:var(--sub);margin-top:2px}
+.hud .hb{height:6px;border-radius:99px;background:#1B3B46;margin-top:5px;overflow:hidden}
+.hud .hb i{display:block;height:100%;width:0;border-radius:99px}
 .cond{font-size:12px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 10px}
 .cond b{color:var(--ink)}.cond .ban{color:var(--bad);font-weight:700}
 .prep{touch-action:none;position:absolute;inset:0;background:rgba(5,14,18,.94);padding:16px;overflow:auto;display:flex;flex-direction:column;gap:10px}
@@ -84,6 +90,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="msg" id="msg">봉돌을 고르고 채비를 내려요</div>
     <div class="rhythm" id="rhy" hidden>기다림 <b id="rhyT">-</b><div class="rbar"><i id="rhyB"></i></div></div>
     <div class="sig" id="sig" hidden></div>
+    <div class="hud" id="hud" hidden><span id="hudT"></span><small id="hudS"></small><div class="hb"><i id="hudB"></i></div></div>
     <div class="card" id="card" hidden>
       <div class="ic" id="cIc">🐙</div>
       <div><h2 id="cName">주꾸미</h2><div class="w" id="cW">120g</div><p id="cNote"></p></div>
@@ -114,6 +121,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <span>묵직</span><span>들 때 길고 무거운 떨림 = 쭈꾸미(문어) 올라탐</span>
         <span>툭!</span><span>떠 있을 때 짧고 날카롭게 = 갑오징어</span>
       </div>
+      <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">👀 화면 신호를 켜면 쭈꾸미 · 갑오징어 올라탐, 밑걸림, 채비 뜸이 화면 위쪽에 떠요 (도망까지 남은 횟수 · 챔질 남은 시간 막대). 🙈 진동만이면 진동으로만 알아채요.</p>
       <b>들어 올리는 양 → 에기 높이</b> (폰을 들어 보면 막대가 바로 움직여요)
       <div class="motion"><i id="mv"></i><span class="th" id="th"></span></div>
       <div class="sens"><span>조금만 뜨게</span><input id="sens" type="range" min="1" max="10" step="0.5" value="3"><span>많이 뜨게</span></div>
@@ -405,6 +413,19 @@ function frame(now){
   }
   prevLift=L;
   if(!sig.hidden&&now>sigT)sig.hidden=true;
+  // 👀 화면 신호: 올라탐 · 갑오징어 · 밑걸림 · 채비 뜸을 화면에 (끄면 안 보임)
+  { let t="",sub="",bar=-1,col="var(--egi)";
+    if(eye&&st==="jig"){
+      if(grab&&grab.t!==CF){t=grab.t.ic+" "+grab.t.n+" 올라탐! 확 들어 챔질";sub="그대로 들기만 하면 도망까지 "+grab.left+"번";bar=grab.left/7}
+      else if(grab&&grab.t===CF){t="🦑 갑오징어! 지금 챔질";sub="아주 짧아요";bar=Math.max(0,(cuttleT-now)/700);col="#FFB27A"}
+      else if(floatOff){t="〰 채비가 떠 있어요";sub="봉돌이 가벼워요 · 걷고 무겁게";col="var(--warn)"}
+    }
+    if(eye&&st==="snag"){t="⚠ 밑걸림!";sub="꾹 2초 당겨 바늘 펴기";bar=Math.min(1,snagHold/2);col="var(--bad)"}
+    const hud=$("hud");
+    if(t){hud.hidden=false;$("hudT").textContent=t;$("hudS").textContent=sub;hud.style.borderColor=col;
+      const hb=$("hudB");hb.parentNode.style.display=bar<0?"none":"block";hb.style.width=Math.round(Math.max(0,bar)*100)+"%";hb.style.background=col}
+    else hud.hidden=true;
+  }
   if(!$("rhy").hidden){
     const m=stays.length?stays.reduce((a,b)=>a+b,0)/stays.length:0;
     $("rhyT").textContent=!m?"-":m<3?"너무 자주 흔들어요":m<=10?"좋아요":"너무 오래";
@@ -444,7 +465,11 @@ function draw(now,L){
   ctx.fillStyle="#9AA7AD";ctx.beginPath();ctx.arc(-14,6,3+sinker/8,0,7);ctx.fill();   // 봉돌
   ctx.restore();
   const rider=st==="hooked"&&catchCur?catchCur:(grab&&eye?grab.t:null);
-  if(rider){ctx.globalAlpha=st==="hooked"?1:.45;ctx.font=(rider.big?34:26)+"px serif";ctx.textAlign="center";ctx.fillText(rider.ic,ex,ey+18);ctx.globalAlpha=1}
+  if(rider){
+    ctx.globalAlpha=st==="hooked"?1:rider===CF?0.55+0.45*Math.abs(Math.sin(now/90)):.6;
+    ctx.font=(rider.big?34:26)+"px serif";ctx.textAlign="center";ctx.fillText(rider.ic,ex+(rider===CF&&st!=="hooked"?22:0),ey+18);ctx.globalAlpha=1}
+  if(st==="snag"&&eye){ctx.strokeStyle="#FF6B6B";ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(ex,ey,18+Math.sin(now/120)*3,0,7);ctx.stroke();
+    ctx.font="20px serif";ctx.textAlign="center";ctx.fillText("⚠",ex,ey-24)}
   if((st==="jig"||st==="slack")&&egiH<0.05){ctx.fillStyle="rgba(140,120,90,.25)";ctx.beginPath();ctx.ellipse(ex,bot,16+Math.sin(now/200)*2,4,0,0,7);ctx.fill()}
   if(st==="jig"){ctx.fillStyle="#FF7AB6";ctx.font="12px sans-serif";ctx.textAlign="left";ctx.fillText("바닥 위 "+egiH.toFixed(1)+"m",ex+22,ey+4)}
   if(now<tideTurnUntil){ctx.fillStyle="#5FD39A";ctx.font="bold 12px sans-serif";ctx.textAlign="right";ctx.fillText("🌊 물돌이",W-10,top+16)}

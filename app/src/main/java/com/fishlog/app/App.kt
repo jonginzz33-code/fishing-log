@@ -3,7 +3,8 @@ package com.fishlog.app
 import android.app.Application
 import android.util.Log
 
-object BuildConfigInfo { const val VERSION = "3.6" }
+/** 화면 · 서버에 보이는 앱 버전 = build.gradle.kts 의 versionName (v4.2.8: 예전엔 "3.6"으로 고정돼 있었음) */
+object BuildConfigInfo { val VERSION: String get() = BuildConfig.VERSION_NAME }
 
 /** 앱이 죽으면 원인을 저장해 두고, 다음 실행 때 화면에 보여준다 */
 class App : Application() {
