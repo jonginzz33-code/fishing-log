@@ -103,6 +103,7 @@ object Khoa {
 
     /** 이 칸들 준비 (폰에 있으면 바로, 없으면 개방海에서) · 하나 받을 때마다 done */
     fun ensure(c: Context, cellIds: List<String>, done: () -> Unit) {
+        appCtx = c.applicationContext
         if (!Zones.on(c)) return
         loadKey(c) {
             val k = key(c)
@@ -158,8 +159,13 @@ object Khoa {
         val code = con.responseCode
         val body = (if (code in 200..299) con.inputStream else con.errorStream)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
         if (code !in 200..299) throw Exception("HTTP $code ${body.take(120)}")
+        appCtx?.let { Ui.countData(it, "zone", body.length.toLong()) }
         return body
     }
+    /** 받은 양 세기용 */
+    @Volatile var appCtx: Context? = null
+    /** v4.1 (185): 미리 받기는 켜 둔 구역 종류만 */
+    fun activeLayers(c: Context) = LAYERS.filter { groupOn(c, it.group) }
 
     private fun fetch(k: String, l: Layer, cellId: String): List<Zones.Zone> {
         val b = cellBox(cellId)
@@ -344,7 +350,8 @@ object Khoa {
         if (k.isBlank()) return done(0, 0)
         val app = c.applicationContext
         // 새로 받을 땐 이미 받아 둔(30일 안) 칸은 건너뜀 (이어 받기 · 데이터 절약) · '다시 받기'는 모두 새로
-        val jobs = cells.flatMap { id -> LAYERS.map { it to id } }.filter { (l, id) -> force || !fresh(app, l, id) }
+        appCtx = app
+        val jobs = cells.flatMap { id -> activeLayers(app).map { it to id } }.filter { (l, id) -> force || !fresh(app, l, id) }
         if (jobs.isEmpty()) {
             if (!force && regions(app).none { it.name == name }) saveRegions(app, regions(app) + Region(System.currentTimeMillis().toString(), name, s, n, w, e, System.currentTimeMillis(), cells))
             return done(0, 0)
@@ -391,7 +398,7 @@ object Khoa {
 
     /** 이 범위가 이미 다 받아져 있나 */
     fun allFresh(c: Context, s: Double, n: Double, w: Double, e: Double) =
-        Zones.cellsFor(s, n, w, e, 16).all { id -> LAYERS.all { fresh(c, it, id) } }
+        Zones.cellsFor(s, n, w, e, 16).all { id -> activeLayers(c).all { fresh(c, it, id) } }
 
     /** 제한 확인 + 횟수 세기 + 받기 (사용자가 누른 것 · 검색 자동) */
     fun prefetchChecked(c: Context, s: Double, n: Double, w: Double, e: Double, name: String,
@@ -409,6 +416,8 @@ object Khoa {
         val s = lat - 0.12; val n = lat + 0.12; val w = lon - 0.15; val e = lon + 0.15
         if (allFresh(c, s, n, w, e)) return
         val app = c.applicationContext
+        // v4.1 (185): 모바일 데이터면 자동 미리 받기는 건너뜀 (와이파이에서만)
+        if (Ui.metered(app)) { Ui.toast(app, "📶 모바일 데이터라 '$name' 주변 미리 받기는 건너뛰었어요 (와이파이에서 검색하면 받아요)"); return }
         Ui.toast(app, "📥 '$name' 주변 해루질 구역을 미리 받는 중이에요 (바다에서 인터넷 약할 때 대비)")
         prefetchChecked(app, s, n, w, e, name, { _, _ -> }) { _, fail, err ->
             Ui.toast(app, err ?: if (fail == 0) "📥 '$name' 주변 받기 완료 · ⚙ 설정 '오프라인 지역'에서 관리" else "📥 '$name' 주변 받기 끝 · ${fail}곳 실패 (인터넷 확인)")

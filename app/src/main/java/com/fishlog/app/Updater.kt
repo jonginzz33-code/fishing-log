@@ -171,7 +171,7 @@ object Updater {
                             var got = 0L; var lastPost = 0L
                             while (true) {
                                 val n = input.read(buf); if (n < 0) break
-                                os.write(buf, 0, n); got += n
+                                os.write(buf, 0, n); got += n; Ui.countData(a, "update", n.toLong())
                                 val now = System.currentTimeMillis()
                                 if (now - lastPost > 150) {
                                     lastPost = now

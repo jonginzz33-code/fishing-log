@@ -117,6 +117,20 @@ object Ui {
         return fr
     }
 
+    /** v4.1 (185): 모바일 데이터(요금 나가는 연결)인가 */
+    fun metered(c: Context): Boolean = try {
+        (c.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).isActiveNetworkMetered
+    } catch (_: Exception) { false }
+    /** v4.1 (185): 앱이 받은 양 기록 (이번 달 · 종류별: zone · update) */
+    fun countData(c: Context, kind: String, bytes: Long) {
+        if (bytes <= 0) return
+        val k = "dl_${kind}_" + java.text.SimpleDateFormat("yyyyMM", java.util.Locale.KOREA).format(java.util.Date())
+        val p = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        p.edit().putLong(k, p.getLong(k, 0L) + bytes).apply()
+    }
+    fun dataOf(c: Context, kind: String): Long = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        .getLong("dl_${kind}_" + java.text.SimpleDateFormat("yyyyMM", java.util.Locale.KOREA).format(java.util.Date()), 0L)
+
     fun toast(c: Context, msg: String) = android.widget.Toast.makeText(c, msg, android.widget.Toast.LENGTH_LONG).show()
 
     fun text(c: Context, size: Float, color: Int = TEXT, bold: Boolean = false, value: String = ""): TextView =

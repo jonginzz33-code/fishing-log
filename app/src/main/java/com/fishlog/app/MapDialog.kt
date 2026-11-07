@@ -42,6 +42,12 @@ class MapCatch(val point: GeoPoint, val color: Int, val title: String, val kind:
                val rough: Boolean = false, val accM: Double = 0.0)
 
 object MapDialog {
+    /** v4.1 (185): 모바일 데이터로 위성 지도를 켜면 (앱 켜 있는 동안 한 번) 알려 주기 */
+    private var satWarned = false
+    fun satWarn(a: android.content.Context) {
+        if (Store.satellite && !satWarned && Ui.metered(a)) { satWarned = true; Ui.toast(a, "📶 모바일 데이터예요 · 위성 지도는 일반 지도보다 데이터를 몇 배 더 써요") }
+    }
+
 
     private var configured = false
 
@@ -541,6 +547,7 @@ object MapDialog {
         val toggle = pill(if (Store.satellite) "지도로 보기" else "위성으로 보기")
         toggle.setOnClickListener {
             Store.satellite = !Store.satellite
+            satWarn(a)
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             toggle.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
         }
@@ -811,6 +818,7 @@ object MapDialog {
         bar.addView(zBar.pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
             Store.satellite = !Store.satellite
+            satWarn(a)
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
         }
@@ -892,6 +900,7 @@ object MapDialog {
         }
         pill(if (Store.satellite) "지도로 보기" else "위성으로 보기") { v ->
             Store.satellite = !Store.satellite
+            satWarn(a)
             map.setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             v.text = if (Store.satellite) "지도로 보기" else "위성으로 보기"
         }

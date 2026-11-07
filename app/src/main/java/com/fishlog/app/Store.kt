@@ -416,6 +416,11 @@ object Store {
         set(v) { prefs.edit().putBoolean("hideRoute", v).apply(); fireChanged() }
 
     /** 배터리 절약 모드: 경로를 3분 간격으로 */
+    /** v4.1 (187): 리모컨 '느리게' (한 번 누를 때 두 번 세지는 리모컨용 · 0.35초 거름) */
+    var remoteSlow: Boolean
+        get() = prefs.getBoolean("remoteSlow", false)
+        set(v) { prefs.edit().putBoolean("remoteSlow", v).apply(); fireChanged() }
+
     var saver: Boolean
         get() = prefs.getBoolean("saver", false)
         set(v) { prefs.edit().putBoolean("saver", v).apply(); Tracker.reapply(); try { Live.saverChanged() } catch (_: Exception) {}; fireChanged() }

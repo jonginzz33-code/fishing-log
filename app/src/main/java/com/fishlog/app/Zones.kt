@@ -288,7 +288,10 @@ object Zones {
         val kinds = list.map { it.type }.distinct()
         val title = kinds.joinToString(" · ") { "${typeIcon(it)} ${TYPES[it] ?: "구역"}" } + " 안이에요 (해루질 참고용)"
         val text = list.distinctBy { it.type }.joinToString("\n") { (if (it.name.isNotBlank()) it.name + " · " else "") + typeWarn(it.type) }
-        try { Haptics.undo(c) } catch (_: Exception) {}
+        // v4.1 (183): 구역마다 다른 진동 + 음성 경고
+        val kind = kindOf(list)
+        vibrateKind(c, kind)
+        speak(c, VOICE[kind] ?: "")
         try {
             val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             if (nm.getNotificationChannel("haeruZone") == null)
@@ -309,6 +312,50 @@ object Zones {
     }
     /** 앱이 켜져 있으면 화면 아래 안내도 */
     var listener: ((String) -> Unit)? = null
+
+    // ---------------- 🔊 음성 경고 · 구역별 진동 (v4.1 · 183) ----------------
+    fun voiceOn(c: Context) = prefs(c).getBoolean("haeru_voice", true)
+    fun setVoice(c: Context, v: Boolean) = prefs(c).edit().putBoolean("haeru_voice", v).apply()
+    /** accident 인명사고 · tidal 갯골 · 위험 · ban 금지 · farm 어장 (위험한 것 먼저) */
+    private fun kindOf(list: List<Zone>): String = when {
+        list.any { it.type == "risk" && it.name.startsWith("인명사고") } -> "accident"
+        list.any { it.type == "risk" } -> "tidal"
+        list.any { it.type == "ban" } -> "ban"
+        else -> "farm"
+    }
+    private val VOICE = mapOf(
+        "accident" to "주의. 인명사고가 있었던 곳이에요. 물때와 주변을 꼭 확인하세요.",
+        "tidal" to "주의. 갯골 구역에 들어왔어요. 물이 들어오면 빠르게 찹니다.",
+        "ban" to "낚시 금지 또는 제한 구역이에요. 안내판을 확인하세요.",
+        "farm" to "어장 구역이에요. 허가 없이 채취하면 안 될 수 있어요.")
+    private val PATTERN = mapOf(
+        "accident" to longArrayOf(0, 150, 100, 150, 100, 150),
+        "tidal" to longArrayOf(0, 150, 100, 150, 100, 150),
+        "farm" to longArrayOf(0, 250, 150, 250),
+        "ban" to longArrayOf(0, 600, 200, 600))
+    private fun vibrateKind(c: Context, kind: String) {
+        try {
+            val v = c.getSystemService(android.os.Vibrator::class.java) ?: return
+            v.vibrate(android.os.VibrationEffect.createWaveform(PATTERN[kind] ?: longArrayOf(0, 400), -1))
+        } catch (_: Exception) { try { Haptics.undo(c) } catch (_: Exception) {} }
+    }
+    private var tts: android.speech.tts.TextToSpeech? = null
+    @Volatile private var ttsReady = false
+    private var pendingSay = ""
+    private fun speak(c: Context, text: String) {
+        if (text.isBlank() || !voiceOn(c)) return
+        val t = tts
+        if (t != null && ttsReady) { t.speak(text, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "haeru"); return }
+        pendingSay = text
+        if (t == null) tts = android.speech.tts.TextToSpeech(c.applicationContext) { st ->
+            if (st == android.speech.tts.TextToSpeech.SUCCESS) {
+                tts?.language = Locale.KOREAN; ttsReady = true
+                if (pendingSay.isNotBlank()) { tts?.speak(pendingSay, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "haeru"); pendingSay = "" }
+            }
+        }
+    }
+    /** 커튼에서 '들어보기' */
+    fun sampleVoice(c: Context) { vibrateKind(c, "tidal"); speak(c, VOICE["tidal"]!!) }
 
     // ---------------- 지도 위에 그리기 ----------------
     class ZoneOverlay(private val a: Activity, private val isOn: () -> Boolean) : Overlay() {
@@ -348,8 +395,16 @@ object Zones {
             say((if (list.isEmpty()) (if (busy > 0) "🦀 해루질 참고 구역" else "🦀 이 화면엔 등록된 해루질 참고 구역이 없어요") else "🦀 해루질 참고 구역 ${list.size}곳 (참고용 · 누르면 설명)") +
                 (if (busy > 0) " · 🌊 개방海 받는 중… ${busy}" else "") + err)
             val pj = map.projection
-            val showName = map.zoomLevelDouble >= 14.0
+            val zoom = map.zoomLevelDouble
+            val showName = zoom >= 14.0
             txt.textSize = 11 * d; halo.textSize = 11 * d; halo.strokeWidth = 3 * d
+            // v4.1 (189): 같은 글자는 가까이 하나만
+            val drawn = ArrayList<Triple<String, Float, Float>>()
+            fun label(t: String, x: Float, y: Float, col: Int) {
+                if (drawn.any { it.first == t && Math.hypot((it.second - x).toDouble(), (it.third - y).toDouble()) < 140 * d }) return
+                drawn.add(Triple(t, x, y)); txt.color = col
+                c.drawText(t, x, y, halo); c.drawText(t, x, y, txt)
+            }
             list.forEach { z ->
                 val col = typeColor(z.type)
                 // v3.9.2 (163): 갯골 · 웅덩이는 가늘고 옅게 (지도 덜 가리게)
@@ -366,7 +421,9 @@ object Zones {
                     fill.color = col; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 3.5f * d, fill)
                     edge.pathEffect = null; edge.color = Color.WHITE; edge.strokeWidth = 1f * d
                     c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 3.5f * d, edge)
-                    cx = pt.x.toFloat(); cy = pt.y.toFloat()
+                    // v4.1 (184): 인명사고 등 점은 글자 없이 · 아주 크게 확대했을 때만 짧게 '⚠사고'
+                    if (zoom >= 16.0) label(if (z.name.startsWith("인명사고")) "⚠사고" else typeIcon(z.type), pt.x.toFloat(), pt.y.toFloat() - 7 * d, col)
+                    return@forEach
                 } else if (z.center != null) {
                     pj.toPixels(z.center, pt)
                     val r = pj.metersToPixels(z.radiusM.toFloat())
@@ -375,19 +432,23 @@ object Zones {
                 } else {
                     path.reset()
                     var sx = 0f; var sy = 0f
+                    var x0 = Float.MAX_VALUE; var x1 = -Float.MAX_VALUE; var y0 = Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
                     z.pts.forEachIndexed { i, g ->
                         pj.toPixels(g, pt)
                         if (i == 0) path.moveTo(pt.x.toFloat(), pt.y.toFloat()) else path.lineTo(pt.x.toFloat(), pt.y.toFloat())
                         sx += pt.x; sy += pt.y
+                        x0 = minOf(x0, pt.x.toFloat()); x1 = maxOf(x1, pt.x.toFloat()); y0 = minOf(y0, pt.y.toFloat()); y1 = maxOf(y1, pt.y.toFloat())
                     }
+                    // v4.1 (189): 작은 갯골 · 웅덩이는 많이 확대했을 때만
+                    if (tidal && zoom < 16.0 && maxOf(x1 - x0, y1 - y0) < 40 * d) return@forEach
                     path.close()
                     c.drawPath(path, fill); c.drawPath(path, edge)
                     cx = sx / z.pts.size; cy = sy / z.pts.size
                 }
+                // v4.1 (189): 갯골 · 웅덩이는 글자 없이 선만 (아주 크게 확대했을 때만 '⚠갯골' 하나)
+                if (tidal) { if (zoom >= 16.0) label("⚠" + z.name.take(3), cx, cy, col); return@forEach }
                 if (showName) {
-                    val label = typeIcon(z.type) + " " + (z.name.ifBlank { TYPES[z.type] ?: "" }).take(14)
-                    txt.color = col
-                    c.drawText(label, cx, cy, halo); c.drawText(label, cx, cy, txt)
+                    label(typeIcon(z.type) + " " + (z.name.ifBlank { TYPES[z.type] ?: "" }).take(14), cx, cy, col)
                 }
             }
         }
@@ -416,7 +477,16 @@ object Zones {
             val g = map.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
             if (drawMode) { drawing.add(g); onDrawChange?.invoke(); map.invalidate(); return true }
             if (!isOn() || map.zoomLevelDouble < MIN_ZOOM) return false
-            val hit = zonesAt(g.latitude, g.longitude)
+            // v4.1 (184): 작은 ⚠ 점도 눌리게 (손가락 둘레 약 24dp)
+            val pj = map.projection
+            val near = if (map.zoomLevelDouble >= 13.0) zonesIn(g.latitude - 0.01, g.latitude + 0.01, g.longitude - 0.01, g.longitude + 0.01)
+                .filter { it.center != null && it.id.startsWith("k") }
+                .filter { z ->
+                    pj.toPixels(z.center!!, pt)
+                    val dist: Double = Math.hypot((pt.x - e.x).toDouble(), (pt.y - e.y).toDouble())
+                    dist < 24.0 * d
+                } else emptyList()
+            val hit = (zonesAt(g.latitude, g.longitude) + near).distinctBy { it.id }
             if (hit.isEmpty()) return false
             onTapZones?.invoke(hit); return true
         }
@@ -440,6 +510,7 @@ object Zones {
         var paintRef: () -> Unit = {}
         // v3.9.3 (167): 작게 · 두 줄 (칩 한 줄 + 작은 버튼 한 줄) · 받는 중일 때만 진행 글
         var busy = ""
+        var confirmedMobile = false
         fun chip(label: String, on: Boolean, col: Int, onClick: () -> Unit) = Ui.text(a, 12.5f, if (on) Color.parseColor("#1B0E02") else col, true, label).apply {
             gravity = Gravity.CENTER; maxLines = 1; setPadding(dp(10), dp(5), dp(10), dp(5))
             background = if (on) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, col)
@@ -462,6 +533,14 @@ object Zones {
             r2.addView(chip("📥 이 지역 받기", false, Ui.TEXT) {
                 if (Khoa.key(a).isBlank()) { Ui.toast(a, "개방海 인증키가 아직 없어요 (관리자)"); return@chip }
                 if (map.zoomLevelDouble < 9.0) { Ui.toast(a, "조금 더 확대해서 받을 지역을 골라 주세요"); return@chip }
+                // v4.1 (185): 모바일 데이터면 먼저 물어보기
+                if (Ui.metered(a) && !confirmedMobile) {
+                    AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("📶 모바일 데이터예요")
+                        .setMessage("구역 자료는 데이터가 꽤 들어요. 와이파이에서 받는 걸 추천해요.\n그래도 지금 받을까요?")
+                        .setPositiveButton("받기") { _, _ -> confirmedMobile = true; Ui.toast(a, "한 번 더 '📥 이 지역 받기'를 눌러 주세요") }
+                        .setNegativeButton("취소", null).show()
+                    return@chip
+                }
                 val box = map.boundingBox
                 val place = Area.name(a, box.centerLatitude, box.centerLongitude).ifBlank { "이 지역" }
                 setBusy("📥 받는 중…")
@@ -474,6 +553,7 @@ object Zones {
             // 🇰🇷 전국 (관리자만 · 170)
             if (Cloud.isAdmin) r2.addView(chip("🇰🇷 전국 받기", false, Ui.TEXT) {
                 if (Khoa.nationalRunning) { Ui.toast(a, "전국 받기가 이미 진행 중이에요"); return@chip }
+                if (Ui.metered(a)) { Ui.toast(a, "📶 전국 받기는 와이파이에서만 할 수 있어요"); return@chip }
                 AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                     .setTitle("🇰🇷 전국 해안 미리 받기 (관리자)")
                     .setMessage("우리나라 해안 · 섬 ${Khoa.nationalCells().size}칸을 받아요.\n이미 받은 곳은 건너뛰고, 끊기면 다시 누를 때 이어서 받아요.\n데이터가 많이 들어요 (와이파이 권장) · 시간이 꽤 걸려요.")
@@ -484,6 +564,10 @@ object Zones {
                             map.invalidate()
                         }
                     }.setNegativeButton("취소", null).show()
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+            val vOn = voiceOn(a)
+            r2.addView(chip(if (vOn) "🔊 음성 켜짐" else "🔇 음성 꺼짐", vOn, Ui.TEXT) {
+                setVoice(a, !vOn); if (!vOn) sampleVoice(a); paintCurtain()
             }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             r2.addView(chip("끄기", false, Color.parseColor("#FF8A92")) {
                 setOn(a, false); cur.visibility = View.GONE; paintRef(); map.invalidate(); after()

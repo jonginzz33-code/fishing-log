@@ -505,6 +505,32 @@ object Tide {
         return (hi - lo).takeIf { it > 0 }
     }
 
+    /** 그날 조차 (m) */
+    fun dayRange(d: Day): Double? = rangeOf(extremes(d), d.dateMillis)
+
+    /** v4.1 (186): 그 관측소의 1년 중 큰 사리 조차 (100% 기준) · 폰에 기억 */
+    fun annualRefCached(ctx: Context, code: String): Double? =
+        ctx.getSharedPreferences("fishlog", Context.MODE_PRIVATE).getFloat("annref_$code", -1f).takeIf { it > 0f }?.toDouble()
+
+    /** 백그라운드에서: 앞으로 1년 동안의 사리(8물) 25번을 받아 가장 큰 조차 (처음 한 번만 · 그 뒤는 기억) */
+    fun annualRef(ctx: Context, code: String): Double? {
+        annualRefCached(ctx, code)?.let { return it }
+        val app = ctx.applicationContext
+        val now = System.currentTimeMillis()
+        val first = (0..15).map { now + it * 86_400_000L }.firstOrNull { mulIndex(it) == 8 } ?: return null
+        var best = 0.0; var n = 0
+        for (k in 0 until 25) {
+            val t = first + (k * 14.765 * 86_400_000L).toLong()
+            try {
+                val ds = dayFmt.parse(dayFmt.format(Date(t)))!!.time
+                khoaDay(app, code, keyFmt.format(Date(t)))?.let { ext -> rangeOf(ext, ds)?.let { best = maxOf(best, it); n++ } }
+            } catch (_: Exception) {}
+        }
+        if (n < 10 || best <= 0) return null
+        app.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putFloat("annref_$code", best.toFloat()).apply()
+        return best
+    }
+
     /** 물때로 짐작: 7물(사리) 100%, 조금 무렵 약 40% */
     fun estimatePct(time: Long): Int {
         val idx = mulIndex(time)
@@ -521,7 +547,9 @@ object Tide {
         val today = rangeOf(extremes(d), d.dateMillis)
         val code = d.stationCode
         if (today != null && code != null) {
-            // 가까운 사리(7물) 날과 그다음 날의 조차 = 기준(100%)
+            // v4.1 (186): 1년 중 큰 사리 조차 = 100% ('물때와 날씨' 같은 앱과 비슷하게)
+            annualRef(ctx, code)?.let { ref -> return Strength((today / maxOf(ref, today) * 100).toInt().coerceIn(5, 100), false, today, hourly) }
+            // (못 받으면) 가까운 사리(7물) 날과 그다음 날의 조차 = 기준(100%)
             val noon = d.dateMillis + 12 * 3_600_000L
             val spring = (-8..8).map { noon + it * 86_400_000L }.filter { mulIndex(it) == 7 }
                 .minByOrNull { kotlin.math.abs(it - noon) }

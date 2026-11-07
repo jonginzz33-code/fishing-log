@@ -120,6 +120,15 @@ object TideCalendar {
 
     fun ruleOf(name: String): Rule? = appRule(name) ?: defaultRule(name)
 
+    // ---------------- 실제 물때 (v4.1 · 181) ----------------
+    /** 그날 실제 간조들 · 가장 낮은 간조(m) · 조차 · 국립해양조사원 자료인지 */
+    class DayInfo(val lows: List<Tide.Extreme>, val range: Double?, val exact: Boolean) {
+        val minLow: Double? get() = lows.minOfOrNull { it.value }
+    }
+    private val infoCache = HashMap<String, DayInfo>()
+    fun haeruCm(c: Context) = prefs(c).getInt("haeru_cm", 100)
+    private fun setHaeruCm(c: Context, v: Int) = prefs(c).edit().putInt("haeru_cm", v).apply()
+
     // ---------------- 어종 고르기 (기억) ----------------
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun chosen(c: Context): MutableList<String> {
@@ -144,6 +153,17 @@ object TideCalendar {
         var sel = Sun.dayStart(System.currentTimeMillis())
         var warnToday = ""
         val station = Tide.stationFor(a, lat, lon)?.name ?: ""
+        val stKey = "${Math.round(lat * 100)}_${Math.round(lon * 100)}"
+        var annRef: Double? = null
+        var loadSeq = 0
+        fun infoOf(day: Long) = infoCache["${stKey}_$day"]
+        fun pctOf(day: Long): Int {
+            val i = infoOf(day); val ref = annRef
+            return if (i?.range != null && ref != null && ref > 0) (i.range / maxOf(ref, i.range) * 100).toInt().coerceIn(5, 100)
+            else Tide.estimatePct(day + 12 * 3_600_000L)
+        }
+        /** 해루질 좋은 날 = 그날 가장 낮은 간조가 기준(기본 100cm) 이하 */
+        fun haeruOk(day: Long): Boolean { val v = infoOf(day)?.minLow ?: return false; return v * 100.0 <= haeruCm(a).toDouble() }
 
         // 맨 위: ‹ 2026년 11월 · 인천송도 › · 닫기
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -163,7 +183,7 @@ object TideCalendar {
             visibility = View.GONE; setPadding(dp(10), dp(5), dp(10), dp(5)); background = Ui.bg(a, Color.parseColor("#8A1F28"), 10)
         }
         root.addView(warnView, Ui.lp(a, MATCH, WRAP, top = 6))
-        root.addView(Ui.text(a, 11f, Ui.SUB, false, "그림 = 그 어종이 잘 잡히는 물때인 날 · 뜰채 = 물 많이 빠지는 해루질 좋은 날 · 칸 아래 막대 = 물세기"),
+        root.addView(Ui.text(a, 11f, Ui.SUB, false, "그림 = 그 어종이 잘 잡히는 물때인 날 · 🥅 = 간조가 기준(기본 100cm) 이하인 해루질 좋은 날 · ↓숫자 = 가장 낮은 간조 · 해루질 칩 꾹 = 기준 바꾸기"),
             Ui.lp(a, MATCH, WRAP, top = 4))
 
         val scroll = ScrollView(a)
@@ -201,6 +221,15 @@ object TideCalendar {
                     addView(Ui.text(a, 13f, if (on) Color.parseColor("#1B0E02") else Ui.TEXT, true, n).apply { setPadding(dp(4), 0, 0, 0) })
                     setOnClickListener { if (on) off.add(n) else off.remove(n); saveOff(a, off); paintChips(); redraw() }
                     setOnLongClickListener {
+                        if (n == HAERU) {
+                            val opts = listOf(60, 80, 100, 120, 150)
+                            val labels = opts.map { (if (it == haeruCm(a)) "✓ " else "") + "간조 ${it}cm 이하 = 해루질 좋은 날" + if (it == 100) " (기본)" else "" } + "🗑 달력에서 빼기"
+                            BigList.show(a, "🥅 해루질 기준 (지금 ${haeruCm(a)}cm)", labels) { i, _ ->
+                                if (i < opts.size) { setHaeruCm(a, opts[i]); redraw() }
+                                else { list.remove(n); off.remove(n); saveChosen(a, list); saveOff(a, off); paintChips(); redraw() }
+                            }
+                            return@setOnLongClickListener true
+                        }
                         AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert).setTitle("'$n' 달력에서 뺄까요?")
                             .setPositiveButton("빼기") { _, _ -> list.remove(n); off.remove(n); saveChosen(a, list); saveOff(a, off); paintChips(); redraw() }
                             .setNegativeButton("취소", null).show(); true
@@ -229,7 +258,7 @@ object TideCalendar {
             val id = ++detId
             det.removeAllViews()
             val noon = day + 12 * 3_600_000L
-            val pct = Tide.estimatePct(noon)
+            val pct = pctOf(day)
             val mi = Tide.mulIndex(noon)
             val mul = when (mi) { 0 -> "무시"; 14 -> "조금"; else -> "${mi}물" }
             val ph = Moon.phase(day + 21 * 3_600_000L)
@@ -237,6 +266,19 @@ object TideCalendar {
             if (Sun.dayStart(System.currentTimeMillis()) == day && warnToday.isNotBlank()) line("⚠ $warnToday (${Warn.seaArea(lat, lon)})", 13f, Color.parseColor("#FF8A92"), true)
             val mo = Calendar.getInstance().apply { timeInMillis = day }.get(Calendar.MONTH) + 1
             active().forEach { n ->
+                if (n == HAERU) {
+                    val i = infoOf(day); val ml = i?.minLow; val cm = haeruCm(a)
+                    val ok = haeruOk(day)
+                    val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    row.addView(iconView(n, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
+                    row.addView(Ui.text(a, 12.5f, if (ok) Ui.TEXT else Ui.SUB, false,
+                        if (ml == null) "해루질 — 물때 받는 중…"
+                        else (if (ok) "✅ " else "▫ ") + String.format(Locale.KOREA, "해루질 — 가장 낮은 간조 %.0fcm (기준 %dcm 이하)", ml * 100, cm) +
+                            (if (i?.exact != false) "" else " · 참고(짐작 자료)")).apply { setPadding(dp(6), 0, 0, 0) },
+                        LinearLayout.LayoutParams(0, WRAP, 1f))
+                    det.addView(row, Ui.lp(a, MATCH, WRAP, top = 4))
+                    return@forEach
+                }
                 val r = ruleOf(n)
                 val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                 row.addView(iconView(n, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
@@ -266,8 +308,10 @@ object TideCalendar {
                 val sb = StringBuilder("🌊 간조 ")
                 sb.append(lows.joinToString(" · ") { String.format(Locale.KOREA, "%s (%.0fcm)", hm.format(Date(it.time)), it.value * 100) }.ifBlank { "없음" })
                 sb.append("\n    만조 ").append(highs.joinToString(" · ") { hm.format(Date(it.time)) }.ifBlank { "없음" })
-                if (pct >= 85 && lows.isNotEmpty()) {
-                    sb.append("\n🥅 해루질 시간: ").append(lows.joinToString(" · ") { "${hm.format(Date(it.time - 2 * 3_600_000L))}~${hm.format(Date(it.time + 30 * 60_000L))}" })
+                val lim = haeruCm(a).toDouble()
+                val goodLows = lows.filter { x -> x.value * 100.0 <= lim }
+                if (goodLows.isNotEmpty()) {
+                    sb.append("\n🥅 해루질 시간: ").append(goodLows.joinToString(" · ") { "${hm.format(Date(it.time - 2 * 3_600_000L))}~${hm.format(Date(it.time + 30 * 60_000L))}" })
                     sb.append(" (간조 2시간 전~간조 30분 뒤 · 밀물 시작 전에 나오기)")
                 }
                 tideLine.text = sb
@@ -323,16 +367,22 @@ object TideCalendar {
                 if (d < 1 || d > days) { row!!.addView(View(a), lp); continue }
                 val day = Sun.dayStart((first.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, d); set(Calendar.HOUR_OF_DAY, 12) }.timeInMillis)
                 val noon = day + 12 * 3_600_000L
-                val pct = Tide.estimatePct(noon)
+                val pct = pctOf(day)
                 val mi = Tide.mulIndex(noon)
-                val good = rules.filter { (_, r) -> r != null && r.ok(pct) && r.inSeason(m) }.keys.toList()
+                val hOk = haeruOk(day)
+                val good = rules.filter { (n, r) -> if (n == HAERU) hOk else r != null && r.ok(pct) && r.inSeason(m) }.keys.toList()
                 val f = FrameLayout(a).apply {
-                    background = Ui.bg(a, if (pct >= 85) Color.parseColor("#123E31") else Color.parseColor("#0F2433"), 9,
+                    background = Ui.bg(a, if (hOk) Color.parseColor("#123E31") else Color.parseColor("#0F2433"), 9,
                         when { day == today && warnToday.isNotBlank() -> Color.parseColor("#E8505B"); day == sel -> Color.parseColor("#FFB27A"); day == today -> Color.WHITE; else -> Color.TRANSPARENT })
                     setOnClickListener { sel = day; paintGrid(); showDetail(day) }
                 }
                 f.addView(Ui.text(a, 12f, when (cell % 7) { 0 -> Color.parseColor("#FF8A92"); 6 -> Color.parseColor("#7FB8FF"); else -> Ui.TEXT }, true,
                     "$d" + if (day == today && warnToday.isNotBlank()) " ⚠" else "").apply { setPadding(dp(4), dp(2), 0, 0) }, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.START))
+                // v4.1 (181): 오른쪽 위에 그날 가장 낮은 간조 (cm) · 기준 이하면 초록
+                infoOf(day)?.minLow?.let { ml ->
+                    f.addView(Ui.text(a, 8.5f, if (hOk) Ui.GREEN else Ui.SUB, hOk, "↓${(ml * 100).toInt()}").apply { setPadding(0, dp(3), dp(3), 0) },
+                        FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.END))
+                }
                 val icons = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
                 good.take(3).forEach { n -> icons.addView(iconView(n, 17), LinearLayout.LayoutParams(dp(17), dp(17))) }
                 f.addView(icons, FrameLayout.LayoutParams(MATCH, dp(18), Gravity.CENTER).apply { topMargin = dp(2) })
@@ -347,10 +397,42 @@ object TideCalendar {
                 row!!.addView(f, lp)
             }
         }
+        // 그달 날짜마다 실제 물때 받기 (폰 · 서버에 기억된 건 바로)
+        val loadView = Ui.text(a, 11.5f, Color.parseColor("#FFB27A"), false, "").apply { visibility = View.GONE }
+        body.addView(loadView, 0)
+        fun loadMonth() {
+            val my = ++loadSeq
+            val first = month.clone() as Calendar
+            val n = first.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val days = (1..n).map { d -> Sun.dayStart((first.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, d); set(Calendar.HOUR_OF_DAY, 12) }.timeInMillis) }
+                .filter { infoOf(it) == null }
+            if (days.isEmpty()) { loadView.visibility = View.GONE; return }
+            var i = 0
+            fun step() {
+                if (my != loadSeq || !dlg.isShowing && i > 0) return
+                if (i >= days.size) { loadView.visibility = View.GONE; redraw(); return }
+                val day = days[i++]
+                loadView.visibility = View.VISIBLE; loadView.text = "🌊 실제 물때 받는 중 $i / ${days.size} (처음 한 번만 · 다음부턴 바로)"
+                Tide.fetch(a, lat, lon, day + 12 * 3_600_000L) { d, _ ->
+                    if (d != null) {
+                        val ex = Tide.extremes(d).filter { it.time >= day && it.time < day + 86_400_000L }
+                        infoCache["${stKey}_$day"] = DayInfo(ex.filter { !it.high }, Tide.dayRange(d), d.stationCode != null)
+                        val code = d.stationCode
+                        if (annRef == null && code != null) {
+                            annRef = Tide.annualRefCached(a, code)
+                            if (annRef == null) Thread { val r = Tide.annualRef(a, code); a.runOnUiThread { if (r != null) { annRef = r; redraw() } } }.start()
+                        }
+                    }
+                    if (i % 6 == 0) paintGrid()
+                    step()
+                }
+            }
+            step()
+        }
         redraw = { paintGrid(); showDetail(sel) }
-        prev.setOnClickListener { month.add(Calendar.MONTH, -1); paintGrid() }
-        next.setOnClickListener { month.add(Calendar.MONTH, 1); paintGrid() }
-        paintChips(); redraw()
+        prev.setOnClickListener { month.add(Calendar.MONTH, -1); paintGrid(); loadMonth() }
+        next.setOnClickListener { month.add(Calendar.MONTH, 1); paintGrid(); loadMonth() }
+        paintChips(); redraw(); loadMonth()
         // 오늘 기상특보 (내 바다 구역)
         Warn.forPlace(lat, lon) { w ->
             if (w.isNullOrBlank()) return@forPlace

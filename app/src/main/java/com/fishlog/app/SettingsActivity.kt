@@ -104,6 +104,36 @@ class SettingsActivity : Activity() {
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "기본 1km · 해루질은 500m 넘게 떨어질 때도 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
             Ui.lp(this, MATCH, WRAP, top = 4))
         renderOffline()
+        renderData()
+    }
+
+    /** v4.1 (185): 📶 이 앱이 쓴 데이터 */
+    private fun renderData() {
+        section("📶 이 앱이 쓴 데이터")
+        fun mb(b: Long) = if (b < 1024 * 1024) "${(b + 1023) / 1024}KB" else String.format(java.util.Locale.KOREA, "%.1fMB", b / 1048576.0)
+        val uid = android.os.Process.myUid()
+        val total = (android.net.TrafficStats.getUidRxBytes(uid) + android.net.TrafficStats.getUidTxBytes(uid)).coerceAtLeast(0L)
+        val zone = Ui.dataOf(this, "zone"); val upd = Ui.dataOf(this, "update")
+        val tiles = try {
+            val dir = org.osmdroid.config.Configuration.getInstance().osmdroidTileCache
+            dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        } catch (_: Exception) { 0L }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        fun line(k: String, v: String) {
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            r.addView(Ui.text(this, 13.5f, Ui.TEXT, false, k), LinearLayout.LayoutParams(0, WRAP, 1f))
+            r.addView(Ui.text(this, 13.5f, Color.parseColor("#FFB27A"), true, v))
+            card.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
+        }
+        line("🦀 해루질 구역 자료 (이번 달)", mb(zone))
+        line("⬇ 앱 업데이트 받기 (이번 달)", mb(upd))
+        line("🗺 지도 그림 저장 용량 (폰에 쌓인 것)", mb(tiles))
+        line("📶 전체 주고받은 양 (폰을 켠 뒤부터)", mb(total))
+        card.addView(Ui.text(this, 11.5f, Ui.SUB, false, "• 지도 · 위성 그림, 사진 올리기, 날씨 · 물때, 같이 출조 중 공유는 '전체'에 들어 있어요\n• 정확한 월 사용량은 폰 설정 → 연결 → 데이터 사용에서 볼 수 있어요\n• 아끼는 법: 구역 미리 받기 · 전국 받기는 와이파이에서, 위성 지도는 꼭 필요할 때만"),
+            Ui.lp(this, MATCH, WRAP, top = 8))
+        box.addView(card, Ui.lp(this, MATCH, WRAP, top = 6))
     }
 
     /** v3.9.3 (168): 📐 화면 크기 막대 (70~120% · 가운데 100 = 자동) · 손을 떼면 앱 전체에 적용 */

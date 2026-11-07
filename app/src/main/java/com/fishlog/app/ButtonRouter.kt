@@ -18,10 +18,11 @@ object ButtonRouter {
     var onMessage: ((String) -> Unit)? = null
 
     private const val LONG_PRESS_MS = 800L
-    private const val DEBOUNCE_MS = 350L
+    private const val DEBOUNCE_MS = 80L          // v4.1 (187): 같은 버튼에서 겹쳐 온 신호만 거름 (따닥 연타는 다 셈)
+    private const val DEBOUNCE_SLOW_MS = 350L     // '느리게': 한 번 누를 때 신호를 두 번 보내는 리모컨용
     private const val WATCH_GAP_MS = 80L
     private var watchAt = 0L
-    private var lastAt = 0L
+    private val lastAtByCode = HashMap<String, Long>()
 
     fun startLearning(n: Int = 1) {
         learningStep = n.coerceIn(1, Store.MAX_REMOTE)
@@ -94,8 +95,9 @@ object ButtonRouter {
     private fun handle(ctx: Context, code: String, longPress: Boolean) {
         val now = SystemClock.elapsedRealtime()
         // 리모컨이 한 번 누를 때 신호를 두 개 보내는 경우 대비
-        if (now - lastAt < DEBOUNCE_MS) return
-        lastAt = now
+        val gap = if (Store.remoteSlow) DEBOUNCE_SLOW_MS else DEBOUNCE_MS
+        if (now - (lastAtByCode[code] ?: 0L) < gap) return
+        lastAtByCode[code] = now
 
         if (learningStep != 0) {
             val n = learningStep

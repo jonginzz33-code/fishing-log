@@ -379,73 +379,65 @@ class MainActivity : Activity() {
             setAutoSizeTextTypeUniformWithConfiguration(13, 30, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(MATCH, 0, 1f))
         header.addView(titleCol, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
-        // 지도 버튼: 큰 글씨 '지도' + 작은 글씨 '그룹 · 현위치'
-        header.addView(smallBtn("") { openMap() }.apply {
-            text = android.text.SpannableStringBuilder("지도\n").apply {
-                val s0 = length; append("그룹 · 현위치")
-                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
-                setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), s0, length, 0)
-            }
-            setLineSpacing(0f, 0.95f)
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-        }, LinearLayout.LayoutParams(WRAP, dp(48)))
-        // v3.9.4 (180): 📅 일정 (물때 달력) · 지도 바로 옆
-        header.addView(smallBtn("") { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }.apply {
-            text = android.text.SpannableStringBuilder("📅 일정\n").apply {
-                val s0 = length; append("물때 좋은 날")
-                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
-                setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFB27A")), s0, length, 0)
-            }
-            setLineSpacing(0f, 0.95f)
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-            background = Ui.bg(this@MainActivity, Ui.CARD, 12, Color.parseColor("#FFB27A"))
-        }, LinearLayout.LayoutParams(WRAP, dp(48)).apply { leftMargin = dp(4) })
-        // 채팅 버튼: '채팅' + 작은 글씨 '접속 N명', 안 읽은 글은 빨간 숫자
-        // 빨간 숫자가 잘리지 않게: 위·오른쪽에 여유 칸을 두고 그 안에 숫자를 그림
-        val chatBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
-        chatBtn = smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }.apply {
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-            setLineSpacing(0f, 0.95f)
-            background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 12, Color.parseColor("#F2C14E"))
+        // v4.1 (188): 맨 위는 그룹 · 제목 · ⚙만 → 둘째 줄에 🎒 가방 · 🗺 지도 · 📅 일정 · 💬 채팅 · ✉ 문의 (같은 폭)
+        header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(2) })
+        col.addView(header)
+        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
+        fun two(big: String, small: String, smallColor: Int?) = android.text.SpannableStringBuilder("$big\n").apply {
+            val s0 = length; append(small)
+            setSpan(android.text.style.AbsoluteSizeSpan(9, true), s0, length, 0)
+            if (smallColor != null) setSpan(android.text.style.ForegroundColorSpan(smallColor), s0, length, 0)
         }
-        chatBox.addView(chatBtn, android.widget.FrameLayout.LayoutParams(WRAP, dp(48)))
+        fun cell(v: View, last: Boolean = false): android.widget.FrameLayout = android.widget.FrameLayout(this).apply {
+            clipChildren = false; clipToPadding = false; setPadding(0, dp(8), if (last) 0 else dp(5), 0)
+            addView(v, android.widget.FrameLayout.LayoutParams(MATCH, dp(50)))
+        }
+        fun styled(t: TextView, fill: Int, stroke: Int, textColor: Int = Ui.TEXT) = t.apply {
+            textSize = 13.5f; setTextColor(textColor); setLineSpacing(0f, 0.95f); setPadding(dp(2), dp(2), dp(2), dp(2)); maxLines = 2
+            background = Ui.bg(this@MainActivity, fill, 12, stroke)
+        }
+        // 🎒 가방 (나만의 재고표)
+        btnRow.addView(cell(styled(smallBtn("") { Inventory.show(this) }, Color.parseColor("#12301F"), Ui.GREEN, Color.parseColor("#BFF5D8")).apply {
+            text = two("🎒 가방", "재고표", Ui.GREEN)
+        }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        // 🗺 지도 (바다색으로 채워 강조 · 182)
+        btnRow.addView(cell(styled(smallBtn("") { openMap() }, Color.parseColor("#1F6E96"), Color.parseColor("#7FD3E8"), Color.WHITE).apply {
+            text = two("🗺 지도", "그룹·현위치", Color.parseColor("#D6F3FF"))
+            background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.parseColor("#2E8FB8"), Color.parseColor("#1C5F86"))).apply { cornerRadius = dp(12).toFloat(); setStroke(dp(1), Color.parseColor("#7FD3E8")) }
+        }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        // 📅 일정 (물때 달력)
+        btnRow.addView(cell(styled(smallBtn("") { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }, Ui.CARD, Color.parseColor("#FFB27A")).apply {
+            text = two("📅 일정", "물때 좋은 날", Color.parseColor("#FFB27A"))
+        }), LinearLayout.LayoutParams(0, WRAP, 1f))
+        // 💬 채팅 (안 읽은 글은 빨간 숫자)
+        chatBtn = styled(smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }, Color.parseColor("#2A2310"), Color.parseColor("#F2C14E"))
+        val chatBox = cell(chatBtn)
         chatBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
             visibility = View.GONE
         }
-        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(9); rightMargin = -dp(7) })
-        header.addView(chatBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(4); rightMargin = dp(0) })
+        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(2) })
+        btnRow.addView(chatBox, LinearLayout.LayoutParams(0, WRAP, 1f))
         paintChat()
-        // 1:1 문의 (나와 운영자만): 채팅 옆 ✉, 안 읽은 답장은 빨간 점
-        val inqBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(9), dp(7), dp(9)) }
-        // 1:1 문의: 지도·채팅과 같은 글자 버튼 ('문의' + 작은 '관리자 1:1'), 답장 오면 빨간 숫자
+        // ✉ 문의 (관리자 1:1 · 답장 오면 빨간 숫자)
         val purple = Color.parseColor("#CFC8FF")
-        inqBox.addView(smallBtn("") {
+        val inqBox = cell(styled(smallBtn("") {
             if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
             else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
-        }.apply {
-            text = android.text.SpannableStringBuilder("문의\n").apply {
-                val s0 = length; append("관리자 1:1")
-                setSpan(android.text.style.AbsoluteSizeSpan(10, true), s0, length, 0)
-            }
-            setTextColor(purple); setLineSpacing(0f, 0.95f); setPadding(dp(8), dp(2), dp(8), dp(2))
-            background = Ui.bg(this@MainActivity, Color.parseColor("#1E1A3A"), 12, Color.parseColor("#7C6BD6"))
-        }, android.widget.FrameLayout.LayoutParams(WRAP, dp(48)))
+        }, Color.parseColor("#1E1A3A"), Color.parseColor("#7C6BD6"), purple).apply { text = two("✉ 문의", "관리자 1:1", null) }, last = true)
         inqBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
         }
-        inqBox.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(9); rightMargin = -dp(7) })
-        header.addView(inqBox, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(2) })
-        // (✉ 문의가 들어가서 '?' 설명서는 ☰ 메뉴의 '사용 설명서'로)
-        // 개인 설정 (톱니바퀴)
-        header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
-            gravity = Gravity.CENTER
-            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
-            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { leftMargin = dp(2) })
-        col.addView(header)
+        inqBox.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(4) })
+        btnRow.addView(inqBox, LinearLayout.LayoutParams(0, WRAP, 1f))
+        col.addView(btnRow, Ui.lp(this, MATCH, WRAP, top = 2))
         paintHeadGroup()
 
         // 출조 종류 칩은 맨 아래 '그룹' 칸 안에서 고름 (renderGroupPanel)
@@ -640,7 +632,6 @@ class MainActivity : Activity() {
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
-        menuBox.addView(Ui.button(this, "📦 나만의 재고표 (준비물 · 봉돌 수량)") { Inventory.show(this) }, Ui.lp(this, MATCH, WRAP, top = 10))
         menuBox.addView(Ui.button(this, "🗑 휴지통 (남이 지운 내 조과 · 30일)") {
             if (Cloud.user == null) showMessage("구글 로그인이 필요해요") else Trash.show(this)
         }, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -901,6 +892,17 @@ class MainActivity : Activity() {
                 refresh(); renderMethods()
             }
         }, Ui.lp(this, MATCH, WRAP, top = 8))
+        // v4.1 (187): 따닥 연타는 다 세요 · 한 번 누를 때 두 번씩 세지는 리모컨이면 '느리게'
+        box.addView(Ui.text(this, 13f, if (Store.remoteSlow) Color.parseColor("#1B0E02") else Ui.TEXT, true,
+            (if (Store.remoteSlow) "☑" else "☐") + " 느리게 (한 번 누를 때 두 번씩 세지면 켜기)").apply {
+            gravity = Gravity.CENTER; setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = if (Store.remoteSlow) Ui.bg(this@MainActivity, Color.parseColor("#FFB27A"), 10) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Ui.LINE)
+            setOnClickListener {
+                Store.remoteSlow = !Store.remoteSlow
+                showMessage(if (Store.remoteSlow) "느리게: 같은 버튼은 0.35초 안에 다시 눌러도 한 번만 세요" else "빠르게: 따닥 연타도 다 세요")
+                renderMethods()
+            }
+        }, Ui.lp(this, MATCH, WRAP, top = 6))
         methodBox.addView(box)
     }
 
