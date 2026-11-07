@@ -2128,7 +2128,8 @@ class MainActivity : Activity() {
     private fun openAdminMenu() {
         if (!Cloud.isAdmin) return
         // v4.2.6 (203): 1:1 문의함은 메인 '✉ 관리자 문의' · 미니게임은 메인 '🎮 게임' 칸으로 (중복이라 뺌)
-        val items = listOf("👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제")
+        // v4.4: 🧪 미니게임 테스트판 (새 기능 먼저 시험 → 괜찮으면 본 게임에 덮어씀)
+        val items = listOf("👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제", "🧪 미니게임 테스트판")
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
@@ -2147,6 +2148,7 @@ class MainActivity : Activity() {
                         .setNegativeButton("취소", null).show()
                     3 -> Zones.openAdmin(this)
                     4 -> StationAdmin.open(this)
+                    5 -> MiniGame.pickTest(this, bestLocation())
                     else -> {}
                 }
             }

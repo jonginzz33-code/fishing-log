@@ -23,11 +23,20 @@ import android.widget.FrameLayout
  *  - 🎣 찌낚시 손맛 · 🐙 쭈꾸미 손맛 (assets/games 폴더의 html 파일을 앱 안 화면으로)
  *  - 쭈꾸미: 폰 흔들기 센서(devicemotion)로 고패질 · 챔질 · 감기, 바닥 찍을 때 진동 (앱 진동으로 세기까지)
  *  - 해 보고 재밌으면 모든 사람 메뉴로 옮길 예정
+ *  - v4.4: 관리자 메뉴 '🧪 미니게임 테스트판' (assets/games 의 _test.html 파일) — 새 기능을 먼저 시험, 괜찮으면 본 게임에 덮어씀
+ *    테스트판은 랭킹에 안 올리고, 오늘 물때 · 바람을 FL.env() 로 넘겨줌
  */
 object MiniGame {
 
     /** 게임 화면(JS)에서 부르는 진동: FL.vibrate("45,90,28", 세기 1~255) */
+    /** 테스트판에 넘겨줄 오늘 물때 · 바람 (JSON) · 받기 전엔 "" */
+    @Volatile private var envJson: String = ""
+
     private class Bridge(val c: Context, val onClose: () -> Unit, val onRank: (String) -> Unit) {
+        /** 🧪 테스트판: {st 관측소, ext:[{m 0시부터 분, h 1만조/0간조}], wind:[24], dir:[24], wave:[24]} */
+        @JavascriptInterface
+        fun env(): String = envJson
+
         @JavascriptInterface
         fun close() = onClose()
 
@@ -70,6 +79,56 @@ object MiniGame {
             .setNegativeButton("닫기", null).show()
     }
 
+    /** 🧪 관리자 메뉴 → 미니게임 테스트판 (loc = 물때 · 바람 받을 위치) */
+    fun pickTest(a: Activity, loc: Pair<Double, Double>?) {
+        loadEnv(a, loc)
+        val items = arrayOf("🐙 쭈꾸미 선상 · 테스트 (하루 출조 · 배 흔들림 · 선장 방송 · 바닥 진동 · 도감)",
+            "🎣 바다찌낚시 · 테스트 (밑밥 · 수심 · 바람 · 칭호)")
+        AlertDialog.Builder(a, R.style.FlAlert)
+            .setTitle("🧪 미니게임 테스트판 · 랭킹 X · 기록은 이 폰에만")
+            .setItems(items) { _, i -> open(a, if (i == 0) "jjukkumi_test.html" else "bobber_test.html") }
+            .setNegativeButton("닫기", null).show()
+    }
+
+    /** 오늘 물때(만조 · 간조) + 시간별 바람 · 파고를 받아 JSON 으로 (못 받으면 게임이 달 계산 · 랜덤으로) */
+    private fun loadEnv(a: Activity, loc: Pair<Double, Double>?) {
+        envJson = ""
+        if (loc == null) return
+        val app = a.applicationContext
+        val j = org.json.JSONObject()
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul")).apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val day0 = cal.timeInMillis
+        fun publish() { synchronized(j) { envJson = j.toString() } }
+        Tide.fetch(app, loc.first, loc.second, System.currentTimeMillis()) { d, _ ->
+            if (d == null) return@fetch
+            try {
+                val arr = org.json.JSONArray()
+                Tide.extremes(d).forEach { e ->
+                    arr.put(org.json.JSONObject().put("m", ((e.time - day0) / 60_000L).toInt()).put("h", if (e.high) 1 else 0))
+                }
+                synchronized(j) {
+                    j.put("ext", arr)
+                    Tide.stationFor(app, loc.first, loc.second)?.let { j.put("st", it.name) }
+                }
+                publish()
+            } catch (_: Exception) {}
+        }
+        Weather.fetch(app, loc.first, loc.second, day0) { day ->
+            if (day.hours.isEmpty()) return@fetch
+            try {
+                val w = org.json.JSONArray(); val dr = org.json.JSONArray(); val wv = org.json.JSONArray()
+                for (h in 0 until 24) {
+                    val hr = day.at(h)
+                    w.put(hr?.wind ?: org.json.JSONObject.NULL); dr.put(hr?.dir ?: org.json.JSONObject.NULL); wv.put(hr?.wave ?: org.json.JSONObject.NULL)
+                }
+                synchronized(j) { j.put("wind", w); j.put("dir", dr); j.put("wave", wv) }
+                publish()
+            } catch (_: Exception) {}
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     fun open(a: Activity, file: String) {
         val dlg = Dialog(a, R.style.FlFull)
@@ -90,6 +149,17 @@ object MiniGame {
         dlg.setContentView(root)
         dlg.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         dlg.setOnDismissListener { try { web.stopLoading(); web.destroy() } catch (_: Exception) {} }
+        // 뒤로 가기: 게임이 막으면(테스트판 하루 출조 중 → '그만할까요?') 안 닫음
+        dlg.setOnKeyListener { _, code, ev ->
+            if (code == android.view.KeyEvent.KEYCODE_BACK && ev.action == android.view.KeyEvent.ACTION_UP) {
+                try {
+                    web.evaluateJavascript("(window.flBeforeClose&&window.flBeforeClose())?'1':'0'") { r ->
+                        if (r?.contains("1") != true) dlg.dismiss()
+                    }
+                } catch (_: Exception) { dlg.dismiss() }
+                true
+            } else code == android.view.KeyEvent.KEYCODE_BACK
+        }
         dlg.show()
     }
 }
