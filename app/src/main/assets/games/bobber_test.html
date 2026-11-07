@@ -17,7 +17,8 @@ body{background:var(--deep);color:var(--ink);font-family:var(--f-body);overflow:
 .app{max-width:460px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:8px;padding-block:10px;box-sizing:border-box}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
 h1{font-family:var(--f-display);font-weight:400;font-size:21px;margin:0;color:var(--foam);white-space:nowrap}
-.hbtns{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.hbtns{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
+header{flex-wrap:wrap;row-gap:6px}
 .chip{border:1px solid #2B5468;background:var(--panel);color:var(--ink);border-radius:99px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .chip:focus-visible{outline:2px solid var(--line)}
 .tide{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
@@ -267,7 +268,7 @@ function checkTitles(){const got=[];TITLES.forEach(t=>{if(!meta.titles.includes(
 
 /* ---- 소리 (WebAudio로 직접 만듦) ---- */
 let ac=null,soundOn=true;try{soundOn=localStorage.getItem("bobber_snd")!=="0"}catch(e){}
-const paintSnd=()=>$("sndBtn").textContent=soundOn?"🔊 소리 켬":"🔇 소리 끔";paintSnd();
+const paintSnd=()=>$("sndBtn").textContent=soundOn?"🔊":"🔇";paintSnd();
 $("sndBtn").onclick=()=>{soundOn=!soundOn;try{localStorage.setItem("bobber_snd",soundOn?"1":"0")}catch(e){};paintSnd()};
 function audio(){if(!soundOn)return null;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();return ac}catch(e){return null}}
 function tone(f,dur,type,vol,slide){const a=audio();if(!a)return;const o=a.createOscillator(),g=a.createGain();o.type=type||"sine";o.frequency.setValueAtTime(f,a.currentTime);

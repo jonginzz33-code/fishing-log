@@ -16,9 +16,10 @@ body{background:var(--deep);color:var(--ink);font-family:var(--f-body);overflow:
   -webkit-user-select:none;user-select:none;touch-action:manipulation}
 .app{max-width:460px;margin:0 auto;height:100%;display:flex;flex-direction:column;gap:8px;padding-block:10px;box-sizing:border-box}
 header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-h1{font-family:var(--f-display);font-weight:400;font-size:21px;margin:0;white-space:nowrap}
+h1{font-family:var(--f-display);font-weight:400;font-size:19px;margin:0;white-space:nowrap}
 h1 span{color:var(--egi)}
-.chips{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;row-gap:4px}
+header{flex-wrap:wrap;row-gap:6px}
 .chip{border:1px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:99px;padding:5px 9px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 .chip.on{border-color:var(--egi);color:var(--egi)}
 .chip:focus-visible{outline:2px solid var(--line)}
@@ -79,6 +80,24 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .sk.rec{border-color:var(--ok)}.sk.on{background:var(--egi);border-color:var(--egi);color:#200}
 .sk small{display:block;font-size:10.5px;font-weight:400;color:var(--sub)}
 .sk.on small{color:#401}
+/* v4.4 · 209~216 (시험판에서 옮김) */
+.capt{position:absolute;left:12px;right:12px;bottom:12px;background:rgba(242,193,78,.96);color:#231700;border-radius:14px;padding:8px 12px;font-size:13.5px;font-weight:700;line-height:1.45;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;border:1.5px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:12px;padding:9px 0;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.seg button.on{background:var(--line);border-color:var(--line);color:#231700}
+.opts{display:flex;gap:6px;flex-wrap:wrap}
+.dexg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 10px}
+.dexc{background:var(--panel);border-radius:12px;padding:8px 4px;text-align:center;font-size:11.5px;color:var(--sub);line-height:1.4}
+.dexc .i{font-size:30px;display:block}.dexc b{color:var(--ink);font-size:13px;display:block}
+.dexc.no .i{filter:grayscale(1) brightness(.25)}
+.li{display:flex;align-items:center;gap:8px;background:var(--panel);border-radius:10px;padding:7px 10px;margin:5px 0;font-size:13px}
+.li .t{flex:1;min-width:0}.li small{display:block;color:var(--sub);font-size:11.5px}
+.li .mini{border:1px solid #2B5560;background:transparent;color:var(--ink);border-radius:99px;padding:4px 9px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.li .mini.on{border-color:var(--ok);color:var(--ok)}
+.li .mini.del{border-color:#7A3A3A;color:var(--bad)}
+.stars{font-size:34px;color:var(--line);text-align:center;letter-spacing:4px}
+.bigb{width:100%;margin-top:10px;height:48px;border:0;border-radius:14px;font-family:var(--f-display);font-size:18px;color:#fff;background:#2C8FC8;cursor:pointer}
+.bigb.red{background:#B33A4A}
 </style>
 
 <div class="app">
@@ -86,14 +105,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <h1>🐙 <span>쭈꾸미</span> 선상</h1>
     <div class="chips">
       <button class="chip" id="flClose" type="button" hidden>✕ 닫기</button>
-      <button class="chip" id="rankBtn" type="button" hidden>🏆 랭킹</button>
-      <button class="chip" id="moveBtn" type="button">🚤 포인트 이동</button>
-      <button class="sw" id="eyeBtn" type="button" role="switch" aria-checked="false">초보 모드<span class="tg"><i></i></span></button>
-      <button class="chip" id="helpBtn" type="button">? 방법</button>
+      <button class="chip" id="rankBtn" type="button" hidden aria-label="랭킹">🏆</button>
+      <button class="chip" id="moveBtn" type="button">🚤 이동</button>
+      <button class="chip" id="dexBtn" type="button">🏅 도감</button>
+      <button class="sw" id="eyeBtn" type="button" role="switch" aria-checked="false" aria-label="초보 모드">초보<span class="tg"><i></i></span></button>
+      <button class="chip" id="helpBtn" type="button">?</button>
     </div>
   </header>
   <div class="cond" id="cond"></div>
   <div class="row"><span id="sensTxt">센서 확인 중…</span><span>오늘 <b id="cnt">0</b>마리 · <b id="kg">0</b>g · 잃은 채비 <b id="lost">0</b></span></div>
+  <div class="row"><span id="clock">⏱ 자유 낚시</span><span id="envTxt"></span></div>
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
     <div class="msg" id="msg">봉돌을 고르고 채비를 내려요</div>
@@ -107,6 +128,16 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
     <div class="prep" id="prep">
       <h3>🚤 오늘 선상 쭈꾸미</h3>
       <div class="cap" id="capTxt"></div>
+      <div id="modeBox" style="display:flex;flex-direction:column;gap:6px">
+        <b style="font-size:14px">모드</b>
+        <div class="seg" id="modeSeg"><button type="button" data-m="free">⏱ 자유 낚시</button><button type="button" data-m="day">🚢 하루 출조</button></div>
+        <div class="seg" id="lenSeg"><button type="button" data-l="6">6분</button><button type="button" data-l="12">12분</button><button type="button" data-l="20">20분</button></div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.5" id="modeNote"></div>
+      </div>
+      <div class="opts">
+        <button class="sw" id="swaySw" type="button" role="switch">배 흔들림<span class="tg"><i></i></span></button>
+        <button class="sw" id="captSw" type="button" role="switch">선장 방송<span class="tg"><i></i></span></button>
+      </div>
       <b style="font-size:14px">봉돌 고르기</b>
       <div class="sinkers" id="sinkers"></div>
       <div style="font-size:12px;color:var(--sub);line-height:1.5">가벼우면 바닥 느낌이 잘 오지만 물살에 채비가 떠요 · 무거우면 바닥은 잘 잡지만 신호가 둔하고 밑걸림이 잦아요</div>
@@ -118,19 +149,27 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <li>선장 안내를 보고 <b>봉돌</b>을 골라요. 물살이 셀수록(사리) 무겁게, 약할수록(무시·조금) 가볍게.</li>
         <li>'삐-' 신호에 채비를 내려요. 바닥에 닿으면 <b>툭</b> 하고 줄이 멈춰요 → 화면을 <b>톡톡 2번</b> 눌러 줄을 팽팽하게 (안 하면 신호가 약해요).</li>
         <li>계속 흔들지 말고 <b>바닥에 5~10초 가만히</b> 두었다가, 폰을 <b>살짝 들어</b> 무게감을 확인해요. 쭈꾸미는 가만히 있는 에기에 올라타요.</li>
-        <li>살짝 들 때 <b>묵직</b>하면 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 화면 톡). 3~7번 안에 챔질 안 하면 도망가요.</li>
+        <li>바닥 찍는 진동이 <b>평소와 달라지면</b>(안 오거나 길고 뭉툭) 올라탄 거예요. 살짝 들 때 <b>묵직</b>해도 올라탄 거예요 → 폰을 <b>확 들어 챔질</b> (또는 화면 톡). 3~7번 안에 챔질 안 하면 도망가요.</li>
         <li>갑오징어는 에기가 바닥에서 조금 떠 있을 때 <b>툭</b> 쳐요 → 바로 챔질 (아주 짧아요).</li>
         <li>화면 <b>톡</b> = 챔질 · 화면 <b>꾹(0.6초)</b> = 릴 감아 채비 회수. 걸리면 <b>화면 꾹</b> = 감기. 밑걸림이면 꾹 2초 당겨 바늘을 펴서 빼요 (못 빼면 채비를 잃어요).</li>
-        <li>선장이 "채비 걷으세요" 하면 걷고 다음 포인트에서 다시 내려요. 입질이 없으면 위쪽 <b>🚤 포인트 이동</b>으로 직접 옮겨요 (30초에 한 번 · 포인트마다 마릿수 · 씨알 · 갑오징어가 달라요).</li>
+        <li>선장이 "채비 걷으세요" 하면 걷고 다음 포인트에서 다시 내려요. 입질이 없으면 위쪽 <b>🚤 이동</b>으로 직접 옮겨요 (30초에 한 번 · 포인트마다 마릿수 · 씨알 · 갑오징어가 달라요).</li>
       </ol>
       <div class="sig-t">
         <span>툭</span><span>채비가 바닥에 닿음 (줄 멈춤)</span>
-        <span>콩</span><span>빈 바닥</span>
-        <span>드득</span><span>돌 · 조개껍데기</span>
+        <span>바닥 길이</span><span>포인트마다 0.1~0.35초로 달라요 · 그 포인트의 바닥 느낌을 익혀 두세요</span>
+        <span>평소와 다름</span><span>바닥을 찍었는데 진동이 없거나 길고 뭉툭(~0.5초) = 쭈꾸미 · 문어가 올라탐 → 챔질</span>
+        <span>툭툭</span><span>피딩 중 쭈꾸미가 에기를 건드림 · 곧 올라타요</span>
+        <span>푹</span><span>뻘바닥 (길고 부드럽게) · 밑걸림 적고 쭈꾸미 잘 나와요</span>
+        <span>콩</span><span>모래바닥 (짧고 또렷하게)</span>
+        <span>딱딱</span><span>돌바닥 (짧게 두 번) · 밑걸림 많고 문어 · 갑오징어 조금 더</span>
+        <span>드득</span><span>조개껍데기 · 잔돌</span>
         <span>묵직</span><span>들 때 길고 무거운 떨림 = 쭈꾸미(문어) 올라탐</span>
         <span>툭!</span><span>떠 있을 때 짧고 날카롭게 = 갑오징어</span>
       </div>
       <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🎯 운용 점수: 바닥에 5~10초 두었다 살짝 드는 걸 반복하면 차요. 높을수록 올라탈 확률이 올라가지만, 다 찬다고 바로 올라타진 않아요.</p>
+      <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🚢 하루 출조: 06:00~12:00 출조를 6 · 12 · 20분으로 줄여서 해요. 만조 · 간조 앞뒤 물돌이와 06~07시는 🔥 피딩타임(입질 2.5배), 중간 물은 물살이 세져서 선장이 봉돌을 바꾸라고 해요. 12시에 쿨러를 정산해요 (오늘 실제 물때 · 바람을 써요, 못 받으면 달 계산).</p>
+      <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🌬 배 흔들림: 바람이 세면 배가 출렁여서 폰을 가만히 들고 있어도 에기가 바닥에서 떠요. 배가 올라갈 때 폰 앞쪽을 살짝 내리면 에기가 제자리에 있어요.</p>
+      <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🏅 도감: 잡은 어종 · 최대 무게 · 칭호 · 하루 출조 기록 (이 폰에 저장돼요).</p>
       <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">초보 모드를 켜면 쭈꾸미 · 갑오징어 올라탐, 밑걸림, 채비 뜸이 화면 위쪽에 떠요 (도망까지 남은 횟수 · 챔질 남은 시간 막대). 끄면 진동으로만 알아채요.</p>
       <b>들어 올리는 양 → 에기 높이</b> (폰을 들어 보면 막대가 바로 움직여요)
       <div class="motion"><i id="mv"></i><span class="th" id="th"></span></div>
@@ -138,6 +177,15 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <p id="sensNote" style="color:var(--sub);font-size:12.5px;margin:0"></p>
       <button class="chip" id="helpClose" type="button" style="width:100%;margin-top:12px">닫기</button>
     </div>
+    <div class="sheet" id="dex" hidden></div>
+    <div class="sheet" id="settle" hidden></div>
+    <div class="sheet" id="quit" hidden>
+      <h3>출조를 그만할까요?</h3>
+      <p style="color:var(--sub)">지금까지 잡은 걸로 정산하고 나가요. 하루 출조 기록에 남아요.</p>
+      <button class="bigb red" id="quitYes" type="button">정산하고 나가기</button>
+      <button class="bigb" id="quitNo" type="button">계속 낚시</button>
+    </div>
+    <div class="capt" id="capt" hidden></div>
   </div>
   <div class="btns">
     <button class="btn b1" id="b1" type="button">채비 내리기</button>
@@ -146,7 +194,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 </div>
 <script>
 (()=>{
-if(window.FL&&FL.close){const c=document.getElementById("flClose");c.hidden=false;c.onclick=()=>FL.close()}
+if(window.FL&&FL.close){const c=document.getElementById("flClose");c.hidden=false;c.onclick=()=>{if(window.flBeforeClose&&window.flBeforeClose())return;FL.close()}}
 const $=id=>document.getElementById(id);
 const cv=$("cv"),ctx=cv.getContext("2d"),b1=$("b1"),b2=$("b2"),msg=$("msg"),sig=$("sig");
 let W=0,H=0;
@@ -164,14 +212,42 @@ const mul=((lunarDay-9)%15+15)%15+1;                    // 1~15 (14 무시 · 15
 const mulName=mul===15?"조금":mul===14?"무시":mul+"물";
 const cur=Math.max(0.2,Math.sin(((mul-1)/14)*Math.PI)); // 물살 세기 0.2~1 (사리 7~8물 = 1)
 const curName=cur>.85?"물살 셈 (사리)":cur>.55?"물살 보통":"물살 약함";
-const REC=cur>.85?16:cur>.7?14:cur>.5?12:cur>.35?10:8;  // 선장 권장 봉돌 (서해 8~20호)
+const recOf=c=>c>.85?16:c>.7?14:c>.5?12:c>.35?10:8;      // 선장 권장 봉돌 (서해 8~20호)
+const REC=recOf(cur);
+let curNow=cur,recNow=REC;                               // 하루 출조 모드에선 시각마다 바뀜
 const now0=new Date(),MON=now0.getMonth()+1,DAY=now0.getDate();
 const BAN=(MON>5&&MON<9)||(MON===5&&DAY>=11);           // 주꾸미 금어기 5.11~8.31
 const SEASON=MON>=9&&MON<=11?"autumn":(MON>=3&&MON<=5)?"spring":"off";
 const SEASON_NAME={autumn:"가을 시즌 (잔챙이 · 마릿수)",spring:"봄 시즌 (산란기 · 큰 씨알)",off:"비시즌 (입질 뜸함)"}[SEASON];
 const seasonMul={autumn:1.3,spring:0.75,off:0.45}[SEASON];
-const tideMul=1.35-0.65*cur;                            // 물살 약할수록 잘 잡힘
+const tideMulOf=c=>1.35-0.65*c;                         // 물살 약할수록 잘 잡힘
 $("cond").innerHTML="오늘 <b>"+mulName+"</b> · "+curName+" · "+SEASON_NAME+(BAN?' · <span class="ban">금어기(5.11~8.31) · 연습 모드</span>':"");
+
+/* ---- 저장 (이 폰) ---- */
+const LS={get(k,d){try{const v=localStorage.getItem("jj2_"+k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem("jj2_"+k,JSON.stringify(v))}catch(e){}}};
+/* 앱이 넘겨주는 오늘 물때 · 바람 (FL.env): {st, ext:[{m:0시부터 분, h:1 만조/0 간조}], wind:[24시간 m/s], wave:[24시간 m]} */
+let ENV=null;
+function readEnv(){try{if(window.FL&&FL.env){const s=FL.env();if(s){const j=JSON.parse(s);if(j&&(j.ext||j.wind))ENV=j}}}catch(e){}return ENV}
+readEnv();
+/* 오늘 만조 · 간조 (분). 못 받으면 달 나이로 대충 (서해: 하루 약 50분씩 늦어짐) */
+function extremes(){
+  const e=ENV&&ENV.ext&&ENV.ext.length>=2?ENV.ext.map(x=>({m:+x.m,h:!!x.h})):null;
+  if(e)return e.sort((a,b)=>a.m-b.m);
+  const P=745,h0=((300+(lunarDay-1)*50)%P+P)%P,out=[];
+  for(let m=h0-2*P;m<1440+2*P;m+=P){out.push({m,h:true});out.push({m:m+P/2,h:false})}
+  return out.sort((a,b)=>a.m-b.m);
+}
+/* 그 시각(분)의 물: 세기 0.15~cur · 들물/날물 · 물돌이(만조 · 간조 앞뒤 25분) · 다음 물돌이까지 분 */
+function tideAt(min){
+  const ex=extremes();let p=null,n=null;
+  for(const x of ex){if(x.m<=min)p=x;else{n=x;break}}
+  if(!p||!n)return{c:cur,dir:"",slack:false,toSlack:999};
+  const ph=(min-p.m)/(n.m-p.m),c=Math.max(.15,cur*Math.sin(Math.PI*ph));
+  const near=Math.min(min-p.m,n.m-min);
+  return{c,dir:n.h?"들물":"날물",slack:near<=25,toSlack:Math.max(0,n.m-25-min),next:n};
+}
+const hhmm=m=>{m=Math.round(m);return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
 
 /* ---- 어종 ---- */
 const SQ={n:"주꾸미",ic:"🐙",min:SEASON==="spring"?120:SEASON==="autumn"?30:60,max:SEASON==="spring"?350:SEASON==="autumn"?140:200,weight:1};
@@ -180,9 +256,12 @@ const OC={n:"문어",ic:"🐙",min:600,max:2600,weight:2.4,big:true};
 
 /* ---- 진동 신호 ---- */
 const SIG={
-  land:{v:[60],a:255,t:"툭 (바닥)",c:"var(--ok)"},
-  bottom:{v:[35],a:200,t:"콩",c:"var(--sub)"},
-  rock:{v:[18,25,18,25,18],a:150,t:"드득",c:"var(--warn)"},
+  land:{v:[80],a:255,t:"툭 (바닥)",c:"var(--ok)"},
+  // 209: 바닥 찍는 진동 더 강하게 + 바닥 종류마다 다르게
+  mud:{v:[75],a:210,t:"푹 (뻘)",c:"var(--sub)"},
+  sand:{v:[55],a:255,t:"콩 (모래)",c:"var(--sub)"},
+  stone:{v:[28,30,28],a:255,t:"딱딱 (돌)",c:"var(--warn)"},
+  rock:{v:[20,25,20,25,20],a:200,t:"드득",c:"var(--warn)"},
   heavy:{v:[260],a:90,t:"묵직…",c:"var(--egi)"},
   cuttle:{v:[22],a:255,t:"툭!",c:"var(--egi)"}
 };
@@ -191,8 +270,25 @@ const paintEye=()=>{$("eyeBtn").classList.toggle("on",eye);$("eyeBtn").setAttrib
 $("eyeBtn").onclick=()=>{eye=!eye;try{localStorage.setItem("jj_eye",eye?"1":"0")}catch(e){};paintEye()};
 if(window.FL&&FL.openRank){$("rankBtn").hidden=false;$("rankBtn").onclick=()=>FL.openRank("jj")}
 let sigT=0;
-function feel(k,weak){const s=SIG[k];buzz(s.v,Math.round(s.a*(weak?0.45:1)));
+function feel(k,weak){const s=SIG[k];buzz(s.v,Math.round(s.a*(weak?0.55:1)));
   if(eye||!canVib){sig.hidden=false;sig.textContent=s.t;sig.style.color=s.c;sigT=performance.now()+900}}
+/* 215: 바닥 찍는 진동 = 포인트마다 길이 0.1~0.35초 (뻘 = 부드럽게 한 번 · 모래 = 또렷하게 한 번 · 돌 = 끊어서 두 번)
+   쭈꾸미 · 문어가 올라타 있으면 = 진동 없음 또는 0.5초까지 길고 뭉툭하게 (평소와 달라지면 올라탄 것) */
+function feelBottom(weak){
+  const L=pt.tap,k=pt.bt,a=k==="mud"?210:255,v=k==="stone"?[Math.round(L*.45),30,Math.round(L*.45)]:[L];
+  buzz(v,Math.round(a*(weak?0.55:1)));
+  if(eye||!canVib){sig.hidden=false;sig.textContent=SIG[BT[k].sig].t+" "+(L/1000).toFixed(2)+"초";sig.style.color="var(--sub)";sigT=performance.now()+900}
+}
+function grabTap(){ // 올라탔을 때 바닥 느낌: 평소 길이와 확실히 다르게 (없음 · 짧게 · 길고 뭉툭)
+  const L=pt.tap,r=Math.random();
+  if(r<.35)return 0;
+  if(r<.55&&L>=170)return 40+Math.floor(Math.random()*30);
+  const lo=Math.max(L+130,380);return Math.round(lo+Math.random()*Math.max(20,500-lo));
+}
+function feelGrab(weak){
+  const ms=grab.tap;if(ms>0)buzz([ms],Math.round(150*(weak?0.55:1)));
+  if(eye||!canVib){sig.hidden=false;sig.textContent=ms?"뭉툭… "+(ms/1000).toFixed(2)+"초 (평소와 다름)":"(바닥 느낌 없음)";sig.style.color="var(--egi)";sigT=performance.now()+1200}
+}
 
 /* ---- 소리 ---- */
 let ac=null;
@@ -202,21 +298,34 @@ function tone(f,dur,vol,type,slide){const a=audio();if(!a)return;const o=a.creat
 
 /* ---- 봉돌 고르기 ---- */
 let sinker=REC;
-$("capTxt").innerHTML="🧑‍✈️ 선장: \"오늘 <b>"+mulName+"</b>, "+curName+"이에요. 봉돌 <b>"+REC+"호</b> 쓰세요."+
-  (cur>.85?" 물이 세니 채비 뜨면 무겁게 바꾸고요.":cur<.4?" 물이 약해서 바닥 느낌 좋을 거예요.":"")+"\"<br>"+
-  "📅 "+SEASON_NAME+(BAN?"<br>⛔ 지금은 주꾸미 금어기라 실제로는 못 잡아요 · 연습 모드":"");
+function paintCap(){
+  const cn=curNow>.85?"물살 셈":curNow>.55?"물살 보통":"물살 약함";
+  $("capTxt").innerHTML="🧑‍✈️ 선장: \"오늘 <b>"+mulName+"</b>, 지금 "+cn+"이에요. 봉돌 <b>"+recNow+"호</b> 쓰세요."+
+    (curNow>.85?" 물이 세니 채비 뜨면 무겁게 바꾸고요.":curNow<.4?" 물이 약해서 바닥 느낌 좋을 거예요.":"")+
+    (pt.bt?" 여긴 <b>"+BT[pt.bt].n+"바닥</b>, 수심 <b>"+DEPTH+"m</b>예요.":"")+"\"<br>"+
+    "📅 "+SEASON_NAME+(BAN?"<br>⛔ 지금은 주꾸미 금어기라 실제로는 못 잡아요 · 연습 모드":"");
+}
 function paintSinkers(){
-  $("sinkers").innerHTML=[8,10,12,14,16,20].map(n=>`<button class="sk${n===sinker?" on":""}${n===REC?" rec":""}" data-n="${n}" type="button">${n}호<small>${n===REC?"선장 권장":n<REC?"가벼움":"무거움"}</small></button>`).join("");
+  $("sinkers").innerHTML=[8,10,12,14,16,20].map(n=>`<button class="sk${n===sinker?" on":""}${n===recNow?" rec":""}" data-n="${n}" type="button">${n}호<small>${n===recNow?"선장 권장":n<recNow?"가벼움":"무거움"}</small></button>`).join("");
   [...document.querySelectorAll(".sk")].forEach(b=>b.onclick=()=>{sinker=+b.dataset.n;paintSinkers()});
 }
-paintSinkers();
 // 봉돌과 물살: diff<0 = 가벼움(채비 뜸) · diff>0 = 무거움(둔함 · 밑걸림)
-const diff=()=>(sinker-REC)/2;
+const diff=()=>(sinker-recNow)/2;
+
+/* ---- 바닥 종류 (209) · 바람 (211) ---- */
+const BT={mud:{n:"뻘",sig:"mud",snag:.5,sq:1.15,oc:1,cf:.9},sand:{n:"모래",sig:"sand",snag:1,sq:1,oc:1,cf:1},stone:{n:"돌",sig:"stone",snag:1.8,sq:.8,oc:2,cf:1.2}};
+const WIND=[{n:"잔잔",a:0},{n:"바람 보통",a:.2},{n:"바람 셈",a:.5}];
+let windLv=0,swayAmp=0,swayPer=5.5,waveM=null,windMs=null;
+let swayOn=LS.get("sway",true),captOn=LS.get("capt",true);
+function paintSw(){[["swaySw",swayOn],["captSw",captOn]].forEach(([id,on])=>{$(id).classList.toggle("on",on);$(id).setAttribute("aria-checked",on?"true":"false")})}
+$("swaySw").onclick=()=>{swayOn=!swayOn;LS.set("sway",swayOn);paintSw()};
+$("captSw").onclick=()=>{captOn=!captOn;LS.set("capt",captOn);paintSw()};
+paintSw();
 
 /* ---- 상태 ----
    prep(봉돌) → sink(입수) → slack(줄 정리) → jig(운용) → hooked(감기) / snag(밑걸림) → result
    egiH = 바닥에서 에기까지(m) */
-const DEPTH=18, MAXH=2.2;
+let DEPTH=18;const MAXH=2.2;
 let st="prep",sinkY=0,egiH=0,wasUp=false,stayStart=0,lastLift=0,stays=[],waitScore=.5,
     grab=null,grabT=0,cuttleT=0,tight=0,floatOff=false,floatT=0,
     reel=0,reelIdle=0,catchN=0,totalG=0,lost=0,catchCur=null,shake=0,hookCool=0,
@@ -225,20 +334,50 @@ function setBtns(a,b,bOn){b1.textContent=a;b2.textContent=b;b2.disabled=!bOn}
 // 센서가 없으면 큰 버튼 = 들기(꾹) · 있으면 채비 걷기
 const walk=()=>motionOK?"채비 걷기":"들기 (꾹)";
 let arrived=false;
-function prep(){st="prep";$("prep").hidden=false;$("prep").querySelector("h3").textContent=arrived?"🚤 새 포인트 도착 · 봉돌 확인하고 내려요":"🚤 오늘 선상 쭈꾸미";arrived=false;$("card").hidden=true;$("rhy").hidden=true;setBtns("채비 내리기","챔질!",false);say("봉돌을 고르고 채비를 내려요","var(--sub)")}
+/* 하루 출조 (210): mode free | day · day = 진행 중인 출조 */
+let mode=LS.get("mode","free"),dayLen=LS.get("len",12),day=null;
+function paintMode(){
+  readEnv();
+  [...$("modeSeg").children].forEach(b=>b.classList.toggle("on",b.dataset.m===mode));
+  [...$("lenSeg").children].forEach(b=>b.classList.toggle("on",+b.dataset.l===dayLen));
+  $("lenSeg").hidden=mode!=="day";
+  $("modeNote").textContent=mode==="day"?"06:00~12:00 출조를 "+dayLen+"분으로 · 물때 따라 물살이 바뀌고 12시에 쿨러 정산"+(ENV&&ENV.ext?" (오늘 "+(ENV.st||"")+" 물때)":" (달 계산 물때)"):"시간 제한 없이 마음대로";
+  $("modeBox").hidden=!!day;
+}
+[...$("modeSeg").children].forEach(b=>b.onclick=()=>{mode=b.dataset.m;LS.set("mode",mode);paintMode()});
+[...$("lenSeg").children].forEach(b=>b.onclick=()=>{dayLen=+b.dataset.l;LS.set("len",dayLen);paintMode()});
+function prep(){st="prep";$("prep").hidden=false;$("prep").querySelector("h3").textContent=arrived?"🚤 새 포인트 도착 · 봉돌 확인하고 내려요":day?"🚢 하루 출조 중 · 봉돌 확인하고 내려요":"🚤 오늘 선상 쭈꾸미";
+  if(arrived)capt("arr"+ptId,"여긴 "+BT[pt.bt].n+"바닥 수심 "+DEPTH+"m, 삐- 하면 내리세요",1);
+  arrived=false;$("card").hidden=true;$("rhy").hidden=true;setBtns("채비 내리기","챔질!",false);say("봉돌을 고르고 채비를 내려요","var(--sub)");paintCap();paintSinkers();paintMode()}
 function drop(){
+  if(mode==="day"&&!day)startDay();
   $("prep").hidden=true;$("card").hidden=true;st="sink";sinkY=0;egiH=0;grab=null;tight=0;floatOff=false;stays=[];
   tone(1400,.35,.08,"square");say("삐- 채비 내리세요!","var(--line)");setBtns(walk(),"챔질!",false);$("rhy").hidden=true;
   const t=performance.now();moveAt=t+(150+Math.random()*120)*1000;moveWarn=0;   // 2.5~4.5분 뒤 포인트 이동
-  if(!nextTurn)nextTurn=t+(60+Math.random()*90)*1000;
+  if(!nextTurn)nextTurn=t+(90+Math.random()*90)*1000;   // 첫 피딩은 1.5~3분 뒤
+  lastBiteAt=t;if(!nextTalk)nextTalk=t+(50+Math.random()*40)*1000;
 }
-/* 포인트: 옮길 때마다 랜덤 (마릿수 · 큰 씨알 · 갑오징어 · 꽝 · 보통) · 어떤 포인트인지는 안 알려 줌 */
-let pt={mul:1,big:0,cf:1,name:"보통"},moveCool=0,movingUntil=0;
+/* 포인트: 옮길 때마다 랜덤 (마릿수 · 큰 씨알 · 갑오징어 · 꽝 · 보통) · 어떤 포인트인지는 안 알려 줌
+   + 바닥 종류(뻘 · 모래 · 돌) · 수심 · 바람 */
+let pt={mul:1,big:0,cf:1,name:"보통",bt:"mud",tap:180},ptId=0,moveCool=0,movingUntil=0,snagsHere=0;
 function newPoint(){const r=Math.random();
-  pt=r<.2?{mul:1.6,big:0,cf:.8,name:"마릿수"}:r<.35?{mul:.8,big:.35,cf:1,name:"큰 씨알"}:r<.5?{mul:1,big:0,cf:2.2,name:"갑오징어"}:r<.65?{mul:.3,big:0,cf:.5,name:"꽝"}:{mul:1,big:0,cf:1,name:"보통"}}
+  const tap0=pt.tap;
+  pt=r<.2?{mul:1.6,big:0,cf:.8,name:"마릿수"}:r<.35?{mul:.8,big:.35,cf:1,name:"큰 씨알"}:r<.5?{mul:1,big:0,cf:2.2,name:"갑오징어"}:r<.65?{mul:.3,big:0,cf:.5,name:"꽝"}:{mul:1,big:0,cf:1,name:"보통"};
+  const b=Math.random();pt.bt=b<.45?"mud":b<.8?"sand":"stone";
+  do{pt.tap=100+Math.round(Math.random()*25)*10}while(tap0&&Math.abs(pt.tap-tap0)<60);   // 0.10~0.35초 · 앞 포인트와 확실히 다르게
+  DEPTH=14+Math.floor(Math.random()*11);ptId++;snagsHere=0;setWind()}
+/* 바람: 하루 출조 = 오늘 실제 풍속 · 파고 (그 시각) · 아니면 랜덤 */
+function setWind(){
+  windMs=null;waveM=null;
+  if(day&&ENV&&ENV.wind){const h=Math.floor(gameMin()/60);windMs=ENV.wind[h];waveM=ENV.wave?ENV.wave[h]:null}
+  if(windMs!=null&&windMs>=0){windLv=windMs<4?0:windMs<8?1:2}
+  else{const r=Math.random();windLv=r<.5?0:r<.85?1:2}
+  swayAmp=WIND[windLv].a;if(windLv>0&&waveM!=null&&waveM>0)swayAmp=Math.max(.12,Math.min(.6,waveM*.4));
+  swayPer=5.5-windLv*.8;
+}
 function pickTarget(){
-  const r=Math.random();
-  return r<0.03?OC:r<(SEASON==="autumn"?0.28:0.2)*pt.cf?CF:SQ;
+  const r=Math.random(),bt=BT[pt.bt],cfB=boost.k==="cf"&&performance.now()<boost.until?1.8:1;
+  return r<0.03*bt.oc?OC:r<(SEASON==="autumn"?0.28:0.2)*pt.cf*bt.cf*cfB?CF:SQ;
 }
 function movePoint(){
   const now=performance.now();
@@ -253,7 +392,9 @@ function hookSet(){
   if(st==="snag"){return}
   if(st!=="jig")return;
   const t=grab&&(grab.t!==CF||now<cuttleT)?grab.t:null;
+  dex.hooks++;if(!t)dex.empty++;
   if(t){
+    lastBiteAt=now;
     st="hooked";catchCur=Object.assign({},t);catchCur.g=Math.round(t.min+(t.max-t.min)*Math.min(1,Math.pow(Math.random(),1.4)+pt.big));
     reel=DEPTH-egiH;reelIdle=0;grab=null;buzz([90,40,90]);tone(160,.15,.15,"square");
     say(t.big?"묵직하다!! 대물?":"걸었다!","var(--egi)");setBtns("감기 (꾹)","—",false);
@@ -261,8 +402,10 @@ function hookSet(){
   }else{
     grab=null;
     // 빈 챔질: 무거운 봉돌 · 바닥에서 당기면 밑걸림이 잘 남
-    const snagP=0.12+Math.max(0,diff())*0.12;
-    if(egiH<0.1&&Math.random()<snagP){st="snag";snagHold=0;shake=6;buzz([200]);say("밑걸림! 꾹 2초 당겨 바늘 펴기","var(--warn)");setBtns("꾹 당기기","—",false);return}
+    const snagP=(0.12+Math.max(0,diff())*0.12)*BT[pt.bt].snag;
+    if(egiH<0.1&&Math.random()<snagP){snagsHere++;
+      if(snagsHere>=2)capt("snag"+ptId,diff()>0?"봉돌 한 호 내리세요, 무거우면 잘 걸려요":pt.bt==="stone"?"돌바닥이라 바닥 너무 끌지 마세요":"챔질은 묵직할 때만 하세요",1);
+      st="snag";snagHold=0;shake=6;buzz([200]);say("밑걸림! 꾹 2초 당겨 바늘 펴기","var(--warn)");setBtns("꾹 당기기","—",false);return}
     shake=8;buzz([30,30,30]);tone(220,.25,.12,"sine",110);say("헛챔질! 올라탄 게 없었어요","var(--bad)");waitScore=Math.max(0,waitScore-.15);
     sig.hidden=false;sig.textContent="헛챔질";sig.style.color="var(--bad)";sigT=performance.now()+1500;
   }
@@ -276,10 +419,11 @@ function liftOff(){ // 바닥에서 뜨는 순간 (= 살짝 들어 무게감 확
 }
 function land(){ // 에기가 바닥에 닿는 순간
   const now=performance.now();
-  if(st==="sink"){st="slack";feel("land");say("툭! 바닥 · 톡톡 2번 = 줄 정리","var(--ok)");setBtns("줄 정리 (톡톡)","챔질!",true);stayStart=now;return}
+  if(st==="sink"){st="slack";feel("land");setTimeout(()=>{if(st==="slack")feelBottom()},300);say("툭! 바닥 · 톡톡 2번 = 줄 정리","var(--ok)");setBtns("줄 정리 (톡톡)","챔질!",true);stayStart=now;return}
   const weak=tight<2||diff()>1;
-  if(grab&&grab.t!==CF){/* 올라탄 채로 내려옴: 바닥 느낌 없음 */ }
-  else feel(Math.random()<0.1+Math.max(0,diff())*0.05?"rock":"bottom",weak);
+  if(grab&&grab.t!==CF)feelGrab(weak);                 // 올라탄 채로 내려옴: 평소와 다른 바닥 느낌
+  else if(Math.random()<0.08+Math.max(0,diff())*0.05)feel("rock",weak);
+  else feelBottom(weak);
   stayStart=now;
   // 기다림 점수: 바닥에 둔 시간이 4~10초면 좋음 (계속 흔들면 나쁨)
   if(stays.length>=2){const m=stays.reduce((a,b)=>a+b,0)/stays.length;const sc=m<1.5?.1:m<3?.45:m<=10?1:m<=15?.7:.4;waitScore=waitScore*.6+sc*.4}
@@ -290,14 +434,122 @@ function end(ok,note){
     catchN++;totalG+=catchCur.g;$("cnt").textContent=catchN;$("kg").textContent=totalG.toLocaleString();
     $("cIc").textContent=catchCur.ic;$("cName").textContent=catchCur.n;$("cW").textContent=catchCur.g.toLocaleString()+"g";
     $("cNote").textContent=(catchCur.n==="문어"?"🎉 문어 손님! ":catchCur.g>(catchCur.min+catchCur.max)/2?"씨알 좋아요 · ":"")+
-      (cur<.5?"물살이 약해 바닥 느낌이 좋았어요":sinker===REC?"선장 말대로 봉돌을 잘 골랐어요":"오늘 물엔 "+REC+"호가 딱이에요");
+      (curNow<.5?"물살이 약해 바닥 느낌이 좋았어요":sinker===recNow?"선장 말대로 봉돌을 잘 골랐어요":"지금 물엔 "+recNow+"호가 딱이에요");
     [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.16,.15,"triangle"),i*90));buzz([40,50,40]);say("올렸다!","var(--line)");
+    recordCatch(catchCur);
     try{if(window.FL&&FL.gameCatch)FL.gameCatch("jj",catchCur.n,catchCur.g)}catch(e){}
   }else{$("cIc").textContent="💨";$("cName").textContent="놓쳤어요";$("cW").textContent="";$("cNote").textContent=note||""}
   $("card").hidden=false;setBtns("다시 내리기","챔질!",false);
 }
-function lose(note){lost++;$("lost").textContent=lost;$("cIc").textContent="🪝";$("cName").textContent="채비를 잃었어요";$("cW").textContent="";
+function lose(note){lost++;$("lost").textContent=lost;dex.lost++;if(day)day.lost++;saveDex();$("cIc").textContent="🪝";$("cName").textContent="채비를 잃었어요";$("cW").textContent="";
   $("cNote").textContent=note;$("card").hidden=false;st="result";setBtns("다시 내리기","챔질!",false)}
+/* ---- 🧑‍✈️ 선장 방송 (212): 말풍선 + 띵동 · 같은 말은 2분 안에 다시 안 함 · 진동 없음 ---- */
+const ONCE=1e12;let captSeen={},captT=0,nextTalk=0,lastBiteAt=0,boost={k:"",until:0};
+function capt(key,text,gap){
+  const now=performance.now();if(!captOn)return;
+  if(captSeen[key]&&now-captSeen[key]<(gap||120000))return;captSeen[key]=now;
+  const c=$("capt");c.textContent="🧑‍✈️ "+text;c.hidden=false;captT=now+4800;
+  tone(880,.12,.06,"sine");setTimeout(()=>tone(660,.2,.06,"sine"),140);
+}
+function talk(){ // 같이 탄 사람들 조과 → 잠깐 그 어종 입질 ↑ (30초)
+  const now=performance.now();
+  if(pt.name==="꽝"){capt("talk","다들 조용하네요… 여긴 입질이 없어요",60000);return}
+  if(SEASON!=="off"&&Math.random()<.5){boost={k:"cf",until:now+30000};capt("talk","앞쪽에서 갑오징어 나왔어요!",60000)}
+  else{boost={k:"sq",until:now+30000};capt("talk","뒤쪽에서 쭈꾸미 연타네요!",60000)}
+}
+
+/* ---- 🏅 도감 · 칭호 (213) · 이 폰에만 ---- */
+const today=()=>{const d=new Date();return d.getFullYear()+"."+(d.getMonth()+1)+"."+d.getDate()};
+const freshDex=()=>({sp:{},lost:0,hooks:0,empty:0,snagEsc:0,dayN:{d:"",n:0},bestDayN:0,bestCooler:0,bestScore:0,safeDay:false,days:[],titles:[],title:""});
+let dex=Object.assign(freshDex(),LS.get("dex",{}));
+function saveDex(){LS.set("dex",dex)}
+const spN=(s,n)=>(s.sp[n]||{}).n||0,spMax=(s,n)=>(s.sp[n]||{}).max||0;
+const TITLES=[
+  ["첫 손맛","아무거나 1마리",s=>Object.values(s.sp).some(v=>v.n>0)],
+  ["쭈꾸미 백 마리","주꾸미 모두 100마리",s=>spN(s,"주꾸미")>=100],
+  ["갑오징어 사냥꾼","갑오징어 모두 30마리",s=>spN(s,"갑오징어")>=30],
+  ["문어 대물","문어 2kg 이상",s=>spMax(s,"문어")>=2000],
+  ["고패질 장인","하루 출조 운용 점수 평균 90점 이상",s=>s.bestScore>=90],
+  ["무사 귀환","하루 출조를 채비 안 잃고 끝까지 (1마리 이상)",s=>s.safeDay],
+  ["밑걸림 탈출왕","밑걸림 빼기 20번",s=>s.snagEsc>=20]];
+const condBase=$("cond").innerHTML;
+function paintTitle(){$("cond").innerHTML=condBase+(dex.title?' · 🏅 <b>'+dex.title+'</b>':"")}
+function checkTitles(){
+  const got=[];TITLES.forEach(t=>{if(!dex.titles.includes(t[0])&&t[2](dex)){dex.titles.push(t[0]);got.push(t[0])}});
+  if(got.length){if(!dex.title)dex.title=got[0];saveDex();paintTitle();
+    setTimeout(()=>{sig.hidden=false;sig.style.color="var(--line)";sig.textContent="🏅 새 칭호: "+got.join(" · ");sigT=performance.now()+3500;tone(988,.15,.1,"triangle");setTimeout(()=>tone(1319,.25,.1,"triangle"),150)},1200)}
+  return got;
+}
+function recordCatch(c){
+  const s=dex.sp[c.n]||(dex.sp[c.n]={n:0,max:0,first:today()});s.n++;if(c.g>s.max)s.max=c.g;
+  if(dex.dayN.d!==today())dex.dayN={d:today(),n:0};dex.dayN.n++;dex.bestDayN=Math.max(dex.bestDayN,dex.dayN.n);
+  if(day){day.n++;day.g+=c.g;const b=day.sp[c.n]||(day.sp[c.n]={n:0,g:0,ic:c.ic});b.n++;b.g+=c.g;if(!day.big||c.g>day.big.g)day.big={n:c.n,g:c.g,ic:c.ic}}
+  lastBiteAt=performance.now();saveDex();checkTitles();
+}
+const li=(a,b)=>'<div class="li"><div class="t">'+a+'</div><b>'+b+'</b></div>';
+function openDex(){
+  const h=['<h3>🏅 도감 · 칭호</h3><div class="dexg">'+[SQ,CF,OC].map(s=>{const r=dex.sp[s.n];
+      return r?`<div class="dexc"><span class="i">${s.ic}</span><b>${s.n}</b>${r.n}마리 · 최대 ${r.max.toLocaleString()}g<br>처음 ${r.first}</div>`
+              :`<div class="dexc no"><span class="i">${s.ic}</span><b>???</b>아직 못 잡음</div>`}).join("")+'</div>',
+    '<b>내 기록</b>',li("하루 최다 (같은 날)",dex.bestDayN+"마리"),li("쿨러 최고 (하루 출조)",(dex.bestCooler/1000).toFixed(2)+"kg"),
+    li("운용 점수 최고 (하루 출조 평균)",dex.bestScore+"점"),li("잃은 채비",dex.lost+"개"),
+    li("헛챔질",dex.hooks?Math.round(dex.empty/dex.hooks*100)+"% ("+dex.empty+"/"+dex.hooks+")":"-"),li("밑걸림 빼기",dex.snagEsc+"번"),
+    '<b style="display:block;margin-top:10px">칭호 <small style="color:var(--sub);font-weight:400">· 대표 칭호는 위쪽 줄에 보여요</small></b>',
+    TITLES.map(t=>{const has=dex.titles.includes(t[0]),on=dex.title===t[0];
+      return `<div class="li"><span>${has?"🏅":"🔒"}</span><div class="t">${t[0]}<small>${t[1]}</small></div>${has?`<button class="mini${on?" on":""}" data-title="${t[0]}" type="button">${on?"대표 ✓ 해제":"대표로"}</button>`:""}</div>`}).join(""),
+    '<b style="display:block;margin-top:10px">🚢 하루 출조 기록</b>',
+    dex.days.length?dex.days.map((d,i)=>`<div class="li"><div class="t">${d.d} · ${d.len}분${d.quit?" (중간 정산)":""}<small>${d.n}마리 · ${(d.g/1000).toFixed(2)}kg · 잃은 채비 ${d.lost}</small></div><span style="color:var(--line)">${"★".repeat(d.stars)||"-"}</span><button class="mini del" data-del="${i}" type="button">🗑 삭제</button></div>`).join("")
+      :'<div class="li" style="color:var(--sub)">아직 없어요 · 준비 화면에서 🚢 하루 출조를 골라 보세요</div>',
+    '<p style="color:var(--sub);font-size:12px;margin:10px 0 0">도감 · 칭호 · 하루 출조 기록은 이 폰에 저장돼요 · 마릿수 · 대어는 🏆 랭킹에도 올라가요.</p>',
+    '<button class="bigb red" id="dexReset" type="button">기록 초기화</button><button class="bigb" id="dexClose" type="button">닫기</button>'].join("");
+  const el=$("dex");el.innerHTML=h;el.hidden=false;
+  el.querySelectorAll("[data-title]").forEach(b=>b.onclick=()=>{dex.title=dex.title===b.dataset.title?"":b.dataset.title;saveDex();paintTitle();openDex()});
+  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{if(b.dataset.sure){dex.days.splice(+b.dataset.del,1);saveDex();openDex()}else{b.dataset.sure="1";b.textContent="한 번 더 = 삭제"}});
+  let sure=0;$("dexReset").onclick=e=>{sure++;if(sure===1)e.target.textContent="정말 지울까요? 한 번 더 누르면 모두 지워요";else{dex=freshDex();saveDex();paintTitle();openDex()}};
+  $("dexClose").onclick=()=>{el.hidden=true};
+}
+$("dexBtn").onclick=()=>{audio();openDex()};
+
+/* ---- 🚢 하루 출조 (210) ---- */
+function gameMin(){return day?360+360*Math.min(1,(performance.now()-day.start)/(day.len*60000)):0}
+function updateTide(){if(day){curNow=tideAt(gameMin()).c;recNow=recOf(curNow)}else{curNow=cur;recNow=REC}}
+function startDay(){
+  readEnv();
+  day={start:performance.now(),len:dayLen,n:0,g:0,sp:{},big:null,lost:0,sc:0,scN:0,sampleAt:0,endMin:720,hr:6,wasSlack:false};
+  catchN=0;totalG=0;lost=0;$("cnt").textContent="0";$("kg").textContent="0";$("lost").textContent="0";
+  setWind();if(windMs!=null&&windMs>=12)day.endMin=600;   // 바람 아주 셈 → 10시 조기 철수
+  updateTide();paintMode();
+  capt("start"+day.start,"오늘 "+mulName+", 봉돌 "+recNow+"호 쓰세요. "+(day.endMin<720?"바람이 세서 10시에 일찍 들어갑니다":"12시까지 합니다"),ONCE);
+}
+function settle(quit){
+  if(!day)return [];
+  const d=day,endM=Math.min(gameMin(),d.endMin);day=null;
+  const thr=Math.max(.5,seasonMul)*(d.len/12),stars=d.n>=14*thr?3:d.n>=7*thr?2:d.n>=1?1:0;
+  const sc=d.scN?Math.round(d.sc/d.scN*100):0;
+  if(d.scN>=30)dex.bestScore=Math.max(dex.bestScore,sc);
+  dex.bestCooler=Math.max(dex.bestCooler,d.g);
+  if(!quit&&d.n>=1&&d.lost===0)dex.safeDay=true;
+  dex.days.unshift({d:today(),n:d.n,g:d.g,stars,len:d.len,lost:d.lost,quit:!!quit});dex.days=dex.days.slice(0,30);
+  saveDex();const got=checkTitles();updateTide();
+  if(quit)return got;
+  st="settled";grab=null;$("card").hidden=true;$("rhy").hidden=true;$("prep").hidden=true;setBtns("정산 중…","챔질!",false);
+  $("settle").innerHTML='<h3>🚢 하루 출조 정산</h3><div style="color:var(--sub)">'+today()+" · 06:00~"+hhmm(endM)+" · "+d.len+'분 출조</div>'+
+    '<div class="stars">'+"★".repeat(stars)+"☆".repeat(3-stars)+'</div>'+
+    li("🧊 쿨러",d.n+"마리 · "+(d.g/1000).toFixed(2)+"kg")+
+    Object.entries(d.sp).map(([n,v])=>li(v.ic+" "+n,v.n+"마리 · "+v.g.toLocaleString()+"g")).join("")+
+    (d.big?li("가장 큰 한 마리",d.big.ic+" "+d.big.n+" "+d.big.g.toLocaleString()+"g"):"")+
+    li("잃은 채비",d.lost+"개")+li("🎯 운용 점수 평균",d.scN?sc+"점":"-")+
+    (got.length?'<div class="li">🏅 새 칭호: '+got.join(" · ")+'</div>':"")+
+    '<button class="bigb" id="settleOk" type="button">확인</button>';
+  $("settle").hidden=false;[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.18,.12,"triangle"),i*120));
+  $("settleOk").onclick=()=>{$("settle").hidden=true;mode="free";LS.set("mode",mode);prep()};
+  return got;
+}
+// 앱의 ✕ 닫기: 하루 출조 중이면 먼저 물어봄
+window.flBeforeClose=()=>{if(day){$("quit").hidden=false;return true}return false};
+$("quitYes").onclick=()=>{settle(true);$("quit").hidden=true;try{if(window.FL&&FL.close)FL.close()}catch(e){}};
+$("quitNo").onclick=()=>{$("quit").hidden=true};
+
 /* ---- 센서: 폰을 얼마나 들었는지 실시간으로 ----
    ① 기울기: 낚싯대 끝을 드는 것처럼 폰 앞쪽이 올라간 각도
    ② 들어 올림: 위쪽 방향 가속도를 적분한 짧은 높이 변화 (금방 0으로 돌아옴)
@@ -306,7 +558,7 @@ let gain=3,motionOK=false;
 try{gain=+localStorage.getItem("jj_gain2")||3}catch(e){}
 $("sens").value=gain;
 $("sens").oninput=e=>{gain=+e.target.value;try{localStorage.setItem("jj_gain2",gain)}catch(e){}};
-let gx=0,gy=0,gz=9.8,gInit=false,vz=0,pz=0,lastT=0,pitch=0,pitchBase=null,lift=0,upVel=0;
+let gx=0,gy=0,gz=9.8,gInit=false,vz=0,pz=0,lastT=0,pitch=0,pitchBase=null,lift=0,upVel=0,down=0,swayAct=false,boat=0;
 function onMotion(e){
   const g=e.accelerationIncludingGravity;if(!g||g.x==null)return;
   const now=performance.now(),dt=lastT?Math.min(.05,(now-lastT)/1000):.016;lastT=now;
@@ -324,7 +576,10 @@ function onMotion(e){
   // ① 기울기: 폰 위쪽(y축)이 하늘을 향한 정도 (세로로 쥐고 앞을 들면 커짐)
   const p=Math.atan2(g.y,Math.hypot(g.x,g.z))*57.3;if(pitchBase===null){pitch=p;pitchBase=p}else pitch=pitch*.6+p*.4;
   // 기준각: 내려간 쪽으로는 바로, 올라간 쪽으로는 아주 천천히 (손이 지치면 자연스럽게 따라감)
-  if(pitch<pitchBase)pitchBase=pitch;else pitchBase+=(pitch-pitchBase)*dt*(still?0.9:0.15);  // 가만히 들고 있으면 그 자세가 새 "내린 상태"
+  // 배 흔들림(211) 중엔 내린 쪽도 천천히 따라감 → 잠깐 내리는 동작(down)을 읽어 배가 올라가는 만큼 에기를 붙잡음
+  if(pitch<pitchBase){if(swayAct)pitchBase+=(pitch-pitchBase)*dt*0.2;else pitchBase=pitch}
+  else pitchBase+=(pitch-pitchBase)*dt*(still?0.9:0.15);  // 가만히 들고 있으면 그 자세가 새 "내린 상태"
+  down=swayAct?Math.max(0,(pitchBase-pitch)/25):0;
   const tilt=Math.max(0,(pitch-pitchBase)/35);          // 35도 들면 1
   const raise=Math.max(0,pz/0.2);                        // 약 30cm 들면 1 (센서 값이 실제보다 작게 나옴)
   const raw=Math.max(tilt,raise);
@@ -353,7 +608,9 @@ function primary(){ // 큰 파란 버튼 · 화면 톡
 b1.addEventListener("pointerdown",e=>{
   e.preventDefault();audio();b1.classList.add("down");
   if(st==="prep"||st==="result"||st==="slack"){primary();return}
-  if(st==="sink"||st==="slack"||st==="jig"){ if(b1.textContent==="채비 걷기"){prep();say("채비를 걷었어요","var(--sub)");return} }
+  if(st==="sink"||st==="slack"||st==="jig"){ if(b1.textContent==="채비 걷기"){
+    if(moveWarn){moveWarn=0;moveAt=0;moveCool=0;movePoint();return}   // 선장 "채비 걷으세요" → 걷으면 바로 이동
+    prep();say("채비를 걷었어요","var(--sub)");return} }
   btnHold=true;
 });
 const b1up=()=>{b1.classList.remove("down");btnHold=false};
@@ -364,7 +621,7 @@ addEventListener("pointerup",()=>b2.classList.remove("down"));
    준비 · 끝 = 내리기 / 내려가는 중 = 안내 / 줄 정리 = 톡톡 / 운용 중 톡 = 챔질 · 꾹(0.6초) = 채비 회수 / 걸림 · 밑걸림 = 꾹 */
 let holdTimer=0;
 // 봉돌 고르는 창 · 결과 카드 위를 눌러도 다음으로 (봉돌 버튼은 제외)
-$("prep").addEventListener("pointerdown",e=>{if(e.target.closest(".sk"))return;e.preventDefault();audio();if(st==="prep")drop()});
+$("prep").addEventListener("pointerdown",e=>{if(e.target.closest("button"))return;e.preventDefault();audio();if(st==="prep")drop()});
 $("card").addEventListener("pointerdown",e=>{e.preventDefault();audio();if(st==="result")prep()});
 cv.addEventListener("pointerdown",e=>{e.preventDefault();audio();
   if(st==="hooked"||st==="snag"){stageHold=true;return}
@@ -389,12 +646,47 @@ function frame(now){
   const dt=Math.min(50,now-last)/1000;last=now;
   btnLift=btnHold&&st==="jig"?Math.min(1,btnLift+dt*1.8):Math.max(0,btnLift-dt*4);
   const L=Math.max(lift,btnLift);
-  // 물돌이: 1~2.5분마다 40초 동안 입질 활발
-  if(nextTurn&&now>nextTurn&&(st==="jig"||st==="slack")){tideTurnUntil=now+40000;nextTurn=now+(60+Math.random()*90)*1000;say("🌊 물돌이! 입질 활발","var(--ok)");tone(660,.2,.08,"triangle")}
-  const turn=now<tideTurnUntil?2:1;
+  const fishing=st==="jig"||st==="slack";
+  updateTide();
+  if(day){
+    // 🚢 하루 출조: 물돌이 = 실제(또는 달 계산) 만조 · 간조 앞뒤 25분
+    const gm=gameMin(),ta=tideAt(gm);
+    // 216 피딩타임: 물돌이 앞뒤 + 해 뜰 무렵(06:00~07:00)
+    const feed=ta.slack||gm<420;
+    if(feed){tideTurnUntil=now+400;if(!day.wasSlack&&fishing){say(ta.slack?"🔥 물돌이 피딩타임!":"🔥 아침 피딩타임!","var(--ok)");tone(660,.2,.08,"triangle");capt("feed"+Math.round(gm/30),"지금 피딩이에요, 집중!",ONCE)}}
+    day.wasSlack=feed;
+    if(!ta.slack&&ta.toSlack>0&&ta.toSlack<=20&&ta.next)capt("turn"+Math.round(ta.next.m),"곧 물 돌아요, 피딩 준비하세요",ONCE);
+    if(fishing&&recNow>=sinker+4)capt("rec"+recNow,"물 세졌어요, "+recNow+"호로 바꾸세요 (채비 걷고 다시)");
+    else if(fishing&&recNow<=sinker-4)capt("rec"+recNow,"물 약해졌어요, "+recNow+"호로 가볍게 바꾸세요");
+    const hr=Math.floor(gm/60);if(hr!==day.hr){day.hr=hr;if(ENV&&ENV.wind)setWind()}
+    if(gm>=day.endMin-30)capt("last"+day.start,"마지막 한 번 내리고 철수합니다",ONCE);
+    if(st==="jig"&&now>day.sampleAt){day.sampleAt=now+1000;day.sc+=waitScore;day.scN++}
+    const ct="🚢 "+hhmm(gm)+" · "+(ta.slack?"물돌이":ta.dir)+" · "+(curNow>.85?"물살 셈":curNow>.55?"물살 보통":"물살 약함")+" · 🧊 "+day.n+"마리";
+    if($("clock").textContent!==ct)$("clock").textContent=ct;
+    if(gm>=day.endMin&&st!=="hooked"&&st!=="snag"&&st!=="moving")settle(false);
+  }else{
+    // 216 피딩타임: 4~6분마다 1~2분 (15초 전에 선장이 알려 줌)
+    if(nextTurn&&fishing&&now>nextTurn-15000&&now<nextTurn)capt("turn"+Math.round(nextTurn),"곧 피딩 들어와요, 준비하세요",ONCE);
+    if(nextTurn&&now>nextTurn&&fishing){tideTurnUntil=now+(60+Math.random()*60)*1000;nextTurn=tideTurnUntil+(240+Math.random()*120)*1000;say("🔥 피딩타임! 입질 활발","var(--ok)");tone(660,.2,.08,"triangle");capt("feed"+Math.round(now),"지금 피딩이에요, 집중!",ONCE)}
+    if($("clock").textContent!=="⏱ 자유 낚시")$("clock").textContent="⏱ 자유 낚시";
+  }
+  const feeding=now<tideTurnUntil,turn=feeding?2.5:1;
+  // 피딩 중: 쭈꾸미가 에기를 툭툭 건드림 (바닥에 가만히 있을 때 · 아직 안 올라탐)
+  if(feeding&&st==="jig"&&!grab&&egiH<0.05&&Math.random()<dt*.15){buzz([15,60,15],140);if(eye){sig.hidden=false;sig.textContent="툭툭 (건드림)";sig.style.color="var(--line)";sigT=now+800}}
+  // 🧑‍✈️ 같이 탄 사람 조과 · 입질 뜸
+  if(st==="jig"&&nextTalk&&now>nextTalk){nextTalk=now+(70+Math.random()*60)*1000;talk()}
+  if(st==="jig"&&lastBiteAt&&now-lastBiteAt>75000){const m=stays.length?stays.reduce((a,b)=>a+b,0)/stays.length:0;
+    capt("slow",m&&m<3?"고패 줄이고 바닥에서 5초 이상 기다려 보세요":"입질 없으면 포인트 옮겨 볼까요?")}
+  if(!$("capt").hidden&&now>captT)$("capt").hidden=true;
+  // 🌬 배 흔들림: 바람이 세면 배가 출렁 → 에기가 저절로 뜸 (배가 올라갈 때 폰을 살짝 내리면 붙잡힘)
+  swayAct=swayOn&&swayAmp>0&&(fishing||st==="sink"||st==="hooked");
+  boat=swayAct?swayAmp*Math.sin(now/1000*2*Math.PI/swayPer):0;
+  if(now>(frame.envAt||0)){frame.envAt=now+400;
+    const et=(eye?"바닥 "+BT[pt.bt].n+" · ":"")+"수심 "+DEPTH+"m · 🌬 "+WIND[windLv].n+(windMs!=null?" "+Math.round(windMs)+"m/s":"")+(swayOn||!windLv?"":" (흔들림 끔)");
+    if($("envTxt").textContent!==et)$("envTxt").textContent=et}
   if(st==="moving"&&now>movingUntil){newPoint();arrived=true;prep();tone(1400,.35,.08,"square");say("삐- 새 포인트 도착 · 바로 내려요","var(--line)")}
   { const mb=$("moveBtn"),left=Math.ceil((moveCool-now)/1000);
-    const txt=st==="moving"?"🚤 이동 중…":left>0?"🚤 "+left+"초":"🚤 포인트 이동";if(mb.textContent!==txt)mb.textContent=txt;mb.disabled=st==="moving"||left>0; }
+    const txt=st==="moving"?"🚤 이동 중":left>0?"🚤 "+left+"초":"🚤 이동";if(mb.textContent!==txt)mb.textContent=txt;mb.disabled=st==="moving"||left>0; }
   // 포인트 이동: 선장 "채비 걷으세요"
   if((st==="jig"||st==="slack")&&moveAt&&now>moveAt&&!moveWarn){moveWarn=now;say("🧑‍✈️ 채비 걷으세요! 포인트 이동","var(--line)");tone(1200,.5,.08,"square");setBtns("채비 걷기","챔질!",true)}
   if(moveWarn&&now-moveWarn>9000&&(st==="jig"||st==="slack")){moveWarn=0;moveAt=0;lose("배가 움직이는데 안 걷어서 옆 사람 줄과 엉켰어요");}
@@ -406,10 +698,10 @@ function frame(now){
   }
   if(st==="jig"||st==="slack"){
     // 가벼운 봉돌 + 센 물살 → 가끔 채비가 떠서 바닥을 놓침
-    if(!floatOff&&diff()<0&&Math.random()<dt*(-diff())*cur*0.08){floatOff=true;floatT=now+4000;say("채비가 떴어요! 봉돌을 무겁게 (걷고 다시)","var(--warn)")}
+    if(!floatOff&&diff()<0&&Math.random()<dt*(-diff())*curNow*0.08){floatOff=true;floatT=now+4000;say("채비가 떴어요! 봉돌을 무겁게 (걷고 다시)","var(--warn)")}
     if(floatOff&&now>floatT)floatOff=false;
     const heavy=grab&&grab.t!==CF?grab.t.weight:1;
-    let target=L*MAXH/heavy+(floatOff?0.9:0);
+    let target=L*MAXH/heavy+(floatOff?0.9:0)+Math.max(0,boat-down*0.8)/heavy;
     if(st==="slack")target=Math.max(target,0);
     if(target>egiH)egiH+=Math.min(target-egiH,dt*9);
     else egiH=Math.max(target,egiH-dt*4.5*(heavy>1?1.25:1));
@@ -421,17 +713,18 @@ function frame(now){
     }
     wasUp=up||(wasUp&&egiH>0.001);
     if(st==="jig"&&!floatOff){
-      const base=0.02*seasonMul*tideMul*turn*pt.mul*(0.4+waitScore)*(tight>=2?1:0.6)*(diff()<-1?0.5:1);
+      const base=0.02*seasonMul*tideMulOf(curNow)*turn*pt.mul*(0.4+waitScore)*(tight>=2?1:0.6)*(diff()<-1?0.5:1);
+      const bt=BT[pt.bt],bq=boost.k==="sq"&&now<boost.until?1.4:1,bc=boost.k==="cf"&&now<boost.until?1.8:1;
       // 쭈꾸미 · 문어: 바닥에 가만히 있는 에기에 올라탐 (가만히 둔 시간이 길수록 잘)
-      if(!wasUp&&!grab){const still=(now-stayStart)/1000;if(still>1.5&&Math.random()<dt*base*Math.min(2.2,still/4)){const t=pickTarget();if(t!==CF)grab={t,left:3+Math.floor(Math.random()*5)}}}
+      if(!wasUp&&!grab){const still=(now-stayStart)/1000;if(still>1.5&&Math.random()<dt*base*bt.sq*bq*Math.min(2.2,still/4)){const t=pickTarget();if(t!==CF){grab={t,left:3+Math.floor(Math.random()*5),tap:grabTap()};lastBiteAt=now}}}
       // 갑오징어: 바닥에서 15~20cm 이상 떠 있는 에기를 툭 침 (짧은 순간)
-      if(wasUp&&egiH>0.15&&!grab&&SEASON!=="off"&&Math.random()<dt*base*0.9){grab={t:CF,left:1};cuttleT=now+700;feel("cuttle",diff()>1)}
+      if(wasUp&&egiH>0.15&&!grab&&SEASON!=="off"&&Math.random()<dt*base*0.9*bt.cf*bc){lastBiteAt=now;grab={t:CF,left:1};cuttleT=now+700;feel("cuttle",diff()>1)}
       if(grab&&grab.t===CF&&now>cuttleT){grab=null}
     }
   }
   if(st==="snag"){ // 꾹 2초 = 바늘 펴서 빼기
     if(stageHold||btnHold){snagHold+=dt;if(Math.random()<dt*6)buzz(20,200)}else snagHold=Math.max(0,snagHold-dt);
-    if(snagHold>=2){if(Math.random()<0.6-Math.max(0,diff())*0.1){st="jig";egiH=0;say("바늘이 펴져서 빠졌어요!","var(--ok)");setBtns(walk(),"챔질!",true);stayStart=now}
+    if(snagHold>=2){if(Math.random()<0.6-Math.max(0,diff())*0.1-(pt.bt==="stone"?.1:0)){dex.snagEsc++;saveDex();checkTitles();st="jig";egiH=0;say("바늘이 펴져서 빠졌어요!","var(--ok)");setBtns(walk(),"챔질!",true);stayStart=now}
       else{SND_lost();lose("밑걸림을 못 빼서 채비가 터졌어요 · 무거운 봉돌일수록 잘 걸려요")}}
   }
   if(st==="hooked"){
@@ -473,12 +766,12 @@ function draw(now,L){
   const g=ctx.createLinearGradient(0,top,0,bot);g.addColorStop(0,"#1E5568");g.addColorStop(1,"#0B2029");ctx.fillStyle=g;ctx.fillRect(-20,top,W+40,bot-top);
   // 물살 (선)
   ctx.strokeStyle="rgba(234,243,242,.07)";ctx.lineWidth=1;
-  for(let i=0;i<6;i++){const y=top+20+i*(bot-top)/6,off=(now/1000*cur*40+i*37)%W;ctx.beginPath();ctx.moveTo(off-40,y);ctx.lineTo(off,y);ctx.stroke()}
+  for(let i=0;i<6;i++){const y=top+20+i*(bot-top)/6,off=(now/1000*curNow*40+i*37)%W;ctx.beginPath();ctx.moveTo(off-40,y);ctx.lineTo(off,y);ctx.stroke()}
   ctx.fillStyle="#5A4A36";ctx.beginPath();ctx.moveTo(-20,bot);for(let x=-20;x<=W+20;x+=20)ctx.lineTo(x,bot+Math.sin(x/30)*3);ctx.lineTo(W+20,H);ctx.lineTo(-20,H);ctx.fill();
   ctx.fillStyle="rgba(234,243,242,.35)";ctx.font="11px sans-serif";ctx.textAlign="left";
   for(let d=0;d<=DEPTH;d+=6){const y=yOf(d);ctx.fillRect(6,y,8,1);ctx.fillText(d+"m",16,y+4)}
   const mv=st==="moving"?Math.max(0,(movingUntil-now)/2600):0;
-  const bx=W*.42+(st==="moving"?Math.sin((1-mv)*Math.PI)*W*.25:0),by=top;
+  const bx=W*.42+(st==="moving"?Math.sin((1-mv)*Math.PI)*W*.25:0),by=top-boat*18;
   ctx.fillStyle="#D9D2C3";ctx.beginPath();ctx.moveTo(bx-60,by-4);ctx.lineTo(bx+60,by-4);ctx.lineTo(bx+44,by+12);ctx.lineTo(bx-44,by+12);ctx.fill();
   ctx.fillStyle="#fff";ctx.font="10px sans-serif";ctx.fillText("봉돌 "+sinker+"호",bx-24,by+8);
   const tipX=bx+30,tipY=by-20-L*26;
@@ -486,7 +779,7 @@ function draw(now,L){
   const d=st==="prep"?0:st==="sink"?sinkY:(st==="hooked"||st==="result")?Math.max(0,reel):DEPTH-egiH;
   const ey=st==="prep"||st==="moving"?top+10:yOf(st==="result"?0:d)-8;
   // 물살에 줄이 비스듬히 (배 흘림) · 가벼운 봉돌일수록 더 기울어짐
-  const drift=(cur*60+(diff()<0?-diff()*18:0))*(d/DEPTH);
+  const drift=(curNow*60+(diff()<0?-diff()*18:0))*(d/DEPTH);
   const ex=tipX+drift+Math.sin(now/600)*3;
   ctx.strokeStyle="#F2C14E";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(tipX,tipY);ctx.quadraticCurveTo(tipX+drift*0.2,(tipY+ey)/2,ex,ey);ctx.stroke();
   ctx.save();ctx.translate(ex,ey);ctx.rotate(egiH>0.1?-.35:.15);
@@ -502,9 +795,11 @@ function draw(now,L){
     ctx.font="20px serif";ctx.textAlign="center";ctx.fillText("⚠",ex,ey-24)}
   if((st==="jig"||st==="slack")&&egiH<0.05){ctx.fillStyle="rgba(140,120,90,.25)";ctx.beginPath();ctx.ellipse(ex,bot,16+Math.sin(now/200)*2,4,0,0,7);ctx.fill()}
   if(st==="jig"){ctx.fillStyle="#FF7AB6";ctx.font="12px sans-serif";ctx.textAlign="left";ctx.fillText("바닥 위 "+egiH.toFixed(1)+"m",ex+22,ey+4)}
-  if(now<tideTurnUntil){ctx.fillStyle="#5FD39A";ctx.font="bold 12px sans-serif";ctx.textAlign="right";ctx.fillText("🌊 물돌이",W-10,top+16)}
+  if(eye&&swayAct&&boat>swayAmp*.45){ctx.fillStyle="#F2C14E";ctx.font="bold 12px sans-serif";ctx.textAlign="left";ctx.fillText("⬆ 배 올라감 · 폰 살짝 내리기",10,top+34)}
+  if(now<tideTurnUntil){ctx.fillStyle="#5FD39A";ctx.font="bold 12px sans-serif";ctx.textAlign="right";ctx.fillText("🔥 피딩타임",W-10,top+16)}
   ctx.restore();
 }
+setWind();paintTitle();
 prep();
 requestAnimationFrame(frame);
 })();
