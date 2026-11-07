@@ -86,6 +86,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
 .seg button{flex:1;border:1.5px solid #2B5560;background:var(--panel);color:var(--ink);border-radius:12px;padding:9px 0;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .seg button.on{background:var(--line);border-color:var(--line);color:#231700}
 .opts{display:flex;gap:6px;flex-wrap:wrap}
+#helpTabs button{font-size:12.5px;padding:8px 0}
 .dexg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:6px 0 10px}
 .dexc{background:var(--panel);border-radius:12px;padding:8px 4px;text-align:center;font-size:11.5px;color:var(--sub);line-height:1.4}
 .dexc .i{font-size:30px;display:block}.dexc b{color:var(--ink);font-size:13px;display:block}
@@ -141,10 +142,13 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <b style="font-size:14px">봉돌 고르기</b>
       <div class="sinkers" id="sinkers"></div>
       <div style="font-size:12px;color:var(--sub);line-height:1.5">가벼우면 바닥 느낌이 잘 오지만 물살에 채비가 떠요 · 무거우면 바닥은 잘 잡지만 신호가 둔하고 밑걸림이 잦아요</div>
+      <button class="chip" id="prepHelp" type="button" style="align-self:flex-start">📘 설명 · 🏆 공략 보기</button>
       <div style="margin-top:auto;text-align:center;font-family:var(--f-display);font-size:18px;color:var(--ok)">▶ 화면 아무 데나 톡 = 이 봉돌로 채비 내리기</div>
     </div>
     <div class="sheet" id="help" hidden>
-      <h3>하는 법 (서해 선상)</h3>
+      <h3>📘 쭈꾸미 선상 · 설명 · 공략</h3>
+      <div class="seg" id="helpTabs" style="margin:6px 0 10px"><button type="button" data-t="how">하는 법</button><button type="button" data-t="sig">진동 신호</button><button type="button" data-t="tip">🏆 공략</button><button type="button" data-t="set">기능 · 설정</button></div>
+      <div data-tab="how">
       <ol>
         <li>선장 안내를 보고 <b>봉돌</b>을 골라요. 물살이 셀수록(사리) 무겁게, 약할수록(무시·조금) 가볍게.</li>
         <li>'삐-' 신호에 채비를 내려요. 바닥에 닿으면 <b>툭</b> 하고 줄이 멈춰요 → 화면을 <b>톡톡 2번</b> 눌러 줄을 팽팽하게 (안 하면 신호가 약해요).</li>
@@ -154,6 +158,9 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <li>화면 <b>톡</b> = 챔질 · 화면 <b>꾹(0.6초)</b> = 릴 감아 채비 회수. 걸리면 <b>화면 꾹</b> = 감기. 밑걸림이면 꾹 2초 당겨 바늘을 펴서 빼요 (못 빼면 채비를 잃어요).</li>
         <li>선장이 "채비 걷으세요" 하면 걷고 다음 포인트에서 다시 내려요. 입질이 없으면 위쪽 <b>🚤 이동</b>으로 직접 옮겨요 (30초에 한 번 · 포인트마다 마릿수 · 씨알 · 갑오징어가 달라요).</li>
       </ol>
+      </div>
+      <div data-tab="sig" hidden>
+        <p style="margin:0 0 6px;color:var(--sub);font-size:12.5px">진동만으로 바닥 · 올라탐 · 갑오징어를 구분하는 게 이 게임의 핵심이에요. 초보 모드를 켜면 화면 오른쪽 위에 신호 이름이 같이 떠요.</p>
       <div class="sig-t">
         <span>툭</span><span>채비가 바닥에 닿음 (줄 멈춤)</span>
         <span>바닥 길이</span><span>포인트마다 0.1~0.35초로 달라요 · 그 포인트의 바닥 느낌을 익혀 두세요</span>
@@ -166,6 +173,25 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
         <span>묵직</span><span>들 때 길고 무거운 떨림 = 쭈꾸미(문어) 올라탐</span>
         <span>툭!</span><span>떠 있을 때 짧고 날카롭게 = 갑오징어</span>
       </div>
+      </div>
+      <div data-tab="tip" hidden>
+        <ol>
+          <li><b>새 포인트에선 바닥부터 익히기</b> — 처음 2~3번 바닥 찍는 진동 길이를 기억해 두세요 (포인트마다 0.1~0.35초로 달라요). 그 뒤로 <b>안 오거나 길고 뭉툭</b>하면 올라탄 거예요 → 바로 확 들어 챔질.</li>
+          <li><b>리듬: 5~10초 기다림 → 10~20cm 살짝 들기</b> — 🎯 운용 점수가 초록이면 리듬이 좋은 거예요. 계속 흔들면 점수가 떨어지고 입질도 줄어요.</li>
+          <li><b>줄 정리 톡톡 2번은 꼭</b> — 안 하면 진동이 약하게 오고 입질도 덜 받아요.</li>
+          <li><b>봉돌은 선장 권장 호수부터</b> — "채비가 떠요"가 뜨면 한 호 무겁게, 밑걸림이 자주 나면 한 호 가볍게. 하루 출조에선 물살이 바뀔 때 선장이 말해 줘요.</li>
+          <li><b>헛챔질 줄이기</b> — 빈 챔질은 밑걸림을 부르고 운용 점수도 깎아요. 신호(평소와 다름 · 묵직)가 왔을 때만 챔질하세요. 돌바닥('딱딱')은 특히 조심.</li>
+          <li><b>🔥 피딩타임에 집중</b> — 입질이 2.5배예요. '툭툭' 건드림이 오면 움직이지 말고 기다리면 곧 올라타요.</li>
+          <li><b>갑오징어 노리기</b> — 선장이 "앞쪽에서 갑오징어"라고 하면 30초 동안 갑오징어가 잘 붙어요. 에기를 15cm 넘게 살짝 띄운 채 기다리다 짧은 '툭!'에 0.7초 안에 챔질.</li>
+          <li><b>입질 없으면 바로 이동</b> — 꽝 포인트도 있어요. 선장이 "다들 조용하네요" 하거나 1~2분 입질이 없으면 🚤 이동.</li>
+          <li><b>감기는 일정하게</b> — 걸린 뒤 1.6초 넘게 멈추면 털려요. 문어는 무거우니 꾹 누른 채 천천히.</li>
+          <li><b>바람 센 날</b> — 배가 올라갈 때 폰 앞쪽을 살짝 내려 에기를 붙잡아요 (초보 모드에서 ⬆ 화살표로 알려 줘요). 그래도 어려우면 '배 흔들림' 스위치를 꺼도 돼요.</li>
+          <li><b>하루 출조 ★3</b> — 가을 시즌 12분 기준 약 14마리. 채비를 한 번도 안 잃고 끝내면 '무사 귀환' 칭호.</li>
+        </ol>
+        <b>🏅 칭호 얻는 법</b>
+        <div id="titleHelp"></div>
+      </div>
+      <div data-tab="set" hidden>
       <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🎯 운용 점수: 바닥에 5~10초 두었다 살짝 드는 걸 반복하면 차요. 높을수록 올라탈 확률이 올라가지만, 다 찬다고 바로 올라타진 않아요.</p>
       <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🚢 하루 출조: 06:00~12:00 출조를 6 · 12 · 20분으로 줄여서 해요. 만조 · 간조 앞뒤 물돌이와 06~07시는 🔥 피딩타임(입질 2.5배), 중간 물은 물살이 세져서 선장이 봉돌을 바꾸라고 해요. 12시에 쿨러를 정산해요 (오늘 실제 물때 · 바람을 써요, 못 받으면 달 계산).</p>
       <p style="margin:6px 0;font-size:12.5px;color:var(--sub)">🌬 배 흔들림: 바람이 세면 배가 출렁여서 폰을 가만히 들고 있어도 에기가 바닥에서 떠요. 배가 올라갈 때 폰 앞쪽을 살짝 내리면 에기가 제자리에 있어요.</p>
@@ -175,6 +201,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none}
       <div class="motion"><i id="mv"></i><span class="th" id="th"></span></div>
       <div class="sens"><span>조금만 뜨게</span><input id="sens" type="range" min="1" max="10" step="0.5" value="3"><span>많이 뜨게</span></div>
       <p id="sensNote" style="color:var(--sub);font-size:12.5px;margin:0"></p>
+      </div>
       <button class="chip" id="helpClose" type="button" style="width:100%;margin-top:12px">닫기</button>
     </div>
     <div class="sheet" id="dex" hidden></div>
@@ -509,6 +536,7 @@ function openDex(){
   $("dexClose").onclick=()=>{el.hidden=true};
 }
 $("dexBtn").onclick=()=>{audio();openDex()};
+$("prepHelp").onclick=()=>openHelp("tip");
 
 /* ---- 🚢 하루 출조 (210) ---- */
 function gameMin(){return day?360+360*Math.min(1,(performance.now()-day.start)/(day.len*60000)):0}
@@ -638,7 +666,10 @@ addEventListener("pointerup",()=>stageHold=false);addEventListener("pointercance
 $("rhyQ").addEventListener("pointerdown",e=>{e.stopPropagation();e.preventDefault();
   sig.hidden=false;sig.style.color="var(--ink)";sig.textContent="🎯 운용 점수: 높을수록 올라탈 확률이 올라가요 · 다 찬다고 바로 올라타진 않아요 · 물살 · 시즌 · 봉돌 · 포인트도 영향";sigT=performance.now()+4500});
 $("moveBtn").onclick=()=>{audio();movePoint()};
-$("helpBtn").onclick=()=>$("help").hidden=false;$("helpClose").onclick=()=>$("help").hidden=true;
+function helpTab(t){[...$("helpTabs").children].forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll("#help [data-tab]").forEach(d=>d.hidden=d.dataset.tab!==t);$("help").scrollTop=0}
+[...$("helpTabs").children].forEach(b=>b.onclick=()=>helpTab(b.dataset.t));
+function openHelp(t){$("titleHelp").innerHTML=TITLES.map(x=>li((dex.titles.includes(x[0])?"🏅 ":"🔒 ")+x[0],x[1])).join("");helpTab(t||"how");$("help").hidden=false}
+$("helpBtn").onclick=()=>openHelp();$("helpClose").onclick=()=>$("help").hidden=true;
 
 /* ---- 매 프레임 ---- */
 let last=performance.now(),reelTick=0,prevLift=0;

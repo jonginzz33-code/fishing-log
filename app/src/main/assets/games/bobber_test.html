@@ -57,6 +57,10 @@ canvas{display:block;width:100%;height:100%}
 .dex .no{opacity:.35;filter:grayscale(1)}
 .dex b{display:block;color:var(--line);font-variant-numeric:tabular-nums}
 .close{margin-top:12px;width:100%}
+.seg{display:flex;gap:6px;margin:6px 0 10px}
+.seg button{flex:1;border:1.5px solid #2B5468;background:var(--panel);color:var(--ink);border-radius:12px;padding:8px 0;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.seg button.on{background:var(--line);border-color:var(--line);color:#231700}
+.hp{font-size:13.5px;line-height:1.6}.hp ol{padding-left:20px;margin:0 0 10px}
 /* 🧪 테스트판 (v4.4 · 213 · 214) */
 .ctrl{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--sub)}
 .ctrl .cb{border:1px solid #2B5468;background:var(--panel);color:var(--ink);border-radius:12px;height:40px;min-width:44px;padding:0 10px;font:inherit;font-size:16px;font-weight:700;cursor:pointer;touch-action:manipulation}
@@ -86,6 +90,7 @@ canvas{display:block;width:100%;height:100%}
       <button class="chip" id="dexBtn" type="button">📖 도감</button>
       <button class="sw" id="eyeBtn" type="button" role="switch">초보<span class="tg"><i></i></span></button>
       <button class="chip" id="sndBtn" type="button">🔊</button>
+      <button class="chip" id="helpBtn" type="button" aria-label="설명 · 공략">?</button>
     </div>
   </header>
   <div class="tide"><span id="tideTxt">오늘 물때 계산 중…</span><span>이번 판 <b id="cnt">0</b>마리</span></div>
@@ -96,6 +101,39 @@ canvas{display:block;width:100%;height:100%}
     <div class="card" id="card" hidden>
       <div class="ic" id="cIc">🐟</div>
       <div><h2 id="cName">우럭</h2><div class="size" id="cSize">32cm</div><p id="cNote"></p></div>
+    </div>
+    <div class="sheet" id="help" hidden>
+      <h3>📘 바다찌낚시 · 설명 · 공략</h3>
+      <div class="seg" id="helpTabs"><button type="button" data-t="how">하는 법</button><button type="button" data-t="fish">어종 · 입질</button><button type="button" data-t="tip">🏆 공략</button></div>
+      <div data-tab="how" class="hp">
+        <ol>
+          <li><b>수심(찌 매듭)</b>을 아래 −＋로 맞춰요. 어종마다 노는 층이 달라요. 바닥보다 깊으면 밑걸림.</li>
+          <li><b>🟤 밑밥</b>을 2~3주걱 뿌려요 (가운데 자리 · 한 판 20주걱).</li>
+          <li><b>던지기</b>: 화면을 누른 쪽으로 찌가 날아가요 (아래 버튼은 가운데로). 뒷바람이면 더 멀리, 맞바람이면 짧게.</li>
+          <li><b>찌 보기</b>: 바람에 찌가 흘러가요. 밑밥 자리 위에 있을 때 입질이 많아요. 너무 흘러가면 다시 던져요.</li>
+          <li><b>챔질</b>: 진짜 입질(본신)에 버튼 또는 화면 톡. 예신(살짝 잠겼다 멈춤)에 당기면 헛챔질.</li>
+          <li><b>감기</b>: 버튼 꾹 = 감기. 장력 막대 초록 유지 · 빨강이면 <b>드랙 풀기</b>나 손 떼기 · 노랑으로 오래 느슨하면 바늘이 빠져요. '고기 힘'이 0이 되면 힘없이 끌려와요.</li>
+        </ol>
+        <p class="sub">'초보' 스위치를 켜면 바닥 수심과 밑밥 범위(점선)가 보여요.</p>
+      </div>
+      <div data-tab="fish" class="hp" hidden><div id="fishHelp"></div></div>
+      <div data-tab="tip" class="hp" hidden>
+        <ol>
+          <li><b>바닥부터 찾기</b> — 초보를 켜거나, 일부러 깊게 해서 밑걸림이 나면 바닥 수심이 표시돼요. 감성돔 · 참돔 · 우럭 · 놀래미는 <b>바닥에서 0.5~1.5m 위</b>.</li>
+          <li><b>층 맞추기</b> — 학꽁치 · 숭어는 얕게(1~3m), 고등어 · 벵에돔은 중간(2~5m), 밤 볼락은 1~4m. 잡어만 나오면 수심을 바꿔 보세요.</li>
+          <li><b>밑밥은 조금씩 자주</b> — 처음 2~3주걱, 그 뒤 입질이 뜸할 때 1주걱. 한꺼번에 많이(게이지 75%↑) 뿌리면 복어 · 망상어가 먼저 와요.</li>
+          <li><b>바람 반대쪽으로 던지기</b> — 바람이 →로 불면 밑밥 자리 왼쪽에, ←로 불면 오른쪽에 던져서 찌가 밑밥 위로 흘러오게.</li>
+          <li><b>예신은 참기</b> — 감성돔은 살짝 잠겨 멈출 때(예신) 기다렸다가 쭉 들어갈 때(본신) 챔질. 볼락 · 망상어도 깜빡일 땐 기다리기. 벵에돔 · 고등어는 바로.</li>
+          <li><b>챔질은 빠를수록</b> — 입질 순간 0.3초 안이면 '완벽한 챔질'로 바늘이 깊게 걸려 잘 안 빠져요.</li>
+          <li><b>째는 고기</b>(참돔 · 숭어 · 고등어) — '확 짼다!'가 뜨면 손을 떼거나 드랙. 쉬는 틈에 감기.</li>
+          <li><b>떼고기</b> — 고등어 · 전갱이는 한 마리 잡으면 다음에도 연달아 붙어요. 같은 자리 · 같은 수심 그대로.</li>
+          <li><b>시간 · 계절</b> — 밤 = 볼락 · 우럭, 아침저녁 = 감성돔 · 벵에돔. 제철 어종이 더 잘 나와요.</li>
+          <li><b>사리</b>(물때가 셀 때) — 입질이 빠르고 조금 더 큰 고기가 나와요.</li>
+        </ol>
+        <b>🏅 칭호 얻는 법</b>
+        <div id="titleHelp"></div>
+      </div>
+      <button class="chip close" id="helpClose" type="button">닫기</button>
     </div>
     <div class="sheet" id="dex" hidden>
       <h3>📖 어종 도감</h3>
@@ -356,7 +394,17 @@ function openDex(){
 }
 $("dexBtn").onclick=openDex;
 // 🏆 랭킹 (앱 안에서만)
-$("dexClose").onclick=()=>$("dex").hidden=true;   // 🧪 테스트판은 랭킹 버튼 없음
+$("dexClose").onclick=()=>$("dex").hidden=true;
+/* 📘 설명 · 공략 */
+const ZNAME=f=>{const z=ZONE[f.n];return z==="any"?"아무 층":z==="b"||z==="b0"?"바닥 근처":z[0]+"~"+z[1]+"m"};
+function helpTab(t){[...$("helpTabs").children].forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll("#help [data-tab]").forEach(d=>d.hidden=d.dataset.tab!==t);$("help").scrollTop=0}
+[...$("helpTabs").children].forEach(b=>b.onclick=()=>helpTab(b.dataset.t));
+$("helpBtn").onclick=()=>{
+  $("fishHelp").innerHTML=FISH.filter(f=>f.n!=="장화").map(f=>{const when=f.night>=1.5?"밤":f.dawn>=1.5?"아침저녁":"아무 때",ss=f.season.length?" · 제철 "+f.season.join(",")+"월":"";
+    return `<div class="li"><span style="font-size:22px">${f.ic}</span><div class="t"><b>${f.n}</b> <small style="display:inline">· ${ZNAME(f)} · ${when}${ss}</small><small>${f.tip}</small></div></div>`}).join("");
+  $("titleHelp").innerHTML=TITLES.map(t=>`<div class="li"><span>${meta.titles.includes(t[0])?"🏅":"🔒"}</span><div class="t">${t[0]}<small>${t[1]}</small></div></div>`).join("");
+  helpTab("how");$("help").hidden=false};
+$("helpClose").onclick=()=>$("help").hidden=true;   // 🧪 테스트판은 랭킹 버튼 없음
 $("dMinus").onclick=()=>setDepth(depth-.5);$("dPlus").onclick=()=>setDepth(depth+.5);
 $("eyeBtn").onclick=()=>{eye=!eye;LSs("eye",eye);paintCtrl()};
 $("chumBtn").onclick=()=>{if(chumLeft<=0||st==="fight")return;audio();chumLeft--;chum=Math.min(100,chum+25);noise(.3,.1,400);
@@ -365,7 +413,7 @@ $("chumBtn").onclick=()=>{if(chumLeft<=0||st==="fight")return;audio();chumLeft--
 
 /* ---- 입력 ---- */
 function down(e){
-  e.preventDefault();if(!$("dex").hidden)return;const now=performance.now();audio();
+  e.preventDefault();if(!$("dex").hidden||!$("help").hidden)return;const now=performance.now();audio();
   if(st==="idle"||(st==="result"&&now-landT>350)){let aim=null;if(e.currentTarget===cv){const r=cv.getBoundingClientRect();aim=Math.max(.3,Math.min(.9,(e.clientX-r.left)/r.width))}cast(aim)}
   else if(st==="wait"||st==="bite")hookSet(now);
   else if(st==="fight"){holding=true;btn.classList.add("down")}
