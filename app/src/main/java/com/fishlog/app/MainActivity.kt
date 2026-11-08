@@ -143,7 +143,12 @@ class MainActivity : Activity() {
     }
     private fun paintInquiry() {
         if (!::inqBadge.isInitialized || Cloud.user == null) return
-        Inquiry.unread { n -> if (!isFinishing) { inqBadge.text = "$n"; inqBadge.visibility = if (n > 0) View.VISIBLE else View.GONE } }
+        Inquiry.unread { n -> if (!isFinishing) {
+            inqBadge.text = "$n"; inqBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
+            // 맨 아래 '더보기' 탭에도 같은 숫자
+            tabMoreN = n
+            if (::tabMoreBadge.isInitialized) { tabMoreBadge.text = "$n"; tabMoreBadge.visibility = if (n > 0) View.VISIBLE else View.GONE }
+        } }
     }
     private val chatListener: () -> Unit = { paintChat(); renderGroupPanel() }
 
@@ -184,10 +189,12 @@ class MainActivity : Activity() {
     /** 채팅 버튼: 접속 인원 + 안 읽은 글 수 */
     private fun paintChat() {
         if (!::chatBtn.isInitialized) return
-        val gold = Color.parseColor("#F2C14E")
-        chatBtn.text = android.text.SpannableStringBuilder(headTwo("💬 채팅",
-            if (Cloud.user == null) "로그인" else if (chatOnline > 0) "접속 ${chatOnline}명" else "실시간", gold)).apply {
-            setSpan(android.text.style.ForegroundColorSpan(gold), 0, length, 0)
+        // v4.7 (217): 맨 아래 '채팅' 탭 이름 옆에 접속 인원 (예전처럼)
+        chatBtn.text = android.text.SpannableStringBuilder("채팅").apply {
+            if (Cloud.user != null && chatOnline > 0) {
+                val s0 = length; append(" 접속${chatOnline}")
+                setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), s0, length, 0)
+            }
         }
         val n = if (Cloud.user == null) 0 else Chat.totalUnread()
         chatBadge.text = if (n > 99) "99+" else "$n"
@@ -412,12 +419,7 @@ class MainActivity : Activity() {
             setAutoSizeTextTypeUniformWithConfiguration(13, 30, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(MATCH, 0, 1f))
         header.addView(titleCol, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
-        // v4.1 (188): 맨 위는 그룹 · 제목 · ⚙만 → 둘째 줄에 🎒 가방 · 🗺 지도 · 📅 일정 · 💬 채팅 · ✉ 문의 (같은 폭)
-        header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
-            gravity = Gravity.CENTER
-            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
-            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
-        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(2) })
+        // v4.7 (217): 맨 위는 그룹 · 제목만 · ⚙ 설정은 맨 아래 '더보기' 탭으로
         col.addView(header)
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
         // v4.2 (191): 칸 크기는 그대로 · 글씨만 크게 (이름 16.5 · 4글자 15 · 작은 글씨 11) · 칸보다 길면 알아서 줄임
@@ -474,7 +476,7 @@ class MainActivity : Activity() {
         }
         inqBox.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(4) })
         btnRow.addView(inqBox, LinearLayout.LayoutParams(0, WRAP, 1f))
-        col.addView(btnRow, Ui.lp(this, MATCH, WRAP, top = 2))
+        // v4.7 (217): 위쪽 버튼 줄은 화면에 안 붙임 → 맨 아래 탭(지도 · 채팅 · 가방)과 '더보기'(출조추천 · 게임 · 관리자 문의)로
         paintHeadGroup()
 
         // 출조 종류 칩은 맨 아래 '그룹' 칸 안에서 고름 (renderGroupPanel)
@@ -496,18 +498,18 @@ class MainActivity : Activity() {
             visibility = View.GONE; setPadding(dp(8), dp(3), dp(8), dp(3)); background = Ui.bg(this@MainActivity, Color.parseColor("#8A1F28"), 8)
         }
         tideTexts.addView(tideWarn, Ui.lp(this, MATCH, WRAP).apply { bottomMargin = dp(4) })
-        tideTitle = Ui.text(this, 17f, Ui.TEXT, true, "").apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
-        tideSub = Ui.text(this, 12f, Ui.SUB, false, "물때 불러오는 중…")
+        tideTitle = Ui.text(this, 18f, Ui.TEXT, true, "").apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
+        tideSub = Ui.text(this, 13f, Ui.SUB, false, "물때 불러오는 중…")
         tideSun = Ui.text(this, 12f, Ui.SUB, false, "")
         tideTexts.addView(tideTitle); tideTexts.addView(tideSub, Ui.lp(this, MATCH, WRAP, top = 2))
         tideTexts.addView(tideSun, Ui.lp(this, MATCH, WRAP, top = 4))
         tideCard.addView(tideTexts, LinearLayout.LayoutParams(0, WRAP, 1f))
-        tideCard.addView(Ui.text(this, 13f, Ui.BG, true, "물때 보기 ›").apply {
+        // v4.7 (217): '물때 보기' 큰 버튼 대신 작은 '물때 ›' (카드 어디를 눌러도 열림)
+        tideCard.addView(Ui.text(this, 13f, Ui.BLUE, true, "물때 ›").apply {
             gravity = Gravity.CENTER
-            setPadding(dp(12), 0, dp(12), 0)
-            background = Ui.bg(this@MainActivity, Ui.BLUE, 99)
+            setPadding(dp(6), 0, dp(2), 0)
             setOnClickListener { openTodayTide() }
-        }, LinearLayout.LayoutParams(WRAP, dp(38)).apply { leftMargin = dp(8) })
+        }, LinearLayout.LayoutParams(WRAP, dp(38)).apply { leftMargin = dp(4) })
         col.addView(tideCard, Ui.lp(this, MATCH, WRAP, top = 12))
         // 출조 중: 배·항구 (눌러서 수정)
         placeText = Ui.text(this, 16f, Ui.TEXT, true).apply {
@@ -541,16 +543,17 @@ class MainActivity : Activity() {
         // 기록 방식 카드: 처음엔 네 가지 모두, 고른 뒤엔 한 줄 칩 + "바꾸기 ▼"
         methodBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = Ui.bg(this@MainActivity, Ui.CARD, 14)
+            background = Ui.bg(this@MainActivity, Ui.CARD, 14, Color.parseColor("#2B5468"))
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
-        col.addView(methodBox, Ui.lp(this, MATCH, WRAP, top = 12))
         message = Ui.text(this, 13f, Ui.GREEN).apply { visibility = View.GONE }
-        col.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 출조 시작 / 종료: 카드 바로 위 (앱 켜면 바로 누를 수 있게)
         tripBtn = Ui.button(this, "출조 시작", filled = true) { onTripButton() }.apply { maxLines = 1 }
         col.addView(tripBtn, Ui.lp(this, MATCH, WRAP, top = 14))
+        // v4.7 (217): 기록 방식은 출조 시작 바로 밑 한 줄 + 눈에 띄는 '바꾸기'
+        col.addView(methodBox, Ui.lp(this, MATCH, WRAP, top = 8))
+        col.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
         Zones.listener = { msg -> runOnUiThread { if (!isFinishing) showMessage(msg) } }
 
         // 카운터
@@ -581,9 +584,7 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         col.addView(liveBox, Ui.lp(this, MATCH, WRAP, top = 8))
-        col.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "✎를 누르면 어종 변경 · 리모컨 버튼을 길게(1초) 누르면 마지막 기록 취소"),
-            Ui.lp(this, MATCH, WRAP, top = 8))
+        // v4.7 (217): "✎를 누르면 어종 변경 · 리모컨 길게 = 취소" 안내는 사용 설명서로 옮김
 
         undoBtn = Ui.button(this, "마지막 기록 취소") {
             if (Store.undoLast() != 0) { Haptics.undo(this); showMessage("마지막 기록을 취소했어요") }
@@ -643,23 +644,22 @@ class MainActivity : Activity() {
         gFrame.addView(groupBtn, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
         groupDot = redDot(0)
         gFrame.addView(groupDot, android.widget.FrameLayout.LayoutParams(WRAP, dp(22), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = dp(4) })
-        bottomRow.addView(gFrame, LinearLayout.LayoutParams(MATCH, WRAP))
+        // v4.7 (217): 그룹 · ☰ 메뉴 · 관리자 페이지는 맨 아래 탭 '그룹' · '더보기'로 (버튼 자체는 그대로 두고 화면엔 안 붙임)
         groupFrame = gFrame
         groupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBtn = Ui.button(this, "☰ 메뉴") { openMenuDialog() }.apply { textSize = 16f }
-        bottomRow.addView(menuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         // 총관리자(나)에게만: 관리자 페이지
         adminMenuBtn = Ui.button(this, "🛠 관리자 페이지") { openAdminMenu() }.apply {
             textSize = 16f
             setTextColor(Color.parseColor("#F2C14E")); background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 14, Color.parseColor("#F2C14E"))
             visibility = View.GONE
         }
-        bottomRow.addView(adminMenuBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         col.addView(bottomRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
         // 메뉴 창 안에 들어갈 내용 (창을 열 때 붙임)
         menuBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        // v4.2.6 (203): ⚙ 개인 설정은 메인 오른쪽 위 ⚙ 버튼으로 (중복이라 메뉴에선 뺌)
+        // v4.7 (217): '더보기' 맨 위 큰 칸 4개 — 출조추천 · 설정 / 관리자 문의 · 게임(관리자)
+        buildMoreGrid()
         menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
             startActivity(Intent(this, HelpActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP))
@@ -701,6 +701,8 @@ class MainActivity : Activity() {
             minHeight = dp(36); gravity = Gravity.CENTER_VERTICAL
             setOnClickListener { if (Updater.latestCode != null) { menuDialog?.dismiss(); Updater.showDialog(this@MainActivity, forceUpdate) } }
         }
+        // 🛠 관리자 페이지 (관리자만 보임 · 예전 메인 맨 아래에서 옮김)
+        menuBox.addView(adminMenuBtn, Ui.lp(this, MATCH, WRAP, top = 12))
         menuBox.addView(versionText, Ui.lp(this, MATCH, WRAP, top = 12))
         paintVersion()
         col.addView(View(this), Ui.lp(this, MATCH, dp(24)))
@@ -711,7 +713,111 @@ class MainActivity : Activity() {
             isFillViewport = true
             addView(col)
         }
-        return scroller
+        // v4.7 (217): 맨 아래 고정 탭 6개
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Ui.BG)
+            addView(scroller, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            addView(buildTabBar(), LinearLayout.LayoutParams(MATCH, WRAP))
+        }
+    }
+
+    // ---------------- v4.7 (217): 맨 아래 탭 · 더보기 ----------------
+    private lateinit var tabGroupBadge: TextView
+    private lateinit var tabMoreBadge: TextView
+    private var tabMoreN = 0
+
+    /** 탭 하나: 위 그림 + 아래 이름 + 오른쪽 위 빨간 숫자 */
+    private fun tabItem(icon: String, label: String, onClick: () -> Unit): Triple<View, TextView, TextView> {
+        val f = android.widget.FrameLayout(this).apply {
+            isClickable = true; clipChildren = false; clipToPadding = false
+            setOnClickListener { onClick() }
+        }
+        val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
+        colv.addView(Ui.text(this, 20f, Ui.TEXT, false, icon).apply { gravity = Gravity.CENTER })
+        val lab = Ui.text(this, 11.5f, Ui.SUB, true, label).apply {
+            gravity = Gravity.CENTER; maxLines = 1
+            setAutoSizeTextTypeUniformWithConfiguration(8, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }
+        colv.addView(lab, LinearLayout.LayoutParams(MATCH, dp(16)))
+        f.addView(colv, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+        val badge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0); minWidth = dp(18)
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
+        }
+        f.addView(badge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(2); leftMargin = dp(18) })
+        return Triple(f, lab, badge)
+    }
+
+    private fun buildTabBar(): View {
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.parseColor("#0B161E"))
+            setPadding(0, dp(6), 0, dp(6))
+        }
+        val line = View(this).apply { setBackgroundColor(Color.parseColor("#23394A")) }
+        val home = tabItem("🏠", "홈") { scroller.smoothScrollTo(0, 0) }
+        home.second.setTextColor(Ui.BLUE)
+        val map = tabItem("🗺", "지도") { openMap() }
+        val grp = tabItem("👥", "그룹") { openGroupDialog() }
+        val chat = tabItem("💬", "채팅") { startActivity(Intent(this, ChatActivity::class.java)) }
+        val bag = tabItem("🎒", "가방") { Inventory.show(this) }
+        val more = tabItem("⋯", "더보기") { openMenuDialog() }
+        listOf(home, map, grp, chat, bag, more).forEach { bar.addView(it.first, LinearLayout.LayoutParams(0, dp(52), 1f)) }
+        tabGroupBadge = grp.third
+        chatBtn = chat.second; chatBadge = chat.third
+        tabMoreBadge = more.third
+        paintChat()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(line, LinearLayout.LayoutParams(MATCH, dp(1)))
+            addView(bar, LinearLayout.LayoutParams(MATCH, WRAP))
+        }
+    }
+
+    /** 더보기 맨 위 큰 칸: 출조추천 · 설정 / 관리자 문의 · 게임(관리자만) */
+    private fun buildMoreGrid() {
+        fun cell(icon: String, title: String, sub: String, fill: String, stroke: String, ink: String, onClick: () -> Unit): android.widget.FrameLayout {
+            val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(6), 0, 0) }
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = Ui.bg(this@MainActivity, Color.parseColor(fill), 12, Color.parseColor(stroke))
+                isClickable = true
+                setOnClickListener { menuDialog?.dismiss(); onClick() }
+            }
+            box.addView(Ui.text(this, 16f, Ui.TEXT, true, "$icon $title").apply { maxLines = 1 })
+            box.addView(Ui.text(this, 11.5f, Color.parseColor(ink), false, sub).apply { maxLines = 1 })
+            f.addView(box, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
+            return f
+        }
+        val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        r1.addView(cell("🎣", "출조추천", "좋은 날 달력", "#2A2410", "#6A5A22", "#E5CF8F") {
+            val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second)
+        }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(8) })
+        r1.addView(cell("⚙", "설정", "위치 · 닉네임 · 화면 크기", "#1A2A30", "#2E4A52", "#A9C4CB") {
+            startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+        }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        menuBox.addView(r1, Ui.lp(this, MATCH, WRAP))
+        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val inq = cell("✉", "관리자 문의", "1:1 · 답장 오면 빨간 숫자", "#16263A", "#2E4A6A", "#A9BFE0") {
+            if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
+            else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
+        }
+        inqBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
+        }
+        inq.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { rightMargin = dp(6) })
+        r2.addView(inq, LinearLayout.LayoutParams(0, WRAP, 1f))
+        // 🎮 미니게임 (테스트하는 동안은 관리자에게만 보임)
+        val gc = cell("🎮", "게임", "미니게임", "#26163A", "#5A3A7A", "#C9A9E9") { MiniGame.pick(this) }.apply {
+            visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        }
+        gameCell = gc
+        r2.addView(gc, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        menuBox.addView(r2, Ui.lp(this, MATCH, WRAP, top = 2))
+        menuBox.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, Ui.lp(this, MATCH, dp(1), top = 12).apply { bottomMargin = dp(10) })
     }
 
     private fun counterCard(slot: Int, color: Int, ink: Int): View {
@@ -942,7 +1048,7 @@ class MainActivity : Activity() {
                 isClickable = true; setOnClickListener { methodsOpen = true; renderMethods() }
             }
             val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            left.addView(Ui.text(this, 12f, Ui.SUB, false, "기록 방식"))
+            left.addView(Ui.text(this, 12f, Ui.SUB, false, "기록 방식 · ${Store.catLabel(Store.current?.cat?.ifBlank { null } ?: Store.category)}"))
             val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             val on = mutableListOf<String>()
             if (remoteOn()) on.add("리모컨")
@@ -961,11 +1067,12 @@ class MainActivity : Activity() {
             left.addView(Ui.hscroll(this, chips),
                 Ui.lp(this, MATCH, WRAP, top = 6))
             row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
-            row.addView(Ui.text(this, 13f, Ui.TEXT, true, "바꾸기 ▼").apply {
-                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
-                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+            // v4.7 (217): '바꾸기'를 눈에 띄게 (하늘색으로 꽉 찬 버튼)
+            row.addView(Ui.text(this, 14f, Color.parseColor("#04303B"), true, "⚙ 바꾸기").apply {
+                gravity = Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
+                background = Ui.bg(this@MainActivity, Ui.BLUE, 12)
                 setOnClickListener { methodsOpen = true; renderMethods() }
-            }, LinearLayout.LayoutParams(WRAP, dp(36)).apply { leftMargin = dp(8) })
+            }, LinearLayout.LayoutParams(WRAP, dp(40)).apply { leftMargin = dp(8) })
             methodBox.addView(row)
             return
         }
@@ -1618,7 +1725,11 @@ class MainActivity : Activity() {
             sb.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFB27A")), 0, sb.length, 0)
             sb.setSpan(android.text.style.RelativeSizeSpan(0.88f), 0, sb.length, 0)
         }
-        sb.append(TideDialog.dayTitle(Tide.mulName(t).substringBefore(" ("), t, mainPct, true))
+        val mul = Tide.mulName(t).substringBefore(" (")
+        val m0 = sb.length
+        sb.append(TideDialog.dayTitle(mul, t, mainPct, true))
+        // v4.7 (217): 중요한 물때(예: 5물 · 사리)는 노란색으로 강조
+        sb.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFD166")), m0, m0 + mul.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         tideTitle.text = sb
     }
 
@@ -1667,16 +1778,28 @@ class MainActivity : Activity() {
             if (isFinishing) return@strengthAt
             if (day == null) { tideSub.text = "물때를 불러오지 못했어요 · 눌러서 다시 보기"; return@strengthAt }
             val t = System.currentTimeMillis()
-            val parts = mutableListOf<String>()
-            Tide.rising(day, t)?.let { parts.add(if (it) "지금 들물" else "지금 날물") }
-            Tide.extremes(day).firstOrNull { it.time > t }?.let {
-                parts.add((if (it.high) "다음 만조 " else "다음 간조 ") + SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it.time)))
+            // v4.7 (217): '지금 날물'은 주황 꼬리표, 다음 만조 · 간조 시각과 물세기는 진하게
+            val sb = android.text.SpannableStringBuilder()
+            fun bold(txt: String, color: Int) { val a0 = sb.length; sb.append(txt)
+                sb.setSpan(android.text.style.ForegroundColorSpan(color), a0, sb.length, 0)
+                sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), a0, sb.length, 0) }
+            fun sep() { if (sb.isNotEmpty()) sb.append(" · ") }
+            Tide.rising(day, t)?.let { up ->
+                val a0 = sb.length; sb.append(if (up) " 지금 들물 " else " 지금 날물 ")
+                val c = if (up) Color.parseColor("#5FC4E0") else Color.parseColor("#F2A65A")
+                sb.setSpan(android.text.style.ForegroundColorSpan(c), a0, sb.length, 0)
+                sb.setSpan(android.text.style.BackgroundColorSpan(Color.argb(55, Color.red(c), Color.green(c), Color.blue(c))), a0, sb.length, 0)
+                sb.setSpan(android.text.style.StyleSpan(Typeface.BOLD), a0, sb.length, 0)
             }
-            stg?.let { parts.add("물세기 ${it.pct}%" + if (it.estimated) "(추정)" else "") }
+            Tide.extremes(day).firstOrNull { it.time > t }?.let {
+                sep(); sb.append(if (it.high) "다음 만조 " else "다음 간조 ")
+                bold(SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(it.time)), Color.WHITE)
+            }
+            stg?.let { sep(); sb.append("물세기 "); bold("${it.pct}%", if (it.pct >= 80) Ui.ORANGE else Ui.GREEN); if (it.estimated) sb.append("(추정)") }
             mainPct = stg?.pct
             paintTideTitle(t, loc)
-            tideSub.text = parts.joinToString(" · ").ifBlank { "눌러서 물때 보기" }
-            tideSub.setTextColor(if ((stg?.pct ?: 0) >= 80) Ui.ORANGE else Ui.SUB)
+            tideSub.text = if (sb.isEmpty()) "눌러서 물때 보기" else sb
+            tideSub.setTextColor(Color.parseColor("#C9D6DD"))
         }
     }
 
@@ -2158,7 +2281,7 @@ class MainActivity : Activity() {
     private fun openMenuDialog() {
         if (menuDialog?.isShowing == true) return
         menuBox.visibility = View.VISIBLE
-        menuDialog = bigDialog("메뉴", menuBox) { menuDialog = null }
+        menuDialog = bigDialog("더보기", menuBox) { menuDialog = null }
     }
 
     override fun onDestroy() {
@@ -2248,6 +2371,12 @@ class MainActivity : Activity() {
         paintNowBtn()
         groupDot.text = total.toString()
         groupDot.visibility = if (total > 0) View.VISIBLE else View.GONE
+        // 맨 아래 '그룹' 탭: 새 소식 빨간 숫자 · 내일 일정만 있으면 초록 점
+        if (::tabGroupBadge.isInitialized) {
+            tabGroupBadge.text = if (total > 0) total.toString() else "•"
+            tabGroupBadge.background = Ui.bg(this, if (total > 0) RED else Ui.GREEN, 99, Ui.BG)
+            tabGroupBadge.visibility = if (total > 0 || tomN > 0) View.VISIBLE else View.GONE
+        }
         if (!groupOpen) return
         groupBox.removeAllViews()
         // 맨 위: 지금 여기에서 설정 중이에요 (종류 색으로 꽉 찬 띠)
@@ -2574,6 +2703,7 @@ class MainActivity : Activity() {
             lastMinute = minute; last1.text = lastText(t, 1); last2.text = lastText(t, 2)
             renderLive()  // "N분 전" 1분마다 갱신
         }
+        status.visibility = if (t == null) View.GONE else View.VISIBLE   // v4.7: 대기 중 안내 줄은 기록 방식 줄로 합침
         status.text = if (t == null) {
             "대기 중 · ${Store.catLabel(Store.category)} · '출조 시작'을 누르면 기록을 시작해요"
         } else {
