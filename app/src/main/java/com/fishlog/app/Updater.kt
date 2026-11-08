@@ -32,6 +32,7 @@ object Updater {
     private val main = Handler(Looper.getMainLooper())
     var checkedThisRun = false
     /** 새 버전이 있으면 그 번호 (메뉴 '새 버전 있음' 표시용) */
+    private const val RAW_README = "https://raw.githubusercontent.com/jonginzz33-code/fishing-log/main/README.md"
     @Volatile var latestCode: Long? = null
     @Volatile var latestNotes: String = ""
     private var dialog: AlertDialog? = null
@@ -58,9 +59,20 @@ object Updater {
             val latest = try {
                 get(BASE + "version.txt").inputStream.bufferedReader().use { it.readText().trim().toLong() }
             } catch (_: Exception) { null }
-            val notes = if (latest != null && latest > mine) try {
-                get(BASE + "notes.txt").inputStream.bufferedReader().use { it.readText().trim() }
-            } catch (_: Exception) { "" } else ""
+            // v4.8 (218): '바뀐 것'은 3번까지 다시 시도 · 그래도 안 되면 GitHub README 맨 끝 버전 내용으로
+            var notes = ""
+            if (latest != null && latest > mine) {
+                for (i in 0 until 3) {
+                    notes = try { get(BASE + "notes.txt").inputStream.bufferedReader().use { it.readText().trim() } } catch (_: Exception) { "" }
+                    if (notes.isNotBlank()) break
+                    try { Thread.sleep(1500) } catch (_: Exception) {}
+                }
+                if (notes.isBlank()) notes = try {
+                    val md = get(RAW_README).inputStream.bufferedReader().use { it.readText() }
+                    val k = md.lastIndexOf("\n## v")
+                    if (k >= 0) md.substring(k + 1).trim() else ""
+                } catch (_: Exception) { "" }
+            }
             main.post {
                 if (latest != null && latest > mine) { latestCode = latest; latestNotes = notes; done(latest) }
                 else done(null)
@@ -161,7 +173,11 @@ object Updater {
             status.visibility = android.view.View.VISIBLE; status.setTextColor(Ui.SUB)
             status.text = "새 버전 받는 중… 창을 닫지 마세요"
             Thread {
-                try {
+                // v4.8 (218): 받다가 끊기면 저절로 3번까지 다시 받기
+                var tries = 0
+                while (true) try {
+                    tries++
+                    if (tries > 1) main.post { status.setTextColor(Ui.SUB); status.text = "끊겨서 다시 받는 중… ($tries/3)"; bar.progress = 0 }
                     val out = File(a.getExternalFilesDir(null), "update.apk")
                     val c = get(BASE + "fishing-log.apk")
                     val total = c.contentLengthLong
@@ -170,7 +186,7 @@ object Updater {
                             val buf = ByteArray(32 * 1024)
                             var got = 0L; var lastPost = 0L
                             while (true) {
-                                val n = input.read(buf); if (n < 0) break
+                                val n = input.read(buf); if (n < 0) { if (total > 0 && got < total) throw java.io.IOException("short"); break }
                                 os.write(buf, 0, n); got += n; Ui.countData(a, "update", n.toLong())
                                 val now = System.currentTimeMillis()
                                 if (now - lastPost > 150) {
@@ -195,13 +211,16 @@ object Updater {
                         mainBtn.setOnClickListener { install() }
                         install()
                     }
+                    break
                 } catch (_: Exception) {
+                    if (tries < 3) { try { Thread.sleep(2000) } catch (_: Exception) {}; continue }
                     main.post {
                         status.text = "받기 실패: 인터넷을 확인하고 '다시 받기'를 눌러 주세요"; status.setTextColor(Ui.ORANGE)
                         mainBtn.isEnabled = true; mainBtn.alpha = 1f; mainBtn.text = "다시 받기"
                         mainBtn.setOnClickListener { download() }
                         if (!force) later.visibility = android.view.View.VISIBLE
                     }
+                    break
                 }
             }.start()
         }

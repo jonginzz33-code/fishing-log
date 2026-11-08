@@ -148,6 +148,7 @@ class MainActivity : Activity() {
             // 맨 아래 '더보기' 탭에도 같은 숫자
             tabMoreN = n
             if (::tabMoreBadge.isInitialized) { tabMoreBadge.text = "$n"; tabMoreBadge.visibility = if (n > 0) View.VISIBLE else View.GONE }
+            paintQuick()
         } }
     }
     private val chatListener: () -> Unit = { paintChat(); renderGroupPanel() }
@@ -419,8 +420,20 @@ class MainActivity : Activity() {
             setAutoSizeTextTypeUniformWithConfiguration(13, 30, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(MATCH, 0, 1f))
         header.addView(titleCol, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
-        // v4.7 (217): 맨 위는 그룹 · 제목만 · ⚙ 설정은 맨 아래 '더보기' 탭으로
+        // v4.8 (219): ⚙ 바로 왼쪽 네모 퀵바 (3개까지 · 4개부터는 제목 아래 한 줄)
+        quickInline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        header.addView(quickInline, LinearLayout.LayoutParams(WRAP, WRAP))
+        // v4.7.1: ⚙ 기본 설정은 오른쪽 맨 위에 꼭 (더보기에도 같이 있음)
+        header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.BLUE)
+            setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(4) })
         col.addView(header)
+        quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false; setPadding(0, dp(6), 0, 0) }
+        quickRowWrap = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; addView(quickRow) }
+        col.addView(quickRowWrap, Ui.lp(this, MATCH, WRAP, top = 4))
+        paintQuick()
         val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
         // v4.2 (191): 칸 크기는 그대로 · 글씨만 크게 (이름 16.5 · 4글자 15 · 작은 글씨 11) · 칸보다 길면 알아서 줄임
         fun two(big: String, small: String, smallColor: Int?) = headTwo(big, small, smallColor)
@@ -722,6 +735,167 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---------------- v4.8 (219): 맨 위 네모 퀵바 ----------------
+    private lateinit var quickInline: LinearLayout
+    private lateinit var quickRow: LinearLayout
+    private lateinit var quickRowWrap: View
+    private class QItem(val id: String, val icon: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null)
+    private val QUICK by lazy { listOf(
+        QItem("cal", "🎣", "추천", "#2A2410", "#6A5A22"),
+        QItem("tide", "🌊", "물때", "#10283A", "#2E5A7A"),
+        QItem("group", "👥", "그룹변경", "#12301F", "#2F6A48"),
+        QItem("hist", "📚", "지난출조", "#12301F", "#2F6A48"),
+        QItem("board", "📋", "조황", "#2A1E10", "#6A4A22"),
+        QItem("point", "📍", "포인트", "#2A1E10", "#6A4A22"),
+        QItem("now", "🟢", "출조중", "#10301E", "#2F6A48"),
+        QItem("trash", "🗑", "휴지통", "#2A1418", "#6A2E38"),
+        QItem("help", "❓", "설명서", "#1A2A30", "#2E4A52"),
+        QItem("upd", "📄", "업데이트", "#1A2A30", "#2E4A52"),
+        QItem("inq", "✉", "문의", "#16263A", "#2E4A6A"),
+        QItem("game", "🎮", "게임", "#26163A", "#5A3A7A", admin = true),
+        QItem("admin", "🛠", "관리", "#2A2410", "#F2C14E", admin = true),
+        QItem("loc", "🧭", "위치", "#10283A", "#5FC4E0", state = { Store.appLoc }),
+        QItem("saver", "🔋", "절약", "#12301F", "#5FD39A", state = { Store.saver }),
+        QItem("method", "🎛", "기록방식", "#16303D", "#2B5468"),
+        QItem("alarm", "🔔", "알람", "#2A2410", "#6A5A22"),
+        QItem("scale", "📐", "화면크기", "#1A2A30", "#2E4A52"),
+        QItem("offline", "📥", "오프라인", "#1A2A30", "#2E4A52"),
+        QItem("nick", "👤", "닉네임", "#1A2A30", "#2E4A52"))
+    }
+    private fun quickPrefs() = getSharedPreferences("fishlog", MODE_PRIVATE)
+    private fun quickIds(): List<String> {
+        val raw = quickPrefs().getString("quick_items", null) ?: "cal,group,inq"
+        return raw.split(",").map { it.trim() }.filter { id -> QUICK.any { it.id == id && (!it.admin || Cloud.isAdmin) } }.distinct()
+    }
+    private fun saveQuick(ids: List<String>) { quickPrefs().edit().putString("quick_items", ids.joinToString(",")).apply(); paintQuick() }
+
+    private fun quickAction(id: String) {
+        when (id) {
+            "cal" -> { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }
+            "tide" -> openTodayTide()
+            "group" -> account.openGroups()
+            "hist" -> startActivity(Intent(this, HistoryActivity::class.java))
+            "board", "point" -> {
+                if (Cloud.user == null) { showMessage("구글 로그인을 하면 볼 수 있어요"); return }
+                quickPrefs().edit().putInt("board_tab", if (id == "point") 1 else 0).apply()
+                startActivity(Intent(this, BoardActivity::class.java))
+            }
+            "now" -> openNowDialog()
+            "trash" -> if (Cloud.user == null) showMessage("구글 로그인이 필요해요") else Trash.show(this)
+            "help" -> startActivity(Intent(this, HelpActivity::class.java))
+            "upd" -> History.show(this)
+            "inq" -> if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
+                     else startActivity(Intent(this, InquiryActivity::class.java))
+            "game" -> MiniGame.pick(this)
+            "admin" -> openAdminMenu()
+            "loc" -> {
+                val on = !Store.appLoc
+                Store.appLoc = on
+                if (!on) { Tracker.forget(); Live.sync(true) } else if (Store.current != null) RemoteService.start(this)
+                showMessage(if (on) "🧭 이 앱에서 내 위치 사용 켬" else "🧭 내 위치 사용 끔 (경로 · 조과 위치 · 위치 공유 안 씀)")
+            }
+            "saver" -> {
+                Store.saver = !Store.saver
+                showMessage(if (Store.saver) "🔋 배터리 절약 켬 · 위치 3분 간격 · 서버 올리기 5분마다" else "배터리 절약 끔 · 원래대로")
+                renderMethods()
+            }
+            "method" -> { methodsOpen = true; renderMethods(); scroller.post { scroller.smoothScrollTo(0, maxOf(0, methodBox.top - dp(80))) } }
+            "alarm" -> TideDialog.pickAlarm(this) {}
+            "scale", "offline" -> startActivity(Intent(this, SettingsActivity::class.java))
+            "nick" -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("askNick", true))
+        }
+        paintQuick()
+    }
+
+    /** 네모 칸 하나 (위 그림 · 아래 이름 · 켜고 끄는 칸은 꺼지면 흐리게 · 문의 답장 빨간 숫자) */
+    private fun quickTile(q: QItem, size: Int): View {
+        val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        val on = q.state?.invoke() ?: true
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Color.parseColor(q.fill), 10, Color.parseColor(q.stroke))
+            alpha = if (on) 1f else 0.45f
+            isClickable = true
+            setOnClickListener { quickAction(q.id) }
+            setOnLongClickListener { openQuickSettings(); true }
+        }
+        box.addView(Ui.text(this, if (size >= 46) 17f else 15f, Ui.TEXT, false, q.icon).apply { gravity = Gravity.CENTER; includeFontPadding = false })
+        box.addView(Ui.text(this, 9.5f, Color.parseColor("#D7E3E8"), true, if (q.state != null) q.label + (if (on) " 켬" else " 끔") else q.label).apply {
+            gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
+            setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+        }, LinearLayout.LayoutParams(MATCH, dp(13)))
+        f.addView(box, android.widget.FrameLayout.LayoutParams(dp(size), dp(size)))
+        if (q.id == "inq" && tabMoreN > 0) f.addView(Ui.text(this, 9.5f, Color.WHITE, true, "$tabMoreN").apply {
+            gravity = Gravity.CENTER; setPadding(dp(4), 0, dp(4), 0); background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
+        }, android.widget.FrameLayout.LayoutParams(WRAP, dp(16), Gravity.TOP or Gravity.END).apply { topMargin = -dp(6); rightMargin = -dp(5) })
+        return f
+    }
+
+    private fun paintQuick() {
+        if (!::quickInline.isInitialized || !::quickRow.isInitialized) return
+        val ids = quickIds()
+        val items = ids.mapNotNull { id -> QUICK.firstOrNull { it.id == id } }
+        quickInline.removeAllViews(); quickRow.removeAllViews()
+        if (items.size <= 3) {
+            items.forEach { q -> quickInline.addView(quickTile(q, 40), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(5) }) }
+            quickInline.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+            quickRowWrap.visibility = View.GONE
+        } else {
+            quickInline.visibility = View.GONE
+            items.forEachIndexed { i, q -> quickRow.addView(quickTile(q, 48), LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) }) }
+            // 맨 끝 '＋' = 퀵바 설정
+            quickRow.addView(Ui.text(this, 20f, Ui.SUB, true, "＋").apply {
+                gravity = Gravity.CENTER; background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Color.parseColor("#3E5A6B"))
+                setOnClickListener { openQuickSettings() }
+            }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(6) })
+            quickRowWrap.visibility = View.VISIBLE
+        }
+    }
+
+    /** ⚡ 퀵바 설정: 칸마다 켜기 · 끄기 · ▲▼ 순서 · 기본으로 */
+    private fun openQuickSettings() {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(4)) }
+        fun draw() {
+            box.removeAllViews()
+            box.addView(Ui.text(this, 12f, Ui.SUB, false, "켠 칸만 맨 위에 보여요 · ▲▼로 순서 · 3개까지는 ⚙ 옆, 4개부터는 제목 아래 한 줄"))
+            val ids = quickIds().toMutableList()
+            val avail = QUICK.filter { !it.admin || Cloud.isAdmin }
+            val ordered = ids.mapNotNull { id -> avail.firstOrNull { it.id == id } } + avail.filter { it.id !in ids }
+            ordered.forEach { q ->
+                val on = q.id in ids
+                val r = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46)
+                    isClickable = true
+                    setOnClickListener { if (on) ids.remove(q.id) else ids.add(q.id); saveQuick(ids); draw() }
+                }
+                r.addView(Ui.text(this, 14f, Color.parseColor("#04222A"), true, if (on) "✓" else "").apply {
+                    gravity = Gravity.CENTER
+                    background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 5) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 5, Ui.LINE)
+                }, LinearLayout.LayoutParams(dp(22), dp(22)))
+                r.addView(Ui.text(this, 15f, if (on) Ui.TEXT else Ui.SUB, on, "${q.icon}  ${q.label}" + if (q.state != null) " (켜기/끄기)" else "").apply { setPadding(dp(10), 0, 0, 0) },
+                    LinearLayout.LayoutParams(0, WRAP, 1f))
+                if (on) {
+                    val i = ids.indexOf(q.id)
+                    fun mv(t: String, d: Int) = Ui.text(this, 14f, Ui.TEXT, true, t).apply {
+                        gravity = Gravity.CENTER; background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 8, Ui.LINE)
+                        setOnClickListener { val j = i + d; if (j in ids.indices) { ids.removeAt(i); ids.add(j, q.id); saveQuick(ids); draw() } }
+                    }
+                    if (i > 0) r.addView(mv("▲", -1), LinearLayout.LayoutParams(dp(36), dp(34)))
+                    if (i < ids.size - 1) r.addView(mv("▼", 1), LinearLayout.LayoutParams(dp(36), dp(34)).apply { leftMargin = dp(6) })
+                }
+                box.addView(r)
+                box.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(MATCH, 1))
+            }
+        }
+        draw()
+        AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle("⚡ 퀵바 설정")
+            .setView(ScrollView(this).apply { addView(box) })
+            .setNeutralButton("기본으로") { _, _ -> quickPrefs().edit().remove("quick_items").apply(); paintQuick(); showMessage("퀵바를 기본(추천 · 그룹변경 · 문의)으로 되돌렸어요") }
+            .setPositiveButton("닫기", null)
+            .show()
+    }
+
     // ---------------- v4.7 (217): 맨 아래 탭 · 더보기 ----------------
     private lateinit var tabGroupBadge: TextView
     private lateinit var tabMoreBadge: TextView
@@ -817,6 +991,8 @@ class MainActivity : Activity() {
         gameCell = gc
         r2.addView(gc, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         menuBox.addView(r2, Ui.lp(this, MATCH, WRAP, top = 2))
+        menuBox.addView(Ui.button(this, "⚡ 퀵바 설정 (맨 위 네모 칸 · 켜고 끄기 · 순서)") { menuDialog?.dismiss(); openQuickSettings() },
+            Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(View(this).apply { setBackgroundColor(Ui.LINE) }, Ui.lp(this, MATCH, dp(1), top = 12).apply { bottomMargin = dp(10) })
     }
 
@@ -2619,6 +2795,7 @@ class MainActivity : Activity() {
         // 관리자 기능은 '🛠 관리자' 메뉴로 (일반 메뉴는 모두 같게)
         if (::adminMenuBtn.isInitialized) adminMenuBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         gameCell?.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
+        paintQuick()
         GroupNews.startLive(newsLive)
         // 그룹 목록이 오면 같이 출조 중 실시간 연결 바로 다시 붙이기
         if (Store.current != null) Live.watch()

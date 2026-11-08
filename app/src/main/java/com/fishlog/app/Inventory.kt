@@ -27,7 +27,7 @@ import org.json.JSONObject
  */
 object Inventory {
 
-    class Item(var name: String, var qty: Int, var note: String, val subs: MutableList<Item> = mutableListOf(), var low: Int = 0) {
+    class Item(var name: String, var qty: Int, var note: String, val subs: MutableList<Item> = mutableListOf(), var low: Int = 0, var icon: String = "") {
         fun total(): Int = if (subs.isEmpty()) qty else subs.sumOf { it.total() }
         fun isLow() = low > 0 && total() < low
     }
@@ -37,12 +37,64 @@ object Inventory {
     }
 
     private val ICONS = listOf("🎒", "🎣", "🥅", "🦺", "🍙", "🧰", "🪝", "🦑", "🦀", "🔦", "🧤", "🧊")
+
+    /** v4.8 (220): 낚시 장비 그림 (res/drawable-nodpi/gear_*.png) · 아이콘 글자는 "g:이름" */
+    val GEAR = listOf(
+        "sinker" to "봉돌", "iron" to "쇠봉돌", "tungsten" to "텅스텐", "glow" to "형광 봉돌", "stick" to "막대 봉돌",
+        "hole" to "구멍 봉돌", "swsinker" to "도래 봉돌", "color" to "컬러 봉돌", "spike" to "스파이크", "splitshot" to "좁쌀 봉돌",
+        "snap" to "핀도래", "swivel" to "도래", "jighead" to "지그헤드", "rig" to "채비", "egi" to "에기", "hook" to "바늘",
+        "line" to "낚싯줄", "rod" to "낚싯대", "baitreel" to "베이트 릴", "spinreel" to "스피닝 릴",
+        "vest" to "구명조끼", "cooler" to "쿨러", "lamp" to "집어등", "glove" to "장갑")
+
+    /** 이름으로 그림 고르기 (구체적인 것부터) · 없으면 "" */
+    fun autoIcon(name: String): String {
+        val n = name.replace(" ", "")
+        val rules = listOf(
+            listOf("텅스텐") to "tungsten", listOf("형광", "야광") to "glow", listOf("막대봉돌", "막대") to "stick",
+            listOf("쇠봉돌", "무쇠") to "iron", listOf("구멍봉돌", "관통") to "hole", listOf("도래봉돌") to "swsinker",
+            listOf("컬러봉돌", "컬러") to "color", listOf("스파이크", "원투봉돌") to "spike", listOf("좁쌀", "좁살") to "splitshot",
+            listOf("봉돌", "싱커") to "sinker", listOf("핀도", "스냅") to "snap", listOf("도래", "도레", "스위벨") to "swivel",
+            listOf("지그") to "jighead", listOf("에기") to "egi", listOf("채비", "체비") to "rig", listOf("바늘", "훅") to "hook",
+            listOf("베이트") to "baitreel", listOf("스피닝", "릴") to "spinreel", listOf("낚싯대", "낚시대", "로드") to "rod",
+            listOf("합사", "원줄", "목줄", "라인", "낚싯줄", "줄") to "line", listOf("구명", "조끼") to "vest",
+            listOf("쿨러", "아이스박스") to "cooler", listOf("집어등", "랜턴", "라이트") to "lamp", listOf("장갑") to "glove")
+        for ((keys, ic) in rules) if (keys.any { n.contains(it) }) return "g:$ic"
+        return ""
+    }
+
+    /** 그림 고르기 칸: 장비 그림 24종 + 이모지 (한 줄 6칸씩) · allowNone = '없음'(-) 칸 */
+    private fun iconGrid(a: Activity, box: LinearLayout, cur: String, allowNone: Boolean = false, pick: (String) -> Unit) {
+        val all = (if (allowNone) listOf("-") else emptyList()) + GEAR.map { "g:" + it.first } + ICONS
+        var row: LinearLayout? = null
+        all.forEachIndexed { i, ic ->
+            if (i % 6 == 0) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }; box.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)) }
+            val on = ic == cur || (ic == "-" && cur.isBlank())
+            val v: View = if (ic == "-") Ui.text(a, 11f, Ui.SUB, true, "없음").apply { gravity = Gravity.CENTER } else iconView(a, ic, 40)
+            v.background = if (on) Ui.bg(a, Color.parseColor("#3A2814"), 10, Color.parseColor("#FFB27A")) else Ui.bg(a, Color.parseColor("#0F2233"), 10)
+            v.setOnClickListener { pick(ic) }
+            row!!.addView(v, LinearLayout.LayoutParams(0, Ui.dp(a, 44), 1f).apply { if (i % 6 > 0) leftMargin = Ui.dp(a, 4) })
+        }
+        val rem = all.size % 6
+        if (rem > 0) repeat(6 - rem) { row!!.addView(View(a), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = Ui.dp(a, 4) }) }
+    }
+
+    /** 아이콘 보기: "g:이름" = 그림 · 나머지 = 이모지 글자 */
+    fun iconView(c: Context, icon: String, sizeDp: Int): View {
+        if (icon.startsWith("g:")) {
+            val id = c.resources.getIdentifier("gear_" + icon.removePrefix("g:"), "drawable", c.packageName)
+            if (id != 0) return android.widget.ImageView(c).apply {
+                setImageResource(id); scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+                val p = Ui.dp(c, maxOf(2, sizeDp / 10)); setPadding(p, p, p, p)
+            }
+        }
+        return Ui.text(c, sizeDp * 0.5f, Ui.TEXT, false, if (icon.startsWith("g:")) "🎒" else icon).apply { gravity = Gravity.CENTER }
+    }
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
-    private fun itemJson(it: Item): JSONObject = JSONObject().put("n", it.name).put("q", it.qty).put("m", it.note).put("l", it.low)
+    private fun itemJson(it: Item): JSONObject = JSONObject().put("n", it.name).put("q", it.qty).put("m", it.note).put("l", it.low).put("i", it.icon)
         .put("s", JSONArray().apply { it.subs.forEach { s -> put(itemJson(s)) } })
     private fun itemFrom(o: JSONObject): Item = Item(o.optString("n"), o.optInt("q"), o.optString("m"),
-        (0 until (o.optJSONArray("s")?.length() ?: 0)).map { itemFrom(o.getJSONArray("s").getJSONObject(it)) }.toMutableList(), o.optInt("l"))
+        (0 until (o.optJSONArray("s")?.length() ?: 0)).map { itemFrom(o.getJSONArray("s").getJSONObject(it)) }.toMutableList(), o.optInt("l"), o.optString("i"))
     private fun toJson(cats: List<Cat>): JSONArray = JSONArray().apply {
         cats.forEach { c -> put(JSONObject().put("c", c.name).put("i", c.icon).put("items", JSONArray().apply { c.items.forEach { put(itemJson(it)) } })) }
     }
@@ -66,7 +118,16 @@ object Inventory {
 
     fun load(c: Context): MutableList<Cat> {
         val s = prefs(c).getString("inventory2", null)
-        if (s != null) return try { fromJson(JSONArray(s)) } catch (_: Exception) { mutableListOf() }
+        if (s != null) {
+            val cats = try { fromJson(JSONArray(s)) } catch (_: Exception) { mutableListOf() }
+            // v4.8 (220): 한 번만 — 그림이 기본(🎒)인 카테고리는 이름 보고 장비 그림으로
+            if (!prefs(c).getBoolean("inv_gear1", false)) {
+                cats.forEach { k -> if (k.icon == "🎒") autoIcon(k.name).takeIf { it.isNotEmpty() }?.let { k.icon = it } }
+                prefs(c).edit().putBoolean("inv_gear1", true).apply()
+                save(c, cats, dirty = false)
+            }
+            return cats
+        }
         val m = migrateOld(prefs(c).getString("inventory", null))
         if (m.isNotEmpty()) save(c, m, dirty = false)
         return m
@@ -124,20 +185,23 @@ object Inventory {
             val f = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
             val n = et("카테고리 이름 (예: 선상 채비, 해루질 장비)", c?.name ?: "")
             f.addView(n)
-            var icon = c?.icon ?: "🎒"
-            val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            var icon = c?.icon ?: ""
+            var picked = c != null
+            val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
             fun paintIcons() {
-                row.removeAllViews()
-                ICONS.forEach { ic ->
-                    row.addView(Ui.text(a, 20f, Ui.TEXT, false, ic).apply {
-                        gravity = Gravity.CENTER
-                        background = if (ic == icon) Ui.bg(a, Color.parseColor("#3A2814"), 10, Color.parseColor("#FFB27A")) else null
-                        setOnClickListener { icon = ic; paintIcons() }
-                    }, LinearLayout.LayoutParams(dp(40), dp(40)))
-                }
+                grid.removeAllViews()
+                val shown = if (icon.isBlank()) autoIcon(n.text.toString()).ifBlank { "🎒" } else icon
+                iconGrid(a, grid, shown) { ic -> icon = ic; picked = true; paintIcons() }
             }
             paintIcons()
-            f.addView(Ui.hscroll(a, row, Color.parseColor("#2B2B2B")), Ui.lp(a, MATCH, WRAP, top = 8))
+            // 이름을 적으면 그림 자동 (직접 고르기 전까지)
+            n.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(e: android.text.Editable?) { if (!picked) { icon = ""; paintIcons() } }
+                override fun beforeTextChanged(s: CharSequence?, st: Int, c0: Int, af: Int) {}
+                override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c0: Int) {}
+            })
+            f.addView(Ui.text(a, 12.5f, Ui.SUB, false, "그림 (이름을 적으면 자동으로 골라요 · 눌러서 바꾸기)"), Ui.lp(a, MATCH, WRAP, top = 8))
+            f.addView(grid, Ui.lp(a, MATCH, WRAP, top = 4))
             if (c != null) {
                 // 순서 바꾸기 (누르면 바로 옮겨짐)
                 val mv = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -159,7 +223,8 @@ object Inventory {
                 .setPositiveButton("저장") { _, _ ->
                     val nm = n.text.toString().trim()
                     if (nm.isEmpty()) { toast(a, "이름을 적어 주세요"); return@setPositiveButton }
-                    if (c == null) cats.add(Cat(nm, icon)) else { c.name = nm; c.icon = icon }
+                    val ic = icon.ifBlank { autoIcon(nm).ifBlank { "🎒" } }
+                    if (c == null) cats.add(Cat(nm, ic)) else { c.name = nm; c.icon = ic }
                     save(a, cats); render()
                 }.setNegativeButton("취소", null).show()
         }
@@ -172,6 +237,18 @@ object Inventory {
             val m = et("비고 (예: 주황 · 핑크 보충)", it0?.note ?: "")
             val l = et("이 수량보다 적으면 '부족' (0 = 안 씀)", (it0?.low ?: 0).toString(), true)
             f.addView(n); f.addView(q); f.addView(m); f.addView(l)
+            // v4.8 (220): 항목 그림 (예: 텅스텐 12호 → 텅스텐 봉돌) · 비우면 이름 보고 자동
+            var iic = it0?.icon ?: ""
+            val igrid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            fun paintI() { igrid.removeAllViews(); iconGrid(a, igrid, iic.ifBlank { autoIcon(n.text.toString()) }, allowNone = true) { ic -> iic = ic; paintI() } }
+            paintI()
+            n.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(e: android.text.Editable?) { if (iic.isBlank()) paintI() }
+                override fun beforeTextChanged(s: CharSequence?, st: Int, c0: Int, af: Int) {}
+                override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c0: Int) {}
+            })
+            f.addView(Ui.text(a, 12.5f, Ui.SUB, false, "그림 (비우면 이름 보고 자동 · '없음' = 그림 안 씀)"), Ui.lp(a, MATCH, WRAP, top = 10))
+            f.addView(igrid, Ui.lp(a, MATCH, WRAP, top = 4))
             f.addView(Ui.text(a, 12.5f, Ui.TEXT, true, "세부 (예: 10호 · 15호) — 있으면 수량은 세부 합계"), Ui.lp(a, MATCH, WRAP, top = 10))
             class SubRow(val n: EditText, val q: EditText)
             val subs = mutableListOf<SubRow>()
@@ -198,6 +275,7 @@ object Inventory {
                     val item = it0 ?: Item(nm, 0, "").also { cat.items.add(it) }
                     item.name = nm; item.qty = q.text.toString().toIntOrNull() ?: 0; item.note = m.text.toString().trim()
                     item.low = l.text.toString().toIntOrNull() ?: 0
+                    item.icon = iic
                     item.subs.clear(); item.subs.addAll(ss)
                     save(a, cats); render()
                 }.setNegativeButton("취소", null).show()
@@ -232,8 +310,8 @@ object Inventory {
                     background = Ui.bg(a, Ui.CARD, 14)
                     setOnClickListener { cur = c; render() }
                 }
-                r.addView(Ui.text(a, 22f, Ui.TEXT, false, c.icon).apply { gravity = Gravity.CENTER; background = Ui.bg(a, Color.parseColor("#0F2233"), 12) },
-                    LinearLayout.LayoutParams(dp(42), dp(42)))
+                r.addView(iconView(a, c.icon, 46).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 12) },
+                    LinearLayout.LayoutParams(dp(46), dp(46)))
                 val tc = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
                 tc.addView(Ui.text(a, 15.5f, Ui.TEXT, true, c.name))
                 val lowN = c.lowCount()
@@ -275,7 +353,10 @@ object Inventory {
             top.addView(Ui.text(a, 15f, Color.parseColor("#FFB27A"), true, "‹ 가방").apply {
                 setPadding(0, dp(6), dp(10), dp(6)); setOnClickListener { cur = null; render() }
             })
-            top.addView(Ui.text(a, 17f, Ui.TEXT, true, "${c.icon} ${c.name}").apply { gravity = Gravity.CENTER; maxLines = 1 }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            val ttl = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+            ttl.addView(iconView(a, c.icon, 32), LinearLayout.LayoutParams(dp(32), dp(32)))
+            ttl.addView(Ui.text(a, 17f, Ui.TEXT, true, c.name).apply { maxLines = 1; setPadding(dp(6), 0, 0, 0) })
+            top.addView(ttl, LinearLayout.LayoutParams(0, WRAP, 1f))
             top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
                 gravity = Gravity.CENTER; setPadding(dp(14), dp(6), dp(14), dp(6)); background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
                 setOnClickListener { dlg.dismiss() }
@@ -288,6 +369,9 @@ object Inventory {
                     setOnClickListener { _ -> editItem(c, it) }
                 }
                 val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val iic = if (it.icon == "-") "" else it.icon.ifBlank { autoIcon(it.name) }
+                if (iic.isNotEmpty()) r.addView(iconView(a, iic, 34).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 10) },
+                    LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(8) })
                 r.addView(Ui.text(a, 15.5f, Ui.TEXT, true, it.name), LinearLayout.LayoutParams(0, WRAP, 1f))
                 if (it.subs.isEmpty()) r.addView(qtyRow(it.qty, it.isLow(), 18f) { d -> it.qty = maxOf(0, it.qty + d); save(a, cats); render() })
                 else r.addView(Ui.text(a, 18f, if (it.isLow()) Color.parseColor("#FF8A92") else Ui.ORANGE, true, "${it.total()}").apply { setPadding(dp(8), 0, dp(14), 0) })
