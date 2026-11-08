@@ -245,12 +245,30 @@ class MainActivity : Activity() {
         window.navigationBarColor = Ui.BG
         if (Cloud.user == null) { showLoginGate(); return }
         setContentView(buildUi())
+        handler.post { handleOpen(intent) }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
     }
 
     private var consentOpen = false
+    /** v4.9 (224): 홈 화면 위젯을 누르면 그 화면 바로 열기 ("open" = "tide" / "bag") */
+    private fun handleOpen(i: Intent?) {
+        val what = i?.getStringExtra("open") ?: return
+        i.removeExtra("open")
+        if (!::scroller.isInitialized) return
+        when (what) {
+            "tide" -> openTodayTide()
+            "bag" -> Inventory.show(this)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handler.post { handleOpen(intent) }
+    }
+
     override fun onResume() {
         super.onResume()
         // 처음 한 번: 위치·개인정보 동의 (동의해야 사용)
@@ -361,7 +379,7 @@ class MainActivity : Activity() {
         }
         col.addView(android.widget.ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) },
             LinearLayout.LayoutParams(dp(96), dp(96)))
-        col.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply { gravity = Gravity.CENTER },
+        col.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과일지").apply { gravity = Gravity.CENTER },
             Ui.lp(this, MATCH, WRAP, top = 16))
         col.addView(Ui.text(this, 14f, Ui.SUB, false,
             "리모컨·터치·워치로 조과를 기록하고\n그룹 친구들과 함께 봐요").apply { gravity = Gravity.CENTER; setLineSpacing(0f, 1.3f) },
@@ -414,7 +432,7 @@ class MainActivity : Activity() {
             setOnClickListener { openGroupPanel() }
         }
         titleCol.addView(headGroupName)
-        titleCol.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과기록").apply {
+        titleCol.addView(Ui.text(this, 26f, Ui.TEXT, true, "조과일지").apply {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
             maxLines = 1
             setAutoSizeTextTypeUniformWithConfiguration(13, 30, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -741,9 +759,15 @@ class MainActivity : Activity() {
     private lateinit var quickRowWrap: View
     private class QItem(val id: String, val icon: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null)
     private val QUICK by lazy { listOf(
+        // v4.9 (221): 앱의 모든 메뉴
+        QItem("map", "🗺", "지도", "#1C5F86", "#7FD3E8"),
+        QItem("chat", "💬", "채팅", "#2A2310", "#F2C14E"),
+        QItem("bag", "🎒", "가방", "#12301F", "#5FD39A"),
+        QItem("groupwin", "👥", "그룹", "#12301F", "#2F6A48"),
+        QItem("settings", "⚙", "설정", "#1A2A30", "#5FC4E0"),
         QItem("cal", "🎣", "추천", "#2A2410", "#6A5A22"),
         QItem("tide", "🌊", "물때", "#10283A", "#2E5A7A"),
-        QItem("group", "👥", "그룹변경", "#12301F", "#2F6A48"),
+        QItem("group", "🔄", "그룹변경", "#12301F", "#2F6A48"),
         QItem("hist", "📚", "지난출조", "#12301F", "#2F6A48"),
         QItem("board", "📋", "조황", "#2A1E10", "#6A4A22"),
         QItem("point", "📍", "포인트", "#2A1E10", "#6A4A22"),
@@ -764,13 +788,18 @@ class MainActivity : Activity() {
     }
     private fun quickPrefs() = getSharedPreferences("fishlog", MODE_PRIVATE)
     private fun quickIds(): List<String> {
-        val raw = quickPrefs().getString("quick_items", null) ?: "cal,group,inq"
+        val raw = quickPrefs().getString("quick_items", null) ?: "cal,group"
         return raw.split(",").map { it.trim() }.filter { id -> QUICK.any { it.id == id && (!it.admin || Cloud.isAdmin) } }.distinct()
     }
     private fun saveQuick(ids: List<String>) { quickPrefs().edit().putString("quick_items", ids.joinToString(",")).apply(); paintQuick() }
 
     private fun quickAction(id: String) {
         when (id) {
+            "map" -> openMap()
+            "chat" -> startActivity(Intent(this, ChatActivity::class.java))
+            "bag" -> Inventory.show(this)
+            "groupwin" -> openGroupDialog()
+            "settings" -> startActivity(Intent(this, SettingsActivity::class.java))
             "cal" -> { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }
             "tide" -> openTodayTide()
             "group" -> account.openGroups()
@@ -803,6 +832,7 @@ class MainActivity : Activity() {
             "alarm" -> TideDialog.pickAlarm(this) {}
             "scale", "offline" -> startActivity(Intent(this, SettingsActivity::class.java))
             "nick" -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("askNick", true))
+            "qset" -> { openQuickSettings(); return }
         }
         paintQuick()
     }
@@ -836,18 +866,15 @@ class MainActivity : Activity() {
         val ids = quickIds()
         val items = ids.mapNotNull { id -> QUICK.firstOrNull { it.id == id } }
         quickInline.removeAllViews(); quickRow.removeAllViews()
-        if (items.size <= 3) {
-            items.forEach { q -> quickInline.addView(quickTile(q, 40), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(5) }) }
-            quickInline.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
+        // v4.9 (221): '⚡ 퀵바 설정' 칸은 고정 (뺄 수 없음 · 늘 맨 끝)
+        val fixed = QItem("qset", "⚡", "퀵바설정", "#1E2A12", "#C9E26A")
+        if (items.size <= 2) {
+            (items + fixed).forEach { q -> quickInline.addView(quickTile(q, 40), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(5) }) }
+            quickInline.visibility = View.VISIBLE
             quickRowWrap.visibility = View.GONE
         } else {
             quickInline.visibility = View.GONE
-            items.forEachIndexed { i, q -> quickRow.addView(quickTile(q, 48), LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) }) }
-            // 맨 끝 '＋' = 퀵바 설정
-            quickRow.addView(Ui.text(this, 20f, Ui.SUB, true, "＋").apply {
-                gravity = Gravity.CENTER; background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Color.parseColor("#3E5A6B"))
-                setOnClickListener { openQuickSettings() }
-            }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(6) })
+            (items + fixed).forEachIndexed { i, q -> quickRow.addView(quickTile(q, 48), LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) }) }
             quickRowWrap.visibility = View.VISIBLE
         }
     }
@@ -857,7 +884,7 @@ class MainActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(4)) }
         fun draw() {
             box.removeAllViews()
-            box.addView(Ui.text(this, 12f, Ui.SUB, false, "켠 칸만 맨 위에 보여요 · ▲▼로 순서 · 3개까지는 ⚙ 옆, 4개부터는 제목 아래 한 줄"))
+            box.addView(Ui.text(this, 12f, Ui.SUB, false, "체크한 메뉴가 맨 위 네모 칸으로 보여요 · ▲▼로 순서 · 2개까지는 ⚙ 옆, 3개부터는 제목 아래 한 줄 · ⚡ 퀵바 설정 칸은 늘 맨 끝에 고정"))
             val ids = quickIds().toMutableList()
             val avail = QUICK.filter { !it.admin || Cloud.isAdmin }
             val ordered = ids.mapNotNull { id -> avail.firstOrNull { it.id == id } } + avail.filter { it.id !in ids }
@@ -891,7 +918,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("⚡ 퀵바 설정")
             .setView(ScrollView(this).apply { addView(box) })
-            .setNeutralButton("기본으로") { _, _ -> quickPrefs().edit().remove("quick_items").apply(); paintQuick(); showMessage("퀵바를 기본(추천 · 그룹변경 · 문의)으로 되돌렸어요") }
+            .setNeutralButton("기본으로") { _, _ -> quickPrefs().edit().remove("quick_items").apply(); paintQuick(); showMessage("퀵바를 기본(추천 · 그룹변경)으로 되돌렸어요") }
             .setPositiveButton("닫기", null)
             .show()
     }
@@ -1924,6 +1951,7 @@ class MainActivity : Activity() {
             if (isFinishing) return@fetch
             val hr = ((System.currentTimeMillis() - day0) / 3_600_000L).toInt()
             val k = WxArt.kindOf(day.at(hr) ?: day.at(hr - 1) ?: day.at(hr + 1))
+            WidgetData.saveWx(this, day.at(hr) ?: day.at(hr - 1) ?: day.at(hr + 1))
             if (k == WxArt.NONE && day.hours.isEmpty()) wxAt = 0L   // 못 받았으면 다음에 다시
             tideBg?.let { it.kind = k; it.invalidateSelf() }
             tideCardView?.invalidate()
@@ -1974,6 +2002,8 @@ class MainActivity : Activity() {
             stg?.let { sep(); sb.append("물세기 "); bold("${it.pct}%", if (it.pct >= 80) Ui.ORANGE else Ui.GREEN); if (it.estimated) sb.append("(추정)") }
             mainPct = stg?.pct
             paintTideTitle(t, loc)
+            // v4.9 (224): 홈 화면 물때 위젯이 쓸 값 저장 (서버 다시 안 읽음)
+            WidgetData.saveTide(this, loc.first, loc.second, shortPlace(loc), day, stg?.pct)
             tideSub.text = if (sb.isEmpty()) "눌러서 물때 보기" else sb
             tideSub.setTextColor(Color.parseColor("#C9D6DD"))
         }

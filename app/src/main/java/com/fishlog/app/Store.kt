@@ -927,7 +927,7 @@ object Store {
     fun exportText(t: Trip): String {
         val df = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.KOREA)
         val sb = StringBuilder()
-        sb.append("[조과기록] ").append(df.format(java.util.Date(t.start)))
+        sb.append("[조과일지] ").append(df.format(java.util.Date(t.start)))
         if (t.end > 0) sb.append(" ~ ").append(df.format(java.util.Date(t.end)).substring(11))
         if (t.place().isNotBlank()) sb.append("\n").append(t.place())
         sb.append("\n").append(t.line(" / ")).append("\n\n")

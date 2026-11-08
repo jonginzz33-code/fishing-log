@@ -727,7 +727,7 @@ object Weather {
     private fun loadWeek(lat: Double, lon: Double): List<WeekDay> {
         val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
             "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
-            "&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=7")
+            "&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=14")   // v4.9 (222): 14일 (8~14일은 참고)
         val dd = JSONObject(body).getJSONObject("daily")
         val days = dd.getJSONArray("time")
         // 바다: 최대 파고 + 하루 평균 수온 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로)

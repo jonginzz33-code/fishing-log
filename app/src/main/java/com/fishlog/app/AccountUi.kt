@@ -143,7 +143,7 @@ class AccountUi(private val a: Activity) {
 
     fun shareCode() {
         val g = Cloud.active ?: return
-        val text = "조과기록 앱 '${g.name}' 그룹 초대 코드: ${g.code}\n앱 → 그룹 → 초대 코드로 가입에 입력하세요"
+        val text = "조과일지 앱 '${g.name}' 그룹 초대 코드: ${g.code}\n앱 → 그룹 → 초대 코드로 가입에 입력하세요"
         (a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             .setPrimaryClip(ClipData.newPlainText("초대 코드", g.code))
         a.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {

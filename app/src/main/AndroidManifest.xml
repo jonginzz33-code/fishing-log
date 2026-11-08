@@ -19,7 +19,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
-        android:label="조과기록"
+        android:label="조과일지"
         android:theme="@style/FlApp">
 
         <activity
@@ -109,5 +109,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- v4.9 (224): 홈 화면 위젯 -->
+        <receiver
+            android:name=".TideWidget"
+            android:exported="true"
+            android:label="🌊 조과일지 물때">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_tide_info" />
+        </receiver>
+        <receiver
+            android:name=".BagWidget"
+            android:exported="true"
+            android:label="🎒 조과일지 가방">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_bag_info" />
+        </receiver>
     </application>
 </manifest>

@@ -505,7 +505,83 @@ object TideDialog {
 
         // ---- 주간 (7일): 날짜 · 하늘 · 기온(+수온) · 비 · 바람 · 파고 · 물때 · 물세기 ----
         lateinit var paintTabs: () -> Unit
+        // v4.9 (222): 주간 = 처음 7일 → '▼ 14일까지' (날씨는 참고) → '▼ 21일까지' (물때만)
+        var weekShown = 7
+        var week21 = false
+        var weekList: List<Weather.WeekDay>? = null
+        lateinit var renderWeekRef: (List<Weather.WeekDay>?) -> Unit
+        fun sectionLine(t: String) = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(View(a).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, dp(1), 1f))
+            addView(Ui.text(a, 11f, Ui.SUB, true, t).apply { setPadding(dp(8), 0, dp(8), 0) })
+            addView(View(a).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, dp(1), 1f))
+        }
+        fun moreBtn(t: String, click: () -> Unit) = Ui.text(a, 14f, Ui.BLUE, true, t).apply {
+            gravity = Gravity.CENTER; minHeight = dp(44)
+            background = Ui.bg(a, Color.TRANSPARENT, 12, Color.parseColor("#2B5468"))
+            setOnClickListener { click() }
+        }
+        /** 15~21일: 날씨 예보가 없어 물때만 자세히 (물때 · 물세기 · 가장 낮은 간조 시각·높이 · 만조 · 일출 · ⭐ 해루질 좋은 날) */
+        fun renderTideOnly() {
+            weekBox.addView(sectionLine("15~21일 · 물때만 (날씨 예보 없음)"), Ui.lp(a, MATCH, WRAP, top = 12))
+            val dfmt = SimpleDateFormat("M/d", Locale.KOREA); val wfmt = SimpleDateFormat("E", Locale.KOREA); val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
+            for (k in 14 until 21) {
+                val ds = dayStart(today + k * 86_400_000L + 3_600_000L)
+                val noon = ds + 12 * 3_600_000L
+                val sun = Calendar.getInstance().apply { timeInMillis = ds }.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
+                val row = LinearLayout(a).apply {
+                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(10), dp(8), dp(10), dp(8)); background = Ui.bg(a, Ui.CARD, 12)
+                    isClickable = true
+                    setOnClickListener { cur = ds; weekMode = false; paintTabs(); load() }
+                }
+                row.addView(Ui.text(a, 13f, Ui.TEXT, true, dfmt.format(Date(ds))).apply {
+                    append(android.text.SpannableStringBuilder("\n" + wfmt.format(Date(ds))).apply {
+                        setSpan(android.text.style.AbsoluteSizeSpan(10, true), 0, length, 0)
+                        setSpan(android.text.style.ForegroundColorSpan(if (sun) Color.parseColor("#F07AA0") else Ui.SUB), 0, length, 0)
+                    })
+                }, LinearLayout.LayoutParams(dp(52), WRAP))
+                val est = Tide.estimatePct(noon)
+                val info = Ui.text(a, 12f, Color.parseColor("#C9D6DD"), false, "")
+                val star = Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "").apply { gravity = Gravity.END }
+                fun paint(pct: Int, low: Tide.Extreme?, high: Tide.Extreme?) {
+                    val sb = android.text.SpannableStringBuilder()
+                    val m0 = sb.length; sb.append(Tide.mulName(noon).substringBefore(" ("))
+                    sb.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#FFD166")), m0, sb.length, 0)
+                    sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), m0, sb.length, 0)
+                    sb.append(" · 물세기 ")
+                    val p0 = sb.length; sb.append("$pct%")
+                    sb.setSpan(android.text.style.ForegroundColorSpan(if (pct >= 80) Ui.ORANGE else if (pct >= 55) Color.parseColor("#F2C14E") else Ui.SUB), p0, sb.length, 0)
+                    sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), p0, sb.length, 0)
+                    if (low != null) {
+                        sb.append("\n간조 ")
+                        val l0 = sb.length; sb.append(hm.format(Date(low.time)))
+                        sb.setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), l0, sb.length, 0)
+                        sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), l0, sb.length, 0)
+                        sb.append(String.format(Locale.KOREA, " (%.0fcm)", low.value * 100))
+                    }
+                    if (high != null) sb.append(" · 만조 ").append(hm.format(Date(high.time)))
+                    Sun.times(noon, lat, lon)?.let { st -> sb.append("\n일출 ").append(hm.format(Date(st.rise))) }
+                    info.text = sb
+                    val ok = low != null && low.value * 100.0 <= TideCalendar.haeruCm(a).toDouble()
+                    star.text = if (ok && pct >= 80) "⭐⭐" else if (ok) "⭐ 해루질" else ""
+                }
+                paint(est, null, null)
+                Tide.fetch(a, lat, lon, noon) { day, _ ->
+                    if (day == null || !dlg.isShowing) return@fetch
+                    val ex = Tide.extremes(day)
+                    val low = ex.filter { !it.high }.minByOrNull { it.value }
+                    val high = ex.firstOrNull { it.high }
+                    paint(est, low, high)
+                    Tide.strength(a, day) { st -> if (dlg.isShowing) paint(st.pct, low, high) }
+                }
+                row.addView(info, LinearLayout.LayoutParams(0, WRAP, 1f))
+                row.addView(star, LinearLayout.LayoutParams(WRAP, WRAP))
+                weekBox.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
+            }
+        }
         fun renderWeek(list: List<Weather.WeekDay>?) {
+            weekList = list
             weekBox.removeAllViews()
             if (list.isNullOrEmpty()) { weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨를 못 받았어요 (인터넷 확인)"), Ui.lp(a, MATCH, WRAP, top = 8)); return }
             val weights = floatArrayOf(1.05f, 0.75f, 1.35f, 0.75f, 0.65f, 0.7f, 0.9f, 0.85f)
@@ -518,7 +594,8 @@ object TideDialog {
                 Ui.lp(a, MATCH, WRAP, top = 8))
             val dfmt = SimpleDateFormat("M/d", Locale.KOREA); val wfmt = SimpleDateFormat("E", Locale.KOREA)
             fun pctColor(p: Int) = when { p >= 80 -> Ui.ORANGE; p >= 55 -> Color.parseColor("#F2C14E"); else -> Ui.SUB }
-            list.forEach { wd ->
+            list.take(weekShown).forEachIndexed { idx, wd ->
+                if (idx == 7) weekBox.addView(sectionLine("8~14일 · 날씨는 참고"), Ui.lp(a, MATCH, WRAP, top = 12))
                 val ds = dayStart(wd.dayStart)
                 val noon = ds + 12 * 3_600_000L
                 val off = Math.round((ds - today) / 86_400_000.0).toInt()
@@ -594,12 +671,19 @@ object TideDialog {
                 Tide.fetch(a, lat, lon, noon) { day, _ ->
                     if (day != null && dlg.isShowing) Tide.strength(a, day) { st -> if (dlg.isShowing) paintPct(st.pct) }
                 }
+                // 8~14일은 날씨가 덜 정확해서 흐리게 (물때 · 물세기는 진하게)
+                if (idx >= 7) listOf(skyBox, temp, popV, windV, waveV).forEach { it.alpha = 0.45f }
                 val row = cellRow(listOf(dcell, skyBox, temp, popV, windV, waveV, mulV, pctV),
                     Ui.bg(a, Ui.CARD, 12, if (ds == cur) Ui.BLUE else 0), 8).apply {
                     isClickable = true
                     setOnClickListener { cur = ds; weekMode = false; paintTabs(); load() }
                 }
                 weekBox.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
+            }
+            when {
+                weekShown < 14 && list.size > 7 -> weekBox.addView(moreBtn("▼ 14일까지 더 보기") { weekShown = 14; renderWeekRef(weekList) }, Ui.lp(a, MATCH, WRAP, top = 8))
+                !week21 -> weekBox.addView(moreBtn("▼ 21일까지 더 보기") { week21 = true; renderWeekRef(weekList) }, Ui.lp(a, MATCH, WRAP, top = 8))
+                else -> renderTideOnly()
             }
             weekBox.addView(Ui.text(a, 11f, Ui.SUB, false,
                 "줄을 누르면 그날 물때·시간별 날씨로 이동 · 바람 = 최대 풍속 m/s · 파고 = 최대 m\n" +
@@ -617,14 +701,15 @@ object TideDialog {
         paintTabs = {
             tabRow.removeAllViews()
             tabRow.addView(tab("시간별", !weekMode) { weekMode = false; paintTabs() }, LinearLayout.LayoutParams(0, dp(38), 1f))
-            tabRow.addView(tab("주간 (7일)", weekMode) {
-                weekMode = true; paintTabs()
+            tabRow.addView(tab("주간", weekMode) {
+                weekMode = true; weekShown = 7; week21 = false; paintTabs()
                 weekBox.removeAllViews(); weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨 불러오는 중…"), Ui.lp(a, MATCH, WRAP, top = 8))
                 Weather.fetchWeek(lat, lon) { l -> if (dlg.isShowing && weekMode) renderWeek(l) }
             }, LinearLayout.LayoutParams(0, dp(38), 1f).apply { leftMargin = dp(8) })
             hourBox.visibility = if (weekMode) View.GONE else View.VISIBLE
             weekBox.visibility = if (weekMode) View.VISIBLE else View.GONE
         }
+        renderWeekRef = { l -> renderWeek(l) }
         paintTabs()
         reloadWx = {
             Weather.clearCache()

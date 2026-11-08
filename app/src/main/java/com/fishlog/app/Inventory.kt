@@ -44,12 +44,21 @@ object Inventory {
         "hole" to "구멍 봉돌", "swsinker" to "도래 봉돌", "color" to "컬러 봉돌", "spike" to "스파이크", "splitshot" to "좁쌀 봉돌",
         "snap" to "핀도래", "swivel" to "도래", "jighead" to "지그헤드", "rig" to "채비", "egi" to "에기", "hook" to "바늘",
         "line" to "낚싯줄", "rod" to "낚싯대", "baitreel" to "베이트 릴", "spinreel" to "스피닝 릴",
-        "vest" to "구명조끼", "cooler" to "쿨러", "lamp" to "집어등", "glove" to "장갑")
+        "vest" to "구명조끼", "cooler" to "쿨러", "lamp" to "집어등", "glove" to "장갑",
+        // v4.9 (227 · 228)
+        "clothes" to "의류", "tacklebox" to "태클박스", "net" to "뜰채", "knife" to "칼 · 가위", "bait" to "미끼통", "chum" to "밑밥통",
+        "cap" to "모자", "glasses" to "편광안경", "boots" to "장화", "headlamp" to "헤드랜턴", "tongs" to "집게", "gaff" to "갈고리", "basket" to "망 · 바구니")
 
     /** 이름으로 그림 고르기 (구체적인 것부터) · 없으면 "" */
     fun autoIcon(name: String): String {
         val n = name.replace(" ", "")
         val rules = listOf(
+            listOf("태클", "소품통", "케이스") to "tacklebox", listOf("헤드랜턴", "헤드라이트") to "headlamp",
+            listOf("편광", "선글라스", "안경") to "glasses", listOf("뜰채") to "net", listOf("밑밥통", "주걱", "밑밥") to "chum",
+            listOf("미끼", "크릴", "갯지렁이", "청갯") to "bait", listOf("집게") to "tongs", listOf("갈고리", "호미") to "gaff",
+            listOf("바구니", "망태", "살림망", "그물망") to "basket", listOf("가위", "칼", "나이프") to "knife",
+            listOf("장화", "웨이더", "신발") to "boots", listOf("모자", "캡") to "cap",
+            listOf("의류", "옷", "자켓", "재킷", "우의", "바지", "방한복", "상의", "하의") to "clothes",
             listOf("텅스텐") to "tungsten", listOf("형광", "야광") to "glow", listOf("막대봉돌", "막대") to "stick",
             listOf("쇠봉돌", "무쇠") to "iron", listOf("구멍봉돌", "관통") to "hole", listOf("도래봉돌") to "swsinker",
             listOf("컬러봉돌", "컬러") to "color", listOf("스파이크", "원투봉돌") to "spike", listOf("좁쌀", "좁살") to "splitshot",
@@ -135,6 +144,16 @@ object Inventory {
 
     private fun save(c: Context, cats: List<Cat>, dirty: Boolean = true) {
         prefs(c).edit().putString("inventory2", toJson(cats).toString()).apply { if (dirty) putBoolean("inv_dirty", true) }.apply()
+        BagWidget.updateAll(c)   // v4.9 (224): 홈 화면 가방 위젯도 같이
+    }
+
+    /** v4.9 (224): 가방 위젯 −/＋ (세부가 없는 항목만) */
+    fun adjust(c: Context, catIdx: Int, itemIdx: Int, delta: Int) {
+        val cats = load(c)
+        val it = cats.getOrNull(catIdx)?.items?.getOrNull(itemIdx) ?: return
+        if (it.subs.isNotEmpty()) return
+        it.qty = maxOf(0, it.qty + delta)
+        save(c, cats)
     }
 
     private fun toast(c: Context, s: String) = Toast.makeText(c, s, Toast.LENGTH_LONG).show()

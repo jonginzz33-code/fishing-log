@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_tide_desc">오늘 물때 · 들물/날물 · 다음 만조/간조 · 물세기 · 날씨 (크게 놓으면 물때 그래프)</string>
+    <string name="widget_bag_desc">내 가방 카테고리별 수량 · −/＋</string>
+</resources>

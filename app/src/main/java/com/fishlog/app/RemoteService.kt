@@ -271,8 +271,8 @@ class RemoteService : Service() {
         val t = Store.current ?: return
         session?.setMetadata(android.media.MediaMetadata.Builder()
             .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "⏮ ${t.name(1)} ${t.count(1)}  ·  ⏭ ${t.name(2)} ${t.count(2)}")
-            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과기록 · 총 ${t.catches.size}마리")
-            .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "조과기록")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과일지 · 총 ${t.catches.size}마리")
+            .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "조과일지")
             .build())
     }
 
@@ -359,7 +359,7 @@ class RemoteService : Service() {
         val b = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_octo)          // AOD·상태바: 주꾸미 아이콘
             .setColor(Ui.ORANGE)
-            .setSubText("조과기록")
+            .setSubText("조과일지")
             .setContentTitle(counts)                        // 마릿수를 크게
             .setContentText(sub)
             .setContentIntent(open)
