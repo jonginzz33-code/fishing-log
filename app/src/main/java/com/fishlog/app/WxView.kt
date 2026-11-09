@@ -66,7 +66,7 @@ object WxView {
             cell(hf.format(Date(h.time)), 1f, if (inT) Ui.TEXT else Ui.SUB)
             cell(h.skyIcon().ifBlank { "-" }, 0.8f)
             cell(h.temp?.let { String.format(Locale.KOREA, "%.0f°", it) } ?: "-", 0.9f)
-            cell(h.wind?.let { String.format(Locale.KOREA, "%.1fm/s", it) + (h.dir?.let { d -> " " + Weather.dir16(d) } ?: "") } ?: "-", 1.5f)
+            cell(h.wind?.let { String.format(Locale.KOREA, "%.1fm/s", it) + (h.dir?.let { d -> " " + Weather.dir16(d) } ?: "") } ?: "-", 1.5f, Weather.windColor(h.wind))
             cell(h.wave?.let { String.format(Locale.KOREA, "%.1fm", it) + (h.period?.let { p -> String.format(Locale.KOREA, " %.0fs", p) } ?: "") } ?: "-", 1.3f)
             val ms = snap.measured[h.time]
             cell((ms ?: h.sst)?.let { String.format(Locale.KOREA, "%.1f°", it) + if (ms != null) "실" else "" } ?: "-", 1f, if (ms != null) Ui.GREEN else Ui.TEXT)

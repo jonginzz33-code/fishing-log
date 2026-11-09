@@ -45,8 +45,9 @@ object Weather {
     }
 
     // ---------------- 서버에 그날 날씨 저장 (못 받을 때 대비) ----------------
+    // v5.0 (230): 해상 바람은 따로 저장 (육상 값과 섞이지 않게)
     private fun wxDoc(lat: Double, lon: Double, ymd: String) = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-        .collection("wx").document(String.format(Locale.US, "%.2f_%.2f_%s", lat, lon, ymd))
+        .collection("wx").document(String.format(Locale.US, "%.2f_%.2f_%s", lat, lon, ymd) + if (Store.windSea) "_sea" else "")
 
     /** 시각 → 저장된 한 시간 (없거나 로그인 전이면 빈 값, 3초 넘으면 포기) */
     private fun loadSaved(lat: Double, lon: Double, ymd: String): Map<Long, Hour> {
@@ -169,6 +170,18 @@ object Weather {
     const val KT20 = 10.29
     fun knots(ms: Double) = ms / 0.514444
 
+    /** v5.0 (230-보충): 바람 색 — 초록 괜찮음(5m/s 아래) · 노랑 주의(5~9) · 빨강 셈(9 이상) */
+    const val WIND_OK = 5.0
+    const val WIND_BAD = 9.0
+    val WIND_YELLOW = android.graphics.Color.parseColor("#F2C14E")
+    val WIND_RED = android.graphics.Color.parseColor("#FF5A5F")
+    fun windColor(ms: Double?): Int = when {
+        ms == null -> Ui.SUB
+        ms < WIND_OK -> Ui.GREEN
+        ms < WIND_BAD -> WIND_YELLOW
+        else -> WIND_RED
+    }
+
     /** Open-Meteo 날씨 코드 → 그림 */
     fun codeIcon(c: Int): String = when (c) {
         0, 1 -> "☀"; 2 -> "⛅"; 3, 45, 48 -> "☁"
@@ -204,7 +217,9 @@ object Weather {
         val dayStart: Long, val hours: List<Hour>,
         val windNote: String, val seaNote: String,
         val measured: Measured?, val measuredNote: String,
-        val kmaNote: String = "", val fromKma: Boolean = false
+        val kmaNote: String = "", val fromKma: Boolean = false,
+        /** v5.0 (230): 바람 기준 안내 (육상 · 해상 몇 km 앞바다) */
+        val windBasis: String = ""
     ) {
         fun at(hour: Int): Hour? = hours.firstOrNull { ((it.time - dayStart) / 3_600_000L).toInt() == hour }
     }
@@ -293,7 +308,7 @@ object Weather {
 
     /** dayStart = 그날 0시 (한국 시각) */
     fun fetch(ctx: Context, lat: Double, lon: Double, dayStart: Long, done: (Day) -> Unit) {
-        val key = String.format(Locale.US, "%.2f,%.2f,%d", lat, lon, dayStart)
+        val key = String.format(Locale.US, "%.2f,%.2f,%d", lat, lon, dayStart) + if (Store.windSea) ",sea" else ""
         // 기억 시간: 오늘은 30분(낙뢰·지금 날씨), 다른 날은 3시간 30분 (기상청 예보는 3시간마다 바뀜)
         val ttl = if (dayStart == dayStartOf(System.currentTimeMillis())) 30 * 60_000L else KEEP_MS
         cache[key]?.let { (at, d) -> if (System.currentTimeMillis() - at < ttl) { done(d); return } }
@@ -336,6 +351,30 @@ object Weather {
                 }
             } catch (_: Exception) { windNote = "바람 정보를 못 받았어요 (인터넷 확인)" }
         } else windNote = "바람은 3달 전부터 15일 뒤까지만 볼 수 있어요"
+
+        // ---- v5.0 (230): 해상 바람 — 내 위치에서 가장 가까운 바다 칸 값으로 ----
+        val seaMode = Store.windSea
+        val sp = if (seaMode) try { seaPoint(lat, lon) } catch (_: Exception) { null } else null
+        val own = grid(lat, lon)
+        var windBasis = if (!seaMode) "바람: 육상 기준 (내 위치 칸 · 건물·지형에 막혀 바다보다 약하게 나와요)"
+            else if (sp == null) "바람: 해상 기준인데 가까운 바다 칸을 못 찾아 내 위치 값이에요"
+            else if (sp.km < 1) "바람: 해상 기준 (내 자리 칸이 바다)"
+            else "바람: 해상 기준 · 내 위치에서 약 ${sp.km}km 앞바다 값"
+        if (sp != null && sp.km >= 1 && diff in -90..15) {
+            try {
+                val body = get("https://api.open-meteo.com/v1/forecast?latitude=${sp.lat}&longitude=${sp.lon}" +
+                    "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=ms" +
+                    "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
+                val h = JSONObject(body).getJSONObject("hourly")
+                val t = h.getJSONArray("time")
+                val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
+                for (i in 0 until t.length()) {
+                    val ms = isoFmt.parse(t.getString(i))?.time ?: continue
+                    val v = num(ws, i) ?: continue
+                    wind[ms] = Triple(v, num(wd, i), num(wg, i))
+                }
+            } catch (_: Exception) {}
+        }
 
         // ---- 파고 · 수온 예측 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로) ----
         val sea = HashMap<Long, Pair<Double?, Double?>>()
@@ -382,7 +421,7 @@ object Weather {
         // ---- 기상청 단기예보 (오늘 ~ 3일 뒤): 기온·하늘·비·바람 ----
         var kmaNote = ""
         val kma: Map<Long, Kma> = if (diff in 0..3) {
-            try { kmaForecast(lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L))) }
+            try { kmaForecastAt(own.first, own.second, keyFmt.format(Date(dayStart + 12 * 3_600_000L))) }
             catch (e: KmaError) { kmaNote = e.message ?: ""; emptyMap() }
             catch (_: Exception) { kmaNote = "기상청 예보를 못 받았어요 (인터넷 확인)"; emptyMap() }
         } else emptyMap()
@@ -395,6 +434,9 @@ object Weather {
             val km = seaKm(lat, lon)
             if (seaWave.isNotEmpty() && km != null && km >= 10) seaNote = "파고: 내 자리 칸이 육지·갯벌이라 약 ${km}km 떨어진 앞바다 기상청 값이에요"
         }
+        // v5.0 (230): 해상이면 바람(풍속·풍향)은 바다 칸의 기상청 값
+        val seaK: Map<Long, Kma> = if (sp?.cell != null && sp.cell != own && kma.isNotEmpty())
+            try { kmaForecastAt(sp.cell.first, sp.cell.second, ymd) } catch (_: Exception) { emptyMap() } else emptyMap()
         // 낙뢰: 기상청 초단기예보 (앞으로 6시간)
         val lightning: Set<Long> = if (diff == 0) try { kmaLightning(lat, lon) } catch (_: Exception) { emptySet() } else emptySet()
 
@@ -407,7 +449,8 @@ object Weather {
             val kw = k?.wav?.takeIf { it > 0.0 } ?: seaWave[t]
             // 바람은 기상청 값이 있으면 기상청 우선 (돌풍은 Open-Meteo), 파고는 기상청 → 바다 칸 기상청 → Open-Meteo
             // 기온·비: 기상청 → Open-Meteo(지난 날 포함) → 서버에 저장해 둔 값
-            val h = Hour(t, k?.wsd ?: w?.first ?: sv?.wind, k?.vec ?: w?.second ?: sv?.dir, w?.third ?: sv?.gust,
+            val wk = if (seaK.isNotEmpty()) seaK[t] else k
+            val h = Hour(t, wk?.wsd ?: w?.first ?: sv?.wind, wk?.vec ?: w?.second ?: sv?.dir, w?.third ?: sv?.gust,
                 kw ?: s?.first ?: sv?.wave, s?.second ?: sv?.sst,
                 k?.tmp ?: omTemp[t] ?: sv?.temp, k?.sky ?: sv?.sky, k?.pty ?: sv?.pty, k?.pop ?: omPop[t] ?: sv?.pop,
                 pd?.first ?: sv?.period, pd?.second ?: sv?.waveDir,
@@ -426,7 +469,7 @@ object Weather {
             measured = r.first; mNote = r.second
         } else if (diff > 0) mNote = "실측 수온은 아직 측정 전이에요 (예측만 보여요)"
         else mNote = "실측 수온은 오늘·어제만 볼 수 있어요"
-        return Day(dayStart, hours, windNote, seaNote, measured, mNote, kmaNote, kma.isNotEmpty())
+        return Day(dayStart, hours, windNote, seaNote, measured, mNote, kmaNote, kma.isNotEmpty(), windBasis)
     }
 
     // ---------------- 기상청 단기예보 ----------------
@@ -456,6 +499,70 @@ object Weather {
         return x to y
     }
 
+    /** v5.0 (230): 기상청 격자 → 위도·경도 (칸 가운데) */
+    fun gridToLatLon(x: Int, y: Int): Pair<Double, Double> {
+        val re = 6371.00877 / 5.0
+        val deg = Math.PI / 180.0
+        val slat1 = 30.0 * deg; val slat2 = 60.0 * deg; val olon = 126.0 * deg; val olat = 38.0 * deg
+        var sn = Math.tan(Math.PI * 0.25 + slat2 * 0.5) / Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+        sn = Math.log(Math.cos(slat1) / Math.cos(slat2)) / Math.log(sn)
+        var sf = Math.tan(Math.PI * 0.25 + slat1 * 0.5)
+        sf = Math.pow(sf, sn) * Math.cos(slat1) / sn
+        var ro = Math.tan(Math.PI * 0.25 + olat * 0.5)
+        ro = re * sf / Math.pow(ro, sn)
+        val xn = x - 43.0; val yn = ro - y + 136.0
+        var ra = Math.sqrt(xn * xn + yn * yn)
+        if (sn < 0.0) ra = -ra
+        var alat = Math.pow(re * sf / ra, 1.0 / sn)
+        alat = 2.0 * Math.atan(alat) - Math.PI * 0.5
+        val theta = when {
+            Math.abs(xn) <= 0.0 -> 0.0
+            Math.abs(yn) <= 0.0 -> if (xn < 0.0) -Math.PI * 0.5 else Math.PI * 0.5
+            else -> Math.atan2(xn, yn)
+        }
+        val alon = theta / sn + olon
+        return alat / deg to alon / deg
+    }
+
+    /** 해상 바람을 받을 점: cell = 기상청 바다 칸 (없으면 null), km = 내 위치에서 거리 */
+    class SeaPoint(val lat: Double, val lon: Double, val km: Int, val cell: Pair<Int, Int>?)
+    private val seaPointCache = HashMap<String, SeaPoint?>()
+
+    /** 기상청 파고가 나오는 가장 가까운 칸 → 없으면 Open-Meteo 해양 예보가 있는 가까운 점 */
+    fun seaPoint(lat: Double, lon: Double): SeaPoint? {
+        val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        if (seaPointCache.containsKey(key)) return seaPointCache[key]
+        val (nx, ny) = grid(lat, lon)
+        val cell = try { seaCell(nx, ny) } catch (_: Exception) { null }
+        if (cell != null) {
+            val r = if (cell == nx to ny) SeaPoint(lat, lon, 0, cell)
+                else gridToLatLon(cell.first, cell.second).let { (la, lo) ->
+                    SeaPoint(la, lo, Math.round(Math.hypot((la - lat) * 111.0, (lo - lon) * 111.0 * Math.cos(Math.toRadians(lat)))).toInt(), cell) }
+            seaPointCache[key] = r
+            return r
+        }
+        val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16, -0.08 to -0.08,
+            0.0 to -0.25, -0.1 to -0.3, 0.0 to -0.4)
+        var anyOk = false
+        for ((dla, dlo) in offsets) {
+            try {
+                val body = get("https://marine-api.open-meteo.com/v1/marine?latitude=${lat + dla}&longitude=${lon + dlo}" +
+                    "&hourly=wave_height&timezone=Asia%2FSeoul&forecast_days=1")
+                anyOk = true
+                val wv = JSONObject(body).getJSONObject("hourly").optJSONArray("wave_height")
+                val ok = (0 until (wv?.length() ?: 0)).count { num(wv, it) != null }
+                if (ok >= 6) {
+                    val km = Math.round(Math.hypot(dla * 111.0, dlo * 111.0 * Math.cos(Math.toRadians(lat)))).toInt()
+                    val r = SeaPoint(lat + dla, lon + dlo, km, null)
+                    seaPointCache[key] = r
+                    return r
+                }
+            } catch (_: Exception) {}
+        }
+        if (anyOk) seaPointCache[key] = null   // 인터넷이 안 될 때는 다음에 다시 찾기
+        return null
+    }
+
     /** 가장 최근 발표 (02·05·08·11·14·17·20·23시, 발표 10분 뒤부터) */
     private fun baseTime(now: Long): Pair<String, String> {
         val c = java.util.Calendar.getInstance(KST).apply { timeInMillis = now - 15 * 60_000L }
@@ -468,12 +575,11 @@ object Weather {
 
     private val kmaCache = HashMap<String, Pair<Long, List<JSONObject>>>()
 
-    private fun kmaForecast(lat: Double, lon: Double, ymd: String): Map<Long, Kma> {
-        val latest = kmaItems(lat, lon)
+    private fun kmaForecastAt(nx: Int, ny: Int, ymd: String): Map<Long, Kma> {
+        val latest = kmaItemsAt(nx, ny)
         // 오늘: 이미 지난 시간은 최신 예보에 없어서, 어젯밤 23시 발표 예보로 채움 (0시~지금)
         val items = if (ymd == keyFmt.format(Date())) {
             val early = try {
-                val (nx, ny) = grid(lat, lon)
                 val y = keyFmt.format(Date(System.currentTimeMillis() - 86_400_000L))
                 kmaItemsAt(nx, ny, y to "2300")
             } catch (_: Exception) { emptyList() }
@@ -510,25 +616,32 @@ object Weather {
     private fun kmaSeaWave(lat: Double, lon: Double, ymd: String): Map<Long, Double> {
         val (nx, ny) = grid(lat, lon)
         val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
-        fun waves(items: List<JSONObject>) = items.filter { it.optString("fcstDate") == ymd && it.optString("category") == "WAV" }
+        val g = seaCell(nx, ny) ?: return emptyMap()
+        return kmaItemsAt(g.first, g.second).filter { it.optString("fcstDate") == ymd && it.optString("category") == "WAV" }
             .mapNotNull { o -> val v = o.optString("fcstValue").toDoubleOrNull()?.takeIf { it > 0 && it < 30 } ?: return@mapNotNull null
                 (tf.parse(o.optString("fcstDate") + o.optString("fcstTime"))?.time ?: return@mapNotNull null) to v }.toMap()
+    }
+
+    /** 바다 칸: 내 칸부터 둘레를 가까운 순서로, 기상청 파고(WAV)가 나오는 첫 칸 (못 찾으면 null) */
+    private fun seaCell(nx: Int, ny: Int): Pair<Int, Int>? {
         val ck = "$nx,$ny"
-        seaGrid[ck]?.let { g -> return waves(kmaItemsAt(g.first, g.second)) }
-        if (seaGrid.containsKey(ck)) return emptyMap()
+        if (seaGrid.containsKey(ck)) return seaGrid[ck]
+        fun isSea(items: List<JSONObject>) = items.any { it.optString("category") == "WAV" &&
+            (it.optString("fcstValue").toDoubleOrNull() ?: -1.0).let { v -> v > 0 && v < 30 } }
+        // 내 칸이 바다인지 먼저 (인증키·인터넷 문제면 여기서 오류 → 못 찾음, 기억 안 함)
+        if (isSea(kmaItemsAt(nx, ny))) { seaGrid[ck] = nx to ny; seaGridKm[ck] = 0; return nx to ny }
         // 가까운 12칸 → 그래도 없으면 서쪽(서해 열린 바다) 쪽으로 약 40km 까지
         val near = (-3..3).flatMap { dx -> (-3..3).map { dy -> dx to dy } }.filter { it != 0 to 0 }
             .sortedBy { it.first * it.first + it.second * it.second }.take(12)
         val west = (4..8).flatMap { d -> listOf(-d to 0, -d to -2, -d to 2, -d to -4) } + listOf(0 to -6, 0 to 6, 2 to -6, -2 to -8)
         for ((dx, dy) in (near + west).distinct()) {
-            val w = try { waves(kmaItemsAt(nx + dx, ny + dy)) } catch (_: Exception) { continue }
-            if (w.isNotEmpty()) { seaGrid[ck] = (nx + dx) to (ny + dy); seaGridKm[ck] = Math.round(Math.hypot(dx * 5.0, dy * 5.0)).toInt(); return w }
+            val items = try { kmaItemsAt(nx + dx, ny + dy) } catch (_: Exception) { continue }
+            if (isSea(items)) { seaGrid[ck] = (nx + dx) to (ny + dy); seaGridKm[ck] = Math.round(Math.hypot(dx * 5.0, dy * 5.0)).toInt(); return seaGrid[ck] }
         }
         seaGrid[ck] = null
-        return emptyMap()
+        return null
     }
 
-    /** 기상청 초단기예보 낙뢰(LGT): 앞으로 6시간 중 낙뢰가 있는 시각 */
     private fun kmaLightning(lat: Double, lon: Double): Set<Long> {
         val key = BuildConfig.KHOA_KEY
         if (key.isBlank()) return emptySet()
@@ -713,7 +826,7 @@ object Weather {
     @Volatile var weekNote: String = ""
 
     fun fetchWeek(lat: Double, lon: Double, done: (List<WeekDay>?) -> Unit) {
-        val key = String.format(Locale.US, "%.2f,%.2f", lat, lon)
+        val key = String.format(Locale.US, "%.2f,%.2f", lat, lon) + if (Store.windSea) ",sea" else ""
         weekCache?.let { (k, v) -> if (k == key && System.currentTimeMillis() - v.first < KEEP_MS) { done(v.second); return } }
         Thread {
             val r = try { loadWeek(lat, lon) } catch (_: Exception) { null }
@@ -761,9 +874,20 @@ object Weather {
                 num(dd.optJSONArray("precipitation_probability_max"), i)?.toInt(), num(dd.optJSONArray("wind_speed_10m_max"), i),
                 waveBy[ds], sstBy[ds], num(dd.optJSONArray("weather_code"), i)?.toInt())
         }
+        // v5.0 (230): 해상이면 바람 최대는 가까운 바다 칸 값
+        val sp = if (Store.windSea) try { seaPoint(lat, lon) } catch (_: Exception) { null } else null
+        if (sp != null && sp.km >= 1) try {
+            val sb = JSONObject(get("https://api.open-meteo.com/v1/forecast?latitude=${sp.lat}&longitude=${sp.lon}" +
+                "&daily=wind_speed_10m_max&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=14")).getJSONObject("daily")
+            val st = sb.getJSONArray("time"); val sw = sb.optJSONArray("wind_speed_10m_max")
+            val byDay = (0 until st.length()).mapNotNull { i -> num(sw, i)?.let { st.getString(i) to it } }.toMap()
+            list.forEach { wd -> byDay[dayFmt.format(Date(wd.dayStart + 12 * 3_600_000L))]?.let { wd.wind = it } }
+        } catch (_: Exception) {}
+        val own = grid(lat, lon)
+        val windCell = sp?.cell?.takeIf { it != own }
         // 기상청으로 덮어쓰기: 오늘~3일 뒤 = 단기예보, 그 뒤 = 중기예보 (못 받으면 Open-Meteo 그대로)
         val notes = mutableListOf<String>()
-        val short = try { kmaShortWeek(lat, lon) } catch (e: Exception) { notes.add("단기예보 못 받음"); emptyMap() }
+        val short = try { kmaShortWeek(lat, lon, windCell) } catch (e: Exception) { notes.add("단기예보 못 받음"); emptyMap() }
         val (mid, midNote) = try { kmaMidWeek(lat, lon) } catch (e: Exception) { emptyMap<String, Wx>() to (e.message ?: "기상청 중기예보를 못 받았어요") }
         list.forEach { wd ->
             val ymd = keyFmt.format(Date(wd.dayStart))
@@ -798,6 +922,12 @@ object Weather {
             append(if (sDays > 0) "단기예보 기간은 기상청, 그 뒤 Open-Meteo" else "Open-Meteo")
             if (mDays == 0 && midNote.isNotBlank()) append("\n⚠ ").append(midNote)
             if (notes.isNotEmpty()) append("\n⚠ ").append(notes.joinToString(" · "))
+            append("\n").append(when {
+                !Store.windSea -> "바람: 육상 기준 (내 위치 칸)"
+                sp == null -> "바람: 해상 기준인데 가까운 바다 칸을 못 찾아 내 위치 값이에요"
+                sp.km < 1 -> "바람: 해상 기준 (내 자리 칸이 바다)"
+                else -> "바람: 해상 기준 · 내 위치에서 약 ${sp.km}km 앞바다 값"
+            })
         }
         return list
     }
@@ -807,7 +937,7 @@ object Weather {
         var wind: Double? = null; var wave: Double? = null; var waveRange: String? = null }
 
     /** 단기예보를 날짜별로: 낮(6~21시) 비·눈 있으면 비/눈, 아니면 정오 하늘 · 최저/최고 · 비 확률 최대 · 바람 최대 · 파고 최대 */
-    private fun kmaShortWeek(lat: Double, lon: Double): Map<String, Wx> {
+    private fun kmaShortWeek(lat: Double, lon: Double, windCell: Pair<Int, Int>? = null): Map<String, Wx> {
         val out = HashMap<String, Wx>()
         val byDay = kmaItems(lat, lon).groupBy { it.optString("fcstDate") }
         byDay.forEach { (ymd, its) ->
@@ -832,6 +962,11 @@ object Weather {
             w.tmin = tmn ?: lo; w.tmax = tmx ?: hi
             out[ymd] = w
         }
+        // v5.0 (230): 해상이면 바람 최대는 바다 칸 값으로 바꾸기
+        if (windCell != null) try {
+            kmaItemsAt(windCell.first, windCell.second).filter { it.optString("category") == "WSD" }.groupBy { it.optString("fcstDate") }
+                .forEach { (ymd, its) -> its.mapNotNull { it.optString("fcstValue").toDoubleOrNull() }.maxOrNull()?.let { m -> out[ymd]?.wind = m } }
+        } catch (_: Exception) {}
         return out
     }
 

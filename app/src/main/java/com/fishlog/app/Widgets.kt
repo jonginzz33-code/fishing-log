@@ -157,9 +157,16 @@ class TideWidget : AppWidgetProvider() {
                 if (rising) Color.parseColor("#5FC4E0") else Color.parseColor("#F2A65A"), true)
             if (wx != null) {
                 val parts = listOfNotNull(wx.optString("icon"),
-                    wx.optDouble("temp", Double.NaN).takeIf { !it.isNaN() }?.let { String.format(Locale.KOREA, "%.0f°", it) },
-                    wx.optDouble("wind", Double.NaN).takeIf { !it.isNaN() }?.let { String.format(Locale.KOREA, "바람 %.1f", it) })
-                txt(parts.joinToString(" "), w - pad, pad + 12 * s, 12f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
+                    wx.optDouble("temp", Double.NaN).takeIf { !it.isNaN() }?.let { String.format(Locale.KOREA, "%.0f°", it) })
+                // v5.0: 바람은 색으로 (초록 5 아래 · 노랑 5~9 · 빨강 9 이상)
+                val wv = wx.optDouble("wind", Double.NaN).takeIf { !it.isNaN() }
+                var rx = w - pad
+                if (wv != null) {
+                    val ws = String.format(Locale.KOREA, " 바람 %.1f", wv)
+                    txt(ws, rx, pad + 12 * s, 12f, Weather.windColor(wv), true, Paint.Align.RIGHT)
+                    p.textSize = 12 * s; p.isFakeBoldText = true; rx -= p.measureText(ws)
+                }
+                txt(parts.joinToString(" "), rx, pad + 12 * s, 12f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
                 wx.optDouble("wave", Double.NaN).takeIf { !it.isNaN() }?.let {
                     txt(String.format(Locale.KOREA, "파고 %.1fm", it), w - pad, pad + 28 * s, 12f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
                 }

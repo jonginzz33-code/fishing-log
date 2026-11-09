@@ -261,6 +261,11 @@ object Store {
     }
 
     // ---- 물때 지역 (null = 내 위치에서 가장 가까운 관측소) ----
+    /** v5.0 (230): 바람 기준 — true = 해상(가까운 바다 칸, 기본) · false = 육상(내 위치 칸) */
+    var windSea: Boolean
+        get() = if (::prefs.isInitialized) prefs.getBoolean("windSea", true) else true
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean("windSea", v).apply() }
+
     var tideStation: String?
         get() = prefs.getString("tideStation", null)
         set(v) { prefs.edit().putString("tideStation", v).apply(); fireChanged() }

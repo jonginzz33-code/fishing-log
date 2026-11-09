@@ -223,6 +223,30 @@ object TideDialog {
         // [오늘 시간별] [주간 (7일)] 탭
         val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
         col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        // v5.0 (230): 바람 기준 [육상 | 해상] (기본 해상 = 가까운 바다 칸)
+        var onBasis: () -> Unit = {}
+        val basisRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        col.addView(basisRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        fun paintBasis() {
+            basisRow.removeAllViews()
+            basisRow.addView(Ui.text(a, 12.5f, Ui.SUB, true, "바람 기준"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(10) })
+            listOf(false to "육상", true to "해상").forEach { (sea, label) ->
+                val on = Store.windSea == sea
+                basisRow.addView(Ui.text(a, 12.5f, if (on) Color.parseColor("#06303A") else Ui.TEXT, true, label).apply {
+                    gravity = Gravity.CENTER
+                    background = if (on) Ui.bg(a, Ui.BLUE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener {
+                        if (Store.windSea == sea) return@setOnClickListener
+                        Store.windSea = sea; paintBasis(); onBasis()
+                        android.widget.Toast.makeText(a, if (sea) "해상 바람: 가까운 바다 위 값으로 보여요" else "육상 바람: 내 위치 칸 값으로 보여요", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }, LinearLayout.LayoutParams(dp(64), dp(30)).apply { rightMargin = dp(6) })
+            }
+            basisRow.addView(Ui.text(a, 10.5f, Ui.SUB, false, if (Store.windSea) "바다 위 바람 (낚시·해루질)" else "내 위치 칸 바람").apply {
+                maxLines = 2
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(4) })
+        }
+        paintBasis()
         val hourBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         val weekBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         col.addView(hourBox, Ui.lp(a, MATCH, WRAP))
@@ -270,15 +294,21 @@ object TideDialog {
             if (hrs.isEmpty()) {
                 wxSummary.text = w.windNote.ifBlank { w.seaNote }.ifBlank { "바람·파도 정보가 없어요" }
             } else {
-                val parts = mutableListOf<String>()
+                val parts = mutableListOf<CharSequence>()
                 hrs.filter { it.wind != null }.maxByOrNull { it.wind!! }?.let {
-                    parts.add(String.format(Locale.KOREA, "바람 최대 %.1fm/s (%s시)", it.wind, hFmt.format(Date(it.time)).take(2)))
+                    // v5.0: 바람 최대도 색 (초록 · 노랑 · 빨강)
+                    parts.add(android.text.SpannableString(String.format(Locale.KOREA, "바람 최대 %.1fm/s (%s시)", it.wind, hFmt.format(Date(it.time)).take(2))).apply {
+                        setSpan(android.text.style.ForegroundColorSpan(Weather.windColor(it.wind)), 0, length, 0)
+                        setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, length, 0)
+                    })
                 }
                 hrs.mapNotNull { it.temp }.takeIf { it.isNotEmpty() }?.let { parts.add(0, String.format(Locale.KOREA, "기온 %.0f~%.0f℃", it.min(), it.max())) }
                 hrs.mapNotNull { it.pop }.maxOrNull()?.takeIf { it > 0 }?.let { parts.add("비 확률 최대 $it%") }
                 hrs.mapNotNull { it.wave }.maxOrNull()?.let { parts.add(String.format(Locale.KOREA, "파고 최대 %.1fm", it)) }
                 hrs.mapNotNull { it.sst }.takeIf { it.isNotEmpty() }?.let { parts.add(String.format(Locale.KOREA, "수온 약 %.0f℃ (예측)", it.average())) }
-                wxSummary.text = parts.joinToString(" · ")
+                wxSummary.text = android.text.SpannableStringBuilder().apply {
+                    parts.forEachIndexed { i, cs -> if (i > 0) append(" · "); append(cs) }
+                }
                 // 실측 수온 (가장 최근) 칩
                 w.measured?.let { m ->
                     wxGrid.addView(Ui.text(a, 12f, Color.parseColor("#7FE0D0"), true,
@@ -325,9 +355,8 @@ object TideDialog {
                     // 바람: 화살표 + 풍속 + 방향
                     // 바람 ('물때와 날씨'처럼): 화살표 + 풍속 m/s (10노트↑면 노트) / 16방위 · 최대(돌풍)
                     val ws = x?.wind
-                    val lvColor = when {
-                        ws == null -> Ui.SUB; ws >= Weather.KT20 -> Color.parseColor("#FF8A92"); ws >= Weather.KT10 -> Ui.ORANGE
-                        Weather.windLevel(ws) == 0 -> Ui.GREEN; else -> Color.parseColor("#F2C14E") }
+                    // v5.0: 초록 괜찮음(5 아래) · 노랑 주의(5~9) · 빨강 셈(9 이상)
+                    val lvColor = Weather.windColor(ws)
                     val wind = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                     val wTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
                     wTop.addView(Ui.text(a, 15f, lvColor, true, if (x?.dir != null) "↑" else "·").apply {
@@ -343,8 +372,11 @@ object TideDialog {
                         }
                     }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(1) })
                     wind.addView(wTop)
-                    val wSub = listOfNotNull(x?.dir?.let { Weather.dir16(it) }, x?.gust?.let { String.format(Locale.KOREA, "최대 %.1f", it) }).joinToString(" · ")
-                    if (wSub.isNotBlank()) wind.addView(Ui.text(a, 9.5f, Ui.SUB, false, wSub).apply {
+                    val wSub = android.text.SpannableStringBuilder(x?.dir?.let { Weather.dir16(it) } ?: "")
+                    x?.gust?.let { g -> if (wSub.isNotEmpty()) wSub.append(" · ")
+                        val g0 = wSub.length; wSub.append(String.format(Locale.KOREA, "최대 %.1f", g))
+                        if (g >= Weather.WIND_OK) wSub.setSpan(android.text.style.ForegroundColorSpan(Weather.windColor(g)), g0, wSub.length, 0) }
+                    if (wSub.isNotBlank()) wind.addView(Ui.text(a, 9.5f, Ui.SUB, false, "").apply { text = wSub
                         maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
                         setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
                     }, LinearLayout.LayoutParams(MATCH, Ui.dp(a, 14)))
@@ -392,7 +424,8 @@ object TideDialog {
             if (w.measuredNote.isNotBlank()) notes.add(w.measuredNote)
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
-                notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 약함 · 노랑 주의 · 주황 10노트↑ · 빨강 20노트↑) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
+                if (w.windBasis.isNotBlank()) notes.add("ⓘ " + w.windBasis)
+                notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 괜찮음 5 아래 · 노랑 주의 5~9 · 빨강 셈 9 이상) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
                     "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값(아래 작은 글씨 = 관측소, 노란색 = 가장 가까운 곳이 끊겨 다음 관측소 값), 예상 = 그날 실측에 맞춘 예측")
                 if (sstOff != null) notes.add(String.format(Locale.KOREA, "수온 예상: 오늘 실측이 먼 바다 예측보다 %+.1f° 라서 실측이 없는 시간은 그만큼 맞춰서 보여요", sstOff))
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
@@ -400,8 +433,9 @@ object TideDialog {
                 notes.add(if (w.fromKma) "기온·하늘·비·바람·파고: 기상청 단기예보 (내 칸이 육지면 가까운 바다 칸) · 낙뢰: 기상청 초단기예보 · 돌풍·파도 주기·파향·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
             }
             wxNote.text = notes.joinToString("\n")
-            if (w.measured != null) wxSummary.text = wxSummary.text.toString().let { t ->
-                (if (t.isBlank()) "" else "$t · ") + String.format(Locale.KOREA, "실측 수온 %.1f℃", w.measured.temp)
+            if (w.measured != null) {
+                if (wxSummary.text.isNotBlank()) wxSummary.append(" · ")
+                wxSummary.append(String.format(Locale.KOREA, "실측 수온 %.1f℃", w.measured.temp))
             }
         }
 
@@ -646,8 +680,7 @@ object TideDialog {
                     temp.addView(sr)
                 }
                 val popV = Ui.text(a, 12f, if ((wd.pop ?: 0) >= 50) Ui.BLUE else Ui.SUB, (wd.pop ?: 0) >= 50, wd.pop?.let { "$it%" } ?: "-")
-                val wl = wd.wind?.let { Weather.windLevel(it) }
-                val windV = Ui.text(a, 12.5f, when (wl) { 0 -> Ui.GREEN; 1 -> Color.parseColor("#F2C14E"); 2 -> Ui.ORANGE; else -> Ui.SUB }, true,
+                val windV = Ui.text(a, 12.5f, Weather.windColor(wd.wind), true,
                     wd.wind?.let { String.format(Locale.KOREA, "%.1f", it) } ?: "-")
                 val waveV = Ui.text(a, 12f, Ui.BLUE, false, wd.wave?.let { String.format(Locale.KOREA, "%.1f", it) } ?: "-").apply {
                     // 기상청 해상예보 범위가 있으면 아래에 작게 (예: 1.0~2.0)
@@ -686,7 +719,7 @@ object TideDialog {
                 else -> renderTideOnly()
             }
             weekBox.addView(Ui.text(a, 11f, Ui.SUB, false,
-                "줄을 누르면 그날 물때·시간별 날씨로 이동 · 바람 = 최대 풍속 m/s · 파고 = 최대 m\n" +
+                "줄을 누르면 그날 물때·시간별 날씨로 이동 · 바람 = 최대 풍속 m/s (초록 5 아래 · 노랑 5~9 · 빨강 9 이상) · 파고 = 최대 m\n" +
                     "물세기: 주황 80% 이상(물 많이 빠짐) · 노랑 55~80% · 회색 55% 아래 · 수온 예상: Open-Meteo"),
                 Ui.lp(a, MATCH, WRAP, top = 4))
             if (Weather.weekNote.isNotBlank()) weekBox.addView(Ui.text(a, 11f, Ui.SUB, false, Weather.weekNote).apply {
@@ -710,6 +743,13 @@ object TideDialog {
             weekBox.visibility = if (weekMode) View.VISIBLE else View.GONE
         }
         renderWeekRef = { l -> renderWeek(l) }
+        onBasis = {
+            load()
+            if (weekMode) {
+                weekBox.removeAllViews(); weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨 불러오는 중…"), Ui.lp(a, MATCH, WRAP, top = 8))
+                Weather.fetchWeek(lat, lon) { l -> if (dlg.isShowing && weekMode) renderWeek(l) }
+            }
+        }
         paintTabs()
         reloadWx = {
             Weather.clearCache()
