@@ -26,8 +26,10 @@ jobs:
       - name: Build
         env:
           KHOA_KEY: ${{ secrets.KHOA_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
         run: |
           if [ -z "$KHOA_KEY" ]; then echo "::warning::KHOA_KEY 비밀값이 비어 있어요 (물때가 Open-Meteo로 나와요)"; else echo "KHOA_KEY 길이: ${#KHOA_KEY}"; fi
+          if [ -z "$KAKAO_REST_KEY" ]; then echo "::warning::KAKAO_REST_KEY 비밀값이 비어 있어요 (카카오 장소 검색이 안 돼요)"; else echo "KAKAO_REST_KEY 길이: ${#KAKAO_REST_KEY}"; fi
           gradle assembleDebug --no-daemon
 
       - name: Rename APK

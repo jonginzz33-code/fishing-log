@@ -146,7 +146,9 @@ object TideCalendar {
     // ---------------- 창 ----------------
     fun show(a: Activity, lat0: Double?, lon0: Double?) {
         fun dp(v: Int) = Ui.dp(a, v)
-        val lat = lat0 ?: Sun.DEF_LAT; val lon = lon0 ?: Sun.DEF_LON
+        // v5.1 (232): 고른 지점 → 직접 고른 관측소 → 내 위치
+        val b = Spot.base(a, lat0, lon0)
+        val lat = b?.first ?: Sun.DEF_LAT; val lon = b?.second ?: Sun.DEF_LON
         val dlg = Dialog(a, R.style.FlFull)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(12), dp(10), dp(12), dp(8)) }
         val month = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }

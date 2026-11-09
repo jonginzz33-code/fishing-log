@@ -90,10 +90,12 @@ object TideDialog {
     fun titleText(a: Activity, lat: Double?, lon: Double?, day: Long? = null): CharSequence {
         val st = Tide.stationFor(a, lat, lon)
         val sb = android.text.SpannableStringBuilder("물때 · 바람 · 수온")
-        if (st != null) {
+        // v5.1 (232): 지점을 골랐으면 지점 이름 (예: 신도)
+        val place = Spot.current
+        if (st != null || place != null) {
             sb.append(" · ")
             val s0 = sb.length
-            sb.append(st.name)
+            sb.append(place?.name ?: st!!.name)
             sb.setSpan(android.text.style.ForegroundColorSpan(Ui.BLUE), s0, sb.length, 0)
         }
         // v3.8: 지금 보고 있는 날짜 (오늘 = '오늘', 다른 날 = '11/7(토)' 노랑)
@@ -114,12 +116,19 @@ object TideDialog {
     /** 제목 아래 작은 줄: "인천송도 관측소 기준 · 내 위치에서 32km · 바꾸기 ▾" */
     fun stationSub(a: Activity, lat: Double?, lon: Double?): String {
         val st = Tide.stationFor(a, lat, lon) ?: return "위치 확인 중 · 눌러서 관측소 고르기 ▾"
+        // v5.1 (232): 고른 지점 기준
+        Spot.current?.let { p ->
+            val km = Tide.stationKm(st, p.lat, p.lon)?.let { String.format(Locale.KOREA, " (%.0fkm)", it) } ?: ""
+            return "📍 ${p.name} 기준 · 물때: ${st.name} 관측소$km · 바꾸기 ▾"
+        }
         val km = Tide.stationKm(st, lat, lon)?.let { String.format(Locale.KOREA, " · 내 위치에서 %.0fkm", it) } ?: ""
         return "${st.name} 관측소 기준" + (if (Store.tideStation != null) " (직접 고름)" else "") + km + " · 바꾸기 ▾"
     }
 
-    fun show(a: Activity, lat: Double, lon: Double, time: Long, trip: Store.Trip?, onChanged: (() -> Unit)? = null) {
+    fun show(a: Activity, gpsLat: Double, gpsLon: Double, time: Long, trip: Store.Trip?, onChanged: (() -> Unit)? = null) {
         fun dp(v: Int) = Ui.dp(a, v)
+        // v5.1 (231 · 232): 기준 위치 = 고른 지점 → 직접 고른 관측소 자리 → 내 위치 (날씨·바람도 여기 기준)
+        val (lat, lon) = Spot.base(a, gpsLat, gpsLon) ?: (gpsLat to gpsLon)
         var cur = dayStart(time)
         val today = dayStart(System.currentTimeMillis())
         var loadId = 0
@@ -143,7 +152,7 @@ object TideDialog {
         // 만조·간조 알람 · 관측소 바꾸기 (맨 위로)
         val setRow = Ui.row(a)
         val alarmBtn = Ui.button(a, alarmLabel()).apply { minHeight = dp(44); textSize = 13f }
-        val changeBtn = Ui.button(a, "관측소 바꾸기 · 검색").apply { minHeight = dp(44); textSize = 13f }
+        val changeBtn = Ui.button(a, "📍 지점 · 관측소 검색").apply { minHeight = dp(44); textSize = 13f }
         setRow.addView(alarmBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
         setRow.addView(changeBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 8))
@@ -242,9 +251,18 @@ object TideDialog {
                     }
                 }, LinearLayout.LayoutParams(dp(64), dp(30)).apply { rightMargin = dp(6) })
             }
-            basisRow.addView(Ui.text(a, 10.5f, Ui.SUB, false, if (Store.windSea) "바다 위 바람 (낚시·해루질)" else "내 위치 칸 바람").apply {
+            basisRow.addView(Ui.text(a, 10.5f, Ui.SUB, false, if (Store.windSea) "바다 위 바람 (낚시·해루질)" else "기준 위치 칸 바람").apply {
                 maxLines = 2
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(4) })
+            // v5.1: 🌬 윈디 지도 (관리자 테스트)
+            if (Cloud.isAdmin) basisRow.addView(Ui.text(a, 11.5f, Color.parseColor("#F2C14E"), true, "🌬 윈디\n테스트").apply {
+                gravity = Gravity.CENTER
+                background = Ui.bg(a, Color.parseColor("#2A2310"), 12, Color.parseColor("#F2C14E"))
+                setOnClickListener {
+                    val sea = if (Store.windSea) Weather.seaPoint(lat, lon) else null
+                    Windy.show(a, sea?.lat ?: lat, sea?.lon ?: lon, Spot.current?.name ?: Tide.stationFor(a, lat, lon)?.name ?: "")
+                }
+            }, LinearLayout.LayoutParams(dp(64), dp(38)).apply { leftMargin = dp(4) })
         }
         paintBasis()
         val hourBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
@@ -757,12 +775,12 @@ object TideDialog {
             if (weekMode) Weather.fetchWeek(lat, lon) { l -> if (dlg.isShowing && weekMode) renderWeek(l) }
         }
 
+        // v5.1 (232): 지점·관측소를 바꾸면 기준 위치가 바뀌니 창을 새로 열기
         val pickStation = {
             StationPicker.show(a, lat, lon) {
-                titleView.text = titleText(a, lat, lon, cur)
-                stationBtn.text = stationSub(a, lat, lon)
                 onChanged?.invoke()
-                load()
+                dlg.dismiss()
+                show(a, gpsLat, gpsLon, cur, trip, onChanged)
             }
         }
         titleBox.setOnClickListener { pickStation() }

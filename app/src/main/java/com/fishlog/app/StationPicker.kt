@@ -21,6 +21,8 @@ import java.util.Locale
  *  - 관측소 이름 일부만 쳐도 걸러짐 ("송" → 인천송도)
  *  - 관측소가 없는 지명(무창포, 오천항 …)은 지도 검색으로 위치를 찾아 가까운 관측소를 보여줌 (인터넷 필요)
  *  - 최근에 고른 관측소 3곳은 위쪽에
+ *  - v5.1 (232): 카카오 장소 검색으로 지점 고르기 (예: 신도) → 물때는 가까운 관측소, 날씨·바람은 그 지점 기준
+ *                ⭐ 즐겨찾기 지점 (추가 · 이름 바꾸기 · 삭제)
  */
 object StationPicker {
 
@@ -31,7 +33,7 @@ object StationPicker {
         val all = Tide.stationsNear(a, lat, lon)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(4), dp(16), dp(4)) }
         val search = EditText(a).apply {
-            hint = "검색: 관측소 이름이나 지명 (예: 무창포)"
+            hint = "검색: 지명 · 섬 · 항구 · 관측소 (예: 신도)"
             inputType = InputType.TYPE_CLASS_TEXT
             setSingleLine()
             setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB)
@@ -41,12 +43,13 @@ object StationPicker {
         box.addView(list, Ui.lp(a, MATCH, WRAP))
 
         val dlg = AlertDialog.Builder(a, R.style.FlAlert)
-            .setTitle("물때 지역 (조위관측소)")
+            .setTitle("물때 · 날씨 지점")
             .setView(ScrollView(a).apply { addView(box) })
             .setNegativeButton("닫기", null)
             .create()
 
         fun pick(code: String?, name: String) {
+            Spot.current = null   // 관측소를 고르면 지점은 해제 (날씨는 관측소 자리 기준)
             Store.tideStation = code
             if (code != null) Store.rememberStation(code)
             dlg.dismiss()
@@ -70,6 +73,61 @@ object StationPicker {
         fun km(s: Tide.Station, la: Double?, lo: Double?): String =
             Tide.stationKm(s, la, lo)?.let { String.format(Locale.KOREA, "%.0fkm", it) } ?: ""
 
+        // ---- v5.1 (232): 지점 ----
+        fun pickPlace(p: Spot.Place) {
+            Spot.current = p
+            Store.tideStation = null   // 물때는 지점에서 가장 가까운 관측소
+            dlg.dismiss()
+            val st = Tide.stationFor(a, p.lat, p.lon)
+            android.widget.Toast.makeText(a, "📍 ${p.name} 기준으로 봐요" + (st?.let { " · 물때: ${it.name} 관측소" } ?: ""),
+                android.widget.Toast.LENGTH_SHORT).show()
+            onPicked()
+        }
+        fun smallBtn(label: String, color: Int, click: () -> Unit) = Ui.text(a, 13f, color, true, label).apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(a, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { click() }
+        }
+        var rerender: () -> Unit = {}
+        /** 지점 한 줄: 이름 · 주소 / 물때 관측소 · [☆ 또는 ✎ 🗑] */
+        fun placeRow(p: Spot.Place, favIndex: Int?): LinearLayout {
+            val on = Spot.current?.let { Spot.same(it, p) } == true
+            val near = Tide.stationsNear(a, p.lat, p.lon).firstOrNull()
+            val line = LinearLayout(a).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(10), dp(8), dp(10)); minimumHeight = dp(52)
+                background = Ui.bg(a, Ui.CARD, 12, if (on) Ui.GREEN else Ui.LINE)
+            }
+            val txt = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; isClickable = true; setOnClickListener { pickPlace(p) } }
+            txt.addView(Ui.text(a, 16f, Ui.TEXT, true, (if (on) "✓ " else "") + (if (favIndex != null) "⭐ " else "📍 ") + p.name))
+            val sub = listOfNotNull(p.sub.ifBlank { null },
+                near?.let { "물때: ${it.name} 관측소 " + km(it, p.lat, p.lon) }).joinToString("\n")
+            if (sub.isNotBlank()) txt.addView(Ui.text(a, 12f, Ui.SUB, false, sub))
+            line.addView(txt, LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (favIndex == null) {
+                val fav = Spot.isFav(p)
+                line.addView(smallBtn(if (fav) "★" else "☆", if (fav) android.graphics.Color.parseColor("#F2C14E") else Ui.TEXT) {
+                    if (Spot.addFav(p)) android.widget.Toast.makeText(a, "⭐ 즐겨찾기에 넣었어요", android.widget.Toast.LENGTH_SHORT).show()
+                    else android.widget.Toast.makeText(a, "이미 즐겨찾기에 있어요", android.widget.Toast.LENGTH_SHORT).show()
+                    rerender()
+                }, LinearLayout.LayoutParams(dp(42), dp(36)).apply { leftMargin = dp(6) })
+            } else {
+                line.addView(smallBtn("✎", Ui.TEXT) {
+                    val et = EditText(a).apply { setText(p.name); setSingleLine(); setTextColor(Ui.TEXT); setSelection(text.length) }
+                    AlertDialog.Builder(a, R.style.FlAlert).setTitle("즐겨찾기 이름 바꾸기")
+                        .setView(LinearLayout(a).apply { setPadding(dp(20), dp(4), dp(20), 0); addView(et, Ui.lp(a, MATCH, WRAP)) })
+                        .setPositiveButton("저장") { _, _ -> Spot.renameFav(favIndex, et.text.toString()); rerender() }
+                        .setNegativeButton("취소", null).show()
+                }, LinearLayout.LayoutParams(dp(42), dp(36)).apply { leftMargin = dp(6) })
+                line.addView(smallBtn("🗑", android.graphics.Color.parseColor("#FF8A92")) {
+                    AlertDialog.Builder(a, R.style.FlAlert).setTitle("즐겨찾기에서 지울까요?").setMessage(p.name)
+                        .setPositiveButton("지우기") { _, _ -> Spot.deleteFav(favIndex); rerender() }
+                        .setNegativeButton("취소", null).show()
+                }, LinearLayout.LayoutParams(dp(42), dp(36)).apply { leftMargin = dp(6) })
+            }
+            return line
+        }
+
         fun stationRow(s: Tide.Station): LinearLayout {
             val on = s.code == Store.tideStation
             return row((if (on) "✓ " else "") + s.name + "  " + km(s, lat, lon).let { if (it.isBlank()) "" else it }, onClick = { pick(s.code, s.name) })
@@ -81,7 +139,17 @@ object StationPicker {
             val key = q.replace(" ", "")
             fun add(v: LinearLayout) = list.addView(v, Ui.lp(a, MATCH, WRAP, top = 8))
             if (key.isEmpty()) {
-                add(row((if (Store.tideStation == null) "✓ " else "") + "가장 가까운 곳 자동 (추천)", strong = true) { pick(null, "") })
+                // v5.1: 지금 고른 지점 · ⭐ 즐겨찾기
+                Spot.current?.let { c ->
+                    add(row("지금 지점", onClick = null))
+                    add(placeRow(c, null))
+                    add(row("📍 지점 해제 (내 위치 · 관측소 기준으로)", "날씨 · 바람이 다시 내 위치 기준이 돼요") { pick(null, "") })
+                }
+                val favs = Spot.favorites()
+                add(row("⭐ 즐겨찾기 지점", if (favs.isEmpty()) "검색 결과의 ☆를 누르면 여기 들어와요" else "누르면 그 지점으로 · ✎ 이름 바꾸기 · 🗑 지우기", onClick = null))
+                favs.forEachIndexed { i, p -> add(placeRow(p, i)) }
+                add(row("물때 관측소", onClick = null))
+                add(row((if (Store.tideStation == null && Spot.current == null) "✓ " else "") + "가장 가까운 곳 자동 (추천)", strong = true) { pick(null, "") })
                 val recent = Store.recentStations().mapNotNull { c -> all.firstOrNull { it.code == c } }
                 if (recent.isNotEmpty()) {
                     add(row("최근에 고른 곳", onClick = null))
@@ -101,6 +169,17 @@ object StationPicker {
                 placeBox.addView(row("'$q' 지명 찾는 중…", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                 val id = ++searchId
                 Thread {
+                    // v5.1: 카카오 장소 검색 먼저 (섬 · 항구 · 낚시터 이름까지)
+                    val kr = Spot.kakao(q)
+                    if (kr.places.isNotEmpty()) {
+                        main.post {
+                            if (id != searchId || !dlg.isShowing) return@post
+                            placeBox.removeAllViews()
+                            placeBox.addView(row("📍 '$q' 지점 (누르면 이 지점 기준 · ☆ 즐겨찾기)", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
+                            kr.places.forEach { p -> placeBox.addView(placeRow(p, null), Ui.lp(a, MATCH, WRAP, top = 6)) }
+                        }
+                        return@Thread
+                    }
                     // 1) 폰 주소 찾기 (주소 · 동네)  2) 오픈스트리트맵 지명 (호수 · 섬 · 방파제 등, 예: 시화호) — v4.2
                     var netOk = false
                     val found = ArrayList<Triple<String, Double, Double>>()
@@ -130,16 +209,14 @@ object StationPicker {
                             placeBox.addView(row("지명 검색은 인터넷이 필요해요", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                             return@post
                         }
+                        if (kr.error.isNotBlank()) placeBox.addView(row("ⓘ " + kr.error, onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                         if (found.isEmpty()) {
                             placeBox.addView(row("'$q' 지명을 찾지 못했어요", "시 · 군 이름을 같이 써 보세요 (예: 시흥 시화호)", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                             return@post
                         }
+                        placeBox.addView(row("📍 '$q' 지점 (누르면 이 지점 기준 · ☆ 즐겨찾기)", onClick = null), Ui.lp(a, MATCH, WRAP, top = 8))
                         found.take(5).forEach { (name, la, lo) ->
-                            placeBox.addView(row("$name 근처 관측소", onClick = null), Ui.lp(a, MATCH, WRAP, top = 10))
-                            Tide.stationsNear(a, la, lo).take(3).forEach { s ->
-                                placeBox.addView(row("${s.name}  약 ${km(s, la, lo)}",
-                                    "누르면 이 관측소로 물때를 봐요") { pick(s.code, s.name) }, Ui.lp(a, MATCH, WRAP, top = 6))
-                            }
+                            placeBox.addView(placeRow(Spot.Place(name.substringBefore(" · "), la, lo, name.substringAfter(" · ", "")), null), Ui.lp(a, MATCH, WRAP, top = 6))
                         }
                     }
                 }.start()
@@ -157,6 +234,7 @@ object StationPicker {
                 pending = Runnable { render(q) }.also { main.postDelayed(it, if (q.length >= 2) 500L else 0L) }
             }
         })
+        rerender = { render(search.text?.toString()?.trim() ?: "") }
         render("")
         dlg.show()
     }

@@ -1915,6 +1915,7 @@ class MainActivity : Activity() {
     /** 첫 줄 맨 앞: 📍안산 (지금 위치의 시 · 군 이름 짧게) */
     private fun shortPlace(loc: Pair<Double, Double>?): String {
         if (loc == null) return ""
+        Spot.current?.let { return it.name }   // v5.1: 고른 지점 이름 (예: 신도)
         val full = Area.name(this, loc.first, loc.second) { refreshTideRow() }
         val w = full.trim().split(" ").firstOrNull()?.trim() ?: return ""
         return if (w.length >= 3 && (w.endsWith("시") || w.endsWith("군"))) w.dropLast(1) else w
@@ -1960,7 +1961,7 @@ class MainActivity : Activity() {
 
     private fun refreshTideRow() {
         val now = System.currentTimeMillis()
-        val loc = bestLocation()
+        val loc = Spot.base(this, bestLocation())   // v5.1: 고른 지점 · 관측소 기준
         paintTideTitle(now, loc)
         paintTideWeather(loc)
         paintSun(now, loc)
@@ -2066,7 +2067,7 @@ class MainActivity : Activity() {
     }
 
     private fun openTodayTide() {
-        val loc = bestLocation()
+        val loc = bestLocation() ?: Spot.base(this, null, null)
         if (loc == null) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 3)
             showMessage("위치를 알아야 물때를 볼 수 있어요. 위치 허용 후 다시 눌러주세요")

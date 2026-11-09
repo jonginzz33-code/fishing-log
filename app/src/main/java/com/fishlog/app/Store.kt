@@ -266,6 +266,14 @@ object Store {
         get() = if (::prefs.isInitialized) prefs.getBoolean("windSea", true) else true
         set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean("windSea", v).apply() }
 
+    /** v5.1 (232): 물때·날씨 지점 (카카오 검색으로 고른 곳, JSON) · 즐겨찾기 지점 목록 (JSON 배열) */
+    var wxPlace: String?
+        get() = if (::prefs.isInitialized) prefs.getString("wxPlace", null) else null
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString("wxPlace", v).apply() }
+    var favPlaces: String
+        get() = if (::prefs.isInitialized) prefs.getString("favPlaces", "[]")!! else "[]"
+        set(v) { if (::prefs.isInitialized) prefs.edit().putString("favPlaces", v).apply() }
+
     var tideStation: String?
         get() = prefs.getString("tideStation", null)
         set(v) { prefs.edit().putString("tideStation", v).apply(); fireChanged() }
