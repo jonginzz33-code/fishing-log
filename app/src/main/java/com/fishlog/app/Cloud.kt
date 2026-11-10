@@ -53,7 +53,9 @@ object Cloud {
         /** 대표 사진의 큰 사진 문서 이름 (photosBig/{mainId}), 예전 글은 "" → photosBig/main */
         val mainId: String = "",
         /** 그때 날씨 (출조 기록에 저장된 값, 없으면 "") */
-        val wx: String = ""
+        val wx: String = "",
+        /** v5.2 (240): 출조 후 조과를 고친 시각 · 고친 사람 이름 (없으면 0 · "") */
+        val editAt: Long = 0L, val editName: String = ""
     ) {
         fun bigMainPath(gid: String) = "groups/$gid/trips/$id/photosBig/" + mainId.ifBlank { "main" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -63,7 +65,9 @@ object Cloud {
         fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, editAt, editName)
+        fun withCatches(cs: List<RemoteCatch>, at: Long, by: String) = RemoteTrip(id, owner, ownerName, start, end, names, cs, track,
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, at, by)
         /** "유료 5만원" / "무료" / "" */
         fun costLabel(): String = Store.costLabel(paid, fee)
     }
@@ -412,6 +416,67 @@ object Cloud {
     }
 
     val isOwner: Boolean get() = active?.owner != null && active?.owner == uid
+
+    // ---------------- v5.2 (240): 출조 후 조과 고치기 (올린 사람 · 관리자) ----------------
+    private fun catchMaps(list: List<Store.Catch>) = list.sortedBy { it.time }.map {
+        val m = hashMapOf<String, Any>("t" to it.time, "s" to it.slot)
+        if (it.lat != null && it.lon != null) { m["la"] = it.lat; m["lo"] = it.lon }
+        m
+    }
+
+    /**
+     * 그룹 기록의 조과만 바꾸기 (사진 · 경로는 그대로)
+     *  forOwner = 관리자가 남의 기록을 고칠 때 그 사람 uid → 그 사람 폰이 다음에 열 때 폰 기록도 같이 고침
+     */
+    fun updateCatches(gid: String, docId: String, list: List<Store.Catch>, forOwner: String?, done: (String?) -> Unit) {
+        if (uid == null) return done("로그인이 필요해요")
+        val now = System.currentTimeMillis()
+        val up = hashMapOf<String, Any>("catches" to catchMaps(list), "total" to list.size, "updated" to now,
+            "editAt" to now, "editName" to if (forOwner != null) "관리자" else displayName)
+        if (forOwner != null) up["editFor"] = forOwner
+        db.collection("groups").document(gid).collection("trips").document(docId).update(up)
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "고치기 실패 (권한 · 인터넷 확인)") }
+    }
+
+    /** 내 폰 기록을 고친 뒤: 이 출조를 올린 그룹마다 조과 바꾸기 */
+    fun pushCatchEdit(t: Store.Trip, done: (String?) -> Unit = {}) {
+        val me = uid ?: return done(null)
+        val gs = Store.sharedGroups(t.id)
+        if (gs.isEmpty()) return done(null)
+        var left = gs.size; var err: String? = null
+        gs.forEach { gid -> updateCatches(gid, "${me}_${t.id}", t.catches.toList(), null) { e ->
+            if (e != null) err = e
+            if (--left == 0) done(err)
+        } }
+    }
+
+    /**
+     * 관리자가 고친 내 그룹 기록 → 내 폰 기록에도 반영 (안 하면 나중에 다시 올릴 때 잘못된 기록으로 돌아감)
+     *  done(고친 출조 수)
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun applyAdminEdits(done: (Int) -> Unit = {}) {
+        val me = uid ?: return done(0)
+        val gs = groups
+        if (gs.isEmpty()) return done(0)
+        var left = gs.size; var n = 0
+        gs.forEach { g ->
+            db.collection("groups").document(g.id).collection("trips").whereEqualTo("editFor", me).get()
+                .addOnSuccessListener { q ->
+                    q.documents.forEach { d ->
+                        val localId = d.id.removePrefix(me + "_").toLongOrNull() ?: return@forEach
+                        val list = (d.get("catches") as? List<Map<String, Any?>>)?.mapNotNull {
+                            val t = (it["t"] as? Number)?.toLong() ?: return@mapNotNull null
+                            Store.Catch(t, (it["s"] as? Number)?.toInt() ?: 1, (it["la"] as? Number)?.toDouble(), (it["lo"] as? Number)?.toDouble())
+                        } ?: return@forEach
+                        if (Store.find(localId) != null) { Store.replaceCatches(localId, list); n++ }
+                        d.reference.update("editFor", FieldValue.delete())
+                    }
+                }
+                .addOnCompleteListener { if (--left == 0) done(n) }
+        }
+    }
 
     // ---------------- 내 출조를 올린 그룹 ----------------
     /** 가입한 그룹마다 내가 올린 출조를 확인해서 폰에 기록 (지난 출조 화면의 "그룹 (N)") */
@@ -1083,7 +1148,8 @@ object Cloud {
             d.getBoolean("hasTrack") == true, if (cla != null && clo != null) cla to clo else null,
             d.getBoolean("paid"), (d.getLong("fee") ?: 0L).toInt(),
             (d.get("gear") as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
-            d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "")
+            d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "",
+            d.getLong("editAt") ?: 0L, d.getString("editName") ?: "")
     } catch (e: Exception) { null }
 
     private fun parsePts(list: List<Map<String, Any?>>?): List<Store.Pt> = list?.mapNotNull {

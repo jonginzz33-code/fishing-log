@@ -132,6 +132,149 @@ class TripActivity : Activity() {
 
     private val openHours = mutableSetOf<String>()
 
+    // ---------------- v5.2 (240): 출조 후 조과 고치기 (올린 사람 · 관리자만) ----------------
+    private var editMode = false
+    private val picked: MutableSet<Store.Catch> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+
+    private fun canEdit(t: Store.Trip): Boolean {
+        val r = remote
+        if (r != null) return Cloud.user != null && (r.owner == Cloud.uid || Cloud.isAdmin)
+        return t.end > 0 && t !== Store.current
+    }
+
+    private fun keepScroll(block: () -> Unit) {
+        val sv = root.parent as? ScrollView
+        val y = sv?.scrollY ?: 0
+        block()
+        sv?.post { sv.scrollTo(0, y) }
+    }
+
+    /** 고친 조과 저장: 내 폰 기록(있으면) → 올린 그룹들 / 관리자는 그룹 기록 + 올린 사람 폰에 나중에 반영 */
+    private fun commitCatches(t: Store.Trip, list: List<Store.Catch>, msg: String) {
+        val r = remote
+        val sorted = list.sortedBy { it.time }
+        picked.clear()
+        fun ok(e: String?) {
+            Toast.makeText(this, e ?: msg, Toast.LENGTH_SHORT).show()
+        }
+        if (r == null) {
+            Store.replaceCatches(t.id, sorted)
+            Store.find(t.id)?.let { tt -> Cloud.pushCatchEdit(tt) { e -> if (!isFinishing) ok(e?.let { "폰 기록은 고쳤어요 · 그룹 기록은 못 고쳤어요 ($it)" }) } }
+                ?: ok(null)
+            keepScroll { render() }
+            return
+        }
+        val mine = r.owner == Cloud.uid
+        val local = if (mine) r.id.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
+        val after = { e: String? ->
+            if (!isFinishing) {
+                if (e == null) {
+                    remote = r.withCatches(sorted.map { Cloud.RemoteCatch(it.time, it.slot, it.lat, it.lon) },
+                        System.currentTimeMillis(), if (mine) Cloud.displayName else "관리자")
+                    remoteTrip?.catches?.let { cs -> cs.clear(); cs.addAll(sorted) }
+                    setResult(RESULT_OK, Intent().putExtra("edited", true))
+                    keepScroll { render() }
+                }
+                ok(e)
+            }
+        }
+        if (local != null) {
+            Store.replaceCatches(local.id, sorted)
+            Cloud.pushCatchEdit(Store.find(local.id) ?: local) { e -> after(e) }
+        } else {
+            val g = Cloud.active ?: return ok("그룹을 못 찾았어요")
+            Cloud.updateCatches(g.id, r.id, sorted, if (mine) null else r.owner) { e -> after(e) }
+        }
+    }
+
+    /** 한 마리 고치기 / 추가 (c == null 이면 추가) */
+    private fun editCatchDialog(t: Store.Trip, c: Store.Catch?) {
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = c?.time ?: (t.catches.lastOrNull()?.time ?: (if (t.end > 0) t.end else t.start)) }
+        var slot = c?.slot ?: (t.catches.lastOrNull()?.slot ?: 1)
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), 0) }
+        val timeBtn = Ui.button(this, "") {}
+        fun paintTime() { timeBtn.text = "시각  " + SimpleDateFormat("MM.dd HH:mm", Locale.KOREA).format(cal.time) + "  ✎" }
+        paintTime()
+        timeBtn.setOnClickListener {
+            android.app.TimePickerDialog(this, { _, h, m ->
+                cal.set(java.util.Calendar.HOUR_OF_DAY, h); cal.set(java.util.Calendar.MINUTE, m); paintTime()
+            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show()
+        }
+        col.addView(timeBtn, Ui.lp(this, MATCH, WRAP))
+        col.addView(Ui.text(this, 13f, Ui.SUB, true, "어종"), Ui.lp(this, MATCH, WRAP, top = 12))
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val slots = ((1..maxOf(2, t.names.size)).toList() + t.catches.map { it.slot }).distinct().sorted()
+        fun paintChips() {
+            chips.removeAllViews()
+            slots.forEach { sl ->
+                val on = sl == slot
+                val color = if (sl in 1..Ui.SLOT.size) Ui.SLOT[sl - 1] else Store.slotColor(sl)
+                chips.addView(Ui.text(this, 14f, if (on) android.graphics.Color.parseColor("#111111") else Ui.TEXT, true, t.name(sl)).apply {
+                    gravity = Gravity.CENTER; setPadding(dp(14), dp(8), dp(14), dp(8))
+                    background = if (on) Ui.bg(this@TripActivity, color, 99) else Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener { slot = sl; paintChips() }
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+            }
+        }
+        paintChips()
+        col.addView(Ui.hscroll(this, chips), Ui.lp(this, MATCH, WRAP, top = 6))
+        if (c == null) col.addView(Ui.text(this, 11.5f, Ui.SUB, false, "추가한 조과는 위치 없이 들어가요"), Ui.lp(this, MATCH, WRAP, top = 10))
+        AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle(if (c == null) "＋ 조과 추가" else "✎ 한 마리 고치기")
+            .setView(col)
+            .setPositiveButton("저장") { _, _ ->
+                val list = t.catches.toMutableList()
+                if (c == null) {
+                    list.add(Store.Catch(cal.timeInMillis, slot))
+                    commitCatches(t, list, "${t.name(slot)} 1마리 추가했어요")
+                } else {
+                    val i = list.indexOfFirst { it === c }
+                    if (i >= 0) list[i] = Store.Catch(cal.timeInMillis, slot, c.lat, c.lon, c.acc, c.q)
+                    commitCatches(t, list, "고쳤어요")
+                }
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    private fun askDelete(t: Store.Trip, what: Collection<Store.Catch>) {
+        if (what.isEmpty()) return
+        val by = what.groupingBy { it.slot }.eachCount().entries.joinToString(" · ") { "${t.name(it.key)} ${it.value}" }
+        AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle("${what.size}마리 지울까요?")
+            .setMessage("$by\n\n지우면 그룹 기록 · 순위에도 같이 반영돼요")
+            .setPositiveButton("지우기") { _, _ ->
+                val set: MutableSet<Store.Catch> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+                set.addAll(what)
+                commitCatches(t, t.catches.filter { it !in set }, "${what.size}마리 지웠어요")
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    /** 고치기 모드의 한 줄: ☐ 시각 · 어종 · ✎ · 🗑 */
+    private fun editRow(t: Store.Trip, c: Store.Catch): View {
+        val r = Ui.row(this).apply { setPadding(dp(4), dp(4), 0, dp(4)) }
+        val on = c in picked
+        r.addView(Ui.text(this, 14f, android.graphics.Color.WHITE, true, if (on) "✓" else "").apply {
+            gravity = Gravity.CENTER
+            background = if (on) Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#FF6B6B"), 6)
+                else Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 6, Ui.SUB)
+            setOnClickListener { if (on) picked.remove(c) else picked.add(c); keepScroll { render() } }
+        }, LinearLayout.LayoutParams(dp(26), dp(26)))
+        r.addView(Ui.text(this, 14f, Ui.TEXT, false, tf.format(Date(c.time))).apply { typeface = android.graphics.Typeface.MONOSPACE },
+            LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
+        r.addView(View(this).apply { background = Ui.bg(this@TripActivity, (if (c.slot in 1..Ui.SLOT.size) Ui.SLOT[c.slot - 1] else Store.slotColor(c.slot)), 99) },
+            LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = dp(8) })
+        r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot)), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        fun ic(label: String, color: Int, click: () -> Unit) = Ui.text(this, 13f, color, true, label).apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { click() }
+        }
+        r.addView(ic("✎", Ui.TEXT) { editCatchDialog(t, c) }, LinearLayout.LayoutParams(dp(40), dp(32)).apply { leftMargin = dp(6) })
+        r.addView(ic("🗑", android.graphics.Color.parseColor("#FF8A92")) { askDelete(t, listOf(c)) }, LinearLayout.LayoutParams(dp(40), dp(32)).apply { leftMargin = dp(6) })
+        return r
+    }
+
     /** 기록 한 줄: 사진 · 시각 · 어종 */
     private fun catchRow(t: Store.Trip, c: Store.Catch): View {
         val r = Ui.row(this).apply { setPadding(dp(6), dp(6), 0, dp(6)) }
@@ -427,7 +570,23 @@ class TripActivity : Activity() {
         }
 
         // 기록: 시간대별 요약 → 누르면 그 시간 상세 → 전체 보기
-        section("시간대별 기록")
+        // v5.2 (240): 제목 줄 오른쪽 '✎ 조과 고치기' (올린 사람 · 관리자만)
+        val canEd = canEdit(t)
+        val secRow = Ui.row(this)
+        secRow.addView(Ui.text(this, 16f, Ui.TEXT, true, "시간대별 기록"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (canEd) secRow.addView(Ui.text(this, 13f, if (editMode) Ui.TEXT else android.graphics.Color.parseColor("#06303A"), true,
+            if (editMode) "✓ 다 고쳤어요" else "✎ 조과 고치기").apply {
+            gravity = Gravity.CENTER; setPadding(dp(14), dp(7), dp(14), dp(7))
+            background = if (editMode) Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+                else Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#5BC8E8"), 99)
+            setOnClickListener { editMode = !editMode; picked.clear(); keepScroll { render() } }
+        })
+        root.addView(secRow, Ui.lp(this, MATCH, WRAP, top = 22))
+        val edInfo = listOfNotNull(
+            if (editMode) (if (viewOnly && remote?.owner != Cloud.uid) "관리자로 고치는 중 · 올린 사람 폰 기록에도 나중에 반영돼요" else "고치면 올린 그룹 기록 · 순위에도 같이 반영돼요") else null,
+            remote?.takeIf { it.editAt > 0 }?.let { "수정됨 · ${it.editName} · " + SimpleDateFormat("MM.dd HH:mm", Locale.KOREA).format(Date(it.editAt)) })
+        if (edInfo.isNotEmpty()) root.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), false, edInfo.joinToString("\n")),
+            Ui.lp(this, MATCH, WRAP, top = 4))
         val list = Ui.card(this)
         if (t.catches.isEmpty()) list.addView(Ui.text(this, 14f, Ui.SUB, false, "기록이 없어요"))
         val hourKey = java.text.SimpleDateFormat("yyyyMMddHH", java.util.Locale.KOREA)
@@ -458,7 +617,23 @@ class TripActivity : Activity() {
                 (if (photos > 0) "  📷 $photos" else "")), LinearLayout.LayoutParams(0, WRAP, 1f))
             head.addView(Ui.text(this, 12f, Ui.SUB, true, if (open) "접기 ▲" else "상세 ▼"))
             list.addView(head, Ui.lp(this, MATCH, WRAP, top = 6))
-            if (open) cs.asReversed().forEach { c -> list.addView(catchRow(t, c)) }
+            if (open && editMode) {
+                val all = cs.all { it in picked }
+                list.addView(Ui.text(this, 12.5f, android.graphics.Color.parseColor("#FF8A92"), true,
+                    (if (all) "☑ " else "☐ ") + java.text.SimpleDateFormat("HH시", java.util.Locale.KOREA).format(Date(hour)) + " 전부 고르기").apply {
+                    setPadding(dp(12), dp(5), dp(12), dp(5))
+                    background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, android.graphics.Color.parseColor("#FF6B6B"))
+                    setOnClickListener { if (all) picked.removeAll(cs.toSet()) else picked.addAll(cs); keepScroll { render() } }
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(8); leftMargin = dp(4) })
+                cs.forEach { c -> list.addView(editRow(t, c)) }
+            } else if (open) cs.asReversed().forEach { c -> list.addView(catchRow(t, c)) }
+        }
+        if (editMode) {
+            if (picked.isNotEmpty()) list.addView(Ui.button(this, "🗑 고른 ${picked.size}마리 지우기") { askDelete(t, picked.toList()) }.apply {
+                setTextColor(android.graphics.Color.parseColor("#FF8A92"))
+            }, Ui.lp(this, MATCH, WRAP, top = 10))
+            list.addView(Ui.button(this, "＋ 조과 추가 (시각 · 어종)") { editCatchDialog(t, null) }, Ui.lp(this, MATCH, WRAP, top = 8))
+            list.addView(Ui.text(this, 11.5f, Ui.SUB, false, "시간대를 눌러 펼친 뒤 ✎ 고치기 · 🗑 지우기 · 체크해서 여러 마리 한 번에"), Ui.lp(this, MATCH, WRAP, top = 6))
         }
         if (t.catches.size > 1) list.addView(Ui.button(this, "전체 보기 (${t.catches.size}) ›") { showAllCatches(t) }.apply { minHeight = dp(42); textSize = 14f },
             Ui.lp(this, MATCH, WRAP, top = 10))
@@ -477,7 +652,7 @@ class TripActivity : Activity() {
             if (delLabel != null) root.addView(Ui.button(this, delLabel) {
                 setResult(RESULT_OK, Intent().putExtra("remove", r.id)); finish()
             }.apply { setTextColor(android.graphics.Color.parseColor("#FF8A92")) }, Ui.lp(this, MATCH, WRAP, top = 8))
-            root.addView(Ui.text(this, 12f, Ui.SUB, false, "수정 · 삭제는 올린 사람만 할 수 있어요").apply { gravity = Gravity.CENTER },
+            root.addView(Ui.text(this, 12f, Ui.SUB, false, "조과 고치기는 올린 사람 · 관리자만 할 수 있어요").apply { gravity = Gravity.CENTER },
                 Ui.lp(this, MATCH, WRAP, top = 10))
             return
         }

@@ -322,6 +322,7 @@ class GroupTripsActivity : Activity() {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != TripActivity.REQ_REMOTE || resultCode != RESULT_OK) return
+        if (data?.getBooleanExtra("edited", false) == true) { load(); return }   // v5.2 (240): 조과를 고쳤으면 목록 새로
         val id = data?.getStringExtra("remove") ?: return
         shown.firstOrNull { it.id == id }?.let { confirmRemove(listOf(it)) }
     }

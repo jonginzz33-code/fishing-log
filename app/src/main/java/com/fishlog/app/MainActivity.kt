@@ -269,6 +269,8 @@ class MainActivity : Activity() {
         handler.post { handleOpen(intent) }
     }
 
+    private var adminEditCheckAt = 0L
+
     override fun onResume() {
         super.onResume()
         // 처음 한 번: 위치·개인정보 동의 (동의해야 사용)
@@ -278,6 +280,11 @@ class MainActivity : Activity() {
         }
         paintBoardSub(); paintNowBtn()
         resumeAfterLoc()
+        // v5.2 (240): 관리자가 고친 내 그룹 기록 → 폰 기록에도 (10분에 한 번)
+        if (Cloud.user != null && Cloud.groups.isNotEmpty() && System.currentTimeMillis() - adminEditCheckAt > 10 * 60_000L) {
+            adminEditCheckAt = System.currentTimeMillis()
+            Cloud.applyAdminEdits { n -> if (n > 0 && !isFinishing) android.widget.Toast.makeText(this, "관리자가 내 출조 ${n}개의 조과를 고쳤어요 (폰 기록도 같이 고침)", android.widget.Toast.LENGTH_LONG).show() }
+        }
         if (crashShown || gated) return
         // 관리자가 이용 정지한 계정·폰이면 막는 화면만
         if (Moderation.bannedCached) { crashShown = true; Moderation.showBlockedScreen(this); return }

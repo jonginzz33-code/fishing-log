@@ -615,6 +615,15 @@ object Store {
         changed()
     }
 
+    /** v5.2 (240): 출조 후 조과 고치기 — 끝난 출조만 (지금 출조 중인 기록은 안 됨) */
+    fun replaceCatches(tripId: Long, list: List<Catch>) {
+        val t = find(tripId) ?: return
+        if (t === current) return
+        t.catches.clear(); t.catches.addAll(list.sortedBy { it.time })
+        t.backedUp = false
+        changed()
+    }
+
     fun addPhotos(tripId: Long, list: List<Photo>) {
         val t = find(tripId) ?: return
         t.photos.addAll(list)
