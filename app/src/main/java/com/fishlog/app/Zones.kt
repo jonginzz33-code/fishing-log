@@ -1672,6 +1672,7 @@ object Zones {
         root.addView(hs)
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(MATCH, MATCH))
+        MapDialog.zoomButtons(a, frame, map)   // v5.2 (237)
         root.addView(frame, LinearLayout.LayoutParams(MATCH, 0, 1f))
         fun pill(label: String, color: Int, onClick: () -> Unit) = Ui.text(a, 13f, color, true, label).apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1

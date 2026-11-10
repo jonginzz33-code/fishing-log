@@ -46,13 +46,41 @@ class TripActivity : Activity() {
     private val df = SimpleDateFormat("yyyy년 M월 d일 (E)", Locale.KOREA)
 
     private fun dp(v: Int) = Ui.dp(this, v)
-    private val trip: Store.Trip? get() = Store.find(tripId)
+    private val trip: Store.Trip? get() = remoteTrip ?: Store.find(tripId)
+
+    // ---- v5.2 (239): 그룹 출조 기록에서 남의 출조 보기 (보기 전용) ----
+    companion object {
+        /** 그룹 출조 목록에서 넘겨주는 출조 (Intent로 넘기기엔 커서 잠깐 보관) */
+        var remoteView: Cloud.RemoteTrip? = null
+        const val REQ_REMOTE = 7239
+    }
+    private var remote: Cloud.RemoteTrip? = null
+    private var remoteTrip: Store.Trip? = null
+    private val viewOnly get() = remote != null
+
+    private fun toTrip(r: Cloud.RemoteTrip): Store.Trip = Store.Trip(
+        id = r.start, start = r.start, end = if (r.end > 0) r.end else r.start,
+        names = r.names.toTypedArray(),
+        catches = r.catches.map { Store.Catch(it.time, it.slot, it.lat, it.lon) }.sortedBy { it.time }.toMutableList(),
+        track = r.track.toMutableList(),
+        boat = r.boat, port = r.port, cat = r.cat, paid = r.paid, fee = r.fee,
+        gear = r.gear.toMutableList(), wx = r.wx)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
         account = AccountUi(this)
         tripId = intent.getLongExtra("id", 0L)
+        if (intent.getBooleanExtra("remote", false)) {
+            remote = remoteView
+            remote?.let { r ->
+                remoteTrip = toTrip(r)
+                // 이동 경로는 따로 받기 (목록에는 경로가 없음)
+                if (r.hasTrack && r.track.isEmpty()) Cloud.loadTracks(listOf(r)) { l ->
+                    l.firstOrNull()?.let { full -> if (!isFinishing && full.track.isNotEmpty()) { remote = full; remoteTrip = toTrip(full); loadTide(); render() } }
+                }
+            }
+        }
         window.statusBarColor = Ui.BG
         window.navigationBarColor = Ui.BG
         root = Ui.column(this)
@@ -145,6 +173,7 @@ class TripActivity : Activity() {
     private fun renderWx(t: Store.Trip, card: LinearLayout) {
         card.removeAllViews()
         val snap = if (t.wx.isNotBlank()) Weather.snapFromJson(t.wx) else null
+        if (snap == null && viewOnly) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "이 출조에는 저장된 날씨가 없어요")); return }
         if (snap == null) {
             if (t.end <= 0) { card.addView(Ui.text(this, 13f, Ui.SUB, false, "출조를 완료하면 그 시간대 날씨가 여기에 저장돼요")); return }
             card.addView(Ui.text(this, 13f, Ui.SUB, false, if (wxAsked) "날씨를 못 받았어요 (인터넷 확인)" else "그날 날씨 불러오는 중… (한 번만 받아서 기록에 저장해요)"))
@@ -195,6 +224,14 @@ class TripActivity : Activity() {
         // 상단
         val top = Ui.row(this)
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
+        remote?.let { r ->
+            top.addView(Ui.text(this, 17f, Ui.TEXT, true, r.ownerName).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },
+                LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
+            top.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), true, "👀 보기 전용").apply {
+                setPadding(dp(10), dp(4), dp(10), dp(4))
+                background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, android.graphics.Color.parseColor("#F2C14E"))
+            })
+        }
         root.addView(top)
         val endTime = if (t.end > 0) t.end else System.currentTimeMillis()
         root.addView(Ui.text(this, 13f, Ui.SUB, false,
@@ -202,8 +239,8 @@ class TripActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 14))
         root.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = Ui.dp(this@TripActivity, 4) })
         root.addView(Ui.text(this, 22f, Ui.TEXT, true, df.format(Date(t.start)) + " " +
-            (if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
-            setOnClickListener { askPlace(t) }
+            (if (viewOnly) t.place() else if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
+            if (!viewOnly) setOnClickListener { askPlace(t) }
         }, Ui.lp(this, MATCH, WRAP, top = 2))
         root.addView(Ui.text(this, 13f, Ui.SUB, false,
             (if (t.cat.isNotBlank()) Store.catLabel(t.cat) + " · " else "") + Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
@@ -233,6 +270,14 @@ class TripActivity : Activity() {
         renderWx(t, wxCard)
 
         section("이용료 · 준비물")
+        if (viewOnly) {
+            val cc = Ui.card(this)
+            cc.addView(Ui.text(this, 14f, Ui.TEXT, false, listOf(
+                t.costLabel().ifBlank { "이용료 안 적음" }.let { "💳 $it" },
+                if (t.gear.isEmpty()) "" else "🎒 " + t.gear.joinToString(" · ")).filter { it.isNotBlank() }.joinToString("\n")))
+            cc.addView(Ui.text(this, 11f, Ui.SUB, false, "그룹원만 보여요"), Ui.lp(this, MATCH, WRAP, top = 4))
+            root.addView(cc, Ui.lp(this, MATCH, WRAP, top = 10))
+        } else {
         val costCard = Ui.card(this)
         val tripCat = t.cat.ifBlank { Store.category }
         val hasCost = t.paid != null || t.gear.isNotEmpty()
@@ -245,6 +290,7 @@ class TripActivity : Activity() {
         }.apply { minHeight = dp(46) }, Ui.lp(this, MATCH, WRAP, top = 12))
         costCard.addView(saveMsg, Ui.lp(this, MATCH, WRAP, top = 6))
         root.addView(costCard, Ui.lp(this, MATCH, WRAP, top = 10))
+        }
 
         // 지도
         section("이동 경로 · 잡은 위치")
@@ -322,6 +368,18 @@ class TripActivity : Activity() {
             root.addView(bc, Ui.lp(this, MATCH, WRAP, top = 10))
         }
 
+        // v5.2: 보기 전용이면 서버 사진
+        remote?.let { r ->
+            if (r.mthumb.isNotBlank() || r.photoCount > 0) section("📸 사진 ${r.photoCount}장")
+            if (r.mthumb.isNotBlank()) root.addView(ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+                background = Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#0F2233"), 12, Ui.LINE)
+                MainPhoto.decode(r.mthumb)?.let { setImageBitmap(it) }
+                setOnClickListener { Cloud.active?.let { g -> MainPhoto.showBig(this@TripActivity, r.bigMainPath(g.id), r.mthumb, "${r.ownerName} · ${r.line()}") } }
+            }, LinearLayout.LayoutParams(dp(140), dp(140)).apply { topMargin = dp(8) })
+            if (r.photoCount > 0) root.addView(Ui.button(this, "사진 모두 보기 (${r.photoCount}장)") { account.showPhotos(r) }, Ui.lp(this, MATCH, WRAP, top = 10))
+        }
+        if (!viewOnly) {
         // 대표 조과 사진: 바꾸기(찍기·앨범) · 이 출조 사진 중 고르기 · 빼기
         section("📸 대표 조과 사진")
         val mr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -366,6 +424,7 @@ class TripActivity : Activity() {
             val un = t.photos.count { it.catchTime == null }
             if (un > 0) root.addView(Ui.text(this, 12f, Ui.SUB, false, "흐린 사진 ${un}장은 아직 조과에 안 붙었어요 · 눌러서 직접 지정"), Ui.lp(this, MATCH, WRAP, top = 6))
         }
+        }
 
         // 기록: 시간대별 요약 → 누르면 그 시간 상세 → 전체 보기
         section("시간대별 기록")
@@ -405,6 +464,23 @@ class TripActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 10))
         root.addView(list, Ui.lp(this, MATCH, WRAP, top = 10))
 
+        // v5.2: 보기 전용 메뉴 — 함께한 출조 · (올린 사람 · 그룹장 · 관리자) 그룹에서 내리기
+        remote?.let { r ->
+            section("메뉴")
+            root.addView(Ui.button(this, "🗺 함께한 출조 지도 · 순위", true) { account.showTogether(r) }, Ui.lp(this, MATCH, WRAP, top = 10))
+            val mine = r.owner == Cloud.uid
+            val local = if (mine) r.id.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
+            if (local != null) root.addView(Ui.button(this, "✎ 내 출조 기록 열기 (수정)") {
+                startActivity(Intent(this, TripActivity::class.java).putExtra("id", local.id))
+            }, Ui.lp(this, MATCH, WRAP, top = 8))
+            val delLabel = when { mine -> "🗑 그룹에서 내리기"; Cloud.isOwner -> "🗑 그룹에서 내리기 (그룹장)"; Cloud.isAdmin -> "🗑 그룹에서 내리기 (관리자)"; else -> null }
+            if (delLabel != null) root.addView(Ui.button(this, delLabel) {
+                setResult(RESULT_OK, Intent().putExtra("remove", r.id)); finish()
+            }.apply { setTextColor(android.graphics.Color.parseColor("#FF8A92")) }, Ui.lp(this, MATCH, WRAP, top = 8))
+            root.addView(Ui.text(this, 12f, Ui.SUB, false, "수정 · 삭제는 올린 사람만 할 수 있어요").apply { gravity = Gravity.CENTER },
+                Ui.lp(this, MATCH, WRAP, top = 10))
+            return
+        }
         // 동작
         section("메뉴")
         root.addView(Ui.button(this, "출조 종류: " + Store.catLabel(t.cat).ifBlank { "없음" } + "  (바꾸기)") { askCat(t) },

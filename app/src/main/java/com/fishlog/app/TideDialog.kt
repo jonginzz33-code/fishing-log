@@ -259,7 +259,7 @@ object TideDialog {
                 gravity = Gravity.CENTER
                 background = Ui.bg(a, Color.parseColor("#2A2310"), 12, Color.parseColor("#F2C14E"))
                 setOnClickListener {
-                    val sea = if (Store.windSea) Weather.seaPoint(lat, lon) else null
+                    val sea = if (Store.windSea) Weather.seaPoint(lat, lon, net = false) else null
                     Windy.show(a, sea?.lat ?: lat, sea?.lon ?: lon, Spot.current?.name ?: Tide.stationFor(a, lat, lon)?.name ?: "")
                 }
             }, LinearLayout.LayoutParams(dp(64), dp(38)).apply { leftMargin = dp(4) })

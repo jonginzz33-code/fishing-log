@@ -83,6 +83,7 @@ object PointMap {
         val liveMe = LiveMe.attach(a, map, emptyList(), "포인트", autoFit = false)
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(MATCH, MATCH))
+        MapDialog.zoomButtons(a, frame, map) { v -> liveMe.goToMe(v) }   // v5.2 (237)
         root.addView(frame, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
         val info = Ui.text(a, 12.5f, Ui.SUB, false, "")

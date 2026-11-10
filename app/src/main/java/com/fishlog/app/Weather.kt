@@ -525,13 +525,32 @@ object Weather {
     /** v5.1 (231): 해상 기준점 — 해안을 따라 미리 정해 둔 바다 지점 중 가장 가까운 곳 (cell = 그 자리 기상청 칸) */
     class SeaPoint(val name: String, val lat: Double, val lon: Double, val km: Int, val cell: Pair<Int, Int>)
 
-    fun seaPoint(lat: Double, lon: Double): SeaPoint {
+    /**
+     * v5.2 (233-2): 섬 · 바닷가 지점을 골랐으면 그 지점 자기 기상청 칸을 먼저 —
+     *  그 칸에 파고(WAV)가 나오면 바다 칸이니 그대로 쓰고, 아니면 해상 기준점
+     *  net = false: 인터넷 안 씀 (화면 스레드, 확인해 둔 결과만)
+     */
+    private val ownSeaCache = HashMap<String, Boolean>()
+    fun seaPoint(lat: Double, lon: Double, net: Boolean = true): SeaPoint {
+        Spot.current?.let { pl ->
+            if (Spot.km(pl.lat, pl.lon, lat, lon) < 0.5) {
+                val c = grid(lat, lon)
+                val ck = "${c.first},${c.second}"
+                val sea = ownSeaCache[ck] ?: if (!net) null else try {
+                    kmaItemsAt(c.first, c.second).any { it.optString("category") == "WAV" &&
+                        (it.optString("fcstValue").toDoubleOrNull() ?: -1.0).let { v -> v > 0 && v < 30 } }
+                        .also { ownSeaCache[ck] = it }
+                } catch (_: Exception) { null }
+                if (sea == true) return SeaPoint("${pl.name} 자리 (바다 칸)", lat, lon, 0, c)
+            }
+        }
         val p = Spot.nearestSea(lat, lon)
         return SeaPoint(p.ref.name, p.ref.lat, p.ref.lon, p.km, grid(p.ref.lat, p.ref.lon))
     }
 
     /** 바람 기준 안내 한 줄 */
     fun basisLine(sp: SeaPoint?): String = if (sp == null) "바람: 육상 기준 (기준 위치 칸 · 건물·지형에 막혀 바다보다 약하게 나와요)"
+        else if (sp.km < 1) "바람·파도·수온: 해상 기준 · ${sp.name}"
         else "바람·파도·수온: 해상 기준 · ${sp.name} (기준 위치에서 약 ${sp.km}km)"
 
     /** 가장 최근 발표 (02·05·08·11·14·17·20·23시, 발표 10분 뒤부터) */

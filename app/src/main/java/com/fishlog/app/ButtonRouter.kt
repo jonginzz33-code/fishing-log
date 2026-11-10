@@ -24,6 +24,37 @@ object ButtonRouter {
     private var watchAt = 0L
     private val lastAtByCode = HashMap<String, Long>()
 
+    // ---- v5.2 (238): 누르고 있으면 한 번만 · 빠르게 두 번 누르면 두 번 ----
+    //  볼륨 신호 리모컨은 누르고 있는 동안 신호를 0.05초마다 계속 보냄 → 그 반복은 한 번으로
+    private const val HOLD_GAP_MS = 160L          // 이보다 짧은 간격으로 이어지면 '누르고 있는 중'
+    private const val HOLD_AFTER_TAP_MS = 1000L   // 한 번 센 뒤 이 안에 시작된 반복은 같은 누름 (반복 시작 전 멈칫하는 시간)
+    private val sigAt = HashMap<String, Long>()
+    private val countedAt = HashMap<String, Long>()
+    private val burstDone = HashSet<String>()
+    private val pendingTap = HashMap<String, Pair<Long, Runnable>>()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private fun tap(ctx: Context, code: String) {
+        if (learningStep != 0) { handle(ctx, code, false); return }
+        val app = ctx.applicationContext
+        val now = SystemClock.elapsedRealtime()
+        val gap = now - (sigAt[code] ?: 0L)
+        sigAt[code] = now
+        if (gap < HOLD_GAP_MS) {
+            // 누르고 있는 중 (반복 신호)
+            if (code in burstDone) return
+            burstDone.add(code)
+            val start = pendingTap.remove(code)?.let { (t, r) -> main.removeCallbacks(r); t } ?: now
+            // 방금 센 누름에 이어진 반복이면 무시, 처음부터 반복으로 오는 리모컨이면 한 번 셈
+            if (start - (countedAt[code] ?: Long.MIN_VALUE / 2) > HOLD_AFTER_TAP_MS) { countedAt[code] = start; handle(app, code, false) }
+            return
+        }
+        burstDone.remove(code)
+        val r = Runnable { pendingTap.remove(code); countedAt[code] = now; handle(app, code, false) }
+        pendingTap[code] = now to r
+        main.postDelayed(r, HOLD_GAP_MS)
+    }
+
     fun startLearning(n: Int = 1) {
         learningStep = n.coerceIn(1, Store.MAX_REMOTE)
         onMessage?.invoke("리모컨에서 ${learningStep}번으로 쓸 버튼을 한 번 눌러주세요")
@@ -74,7 +105,8 @@ object ButtonRouter {
 
     /** 키를 뗐을 때 호출. 누른 시간으로 짧게/길게 구분 */
     fun onKeyUp(ctx: Context, keyCode: Int, heldMs: Long) {
-        handle(ctx, codeOf(keyCode), heldMs >= LONG_PRESS_MS)
+        if (heldMs >= LONG_PRESS_MS) handle(ctx, codeOf(keyCode), true)
+        else tap(ctx, codeOf(keyCode))
     }
 
     /** 갤럭시 워치 음악 컨트롤러: ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번 */
@@ -90,7 +122,7 @@ object ButtonRouter {
     }
 
     /** 누름/뗌 구분이 없는 입력 (볼륨 조절 신호) */
-    fun onPress(ctx: Context, code: String) = handle(ctx, code, false)
+    fun onPress(ctx: Context, code: String) = tap(ctx, code)
 
     private fun handle(ctx: Context, code: String, longPress: Boolean) {
         val now = SystemClock.elapsedRealtime()

@@ -76,11 +76,41 @@ object MapDialog {
         configure(a)
         return MapView(a).apply {
             setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
     }
+    /**
+     * v5.2 (237): 지도 ＋/－ 버튼 — 오른쪽 아래 반투명 어두운 둥근 묶음 (＋ 위 · － 아래) + 그 아래 ◎ 내 위치
+     *  onMe = null 이면 ◎ 없음
+     */
+    fun zoomButtons(a: Activity, frame: FrameLayout, map: MapView, onMe: ((TextView?) -> Unit)? = null) {
+        map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+        val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
+        fun box() = GradientDrawable().apply { setColor(Color.argb(225, 11, 26, 38)); cornerRadius = dp(a, 14).toFloat(); setStroke(dp(a, 1), Color.parseColor("#2C4656")) }
+        val pair = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; background = box(); elevation = dp(a, 3).toFloat() }
+        fun key(label: String, click: () -> Unit) = TextView(a).apply {
+            text = label; textSize = 24f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER; includeFontPadding = false
+            setOnClickListener { click() }
+        }
+        pair.addView(key("＋") { map.controller.zoomIn() }, LinearLayout.LayoutParams(dp(a, 46), dp(a, 46)))
+        pair.addView(android.view.View(a).apply { setBackgroundColor(Color.parseColor("#2C4656")) },
+            LinearLayout.LayoutParams(dp(a, 30), dp(a, 1)).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        pair.addView(key("－") { map.controller.zoomOut() }, LinearLayout.LayoutParams(dp(a, 46), dp(a, 46)))
+        col.addView(pair, LinearLayout.LayoutParams(dp(a, 46), ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (onMe != null) col.addView(TextView(a).apply {
+            text = "◎"; textSize = 22f; setTextColor(Color.parseColor("#6FC3FF")); typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER; includeFontPadding = false
+            background = box(); elevation = dp(a, 3).toFloat()
+            contentDescription = "내 위치로"
+            setOnClickListener { onMe(null) }
+        }, LinearLayout.LayoutParams(dp(a, 46), dp(a, 46)).apply { topMargin = dp(a, 10) })
+        frame.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END).apply { rightMargin = dp(a, 12); bottomMargin = dp(a, 64) })
+    }
+
     fun setSatellite(map: MapView, on: Boolean) { Store.satellite = on; map.setTileSource(if (on) satelliteSource else TileSourceFactory.MAPNIK) }
     fun openCluster(a: Activity, items: List<MapDot>) = showCluster(a, items)
 
@@ -297,7 +327,7 @@ object MapDialog {
 
         val map = MapView(a).apply {
             setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
@@ -576,6 +606,7 @@ object MapDialog {
             })
         }
         if (liveMe != null) addStatus(a, frame, liveMe)
+        zoomButtons(a, frame, map, liveMe?.let { lm -> { v: TextView? -> lm.goToMe(v) } })
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         if (live != null) root.addView(liveInfo)
         root.addView(legendView)
@@ -782,7 +813,7 @@ object MapDialog {
         val dialog = Dialog(a, R.style.FlFull)
         val map = MapView(a).apply {
             setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
@@ -828,6 +859,7 @@ object MapDialog {
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addStatus(a, frame, liveMe)
+        zoomButtons(a, frame, map) { v -> liveMe.goToMe(v) }
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(TextView(a).apply {
             text = legend + "\n파란 점 = 지금 내 위치 (뾰족한 쪽 = 폰이 향한 방향) · 점선 = $targetName 까지\n지도 © OpenStreetMap · 위성 © Esri"
@@ -853,7 +885,7 @@ object MapDialog {
         val pt = GeoPoint(lat, lon)
         val map = MapView(a).apply {
             setMultiTouchControls(true)
-            zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+            zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
         }
@@ -912,6 +944,7 @@ object MapDialog {
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addStatus(a, frame, liveMe)
+        zoomButtons(a, frame, map) { v -> liveMe.goToMe(v) }
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val legend = TextView(a).apply {
             text = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치 · 점선 = $name 까지 방향·거리\n지도 © OpenStreetMap · 위성 © Esri"

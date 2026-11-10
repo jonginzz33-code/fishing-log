@@ -213,7 +213,7 @@ class GroupTripsActivity : Activity() {
         }
 
         // 출조 카드
-        body.addView(Ui.text(this, 12f, Ui.SUB, false, "카드를 누르면 함께한 출조 지도·순위, 사진 · 꾹 누르면 골라서 그룹에서 내리기"), Ui.lp(this, MATCH, WRAP, top = 14))
+        body.addView(Ui.text(this, 12f, Ui.SUB, false, "카드를 누르면 출조 상세(지도 · 날씨 · 물때 · 사진) · 꾹 누르면 골라서 그룹에서 내리기"), Ui.lp(this, MATCH, WRAP, top = 14))
         shown = list.take(150)
         if (selMode) body.addView(selHeader(), Ui.lp(this, MATCH, WRAP, top = 8))
         shown.forEach { t ->
@@ -310,7 +310,24 @@ class GroupTripsActivity : Activity() {
             .setNegativeButton("취소", null).show()
     }
 
+    // v5.2 (239): 카드를 누르면 내 출조 상세와 같은 화면 (보기 전용)
     private fun openTrip(t: Cloud.RemoteTrip) {
+        TripActivity.remoteView = t
+        @Suppress("DEPRECATION")
+        startActivityForResult(Intent(this, TripActivity::class.java).putExtra("remote", true), TripActivity.REQ_REMOTE)
+    }
+
+    @Deprecated("startActivityForResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != TripActivity.REQ_REMOTE || resultCode != RESULT_OK) return
+        val id = data?.getStringExtra("remove") ?: return
+        shown.firstOrNull { it.id == id }?.let { confirmRemove(listOf(it)) }
+    }
+
+    @Suppress("unused")
+    private fun openTripMenu(t: Cloud.RemoteTrip) {
         val items = mutableListOf("함께한 출조 지도·순위")
         if (t.photoCount > 0) items.add("사진 보기 (${t.photoCount}장)")
         if (t.wx.isNotBlank()) items.add("🌡 그때 날씨")
