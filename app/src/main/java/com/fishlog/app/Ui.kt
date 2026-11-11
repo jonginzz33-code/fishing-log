@@ -12,6 +12,9 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 
 /** 모든 화면이 같이 쓰는 색과 모양 (디자인 시안과 동일) */
 object Ui {
@@ -50,12 +53,19 @@ object Ui {
     /** 화면이 만들어질 때 쓴 크기 → 설정에서 바꾸고 돌아오면 그 화면을 다시 그림 */
     private val madeScale = java.util.WeakHashMap<android.app.Activity, Int>()
     @Volatile private var hooked = false
+    /** App.onCreate 에서 한 번 (첫 화면이 열리기 전에) */
+    fun install(base: Context) = hook(base)
     private fun hook(base: Context) {
         if (hooked) return
         val app = base.applicationContext as? android.app.Application ?: return
         hooked = true
         app.registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) { madeScale[a] = userScale(a) }
+            override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {
+                madeScale[a] = userScale(a)
+                // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백, 큰 화면 가운데 폭, 펼친 폴드 · 태블릿은 회전 허용
+                edge(a.window)
+                orient(a)
+            }
             override fun onActivityResumed(a: android.app.Activity) {
                 val m = madeScale[a] ?: return
                 if (m != userScale(a)) { madeScale[a] = userScale(a); a.recreate() }
@@ -72,13 +82,92 @@ object Ui {
         return try {
             hook(base)
             val conf = android.content.res.Configuration(base.resources.configuration)
-            val w = conf.screenWidthDp
+            // v6.0 (243): 펼친 폴드 · 태블릿은 내용 폭이 MAX_DP 까지라 그 폭 기준으로
+            val w = minOf(conf.screenWidthDp, MAX_DP)
             if (w <= 0) return base
             val f = (w / 400f).coerceIn(0.88f, 1.22f) * (userScale(base) / 100f)
-            if (kotlin.math.abs(f - 1f) < 0.03f) return base
-            conf.densityDpi = (conf.densityDpi * f).toInt()
+            // v6.0 (243): 폰 설정 글자 크기가 아주 크면 칸이 깨져서 FONT_MAX 까지만
+            val bigFont = conf.fontScale > FONT_MAX
+            val scale = kotlin.math.abs(f - 1f) >= 0.03f
+            if (!scale && !bigFont) return base
+            if (scale) conf.densityDpi = (conf.densityDpi * f).toInt()
+            if (bigFont) conf.fontScale = FONT_MAX
             base.createConfigurationContext(conf)
         } catch (_: Exception) { base }
+    }
+
+    // ── v6.0 (242-1 · 243): 안드로이드 16 · 폴드 · 태블릿 ──
+    /** 내용 최대 폭 (실제 dp) — 펼친 폴드 · 태블릿은 가운데에 이 폭으로, 양옆은 배경색 */
+    const val MAX_DP = 600
+    /** 폰 설정 글자 크기 최대 배율 */
+    const val FONT_MAX = 1.3f
+    /** 앱 크기 맞춤 전 실제 밀도로 잰 최대 폭 (px) */
+    fun maxPx(c: Context): Int = (MAX_DP * c.applicationContext.resources.displayMetrics.density).toInt()
+    /** 내용이 실제로 쓰는 폭 (px) — 화면 폭 대신 이걸로 칸 크기를 계산 */
+    fun contentW(c: Context): Int = minOf(c.resources.displayMetrics.widthPixels, maxPx(c))
+
+    /**
+     * 안드로이드 15부터는 화면이 상태바 · 하단 버튼 밑까지 그려져요 (안드로이드 16은 끌 수 없음).
+     * 그래서 모든 화면 · 전체 창의 내용 칸에 그만큼 여백을 넣고, 키보드가 올라오면 그 높이만큼 올려요.
+     * 화면이 MAX_DP 보다 넓으면 양옆에 여백을 더 넣어 가운데에 보기 좋은 폭으로 보여요.
+     * 예전 안드로이드에서도 똑같이 동작하게 직접 여백을 계산해요.
+     */
+    fun edge(w: android.view.Window?, bg: Int = BG, center: Boolean = true) {
+        w ?: return
+        try {
+            WindowCompat.setDecorFitsSystemWindows(w, false)
+            @Suppress("DEPRECATION")
+            w.setSoftInputMode((w.attributes.softInputMode and android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST.inv()) or
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            val content = w.decorView.findViewById<android.view.ViewGroup>(android.R.id.content) ?: return
+            content.setBackgroundColor(bg)
+            var last: WindowInsetsCompat? = null
+            fun pad(v: View, ins: WindowInsetsCompat) {
+                val b = ins.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
+                val full = if (v.width > 0) v.width else v.resources.displayMetrics.widthPixels
+                val side = if (!center) 0 else ((full - b.left - b.right - maxPx(v.context)) / 2).coerceAtLeast(0)
+                val l = b.left + side; val r = b.right + side
+                if (v.paddingLeft != l || v.paddingTop != b.top || v.paddingRight != r || v.paddingBottom != b.bottom) v.setPadding(l, b.top, r, b.bottom)
+            }
+            ViewCompat.setOnApplyWindowInsetsListener(content) { v, ins -> last = ins; pad(v, ins); WindowInsetsCompat.CONSUMED }
+            // 접고 펼 때 · 창 크기가 바뀔 때 가운데 폭 다시 계산
+            content.addOnLayoutChangeListener { v, l, _, r, _, ol, _, or2, _ ->
+                if (r - l != or2 - ol) last?.let { i -> v.post { pad(v, i) } }
+            }
+            ViewCompat.requestApplyInsets(content)
+        } catch (_: Exception) {}
+    }
+
+    /** 펼친 폴드 · 태블릿(짧은 쪽 600dp 이상)은 세로 고정을 풀어요. 폰은 그대로 세로. */
+    fun orient(a: android.app.Activity) {
+        try {
+            if (a.resources.configuration.smallestScreenWidthDp >= 600)
+                a.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } catch (_: Exception) {}
+    }
+
+    /** 큰 창(AlertDialog) 폭: 폰은 화면 가득, 펼친 폴드 · 태블릿은 MAX_DP 까지 */
+    fun dialogW(c: Context): Int = contentW(c)
+
+    /**
+     * 체크박스 · 스위치: 글이 두 줄 이상이면 체크 상자를 첫 줄에 맞춰요 (기본은 가운데라 글과 어긋나 보임).
+     * 한 줄이면 지금처럼 가운데.
+     */
+    fun <T : android.widget.CompoundButton> checkFit(cb: T): T {
+        val baseTop = cb.paddingTop
+        cb.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        cb.addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+            val t = v as android.widget.CompoundButton
+            val multi = t.lineCount > 1
+            val g = (if (multi) Gravity.TOP else Gravity.CENTER_VERTICAL) or Gravity.START
+            val dh = t.buttonDrawable?.intrinsicHeight ?: 0
+            val top = if (multi) baseTop + ((dh - t.lineHeight) / 2).coerceAtLeast(0) else baseTop
+            if (t.gravity != g || t.paddingTop != top) t.post {
+                t.gravity = g
+                t.setPadding(t.paddingLeft, top, t.paddingRight, t.paddingBottom)
+            }
+        }
+        return cb
     }
 
     /** v3.9.3 (169): 옆으로 밀리는 줄 · 화면 밖에 더 있으면 작은 주황 › ‹ 표시 (누르면 그쪽으로 밀어 줌) */

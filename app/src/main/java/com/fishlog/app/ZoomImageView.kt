@@ -121,6 +121,7 @@ class ZoomImageView(c: Context) : ImageView(c) {
                 setMargins(0, Ui.dp(a, 16), Ui.dp(a, 16), 0)
             })
             dlg.setContentView(frame)
+            Ui.edge(dlg.window, Color.BLACK, center = false)   // v6.0 (242-1): 닫기 버튼이 상태바 밑에 안 가리게
             dlg.show()
             return { bmp -> if (dlg.isShowing) iv.setImageBitmap(bmp) }
         }

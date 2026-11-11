@@ -159,7 +159,7 @@ class InquiryActivity : Activity() {
             LinearLayout.LayoutParams(WRAP, WRAP))
         col.addView(Ui.text(this, 14.5f, if (mine) Color.parseColor("#04342C") else Ui.TEXT, false, text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8)); setLineSpacing(0f, 1.15f)
-            maxWidth = (resources.displayMetrics.widthPixels * 0.78).toInt()
+            maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = Ui.bg(this@InquiryActivity, if (mine) Ui.BLUE else Color.parseColor(if (fromAdmin) "#2A2310" else "#1E3247"), 14)
         }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(2) })
         return col

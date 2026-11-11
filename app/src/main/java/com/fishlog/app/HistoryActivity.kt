@@ -366,7 +366,7 @@ class HistoryActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(this@HistoryActivity, 20), Ui.dp(this@HistoryActivity, 4), Ui.dp(this@HistoryActivity, 20), 0) }
         box.addView(Ui.text(this, 13f, Ui.SUB, false, "체크한 그룹에 올라가고, 체크를 뺀 그룹에서는 내 출조가 지워져요 (내 폰 기록은 그대로)"))
         val checks = gs.map { g ->
-            android.widget.CheckBox(this).apply {
+            Ui.checkFit(android.widget.CheckBox(this)).apply {
                 text = android.text.SpannableStringBuilder(GroupIcon.prefix(this@HistoryActivity, g, 24, GroupBand.catIcon(GroupBand.currentCat(g)))).append(g.styled())
                 setTextColor(Ui.TEXT); textSize = 16f
                 buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)

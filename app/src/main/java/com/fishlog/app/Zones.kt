@@ -1707,6 +1707,7 @@ object Zones {
         ov.onTapZones = { showInfo(a, it, map) }
         paint()
         dlg.setContentView(root)
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dlg.setOnDismissListener { map.onPause(); map.onDetach() }
         dlg.show()
         map.onResume()

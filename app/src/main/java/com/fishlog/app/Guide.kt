@@ -86,6 +86,7 @@ object Guide {
         next.setOnClickListener { if (i < PAGES.size - 1) { i++; paint() } else dlg.dismiss() }
         dlg.setOnDismissListener { Store.guideSeen = true; onDone?.invoke() }
         dlg.setContentView(root)
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         paint()
         dlg.show()
     }

@@ -308,7 +308,7 @@ class TripActivity : Activity() {
             .setView(ScrollView(this).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .show()
-        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.92).toInt())
+        dlg.window?.setLayout(Ui.dialogW(this), (resources.displayMetrics.heightPixels * 0.92).toInt())
     }
 
     private var wxAsked = false
@@ -553,7 +553,7 @@ class TripActivity : Activity() {
         root.addView(Ui.button(this, "사진 추가 (촬영 시각으로 자동 매칭)") { pickPhotos() }, Ui.lp(this, MATCH, WRAP, top = 10))
         if (t.photos.isNotEmpty()) {
             val grid = GridLayout(this).apply { columnCount = 4 }
-            val size = (resources.displayMetrics.widthPixels - dp(40) - dp(18)) / 4
+            val size = (Ui.contentW(this) - dp(40) - dp(18)) / 4
             t.photos.forEach { p ->
                 val iv = ImageView(this).apply {
                     scaleType = ImageView.ScaleType.CENTER_CROP
@@ -719,7 +719,7 @@ class TripActivity : Activity() {
         val grid = GridLayout(this).apply { columnCount = 3; setPadding(dp(12), dp(8), dp(12), dp(8)) }
         val dlg = AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("대표 사진 고르기").setView(ScrollView(this).apply { addView(grid) }).setNegativeButton("취소", null).create()
-        val w = (resources.displayMetrics.widthPixels - dp(80)) / 3
+        val w = (Ui.contentW(this) - dp(80)) / 3
         ps.forEach { p ->
             grid.addView(ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP

@@ -466,7 +466,7 @@ class AdminActivity : Activity() {
                 val pr = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(6), dp(10), dp(6)); background = Ui.bg(this@AdminActivity, android.graphics.Color.parseColor("#0F2233"), 10) }
                 pr.addView(Ui.text(this, 12f, Ui.SUB, true, "권한"))
                 Cloud.PERMS.forEach { (key, label) ->
-                    pr.addView(android.widget.CheckBox(this).apply {
+                    pr.addView(Ui.checkFit(android.widget.CheckBox(this)).apply {
                         text = label; setTextColor(Ui.TEXT); textSize = 14f
                         buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
                         isChecked = key in (perms[u.uid] ?: emptySet())

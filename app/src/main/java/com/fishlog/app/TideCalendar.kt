@@ -443,6 +443,7 @@ object TideCalendar {
             redraw()
         }
         dlg.setContentView(root)
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dlg.show()
     }
 }

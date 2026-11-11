@@ -286,7 +286,7 @@ class ChatActivity : Activity() {
         col.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8))
             setLineSpacing(0f, 1.15f)
-            maxWidth = (resources.displayMetrics.widthPixels * 0.78).toInt()
+            maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = if (m.mine) Ui.bg(this@ChatActivity, Ui.BLUE, 14) else Ui.bg(this@ChatActivity, Color.parseColor("#1E3247"), 14)
             setTextIsSelectable(false)
             setOnLongClickListener { menu(m); true }

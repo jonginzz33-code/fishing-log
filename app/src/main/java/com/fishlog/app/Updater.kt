@@ -54,6 +54,8 @@ object Updater {
 
     /** 새 버전 번호 + 바뀐 내용 (없거나 실패하면 null) */
     fun check(a: Activity, done: (Long?) -> Unit) {
+        // v6.0 (242-2): 플레이 스토어판은 스토어가 업데이트해요 (GitHub 확인 안 함)
+        if (!BuildConfig.SELF_UPDATE) { main.post { done(null) }; return }
         val mine = currentCode(a)
         Thread {
             val latest = try {
@@ -82,9 +84,28 @@ object Updater {
 
     fun isShowing() = dialog?.isShowing == true
 
+    /** v6.0 (242-2): 플레이 스토어판 — 최소 버전보다 낮으면 스토어에서 업데이트하라고 안내 */
+    private fun storeDialog(a: Activity, force: Boolean) {
+        fun openStore() {
+            val id = a.packageName
+            try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$id"))) }
+            catch (_: Exception) {
+                try { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$id"))) } catch (_: Exception) {}
+            }
+        }
+        val b = AlertDialog.Builder(a, R.style.FlAlert)
+            .setTitle("🎣 새 버전이 있어요")
+            .setMessage(if (force) "이 버전은 더 이상 쓸 수 없어요. 플레이 스토어에서 업데이트해 주세요." else "플레이 스토어에서 업데이트할 수 있어요.")
+            .setPositiveButton("플레이 스토어 열기") { _, _ -> openStore(); if (force) a.finish() }
+            .setCancelable(!force)
+        if (force) b.setNegativeButton("앱 닫기") { _, _ -> a.finish() } else b.setNegativeButton("나중에", null)
+        dialog = b.show()
+    }
+
     /** 큰 업데이트 창. force = 나중에 없음 (뒤로 가기 = 앱 닫기) */
     fun showDialog(a: Activity, force: Boolean) {
         if (isShowing() || a.isFinishing) return
+        if (!BuildConfig.SELF_UPDATE) { storeDialog(a, force); return }
         fun dp(v: Int) = Ui.dp(a, v)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(20), dp(22), dp(16)) }
         box.addView(Ui.text(a, 40f, Ui.TEXT, false, "🎣").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP))
@@ -228,6 +249,6 @@ object Updater {
         dlg.setOnDismissListener { if (dialog === dlg) dialog = null }
         dialog = dlg
         dlg.show()
-        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dlg.window?.setLayout(Ui.dialogW(a), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 }

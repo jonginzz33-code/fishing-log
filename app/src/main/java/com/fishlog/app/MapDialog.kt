@@ -670,6 +670,7 @@ object MapDialog {
         }
 
         dialog.setContentView(root)
+        Ui.edge(dialog.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dialog.setOnDismissListener {
             handler.removeCallbacksAndMessages(null)
             Live.removeListener(matesListener)
@@ -867,6 +868,7 @@ object MapDialog {
             setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
         })
         dialog.setContentView(root)
+        Ui.edge(dialog.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dialog.setOnDismissListener { liveMe.stop(); map.onPause(); map.onDetach() }
         dialog.show()
         map.onResume()
@@ -974,6 +976,7 @@ object MapDialog {
             }
         }
         dialog.setContentView(root)
+        Ui.edge(dialog.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dialog.setOnDismissListener { stopMap(); liveMe.stop(); map.onPause(); map.onDetach() }
         dialog.show()
         map.onResume()

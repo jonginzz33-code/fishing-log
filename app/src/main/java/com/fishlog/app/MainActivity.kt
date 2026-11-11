@@ -123,7 +123,6 @@ class MainActivity : Activity() {
     /** 관리자가 막은 옛날 버전인지 (출조 중엔 막지 않고, 끝난 뒤에) */
     private var forceUpdate = false
     private lateinit var chatBtn: TextView
-    private var gameCell: View? = null
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
     private var stationsSynced = false
@@ -475,12 +474,7 @@ class MainActivity : Activity() {
         btnRow.addView(cell(styled(smallBtn("") { Inventory.show(this) }, Color.parseColor("#12301F"), Ui.GREEN, Color.parseColor("#BFF5D8")).apply {
             text = two("🎒 가방", "재고표", Ui.GREEN)
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
-        // 🎮 미니게임 (v4.2.5 · 200) — 테스트하는 동안은 관리자에게만 보임
-        val gc = cell(styled(smallBtn("") { MiniGame.pick(this) }, Color.parseColor("#3A1840"), Color.parseColor("#E07AD8"), Color.parseColor("#FFD3F5")).apply {
-            text = two("🎮 게임", "미니게임", Color.parseColor("#E07AD8"))
-        }).apply { visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE }
-        gameCell = gc
-        btnRow.addView(gc, LinearLayout.LayoutParams(0, WRAP, 1f))
+        // v6.0 (241): 🎮 미니게임 뺌
         // 🗺 지도 (바다색으로 채워 강조 · 182)
         btnRow.addView(cell(styled(smallBtn("") { openMap() }, Color.parseColor("#1F6E96"), Color.parseColor("#7FD3E8"), Color.WHITE).apply {
             text = two("🗺 지도", "현위치", Color.parseColor("#D6F3FF"))
@@ -723,7 +717,7 @@ class MainActivity : Activity() {
                 else -> account.openGroups()
             }
         }.apply { minHeight = dp(44); textSize = 14f }
-        hideRouteBox = CheckBox(this).apply {
+        hideRouteBox = Ui.checkFit(CheckBox(this)).apply {
             text = "그룹에 올릴 때 이동 경로 숨기기"
             setTextColor(Ui.TEXT); textSize = 14f
             buttonTintList = ColorStateList.valueOf(Ui.BLUE)
@@ -783,7 +777,6 @@ class MainActivity : Activity() {
         QItem("help", "❓", "설명서", "#1A2A30", "#2E4A52"),
         QItem("upd", "📄", "업데이트", "#1A2A30", "#2E4A52"),
         QItem("inq", "✉", "문의", "#16263A", "#2E4A6A"),
-        QItem("game", "🎮", "게임", "#26163A", "#5A3A7A", admin = true),
         QItem("admin", "🛠", "관리", "#2A2410", "#F2C14E", admin = true),
         QItem("loc", "🧭", "위치", "#10283A", "#5FC4E0", state = { Store.appLoc }),
         QItem("saver", "🔋", "절약", "#12301F", "#5FD39A", state = { Store.saver }),
@@ -822,7 +815,6 @@ class MainActivity : Activity() {
             "upd" -> History.show(this)
             "inq" -> if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
                      else startActivity(Intent(this, InquiryActivity::class.java))
-            "game" -> MiniGame.pick(this)
             "admin" -> openAdminMenu()
             "loc" -> {
                 val on = !Store.appLoc
@@ -983,7 +975,7 @@ class MainActivity : Activity() {
         }
     }
 
-    /** 더보기 맨 위 큰 칸: 출조추천 · 설정 / 관리자 문의 · 게임(관리자만) */
+    /** 더보기 맨 위 큰 칸: 출조추천 · 설정 / 관리자 문의 */
     private fun buildMoreGrid() {
         fun cell(icon: String, title: String, sub: String, fill: String, stroke: String, ink: String, onClick: () -> Unit): android.widget.FrameLayout {
             val f = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false; setPadding(0, dp(6), 0, 0) }
@@ -1018,12 +1010,6 @@ class MainActivity : Activity() {
         }
         inq.addView(inqBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { rightMargin = dp(6) })
         r2.addView(inq, LinearLayout.LayoutParams(0, WRAP, 1f))
-        // 🎮 미니게임 (테스트하는 동안은 관리자에게만 보임)
-        val gc = cell("🎮", "게임", "미니게임", "#26163A", "#5A3A7A", "#C9A9E9") { MiniGame.pick(this) }.apply {
-            visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
-        }
-        gameCell = gc
-        r2.addView(gc, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         menuBox.addView(r2, Ui.lp(this, MATCH, WRAP, top = 2))
         menuBox.addView(Ui.button(this, "⚡ 퀵바 설정 (맨 위 네모 칸 · 켜고 끄기 · 순서)") { menuDialog?.dismiss(); openQuickSettings() },
             Ui.lp(this, MATCH, WRAP, top = 8))
@@ -1459,7 +1445,7 @@ class MainActivity : Activity() {
                 fun syncAll() { allBtn.text = if (picks.values.all { it.isChecked }) "☑ 전체 선택" else "☐ 전체 선택" }
                 groups.forEach { g ->
                     val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
-                    val cb = CheckBox(this).apply {
+                    val cb = Ui.checkFit(CheckBox(this)).apply {
                         buttonTintList = ColorStateList.valueOf(Ui.BLUE); isChecked = g.id == Cloud.active?.id
                         setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0(); paintOk(); drawOptsRef?.invoke() }
                     }
@@ -1475,7 +1461,7 @@ class MainActivity : Activity() {
                 syncAll()
                 box.addView(list, Ui.lp(this, MATCH, WRAP, top = 6))
             }
-            val pubBox = CheckBox(this).apply {
+            val pubBox = Ui.checkFit(CheckBox(this)).apply {
                 text = "전체 게시판에도 공개 (위치는 다음 창에서 정확/대략 선택, 경로·배 이름은 안 올라감)"
                 setTextColor(Ui.TEXT); textSize = 14f
                 buttonTintList = ColorStateList.valueOf(Ui.BLUE)
@@ -2194,7 +2180,7 @@ class MainActivity : Activity() {
             .setPositiveButton("닫기", null)
             .setOnDismissListener { (content.parent as? android.view.ViewGroup)?.removeView(content); onDismiss() }
             .show()
-        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.92).toInt())
+        dlg.window?.setLayout(Ui.dialogW(this), (resources.displayMetrics.heightPixels * 0.92).toInt())
         return dlg
     }
 
@@ -2466,7 +2452,7 @@ class MainActivity : Activity() {
         if (!Cloud.isAdmin) return
         // v4.2.6 (203): 1:1 문의함은 메인 '✉ 관리자 문의' · 미니게임은 메인 '🎮 게임' 칸으로 (중복이라 뺌)
         // v4.4: 🧪 미니게임 테스트판 (새 기능 먼저 시험 → 괜찮으면 본 게임에 덮어씀)
-        val items = listOf("👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제", "🧪 미니게임 테스트판")
+        val items = listOf("👥 사용자 목록 · 권한 · 최소 버전 · 정지", "🐟 어종 관리", "💬 전체 채팅방 초기화", "🦀 해루질 참고 구역 (CSV 올리기 · 직접 그리기)", "🌊 물때 관측소 찾기 · 추가 · 수정 · 삭제")
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("🛠 관리자 메뉴")
             .setItems(items.toTypedArray()) { _, i ->
@@ -2485,7 +2471,6 @@ class MainActivity : Activity() {
                         .setNegativeButton("취소", null).show()
                     3 -> Zones.openAdmin(this)
                     4 -> StationAdmin.open(this)
-                    5 -> MiniGame.pickTest(this, bestLocation())
                     else -> {}
                 }
             }
@@ -2832,7 +2817,6 @@ class MainActivity : Activity() {
         if (hideRouteBox.isChecked != Store.hideRoute) hideRouteBox.isChecked = Store.hideRoute
         // 관리자 기능은 '🛠 관리자' 메뉴로 (일반 메뉴는 모두 같게)
         if (::adminMenuBtn.isInitialized) adminMenuBtn.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
-        gameCell?.visibility = if (Cloud.isAdmin) View.VISIBLE else View.GONE
         paintQuick()
         GroupNews.startLive(newsLive)
         // 그룹 목록이 오면 같이 출조 중 실시간 연결 바로 다시 붙이기

@@ -11,6 +11,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Cloud.appContext = applicationContext
+        // v6.0 (242-1 · 243): 모든 화면에 여백 · 큰 화면 맞춤을 첫 화면부터
+        Ui.install(this)
         // 지도 '내 위치 기록 확인': 앱이 화면에서 사라지면 자동으로 끄기
         TestTrack.install(this)
         // 지난번에 받아 둔 내 닉네임 (인터넷 없을 때도 실명 대신)

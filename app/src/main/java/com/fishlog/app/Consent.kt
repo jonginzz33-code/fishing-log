@@ -40,7 +40,7 @@ object Consent {
         col.addView(Ui.text(a, 13f, Ui.SUB, false, "앱을 쓰려면 아래 내용을 확인하고 동의해 주세요."), Ui.lp(a, MATCH, WRAP, top = 6))
         fun block(title: String, body: String, required: Boolean, checked: Boolean): CheckBox {
             val c = Ui.card(a)
-            val cb = CheckBox(a).apply {
+            val cb = Ui.checkFit(CheckBox(a)).apply {
                 text = (if (required) "[필수] " else "[선택] ") + title
                 setTextColor(Ui.TEXT); textSize = 15f; isChecked = checked
                 buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
@@ -54,7 +54,7 @@ object Consent {
         val c1 = block("위치 정보 이용 동의", LOCATION, true, readOnly)
         val c2 = block("개인정보 수집·이용 동의", PRIVACY, true, readOnly)
         val c3 = block("같이 출조 중 위치·마릿수 공유", LIVE, false, shareLive(a))
-        val all = CheckBox(a).apply {
+        val all = Ui.checkFit(CheckBox(a)).apply {
             text = "모두 동의"; setTextColor(Ui.TEXT); textSize = 16f
             buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
             visibility = if (readOnly) android.view.View.GONE else android.view.View.VISIBLE
@@ -77,6 +77,7 @@ object Consent {
         }
         dlg.setCancelable(readOnly)
         dlg.setContentView(ScrollView(a).apply { setBackgroundColor(Ui.BG); addView(col) })
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dlg.show()
     }
 }

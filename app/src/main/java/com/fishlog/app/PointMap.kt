@@ -215,6 +215,7 @@ object PointMap {
         }
         paintBar(); paintDots()
         dlg.setContentView(root)
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dlg.setOnDismissListener { liveMe.stop(); map.onPause(); map.onDetach() }
         dlg.show()
         map.onResume()
@@ -314,7 +315,7 @@ object PointMap {
             .setTitle("⭕ $place")
             .setView(ScrollView(a).apply { addView(box) })
             .setPositiveButton("닫기", null).show()
-        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, (a.resources.displayMetrics.heightPixels * 0.9).toInt())
+        dlg.window?.setLayout(Ui.dialogW(a), (a.resources.displayMetrics.heightPixels * 0.9).toInt())
         Analysis.run(a, recs, { loading.text = it }) { res ->
             if (!dlg.isShowing) return@run
             box.removeAllViews()

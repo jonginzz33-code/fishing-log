@@ -429,11 +429,11 @@ class GroupActivity : Activity() {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), 0)
         }
-        val delTrips = android.widget.CheckBox(this).apply {
+        val delTrips = Ui.checkFit(android.widget.CheckBox(this)).apply {
             text = "이 사람이 올린 출조 ${count}개도 지우기"
             isChecked = false
         }
-        val newCode = android.widget.CheckBox(this).apply {
+        val newCode = Ui.checkFit(android.widget.CheckBox(this)).apply {
             text = "초대 코드도 새로 만들기 (다시 못 들어오게)"
             isChecked = true
         }

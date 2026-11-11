@@ -431,6 +431,7 @@ object Inventory {
         }
         render()
         dlg.setContentView(root)
+        Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
         dlg.setOnKeyListener { _, code, ev ->
             if (code == android.view.KeyEvent.KEYCODE_BACK && ev.action == android.view.KeyEvent.ACTION_UP && cur != null) { cur = null; render(); true } else false
         }

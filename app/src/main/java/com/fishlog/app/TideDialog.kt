@@ -297,7 +297,7 @@ object TideDialog {
             .setPositiveButton("닫기", null)
             .show()
         // 상세 페이지처럼 화면을 거의 꽉 채우게
-        dlg.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        dlg.window?.setLayout(Ui.dialogW(a),
             (a.resources.displayMetrics.heightPixels * 0.92).toInt())
         // 1분마다 다시 그림 ('지금' 선·시각)
         val tick = object : Runnable { override fun run() { if (dlg.isShowing) { graph.invalidate(); graph.postDelayed(this, 60_000L) } } }

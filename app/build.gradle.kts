@@ -6,18 +6,34 @@ plugins {
 
 android {
     namespace = "com.fishlog.app"
-    compileSdk = 34
+    // v6.0 (242-1): 안드로이드 16(API 36) 기준 — 플레이 스토어 새 앱 필수 조건
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.fishlog.app"
         minSdk = 26
-        targetSdk = 34
-        versionCode = 80
-        versionName = "5.3"
+        targetSdk = 36
+        versionCode = 81
+        versionName = "6.0"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KAKAO_KEY", "\"" + (System.getenv("KAKAO_REST_KEY") ?: "") + "\"")
+    }
+
+    // v6.0 (242-2): 같은 코드로 두 가지 판
+    //  - github: 지금처럼 GitHub에서 받아 앱 안에서 업데이트 (지금 쓰는 사람용 · 기본 빌드)
+    //  - play: 플레이 스토어용 (앱 안 업데이트 · 설치 권한 없음, 스토어가 업데이트)
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+            buildConfigField("boolean", "SELF_UPDATE", "true")
+        }
+        create("play") {
+            dimension = "store"
+            buildConfigField("boolean", "SELF_UPDATE", "false")
+        }
     }
 
     buildFeatures {
