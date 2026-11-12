@@ -279,6 +279,8 @@ class MainActivity : Activity() {
         }
         paintBoardSub(); paintNowBtn()
         resumeAfterLoc()
+        // v6.1 (244): 예전에 고친 조과가 게시판 글에 안 들어간 것 한 번 맞추기 (한 번 끝나면 다시 안 함)
+        if (Cloud.user != null) PublicBoard.resyncOnce(applicationContext)
         // v5.2 (240): 관리자가 고친 내 그룹 기록 → 폰 기록에도 (10분에 한 번)
         if (Cloud.user != null && Cloud.groups.isNotEmpty() && System.currentTimeMillis() - adminEditCheckAt > 10 * 60_000L) {
             adminEditCheckAt = System.currentTimeMillis()

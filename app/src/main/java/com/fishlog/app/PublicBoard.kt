@@ -95,6 +95,54 @@ object PublicBoard {
             .addOnFailureListener { done(it.message ?: "게시판 반영 실패") }
     }
 
+    /**
+     * v6.1 (244): 조과를 고친 뒤 공개한 게시판 글의 조과 · 마릿수도 같이 바꾸기
+     *  - 위치 공개 방법(정확/대략)은 처음 고른 대로 (예전 글은 대략으로)
+     *  - 게시판 글은 서버 규칙상 올린 사람만 고칠 수 있어서, 관리자가 고친 건 올린 사람 폰이 받을 때 같이 고쳐요
+     */
+    fun pushCatches(app: android.content.Context, t: Store.Trip, done: (String?) -> Unit = {}) {
+        if (Cloud.uid == null || !t.pub) return done(null)
+        val exact = t.pubPrec == "exact"
+        Thread {
+            val catches = buildCatches(app, t, exact)
+            db.collection("public").document(docId(t))
+                .update(mapOf("catches" to catches, "total" to t.catches.size, "prec" to (if (exact) "exact" else "approx"),
+                    "upd" to System.currentTimeMillis()))
+                .addOnSuccessListener { cache.clear(); done(null) }
+                .addOnFailureListener { main.post { done(it.message ?: "게시판 반영 실패") } }
+        }.start()
+    }
+
+    /**
+     * v6.1 (244): 한 번만 — 예전 버전에서 고친 조과가 게시판 글에 안 들어간 것 맞추기
+     *  공개한 내 출조마다 게시판 글의 조과 시각 목록이 폰 기록과 다르면 다시 보내요
+     */
+    @Volatile private var resyncing = false
+    fun resyncOnce(app: android.content.Context) {
+        val me = Cloud.uid ?: return
+        val p = app.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
+        val key = "pub_resync_244_$me"
+        if (resyncing || p.getBoolean(key, false)) return
+        resyncing = true
+        val mine = Store.history.filter { it.pub && it.end > 0 }
+        if (mine.isEmpty()) { p.edit().putBoolean(key, true).apply(); resyncing = false; return }
+        var left = mine.size; var failed = false
+        fun one() { if (--left == 0) { if (!failed) p.edit().putBoolean(key, true).apply(); resyncing = false } }
+        mine.forEach { t ->
+            db.collection("public").document(docId(t)).get()
+                .addOnSuccessListener { d ->
+                    if (!d.exists()) return@addOnSuccessListener one()
+                    @Suppress("UNCHECKED_CAST")
+                    val times = (d.get("catches") as? List<Map<String, Any?>>)?.mapNotNull { (it["t"] as? Number)?.toLong() }?.sorted() ?: emptyList()
+                    val slots = (d.get("catches") as? List<Map<String, Any?>>)?.mapNotNull { (it["s"] as? Number)?.toInt() }?.sorted() ?: emptyList()
+                    val local = t.catches.toList()
+                    if (times == local.map { it.time }.sorted() && slots == local.map { it.slot }.sorted()) return@addOnSuccessListener one()
+                    pushCatches(app, t) { e -> if (e != null) failed = true; one() }
+                }
+                .addOnFailureListener { failed = true; one() }
+        }
+    }
+
     private fun docId(t: Store.Trip) = "${Cloud.uid}_${t.id}"
     fun docIdOf(uid: String, tripId: Long) = "${uid}_$tripId"
 

@@ -443,12 +443,13 @@ object Cloud {
     fun pushCatchEdit(t: Store.Trip, done: (String?) -> Unit = {}) {
         val me = uid ?: return done(null)
         val gs = Store.sharedGroups(t.id)
-        if (gs.isEmpty()) return done(null)
-        var left = gs.size; var err: String? = null
-        gs.forEach { gid -> updateCatches(gid, "${me}_${t.id}", t.catches.toList(), null) { e ->
-            if (e != null) err = e
-            if (--left == 0) done(err)
-        } }
+        // v6.1 (244): 전체 게시판에 공개한 글도 같이
+        val pub = t.pub && ::appContext.isInitialized
+        var left = gs.size + (if (pub) 1 else 0); var err: String? = null
+        if (left == 0) return done(null)
+        val one = { e: String? -> if (e != null) err = e; if (--left == 0) done(err) }
+        gs.forEach { gid -> updateCatches(gid, "${me}_${t.id}", t.catches.toList(), null) { e -> one(e) } }
+        if (pub) PublicBoard.pushCatches(appContext, t) { e -> one(e) }
     }
 
     /**
@@ -470,7 +471,11 @@ object Cloud {
                             val t = (it["t"] as? Number)?.toLong() ?: return@mapNotNull null
                             Store.Catch(t, (it["s"] as? Number)?.toInt() ?: 1, (it["la"] as? Number)?.toDouble(), (it["lo"] as? Number)?.toDouble())
                         } ?: return@forEach
-                        if (Store.find(localId) != null) { Store.replaceCatches(localId, list); n++ }
+                        if (Store.find(localId) != null) {
+                            Store.replaceCatches(localId, list); n++
+                            // v6.1 (244): 공개한 게시판 글도 (게시판 글은 올린 사람만 고칠 수 있어서 여기서)
+                            Store.find(localId)?.let { t -> if (t.pub && ::appContext.isInitialized) PublicBoard.pushCatches(appContext, t) }
+                        }
                         d.reference.update("editFor", FieldValue.delete())
                     }
                 }

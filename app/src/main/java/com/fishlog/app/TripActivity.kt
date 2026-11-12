@@ -159,7 +159,7 @@ class TripActivity : Activity() {
         }
         if (r == null) {
             Store.replaceCatches(t.id, sorted)
-            Store.find(t.id)?.let { tt -> Cloud.pushCatchEdit(tt) { e -> if (!isFinishing) ok(e?.let { "폰 기록은 고쳤어요 · 그룹 기록은 못 고쳤어요 ($it)" }) } }
+            Store.find(t.id)?.let { tt -> Cloud.pushCatchEdit(tt) { e -> if (!isFinishing) ok(e?.let { "폰 기록은 고쳤어요 · 그룹 · 게시판 기록은 못 고쳤어요 ($it)" }) } }
                 ?: ok(null)
             keepScroll { render() }
             return
