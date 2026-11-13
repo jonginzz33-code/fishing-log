@@ -148,6 +148,7 @@ class AdminActivity : Activity() {
         listBox = rootBox
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
         renderMinVersion()
+        renderStoreMove()
         renderCatAdmin()
         renderLimit()
         renderReports()
@@ -178,6 +179,26 @@ class AdminActivity : Activity() {
             Cloud.setMinVersion(0) { e -> toast(e ?: "막기를 풀었어요"); load() }
         }.apply { minHeight = dp(44); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         c.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    // ---------------- v6.6 (248): GitHub판 → 플레이 스토어로 옮기기 ----------------
+    private fun renderStoreMove() {
+        val on = Cloud.storeMove
+        section("📦 스토어로 옮기기 (GitHub판 막기)", if (on) "켜짐 · GitHub판은 옮기기 창만" else "꺼짐")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 14f, if (on) Ui.ORANGE else Ui.TEXT, true,
+            if (on) "켜져 있어요: GitHub판 앱을 켜면 '플레이 스토어로 옮겨 주세요' 창만 떠요" else "꺼져 있어요: GitHub판도 지금처럼 쓸 수 있어요"))
+        c.addView(Ui.text(this, 12f, Ui.SUB, false,
+            "켜기 전에 그룹원 구글 이메일을 플레이 콘솔 내부 테스트 테스터 목록에 넣어 주세요 (안 넣으면 스토어에서 못 받아요) · 창에서 기록을 서버에 자동 백업하고, 스토어판에서 '복원'하게 안내해요 · 출조 중인 사람은 끝난 뒤에 떠요 · 스토어판에는 안 떠요 · 관리자는 창을 닫고 쓸 수 있어요"),
+            Ui.lp(this, MATCH, WRAP, top = 4))
+        c.addView(Ui.button(this, if (on) "끄기 (GitHub판 다시 쓸 수 있게)" else "켜기 (GitHub판 막기)", !on) {
+            AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle(if (on) "스토어로 옮기기를 끌까요?" else "스토어로 옮기기를 켤까요?")
+                .setMessage(if (on) "GitHub판 앱을 다시 지금처럼 쓸 수 있어요." else "GitHub판 앱을 쓰는 사람은 앱을 켜면 '플레이 스토어로 옮겨 주세요' 창만 떠요. 테스터 목록에 그룹원 이메일을 다 넣었는지 확인해 주세요.")
+                .setPositiveButton(if (on) "끄기" else "켜기") { _, _ -> Cloud.setStoreMove(!on) { e -> toast(e ?: if (on) "껐어요" else "켰어요"); load() } }
+                .setNegativeButton("취소", null).show()
+        }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 10))
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 

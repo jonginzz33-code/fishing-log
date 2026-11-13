@@ -886,10 +886,20 @@ object Cloud {
         db.collection("config").document("app").get()
             .addOnSuccessListener { d ->
                 val v = d.getLong("minVersion") ?: 0L
-                p.edit().putLong("minVersion", v).apply()
+                storeMove = d.getBoolean("storeMove") == true
+                p.edit().putLong("minVersion", v).putBoolean("storeMove", storeMove).apply()
                 done(v)
             }
-            .addOnFailureListener { done(p.getLong("minVersion", 0L)) }
+            .addOnFailureListener { storeMove = p.getBoolean("storeMove", false); done(p.getLong("minVersion", 0L)) }
+    }
+
+    /** v6.6 (248): 관리자 스위치 — 켜면 GitHub판 앱은 '플레이 스토어로 옮겨 주세요' 창만 (스토어판은 그대로) */
+    @Volatile var storeMove = false
+    fun setStoreMove(on: Boolean, done: (String?) -> Unit) {
+        if (!isAdmin) return done("관리자만 바꿀 수 있어요")
+        db.collection("config").document("app").set(mapOf("storeMove" to on, "updated" to System.currentTimeMillis()), SetOptions.merge())
+            .addOnSuccessListener { storeMove = on; done(null) }
+            .addOnFailureListener { done(it.message ?: "저장 실패") }
     }
 
     fun setMinVersion(v: Long, done: (String?) -> Unit) {
@@ -1109,14 +1119,20 @@ object Cloud {
 
     // ---- 내 기록 보관함 (서버 백업 / 복원) ----
     /** 백업 안 된 기록을 내 계정에 올림 (사진 원본은 폰에만, 기록·경로만) */
-    fun backupPending() {
-        val id = uid ?: return
-        Store.history.filter { !it.backedUp }.forEach { t ->
+    fun backupPending(done: ((ok: Int, fail: Int) -> Unit)? = null) {
+        val id = uid ?: run { done?.invoke(0, -1); return }
+        val list = Store.history.filter { !it.backedUp }
+        if (list.isEmpty()) { done?.invoke(0, 0); return }
+        // v6.6 (248): 다 끝나면 알려 주기 (스토어로 옮기기 창의 '백업 끝 ✓')
+        var left = list.size; var ok = 0; var fail = 0
+        list.forEach { t ->
             val json = Store.tripToJson(t)
             json.remove("photos")
             db.collection("users").document(id).collection("trips").document(t.id.toString())
                 .set(mapOf("json" to json.toString(), "start" to t.start))
-                .addOnSuccessListener { Store.markBackedUp(t.id) }
+                .addOnSuccessListener { Store.markBackedUp(t.id); ok++ }
+                .addOnFailureListener { fail++ }
+                .addOnCompleteListener { if (--left == 0) done?.invoke(ok, fail) }
         }
     }
 

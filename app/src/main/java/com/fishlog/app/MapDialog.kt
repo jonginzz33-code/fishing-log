@@ -1023,7 +1023,9 @@ object MapDialog {
                         nm(c.slot), c.time, name, nm(c.slot), false, 1, 0.0, c.q == 1)
                 }
                 val counts = m.catches.groupingBy { nm(it.slot) }.eachCount().entries.joinToString(" · ") { "${it.key} ${it.value}" }
-                legendBase = info + "\n지도에 보이는 조과: " + counts.ifBlank { "아직 없음" } +
+                // v6.4+ (250): 이동 거리 (내 지도와 같은 계산)
+                val dist = if (pts.size >= 2) "\n" + distanceText(pts) else ""
+                legendBase = info + dist + "\n지도에 보이는 조과: " + counts.ifBlank { "아직 없음" } +
                     "\n초록 점 = $name · 분홍 선 = 이동 경로 · 숫자 = 그 자리 마릿수 · 파란 점 = 내 위치\n지도 © OpenStreetMap · 위성 © Esri"
                 paintLegend()
                 map.invalidate()

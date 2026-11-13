@@ -203,7 +203,117 @@ class MainActivity : Activity() {
     private var guideOpen = false
     private lateinit var versionText: TextView
 
+    // ---------------- v6.6 (248): GitHub판 → 플레이 스토어로 옮기기 ----------------
+    private var storeMoveDlg: android.app.Dialog? = null
+    private var storeMoveSkipped = false
+    private val STORE_URL = "https://play.google.com/store/apps/details?id=kr.jogwailji.app"
+
+    /** 관리자가 '스토어로 옮기기'를 켰으면 GitHub판은 이 창만 (출조 중에는 끝난 뒤에) */
+    private fun checkStoreMove() {
+        if (!BuildConfig.SELF_UPDATE || !Cloud.storeMove || isFinishing) return
+        if (Store.current != null || guideOpen || storeMoveSkipped) return
+        if (storeMoveDlg?.isShowing == true) return
+        showStoreMove()
+    }
+
+    private fun showStoreMove() {
+        val d = android.app.Dialog(this, R.style.FlFullZoom)
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(24), dp(22), dp(24)); setBackgroundColor(Ui.BG) }
+        col.addView(Ui.text(this, 22f, Ui.TEXT, true, "📦 조과일지가 플레이 스토어로 옮겼어요"))
+        col.addView(Ui.text(this, 15f, Ui.ORANGE, true, "이 버전(GitHub판)은 더 이상 쓸 수 없어요.").apply { setLineSpacing(0f, 1.2f) }, Ui.lp(this, MATCH, WRAP, top = 10))
+        col.addView(Ui.text(this, 13.5f, Ui.SUB, false, "아래 순서대로 플레이 스토어판으로 옮겨 주세요. 그룹 · 게시판 · 채팅은 같은 구글 계정이면 그대로예요."),
+            Ui.lp(this, MATCH, WRAP, top = 6))
+
+        // ① 서버 백업
+        val c1 = Ui.card(this)
+        c1.addView(Ui.text(this, 15f, Ui.TEXT, true, "① 내 출조 기록 서버에 백업"))
+        val status = Ui.text(this, 13.5f, Ui.SUB, false, "")
+        c1.addView(status, Ui.lp(this, MATCH, WRAP, top = 6))
+        val loginBtn = Ui.button(this, "구글 로그인") {}.apply { visibility = View.GONE }
+        c1.addView(loginBtn, Ui.lp(this, MATCH, WRAP, top = 8))
+        col.addView(c1, Ui.lp(this, MATCH, WRAP, top = 16))
+        fun runBackup() {
+            if (Cloud.user == null) {
+                status.text = "구글 로그인이 안 돼 있어서 백업을 못 했어요. 로그인하면 바로 백업해요."
+                status.setTextColor(Ui.ORANGE)
+                loginBtn.visibility = View.VISIBLE
+                return
+            }
+            loginBtn.visibility = View.GONE
+            status.text = "백업 중…"; status.setTextColor(Ui.SUB)
+            Cloud.backupPending { ok, fail ->
+                if (!d.isShowing) return@backupPending
+                val all = Store.history.count { it.backedUp }
+                if (fail > 0) {
+                    status.text = "백업 실패 ${fail}개 (인터넷을 확인하고 다시 눌러 주세요) · 백업된 출조 ${all}개"
+                    status.setTextColor(Ui.ORANGE)
+                    status.setOnClickListener { runBackup() }
+                } else {
+                    status.text = "백업 끝 ✓ (서버에 있는 내 출조 ${all}개" + (if (ok > 0) " · 방금 $ok 개 올림" else "") + ")"
+                    status.setTextColor(Ui.GREEN)
+                }
+            }
+        }
+        loginBtn.setOnClickListener { account.signIn { refreshAccount(); runBackup() } }
+
+        // ② 플레이 스토어에서 받기
+        val c2 = Ui.card(this)
+        c2.addView(Ui.text(this, 15f, Ui.TEXT, true, "② 플레이 스토어에서 받기"))
+        c2.addView(Ui.text(this, 13f, Color.parseColor("#08311F"), true, "▶ 플레이 스토어에서 받기").apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(14), 0, dp(14))
+            background = Ui.bg(this@MainActivity, Ui.GREEN, 14)
+            textSize = 16f
+            setOnClickListener {
+                try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=kr.jogwailji.app"))) }
+                catch (_: Exception) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(STORE_URL))) } catch (_: Exception) {} }
+            }
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        col.addView(c2, Ui.lp(this, MATCH, WRAP, top = 10))
+
+        // ③ 복원
+        val c3 = Ui.card(this)
+        c3.addView(Ui.text(this, 15f, Ui.TEXT, true, "③ 스토어판에서 내 기록 가져오기"))
+        c3.addView(Ui.text(this, 13.5f, Ui.SUB, false,
+            "스토어판을 열고 같은 구글 계정으로 로그인 → ⋯ 더보기 → '지난 출조 · 내 기록 보관함' → '서버에서 내 기록 복원하기'").apply { setLineSpacing(0f, 1.2f) },
+            Ui.lp(this, MATCH, WRAP, top = 6))
+        col.addView(c3, Ui.lp(this, MATCH, WRAP, top = 10))
+
+        // 테스터 등록 안내 + 관리자 문의
+        val c4 = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = Ui.bg(this@MainActivity, Color.parseColor("#2A1E10"), 12, Ui.ORANGE)
+        }
+        c4.addView(Ui.text(this, 13.5f, Ui.TEXT, false,
+            "플레이 스토어에서 '항목을 찾을 수 없습니다'가 나오면 아직 테스터 등록 전이에요. 관리자에게 구글 이메일(플레이 스토어 계정)을 알려 주세요.").apply { setLineSpacing(0f, 1.2f) })
+        c4.addView(Ui.button(this, "✉ 관리자에게 문의") {
+            if (Cloud.user == null) account.signIn { refreshAccount(); runBackup(); startActivity(Intent(this, InquiryActivity::class.java)) }
+            else startActivity(Intent(this, InquiryActivity::class.java))
+        }, Ui.lp(this, MATCH, WRAP, top = 10))
+        col.addView(c4, Ui.lp(this, MATCH, WRAP, top = 12))
+
+        col.addView(Ui.text(this, 12f, Ui.SUB, false,
+            "• 사진 원본 · 🎒 가방 · 리모컨 버튼 등록 · 설정은 이 폰의 이 앱에만 있어서 넘어가지 않아요. 스토어판에서 다시 해 주세요.\n" +
+            "• 스토어판을 잘 쓰게 되면 이 앱(GitHub판)은 지워도 돼요.").apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 14))
+
+        if (Cloud.isAdmin) col.addView(Ui.button(this, "🛠 관리자: 닫고 이 앱 계속 쓰기") {
+            storeMoveSkipped = true; d.dismiss()
+        }, Ui.lp(this, MATCH, WRAP, top = 16))
+
+        d.setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); addView(col) })
+        Ui.edge(d.window)
+        d.setCancelable(false)
+        d.setOnKeyListener { _, keyCode, e ->
+            // 뒤로 가기 = 앱 닫기 (관리자는 위 버튼으로 닫기)
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && e.action == android.view.KeyEvent.ACTION_UP) { moveTaskToBack(true); true } else false
+        }
+        d.setOnDismissListener { storeMoveDlg = null }
+        storeMoveDlg = d
+        d.show()
+        runBackup()
+    }
+
     private fun checkForced() {
+        checkStoreMove()
         if (!forceUpdate || isFinishing || Store.current != null || guideOpen) return
         if (Updater.latestCode == null) Updater.check(this) { if (!isFinishing) Updater.showDialog(this, true) }
         else Updater.showDialog(this, true)
