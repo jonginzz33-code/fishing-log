@@ -522,7 +522,7 @@ class TripActivity : Activity() {
         }
 
         // 입질 시간 메모 (일출·일몰 기준)
-        val peaks = BiteMemo.forTrip(t, if (fresh) null else tideDay)
+        val peaks = BiteMemo.forTrip(t, if (fresh) null else tideDay, if (fresh) null else tideStrength)
         if (peaks.isNotEmpty()) {
             section("입질 시간 메모 (일출·일몰 기준)")
             Sun.times(t.start, t.anyLocation()?.first, t.anyLocation()?.second)?.let { s ->

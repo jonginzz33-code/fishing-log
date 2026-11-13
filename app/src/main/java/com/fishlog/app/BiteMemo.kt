@@ -15,12 +15,14 @@ object BiteMemo {
     private const val WIN = 30 * 60_000L
     const val MIN_TRIPS = 3
 
-    class Peak(val species: String, val total: Int, val count: Int, val label: String, val dayPct: Int, val tideNote: String?)
+    class Peak(val species: String, val total: Int, val count: Int, val label: String, val dayPct: Int, val tideNote: String?,
+               /** v6.14 (258): 그 시간대 물흐름 — 그날 가장 셀 때 대비 % (모르면 null) · 0 약함 1 보통 2 셈 */
+               val flowPct: Int? = null, val flowLv: Int = -1)
 
     private fun locOf(t: Store.Trip): Pair<Double, Double>? = t.anyLocation()
 
     /** 출조 하나의 어종별 입질 피크 (3마리 이상 잡은 어종만) */
-    fun forTrip(t: Store.Trip, day: Tide.Day?): List<Peak> {
+    fun forTrip(t: Store.Trip, day: Tide.Day?, st: Tide.Strength? = null): List<Peak> {
         val loc = locOf(t)
         val out = mutableListOf<Peak>()
         for (slot in t.slots()) {
@@ -43,7 +45,19 @@ object BiteMemo {
                     if (it.high) "만조 물돌이 앞뒤" else "간조 물돌이 앞뒤"
                 } ?: Tide.rising(d, mid)?.let { r -> if (r) "들물 때" else "날물 때" }
             }
-            out.add(Peak(t.name(slot), cs.size, best, label, Math.round(dayN * 100f / cs.size), note))
+            // v6.14 (258): 그 시간대 물흐름 세기 (시간별 물흐름 막대와 같은 값)
+            var flowPct: Int? = null; var flowLv = -1
+            if (day != null && st != null && st.maxRate > 0) {
+                val h0 = ((a - day.dateMillis) / 3_600_000L).toInt().coerceIn(0, 23)
+                val h1 = ((b - day.dateMillis) / 3_600_000L).toInt().coerceIn(0, 23)
+                val vals = (minOf(h0, h1)..maxOf(h0, h1)).mapNotNull { st.hourly.getOrNull(it) }
+                if (vals.isNotEmpty()) {
+                    val r = vals.average()
+                    flowPct = Math.round(r / st.maxRate * 100).toInt().coerceIn(0, 100)
+                    flowLv = when { r < st.maxRate * 0.35 -> 0; r < st.maxRate * 0.7 -> 1; else -> 2 }
+                }
+            }
+            out.add(Peak(t.name(slot), cs.size, best, label, Math.round(dayN * 100f / cs.size), note, flowPct, flowLv))
         }
         return out
     }
@@ -114,12 +128,25 @@ object BiteMemo {
             setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
             background = Ui.bg(c, Color.argb(50, Color.red(col), Color.green(col), Color.blue(col)), 8)
         }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
+        // 물때 한마디 + v6.14 (258): 그 시간대 물살 세기 (같은 줄)
+        val tideRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         p.tideNote?.let { n ->
-            card.addView(Ui.text(c, 12f, Ui.BLUE, true, "≋ $n").apply {
+            tideRow.addView(Ui.text(c, 12f, Ui.BLUE, true, "≋ $n").apply {
                 setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
                 background = Ui.bg(c, Color.argb(45, 91, 200, 223), 8)
-            }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 4) })
+            }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { rightMargin = Ui.dp(c, 6) })
         }
+        p.flowPct?.let { f ->
+            val fc = when (p.flowLv) { 2 -> Ui.ORANGE; 1 -> Ui.BLUE; else -> Color.parseColor("#8E9AA3") }
+            val name = when (p.flowLv) { 2 -> "셈"; 1 -> "보통"; else -> "약함" }
+            tideRow.addView(Ui.text(c, 12f, fc, true, "💧 물살 $name $f%").apply {
+                setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
+                background = Ui.bg(c, Color.argb(45, Color.red(fc), Color.green(fc), Color.blue(fc)), 8)
+            }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP))
+        }
+        if (tideRow.childCount > 0) card.addView(tideRow, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 4) })
+        if (p.flowPct != null) card.addView(Ui.text(c, 10.5f, Ui.SUB, false, "물살 % = 그 시간대 물흐름 ÷ 그날 가장 셀 때 (위 물흐름 막대와 같은 값)"),
+            LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 3) })
         card
     }
 
