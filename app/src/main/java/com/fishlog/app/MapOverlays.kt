@@ -23,7 +23,80 @@ class MapDot(val point: GeoPoint, val color: Int, val title: String, val kind: S
              /** 게시판 기록: 대략 위치 범위(m), 0 = 정확한 점 */
              val radiusM: Double = 0.0,
              /** GPS가 아닌 대략 위치로 잡힌 조과 (흐리게 + 오차 원 radiusM) */
-             val rough: Boolean = false)
+             val rough: Boolean = false,
+             /** v6.9 (256): 어느 출조의 조과인지 (지난 기록 출조별 색 · '이 출조만 보기'), 모르면 "" */
+             val trip: String = "") {
+    /** 색만 바꾼 복사본 */
+    fun withColor(c: Int) = MapDot(point, c, title, kind, time, who, species, paid, src, radiusM, rough, trip)
+}
+
+/**
+ * v6.9 (256): 지난 기록 출조마다 이동 경로 — 평소엔 얇고 흐리게(출조 색),
+ * '이 출조만 보기'(focus)면 그 출조만 굵고 진하게 + 잡은 순서 번호 · 시각, 나머지는 더 흐리게
+ */
+class PastRoutesOverlay(ctx: Context) : Overlay() {
+    class Route(val key: String, val color: Int, val pts: List<GeoPoint>)
+    class Mark(val point: GeoPoint, val label: String)
+    var routes: List<Route> = emptyList()
+    var focus: String? = null
+    var marks: List<Mark> = emptyList()
+    private val d = ctx.resources.displayMetrics.density
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
+    private val dot = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.WHITE }
+    private val txt = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; typeface = Typeface.DEFAULT_BOLD; color = Color.WHITE }
+    private val tagBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(230, 11, 26, 38) }
+    private val pt = Point()
+
+    private fun pathOf(map: MapView, pts: List<GeoPoint>): Path {
+        val p = Path()
+        var lx = Float.NaN; var ly = Float.NaN
+        pts.forEachIndexed { i, g ->
+            map.projection.toPixels(g, pt)
+            val x = pt.x.toFloat(); val y = pt.y.toFloat()
+            if (i == 0) p.moveTo(x, y)
+            else if (i == pts.size - 1 || (x - lx) * (x - lx) + (y - ly) * (y - ly) > 4 * d * d) p.lineTo(x, y) else return@forEachIndexed
+            lx = x; ly = y
+        }
+        return p
+    }
+
+    override fun draw(c: Canvas, map: MapView, shadow: Boolean) {
+        if (shadow) return
+        val f = focus
+        for (r in routes) {
+            if (r.pts.size < 2 || r.key == f) continue
+            line.color = r.color; line.alpha = if (f == null) 130 else 45; line.strokeWidth = 2.2f * d
+            c.drawPath(pathOf(map, r.pts), line)
+        }
+        val sel = routes.firstOrNull { it.key == f && it.pts.size >= 2 }
+        if (sel != null) {
+            val p = pathOf(map, sel.pts)
+            line.color = Color.parseColor("#0B1A26"); line.alpha = 200; line.strokeWidth = 8 * d
+            c.drawPath(p, line)
+            line.color = sel.color; line.alpha = 255; line.strokeWidth = 4.5f * d
+            c.drawPath(p, line)
+            map.projection.toPixels(sel.pts.first(), pt)
+            dot.color = Color.parseColor("#2FBF71"); c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 6 * d, dot)
+            ring.strokeWidth = 2 * d; c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 6 * d, ring)
+        }
+        // 잡은 순서 번호 + 시각
+        if (f != null) {
+            val col = routes.firstOrNull { it.key == f }?.color ?: Color.parseColor("#5BC8DF")
+            marks.forEachIndexed { i, m ->
+                map.projection.toPixels(m.point, pt)
+                val x = pt.x.toFloat(); val y = pt.y.toFloat()
+                dot.color = col; c.drawCircle(x, y, 10 * d, dot)
+                ring.strokeWidth = 2.5f * d; c.drawCircle(x, y, 10 * d, ring)
+                txt.textSize = 11 * d; c.drawText("${i + 1}", x, y + 4 * d, txt)
+                txt.textSize = 10.5f * d
+                val w = txt.measureText(m.label) + 10 * d
+                c.drawRoundRect(x + 12 * d, y - 8 * d, x + 12 * d + w, y + 8 * d, 8 * d, 8 * d, tagBg)
+                c.drawText(m.label, x + 12 * d + w / 2, y + 4 * d, txt)
+            }
+        }
+    }
+}
 
 /**
  * 조과 점 그리기. 화면에서 가까이 겹치는 점은 하나로 묶어서
@@ -40,6 +113,8 @@ class DotsOverlay(
     var mergeDp = 18f
     /** 지난 기록: 색 점 대신 어종 그림 + 마릿수 + 이름표 */
     var icons = false
+    /** v6.9 (256): '이 출조만 보기' — 이 출조가 없는 묶음은 흐리게 */
+    var focus: String? = null
     private val art = SpeciesArtView(ctx)
     private val PINK = Color.parseColor("#F07AA0")
     private val PURPLE = Color.parseColor("#B9A6FF")
@@ -158,7 +233,15 @@ class DotsOverlay(
             if (hit != null) hit.items.add(dot) else list.add(Cluster(x, y, mutableListOf(dot)))
         }
         clusters = list
-        if (icons) { for (cl in list) drawIcon(c, map, cl); return }
+        if (icons) {
+            for (cl in list) {
+                val dim = focus != null && cl.items.none { it.trip == focus }
+                if (dim) c.saveLayerAlpha(null, 55)
+                drawIcon(c, map, cl)
+                if (dim) c.restore()
+            }
+            return
+        }
         val alpha = if (faded) 105 else 255
         for (cl in list) {
             val n = cl.items.size

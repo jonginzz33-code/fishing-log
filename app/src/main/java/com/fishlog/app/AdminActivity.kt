@@ -207,7 +207,8 @@ class AdminActivity : Activity() {
         section("출조 종류 관리", "${Store.allCats().size}개")
         val c = Ui.card(this)
         c.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요"))
+            "여기서 바꾸면 모든 사람 앱에 반영돼요 (앱을 다시 켤 때) · 숨긴 종류는 고를 수 없지만 지난 기록 이름은 그대로 보여요\n" +
+            "🌊 바다 / 🏞 민물: 민물 종류는 출조 기록 · 게시판에서 물때 대신 일출 · 일몰 기준으로 보여요 (눌러서 바꾸기)"))
         val list = Store.allCats()
         list.forEachIndexed { i, cat ->
             // 첫 줄: 이름 / 둘째 줄: ▲ ▼ 이름 숨기기 삭제
@@ -223,11 +224,15 @@ class AdminActivity : Activity() {
             r.addView(mini("▲") { if (i > 0) save(list.toMutableList().apply { add(i - 1, removeAt(i)) }) }, LinearLayout.LayoutParams(0, dp(34), 1f))
             r.addView(mini("▼") { if (i < list.size - 1) save(list.toMutableList().apply { add(i + 1, removeAt(i)) }) },
                 LinearLayout.LayoutParams(0, dp(34), 1f).apply { leftMargin = dp(6) })
-            r.addView(mini("이름") { askCat(cat) { l, sh -> save(list.map { if (it.id == cat.id) Store.Cat(it.id, l, sh, it.hidden) else it }) } },
+            r.addView(mini("이름") { askCat(cat) { l, sh -> save(list.map { if (it.id == cat.id) Store.Cat(it.id, l, sh, it.hidden, it.fresh) else it }) } },
                 LinearLayout.LayoutParams(0, dp(34), 1.2f).apply { leftMargin = dp(6) })
+            // v6.9 (254): 🌊 바다 / 🏞 민물 (민물이면 물때 대신 일출 · 일몰 기준)
+            r.addView(mini(if (cat.fresh) "🏞 민물" else "🌊 바다") {
+                save(list.map { if (it.id == cat.id) Store.Cat(it.id, it.label, it.short, it.hidden, !it.fresh) else it })
+            }, LinearLayout.LayoutParams(0, dp(34), 1.6f).apply { leftMargin = dp(6) })
             r.addView(mini(if (cat.hidden) "보이기" else "숨기기") {
                 if (!cat.hidden && list.count { !it.hidden } <= 1) { toast("종류는 하나 이상 있어야 해요"); return@mini }
-                save(list.map { if (it.id == cat.id) Store.Cat(it.id, it.label, it.short, !it.hidden) else it })
+                save(list.map { if (it.id == cat.id) Store.Cat(it.id, it.label, it.short, !it.hidden, it.fresh) else it })
             }, LinearLayout.LayoutParams(0, dp(34), 1.4f).apply { leftMargin = dp(6) })
             r.addView(mini("삭제", android.graphics.Color.parseColor("#F07AA0")) { askDelete(list, cat) },
                 LinearLayout.LayoutParams(0, dp(34), 1.2f).apply { leftMargin = dp(6) })

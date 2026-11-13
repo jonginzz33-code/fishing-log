@@ -244,7 +244,7 @@ class GroupTripsActivity : Activity() {
             val endText = if (t.end > 0) hm.format(Date(t.end)) else "출조 중"
             val counts = t.slots().filter { t.count(it) > 0 || it == 1 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" }
             c.addView(Ui.text(this, 13f, Color.parseColor("#B8C7D4"), false,
-                "$counts · ${Tide.mulName(t.start).substringBefore(" (")} · ${hm.format(Date(t.start))}~$endText" +
+                "$counts · ${if (t.isFresh()) "🏞 민물" else Tide.mulName(t.start).substringBefore(" (")} · ${hm.format(Date(t.start))}~$endText" +
                     (if (t.photoCount > 0) " · 사진 ${t.photoCount}" else "")), Ui.lp(this, MATCH, WRAP, top = 3))
             stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { c.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
             if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {

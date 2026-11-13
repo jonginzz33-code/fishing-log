@@ -55,7 +55,9 @@ object Cloud {
         /** 그때 날씨 (출조 기록에 저장된 값, 없으면 "") */
         val wx: String = "",
         /** v5.2 (240): 출조 후 조과를 고친 시각 · 고친 사람 이름 (없으면 0 · "") */
-        val editAt: Long = 0L, val editName: String = ""
+        val editAt: Long = 0L, val editName: String = "",
+        /** v6.9 (255): 전체 게시판 글을 큰 상세 화면으로 볼 때 그 글 id (그룹 기록은 "") · 정확한 위치 공개인지 */
+        val pubId: String = "", val pubExact: Boolean = true
     ) {
         fun bigMainPath(gid: String) = "groups/$gid/trips/$id/photosBig/" + mainId.ifBlank { "main" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -65,11 +67,13 @@ object Cloud {
         fun line(sep: String = " · "): String = shownSlots().joinToString(sep) { "${name(it)} ${count(it)}" }
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, editAt, editName)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, editAt, editName, pubId, pubExact)
         fun withCatches(cs: List<RemoteCatch>, at: Long, by: String) = RemoteTrip(id, owner, ownerName, start, end, names, cs, track,
-            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, at, by)
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, at, by, pubId, pubExact)
         /** "유료 5만원" / "무료" / "" */
         fun costLabel(): String = Store.costLabel(paid, fee)
+        /** v6.9 (254) */
+        fun isFresh(): Boolean = Store.isFresh(cat, shownSlots().filter { count(it) > 0 }.map { name(it) })
     }
 
     private val auth get() = FirebaseAuth.getInstance()
@@ -916,7 +920,8 @@ object Cloud {
                 val list = (d.get("list") as? List<*>)?.mapNotNull { m ->
                     (m as? Map<*, *>)?.let {
                         val id = it["id"] as? String ?: return@let null
-                        Store.Cat(id, it["label"] as? String ?: "", it["short"] as? String ?: "", it["hidden"] as? Boolean ?: false)
+                        Store.Cat(id, it["label"] as? String ?: "", it["short"] as? String ?: "", it["hidden"] as? Boolean ?: false,
+                            it["fresh"] as? Boolean ?: (id == "fresh"))
                     }
                 }.orEmpty().filter { it.label.isNotBlank() }
                 if (list.isNotEmpty()) Store.applyServerCats(list)
@@ -928,7 +933,7 @@ object Cloud {
     fun saveCats(list: List<Store.Cat>, done: (String?) -> Unit) {
         if (!isAdmin) return done("관리자만 바꿀 수 있어요")
         db.collection("config").document("cats")
-            .set(mapOf("list" to list.map { mapOf("id" to it.id, "label" to it.label, "short" to it.short, "hidden" to it.hidden) },
+            .set(mapOf("list" to list.map { mapOf("id" to it.id, "label" to it.label, "short" to it.short, "hidden" to it.hidden, "fresh" to it.fresh) },
                 "updated" to System.currentTimeMillis()))
             .addOnSuccessListener { Store.applyServerCats(list); done(null) }
             .addOnFailureListener { done(it.message ?: "저장 실패") }
@@ -1181,6 +1186,12 @@ object Cloud {
     /** 지도로 볼 때만: 따로 저장된 이동 경로 받기 */
     fun loadTracks(list: List<RemoteTrip>, done: (List<RemoteTrip>) -> Unit) {
         val g = active ?: return done(list)
+        loadTracksIn(g.id, list, done)
+    }
+
+    /** v6.9 (256): 특정 그룹 출조들의 이동 경로 받기 (지난 기록 출조별 경로) */
+    fun loadTracksIn(gid: String, list: List<RemoteTrip>, done: (List<RemoteTrip>) -> Unit) {
+        val g = object { val id = gid }
         val need = list.filter { it.hasTrack && it.track.isEmpty() }
         if (need.isEmpty()) return done(list)
         val got = HashMap<String, List<Store.Pt>>()

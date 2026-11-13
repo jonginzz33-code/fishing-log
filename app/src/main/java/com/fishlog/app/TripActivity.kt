@@ -57,6 +57,8 @@ class TripActivity : Activity() {
     private var remote: Cloud.RemoteTrip? = null
     private var remoteTrip: Store.Trip? = null
     private val viewOnly get() = remote != null
+    /** v6.9 (255): 전체 게시판 글을 보는 중 (그룹 기록이 아님) */
+    private val isPub get() = remote?.pubId?.isNotBlank() == true
 
     private fun toTrip(r: Cloud.RemoteTrip): Store.Trip = Store.Trip(
         id = r.start, start = r.start, end = if (r.end > 0) r.end else r.start,
@@ -121,6 +123,7 @@ class TripActivity : Activity() {
     private fun loadTide() {
         val t = trip ?: return
         val loc = t.anyLocation()
+        if (t.isFresh()) { tideMsg = ""; return }   // v6.9 (254): 민물은 물때 안 받음
         if (loc == null) { tideMsg = "위치 기록이 없어서 조위 그래프는 못 불러와요"; return }
         Tide.fetch(this, loc.first, loc.second, t.start) { day, err ->
             tideDay = day
@@ -138,6 +141,7 @@ class TripActivity : Activity() {
 
     private fun canEdit(t: Store.Trip): Boolean {
         val r = remote
+        if (r != null && r.pubId.isNotBlank()) return false   // 게시판 글은 여기서 못 고침 (내 기록에서 고치면 같이 바뀜)
         if (r != null) return Cloud.user != null && (r.owner == Cloud.uid || Cloud.isAdmin)
         return t.end > 0 && t !== Store.current
     }
@@ -370,7 +374,7 @@ class TripActivity : Activity() {
         remote?.let { r ->
             top.addView(Ui.text(this, 17f, Ui.TEXT, true, r.ownerName).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },
                 LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(12) })
-            top.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), true, "👀 보기 전용").apply {
+            top.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), true, if (r.pubId.isNotBlank()) "📰 게시판 · 보기 전용" else "👀 보기 전용").apply {
                 setPadding(dp(10), dp(4), dp(10), dp(4))
                 background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, android.graphics.Color.parseColor("#F2C14E"))
             })
@@ -385,8 +389,10 @@ class TripActivity : Activity() {
             (if (viewOnly) t.place() else if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
             if (!viewOnly) setOnClickListener { askPlace(t) }
         }, Ui.lp(this, MATCH, WRAP, top = 2))
+        val fresh = t.isFresh()
         root.addView(Ui.text(this, 13f, Ui.SUB, false,
-            (if (t.cat.isNotBlank()) Store.catLabel(t.cat) + " · " else "") + Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
+            (if (t.cat.isNotBlank()) Store.catLabel(t.cat) + " · " else if (fresh) "🏞 민물 · " else "") +
+                if (fresh) SunPhase.riseSet(t.start, t.anyLocation()?.first, t.anyLocation()?.second) else Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
 
         // 합계
         val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -412,6 +418,15 @@ class TripActivity : Activity() {
         root.addView(wxCard, Ui.lp(this, MATCH, WRAP, top = 8))
         renderWx(t, wxCard)
 
+        if (isPub) {
+            // 게시판은 유료 여부만 (금액 · 준비물은 안 올라감)
+            if (t.paid == true) {
+                section("이용료")
+                val cc = Ui.card(this)
+                cc.addView(Ui.text(this, 14f, Ui.TEXT, false, "💳 유료 자리 (금액은 게시판에 안 올라가요)"))
+                root.addView(cc, Ui.lp(this, MATCH, WRAP, top = 10))
+            }
+        } else {
         section("이용료 · 준비물")
         if (viewOnly) {
             val cc = Ui.card(this)
@@ -434,6 +449,7 @@ class TripActivity : Activity() {
         costCard.addView(saveMsg, Ui.lp(this, MATCH, WRAP, top = 6))
         root.addView(costCard, Ui.lp(this, MATCH, WRAP, top = 10))
         }
+        }
 
         // 지도
         section("이동 경로 · 잡은 위치")
@@ -442,7 +458,9 @@ class TripActivity : Activity() {
         root.addView(m, Ui.lp(this, MATCH, dp(240), top = 10))
         m.onResume()
         root.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "주황 ${t.name(1)} · 하늘 ${t.name(2)} · 분홍 선 이동 경로 · 지도를 누르면 크게 보기"), Ui.lp(this, MATCH, WRAP, top = 6))
+            if (isPub) (if (remote?.pubExact == true) "📍 정확한 위치 공개" else "◯ 대략 공개 · 점 근처(약 500m 안) 어딘가에서 잡았어요") +
+                " · 주황 ${t.name(1)} · 하늘 ${t.name(2)} · 게시판 글은 이동 경로가 없어요 · 지도를 누르면 크게 보기"
+            else "주황 ${t.name(1)} · 하늘 ${t.name(2)} · 분홍 선 이동 경로 · 지도를 누르면 크게 보기"), Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 머문 곳
         val stays = stays(t)
@@ -467,6 +485,8 @@ class TripActivity : Activity() {
             }
         }
 
+        // v6.9 (254): 민물이면 물때 대신 '🌅 해 · 시간대'
+        if (fresh) renderSun(t) else {
         // 물때
         section("물때")
         val tideCard = Ui.card(this)
@@ -489,9 +509,10 @@ class TripActivity : Activity() {
             tideCard.addView(Ui.text(this, 13f, Ui.SUB, false, tideMsg))
         }
         root.addView(tideCard, Ui.lp(this, MATCH, WRAP, top = 10))
+        }
 
         // 입질 시간 메모 (일출·일몰 기준)
-        val peaks = BiteMemo.forTrip(t, tideDay)
+        val peaks = BiteMemo.forTrip(t, if (fresh) null else tideDay)
         if (peaks.isNotEmpty()) {
             section("입질 시간 메모 (일출·일몰 기준)")
             Sun.times(t.start, t.anyLocation()?.first, t.anyLocation()?.second)?.let { s ->
@@ -518,9 +539,26 @@ class TripActivity : Activity() {
                 scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true
                 background = Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#0F2233"), 12, Ui.LINE)
                 MainPhoto.decode(r.mthumb)?.let { setImageBitmap(it) }
-                setOnClickListener { Cloud.active?.let { g -> MainPhoto.showBig(this@TripActivity, r.bigMainPath(g.id), r.mthumb, "${r.ownerName} · ${r.line()}") } }
+                setOnClickListener {
+                    if (r.pubId.isNotBlank()) MainPhoto.showBig(this@TripActivity, "public/${r.pubId}/photos/main", r.mthumb, "${r.ownerName} · ${r.line()}")
+                    else Cloud.active?.let { g -> MainPhoto.showBig(this@TripActivity, r.bigMainPath(g.id), r.mthumb, "${r.ownerName} · ${r.line()}") }
+                }
             }, LinearLayout.LayoutParams(dp(140), dp(140)).apply { topMargin = dp(8) })
-            if (r.photoCount > 0) root.addView(Ui.button(this, "사진 모두 보기 (${r.photoCount}장)") { account.showPhotos(r) }, Ui.lp(this, MATCH, WRAP, top = 10))
+            if (r.photoCount > 0 && r.pubId.isNotBlank()) {
+                // 게시판 사진: 옆으로 밀어서 보기
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                root.addView(Ui.hscroll(this, row), Ui.lp(this, MATCH, WRAP, top = 10))
+                PublicBoard.loadPhotos(r.pubId) { ps ->
+                    if (isFinishing) return@loadPhotos
+                    ps.filter { it.id != r.mainId }.forEach { p ->
+                        row.addView(ImageView(this).apply {
+                            setImageBitmap(p.bitmap); scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+                            background = Ui.bg(this@TripActivity, Ui.CARD, 10)
+                            setOnClickListener { ZoomImageView.show(this@TripActivity, p.bitmap, hm.format(Date(p.time))) }
+                        }, LinearLayout.LayoutParams(dp(110), dp(140)).apply { rightMargin = dp(6) })
+                    }
+                }
+            } else if (r.photoCount > 0) root.addView(Ui.button(this, "사진 모두 보기 (${r.photoCount}장)") { account.showPhotos(r) }, Ui.lp(this, MATCH, WRAP, top = 10))
         }
         if (!viewOnly) {
         // 대표 조과 사진: 바꾸기(찍기·앨범) · 이 출조 사진 중 고르기 · 빼기
@@ -639,6 +677,40 @@ class TripActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 10))
         root.addView(list, Ui.lp(this, MATCH, WRAP, top = 10))
 
+        // v6.9 (255): 게시판 글 메뉴 — 이 사람 차단 · 공개 내리기 (본인 · 관리자)
+        remote?.takeIf { it.pubId.isNotBlank() }?.let { r ->
+            section("메뉴")
+            val mine = r.owner == Cloud.uid
+            val local = if (mine) r.pubId.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
+            if (local != null) root.addView(Ui.button(this, "✎ 내 출조 기록 열기 (수정)") {
+                startActivity(Intent(this, TripActivity::class.java).putExtra("id", local.id))
+            }, Ui.lp(this, MATCH, WRAP, top = 10))
+            if (!mine && Cloud.user != null) root.addView(Ui.button(this, "🚫 이 사람 차단") {
+                AlertDialog.Builder(this, R.style.FlAlert)
+                    .setTitle("이 사람을 차단할까요?")
+                    .setMessage("이 사람이 올린 출조가 내 조황 목록, 어종 마릿수, 지도, 포인트 계산에서 모두 빠져요.\n상대에게는 알림이 가지 않아요. '차단 목록'에서 언제든 해제할 수 있어요.")
+                    .setPositiveButton("차단") { _, _ ->
+                        Moderation.block(r.owner, "${r.ownerName} · ${df.format(Date(r.start))} 글에서 차단") { err ->
+                            Toast.makeText(this, err ?: "차단했어요", Toast.LENGTH_LONG).show()
+                            if (err == null) { setResult(RESULT_OK, Intent().putExtra("pubChanged", true)); finish() }
+                        }
+                    }.setNegativeButton("취소", null).show()
+            }, Ui.lp(this, MATCH, WRAP, top = 8))
+            if (mine || Cloud.isAdmin) root.addView(Ui.button(this, if (mine) "🗑 전체 공개 내리기" else "🗑 이 글 지우기 (관리자)") {
+                AlertDialog.Builder(this, R.style.FlAlert)
+                    .setTitle(if (mine) "내 출조 공개를 내릴까요?" else "관리자: 이 글을 지울까요?")
+                    .setMessage("전체 게시판에서만 사라지고, 폰의 기록은 그대로예요")
+                    .setPositiveButton("내리기") { _, _ ->
+                        PublicBoard.unpublish(r.pubId, local?.id) { err ->
+                            Toast.makeText(this, err ?: "내렸어요", Toast.LENGTH_LONG).show()
+                            if (err == null) { setResult(RESULT_OK, Intent().putExtra("pubChanged", true)); finish() }
+                        }
+                    }.setNegativeButton("취소", null).show()
+            }.apply { setTextColor(android.graphics.Color.parseColor("#FF8A92")) }, Ui.lp(this, MATCH, WRAP, top = 8))
+            root.addView(Ui.text(this, 12f, Ui.SUB, false, "게시판 글은 이동 경로 · 배 이름 · 이용료 금액이 안 올라가요").apply { gravity = Gravity.CENTER },
+                Ui.lp(this, MATCH, WRAP, top = 10))
+            return
+        }
         // v5.2: 보기 전용 메뉴 — 함께한 출조 · (올린 사람 · 그룹장 · 관리자) 그룹에서 내리기
         remote?.let { r ->
             section("메뉴")
@@ -691,6 +763,39 @@ class TripActivity : Activity() {
         root.addView(names, Ui.lp(this, MATCH, WRAP, top = 8))
         extra.forEach { sl -> root.addView(Ui.button(this, "${t.name(sl)} 이름") { askRename(t, sl) }, Ui.lp(this, MATCH, WRAP, top = 8)) }
         if (t.end > 0) root.addView(Ui.button(this, "이 출조 삭제") { askDelete(t) }, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    /** v6.9 (254): 민물 출조 — 일출 · 일몰 · 골든타임 · 해 기준 마릿수 */
+    private fun renderSun(t: Store.Trip) {
+        section("🌅 해 · 시간대")
+        val card = Ui.card(this)
+        val loc = t.anyLocation()
+        val la = loc?.first; val lo = loc?.second
+        card.addView(Ui.text(this, 15f, Ui.TEXT, true, SunPhase.riseSet(t.start, la, lo) + if (loc == null) " (서해 중부 기준)" else ""))
+        card.addView(Ui.text(this, 12.5f, android.graphics.Color.parseColor("#F2C14E"), false, SunPhase.goldenText(t.start, la, lo)),
+            Ui.lp(this, MATCH, WRAP, top = 4))
+        if (t.catches.isNotEmpty()) {
+            card.addView(Ui.text(this, 13f, Ui.SUB, true, "해 기준 조과"), Ui.lp(this, MATCH, WRAP, top = 12))
+            val rows = SunPhase.counts(t.catches.map { it.time }, la, lo)
+            val max = rows.maxOf { it.second }.coerceAtLeast(1)
+            rows.forEach { (k, v) ->
+                val gold = SunPhase.golden(k)
+                val r = Ui.row(this)
+                r.addView(Ui.text(this, 13f, if (v > 0) Ui.TEXT else Ui.SUB, gold && v > 0, k), LinearLayout.LayoutParams(dp(118), WRAP))
+                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                track.addView(View(this).apply { background = Ui.bg(this@TripActivity, if (gold) android.graphics.Color.parseColor("#F2C14E") else Ui.BLUE, 3) },
+                    LinearLayout.LayoutParams(0, dp(10), v.toFloat() / max + 0.0001f))
+                track.addView(View(this), LinearLayout.LayoutParams(0, dp(10), 1f - v.toFloat() / max + 0.0001f))
+                r.addView(track, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.text(this, 13f, Ui.TEXT, true, "$v").apply { gravity = Gravity.END }, LinearLayout.LayoutParams(dp(30), WRAP).apply { leftMargin = dp(6) })
+                card.addView(r, Ui.lp(this, MATCH, WRAP, top = 5))
+            }
+            val g = rows.filter { SunPhase.golden(it.first) }.sumOf { it.second }
+            card.addView(Ui.text(this, 12.5f, if (g > 0) android.graphics.Color.parseColor("#F2C14E") else Ui.SUB, g > 0,
+                "골든타임(일출 · 일몰 전후 1시간)에 ${g}마리 · 전체의 ${g * 100 / t.catches.size}%"), Ui.lp(this, MATCH, WRAP, top = 8))
+        }
+        card.addView(Ui.text(this, 11f, Ui.SUB, false, "민물 출조라 물때 대신 해 기준으로 보여요 (노란 막대 = 골든타임)"), Ui.lp(this, MATCH, WRAP, top = 6))
+        root.addView(card, Ui.lp(this, MATCH, WRAP, top = 10))
     }
 
     /** 200m 안에 20분 이상 머문 구간 */

@@ -61,6 +61,8 @@ object Store {
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun photoOf(c: Catch): Photo? = photos.firstOrNull { it.catchTime == c.time }
         /** 위치가 있는 첫 지점 (물때 조회용) */
+        /** v6.9 (254): 민물 출조인가 (종류 🏞 민물 · 또는 잡은 어종이 전부 민물 고기) */
+        fun isFresh(): Boolean = Store.isFresh(cat, slots().filter { count(it) > 0 }.map { name(it) })
         fun anyLocation(): Pair<Double, Double>? =
             catches.firstOrNull { it.lat != null && it.lon != null }?.let { it.lat!! to it.lon!! }
                 ?: track.firstOrNull()?.let { it.lat to it.lon }
@@ -119,8 +121,11 @@ object Store {
     // ---- 설정 ----
     // ---- 출조 종류 (선상 · 해루질 · 워킹) ----
     // 관리자가 '출조 종류 관리'에서 추가·이름 바꾸기·순서·숨기기 (서버 config/cats → 폰에 저장)
-    class Cat(val id: String, val label: String, val short: String, val hidden: Boolean = false)
-    private val BASE_CATS = listOf(Cat("boat", "선상낚시", "선상"), Cat("night", "해루질", "해루질"), Cat("walk", "워킹낚시", "워킹"))
+    /** v6.9 (254): fresh = 🏞 민물 (물때 대신 일출 · 일몰 기준) */
+    class Cat(val id: String, val label: String, val short: String, val hidden: Boolean = false, val fresh: Boolean = false)
+    /** v6.9 (254): 기본 민물 종류 (서버 목록에 없으면 앱이 덧붙임 · 관리자가 이름 바꾸기 · 숨기기 가능) */
+    private val FRESH_CAT = Cat("fresh", "민물낚시", "민물", false, true)
+    private val BASE_CATS = listOf(Cat("boat", "선상낚시", "선상"), Cat("night", "해루질", "해루질"), Cat("walk", "워킹낚시", "워킹"), FRESH_CAT)
 
     /** 모든 종류 (숨긴 것 포함, 이름 찾기용) */
     private var catsCache: Pair<String?, List<Cat>>? = null
@@ -138,10 +143,29 @@ object Store {
             val a = JSONArray(saved)
             val l = (0 until a.length()).map { i ->
                 val o = a.getJSONObject(i)
-                Cat(o.getString("id"), o.optString("label", ""), o.optString("short", ""), o.optBoolean("hidden", false))
+                Cat(o.getString("id"), o.optString("label", ""), o.optString("short", ""), o.optBoolean("hidden", false),
+                    o.optBoolean("fresh", o.getString("id") == "fresh"))
             }.filter { it.id.isNotBlank() && it.label.isNotBlank() }
-            if (l.isEmpty()) BASE_CATS else l
+            when {
+                l.isEmpty() -> BASE_CATS
+                l.none { it.id == FRESH_CAT.id } -> l + FRESH_CAT
+                else -> l
+            }
         } catch (_: Exception) { BASE_CATS }
+    }
+
+    // ---- v6.9 (254): 바다 / 민물 ----
+    /** 민물 고기 (어종이 전부 이것들이면 종류를 몰라도 민물로 봐요) */
+    private val FRESH_SPECIES = setOf("배스", "붕어", "잉어", "쏘가리", "송어", "블루길", "메기", "가물치", "향어", "끄리", "누치",
+        "꺽지", "피라미", "산천어", "빙어", "떡붕어", "강준치", "동자개", "빠가사리", "장어(민물)", "민물장어")
+    fun isFreshSpecies(n: String): Boolean = n.trim().let { s -> s in FRESH_SPECIES || FRESH_SPECIES.any { f -> f.length >= 2 && s.contains(f) } }
+    fun isFreshCat(cat: String): Boolean = cat.isNotBlank() && allCats().firstOrNull { it.id == cat }?.fresh == true
+    /** 이 출조가 민물인가: 종류가 🏞 민물이거나, 잡은 어종이 전부 민물 고기 */
+    fun isFresh(cat: String, species: List<String>): Boolean {
+        if (isFreshCat(cat)) return true
+        // 바다 종류로 골랐어도 잡은 게 전부 민물 고기면 민물
+        val sp = species.map { it.trim() }.filter { it.isNotBlank() && !it.endsWith("번") }
+        return sp.isNotEmpty() && sp.all { isFreshSpecies(it) }
     }
 
     /** 고를 수 있는 종류 (숨긴 것 빼고, 관리자가 정한 순서) */
@@ -153,7 +177,7 @@ object Store {
 
     fun catsToJson(list: List<Cat>): String {
         val a = JSONArray()
-        list.forEach { c -> a.put(JSONObject().put("id", c.id).put("label", c.label).put("short", c.short).put("hidden", c.hidden)) }
+        list.forEach { c -> a.put(JSONObject().put("id", c.id).put("label", c.label).put("short", c.short).put("hidden", c.hidden).put("fresh", c.fresh)) }
         return a.toString()
     }
 
@@ -168,7 +192,9 @@ object Store {
     private val DEFAULT_SPECIES = mapOf(
         "boat" to listOf("주꾸미", "갑오징어", "우럭", "광어", "참돔", "쭈갑"),
         "night" to listOf("낙지", "문어", "해삼", "소라", "꽃게", "키조개"),
-        "walk" to listOf("우럭", "노래미", "감성돔", "농어", "볼락", "학꽁치")
+        "walk" to listOf("우럭", "노래미", "감성돔", "농어", "볼락", "학꽁치"),
+        // v6.9 (254)
+        "fresh" to listOf("배스", "붕어", "잉어", "쏘가리", "송어", "블루길")
     )
 
     var category: String

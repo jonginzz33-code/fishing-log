@@ -138,10 +138,11 @@ object MapDialog {
         items.groupingBy { it.species }.eachCount().entries.sortedByDescending { it.value }.joinToString(" · ") { "${it.key} ${it.value}" }
 
     /** 묶음 점을 눌렀을 때: 날짜별(사람별)로 한 줄씩 요약 */
-    private fun showCluster(a: Activity, items: List<MapDot>) {
+    private fun showCluster(a: Activity, items: List<MapDot>, onFocus: ((String) -> Unit)? = null) {
         if (items.isEmpty()) return
         if (items.any { it.time <= 0L || it.species.isBlank() }) { showClusterOld(a, items); return }
-        val groups = items.groupBy { dayKey.format(Date(it.time)) + "|" + it.who }.values
+        // v6.9 (256): 출조를 알면 출조별로 (모르면 예전처럼 날짜 · 사람별)
+        val groups = items.groupBy { if (it.trip.isNotBlank()) it.trip else dayKey.format(Date(it.time)) + "|" + it.who }.values
             .sortedByDescending { g -> g.maxOf { it.time } }
         val days = groups.map { dayKey.format(Date(it[0].time)) }.distinct().size
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(a, 16), dp(a, 4), dp(a, 16), dp(a, 4)) }
@@ -174,24 +175,47 @@ object MapDialog {
                 setPadding(dp(a, 14), dp(a, 10), dp(a, 14), dp(a, 10))
                 background = Ui.bg(a, Ui.CARD, 12, Ui.LINE)
                 isClickable = true
-                setOnClickListener { showDay(a, g) }
+                setOnClickListener { showDay(a, g, pastTrips[g[0].trip]?.fresh == true) }
             }
             val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
             top.addView(android.view.View(a).apply { background = Ui.bg(a, first.color, 99) },
                 LinearLayout.LayoutParams(dp(a, 10), dp(a, 10)).apply { rightMargin = dp(a, 8) })
+            val freshTrip = pastTrips[first.trip]?.fresh == true
             top.addView(Ui.text(a, 15f, Ui.TEXT, true, dayLabel.format(Date(first.time)) + " · " +
-                Tide.mulName(first.time).substringBefore(" (")), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                (if (freshTrip) "🏞 민물" else Tide.mulName(first.time).substringBefore(" ("))), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             top.addView(Ui.text(a, 16f, Ui.SUB, true, "›"))
             card.addView(top)
             card.addView(Ui.text(a, 14f, Ui.TEXT, false, (if (first.who.isNotBlank()) first.who + "  " else "") + speciesLine(g)),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 4) })
+            // v6.9 (256): 잡은 시각 · 이 출조만 보기 · 상세
+            val times = g.sortedBy { it.time }.groupBy { it.species }.entries.joinToString(" · ") { e ->
+                e.key + " " + e.value.take(6).joinToString(" · ") { hmFmt.format(Date(it.time)) } + if (e.value.size > 6) " 외 ${e.value.size - 6}" else ""
+            }
+            card.addView(Ui.text(a, 12.5f, Ui.SUB, false, "⏱ $times"),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 3) })
+            val pt = pastTrips[first.trip]
+            if (pt != null) {
+                card.background = Ui.bg(a, Ui.CARD, 12, pt.color)
+                val btns = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                if (onFocus != null) btns.addView(Ui.text(a, 13f, Color.parseColor("#06301C"), true, "🗺 이 출조만 보기").apply {
+                    gravity = Gravity.CENTER; setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+                    background = Ui.bg(a, Color.parseColor("#5FD49A"), 10)
+                    setOnClickListener { dlg.dismiss(); onFocus(pt.key) }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
+                btns.addView(Ui.text(a, 13f, Ui.TEXT, true, "상세 ›").apply {
+                    gravity = Gravity.CENTER; setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+                    background = Ui.bg(a, Color.TRANSPARENT, 10, Ui.LINE)
+                    setOnClickListener { dlg.dismiss(); pt.open(a) }
+                })
+                card.addView(btns, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 8) })
+            }
             col.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 8) })
         }
         dlg.show()
     }
 
     /** 하루 상세: 어종별 마릿수, 시간대, 물때·들물/날물·만조·간조 전후 */
-    private fun showDay(a: Activity, g: List<MapDot>) {
+    private fun showDay(a: Activity, g: List<MapDot>, fresh: Boolean = false) {
         val list = g.sortedBy { it.time }
         val first = list.first()
         val title = (if (first.who.isNotBlank()) first.who + " · " else "") + dayLabel.format(Date(first.time))
@@ -236,6 +260,22 @@ object MapDialog {
                 sb.append("\n")
             }
             tv.text = sb.toString().trimEnd()
+        }
+        // v6.9 (254): 민물이면 물때 대신 해 기준
+        if (fresh) {
+            val sb = StringBuilder()
+            sb.append("🏞 민물 · ").append(SunPhase.riseSet(first.time, first.point.latitude, first.point.longitude)).append("\n")
+            sb.append("잡은 시간: ").append(hmFmt.format(Date(first.time))).append(" ~ ").append(hmFmt.format(Date(list.last().time))).append("\n\n")
+            sb.append("어종별\n")
+            list.groupingBy { it.species }.eachCount().entries.sortedByDescending { it.value }
+                .forEach { sb.append("  ").append(it.key).append(" ").append(it.value).append("마리\n") }
+            sb.append("\n해 기준 (골든타임 = 일출 · 일몰 전후 1시간)\n")
+            sb.append(SunPhase.summary(list.map { it.time }, first.point.latitude, first.point.longitude)).append("\n")
+            sb.append("\n시각별\n")
+            list.forEach { d -> sb.append("  ").append(hmFmt.format(Date(d.time))).append("  ").append(d.species)
+                .append(" · ").append(SunPhase.of(d.time, d.point.latitude, d.point.longitude)).append("\n") }
+            tv.text = sb.toString().trimEnd()
+            return
         }
         Tide.fetch(a, first.point.latitude, first.point.longitude, first.time) { d, _ -> render(d) }
     }
@@ -336,8 +376,11 @@ object MapDialog {
         val zoneOv = Zones.ZoneOverlay(a) { Zones.on(a) }
         zoneOv.onTapZones = { Zones.showInfo(a, it, map) }
         map.overlays.add(zoneOv)
-        // 지난 기록 (맨 아래, 반투명)
-        val past = DotsOverlay(a, emptyList(), true) { showCluster(a, it) }
+        // 지난 기록 (맨 아래, 반투명) · v6.9 (256): 출조마다 얇은 경로 + 점 누르면 '이 출조만 보기'
+        var focusFn: (String?) -> Unit = {}
+        val pastRoutes = PastRoutesOverlay(a).apply { isEnabled = false }
+        map.overlays.add(pastRoutes)
+        val past = DotsOverlay(a, emptyList(), true) { showCluster(a, it) { k -> focusFn(k) } }
         past.isEnabled = false
         map.overlays.add(past)
 
@@ -530,15 +573,46 @@ object MapDialog {
             visibility = android.view.View.GONE
         }
         past.icons = true
+        // v6.9 (256): 출조 색 범례 줄 (누르면 그 출조만 보기)
+        val chipRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipWrap = Ui.hscroll(a, chipRow).apply { visibility = android.view.View.GONE }
+        var pastList: List<PastTrip> = emptyList()
+        fun paintChips() {
+            chipRow.removeAllViews()
+            val colored = pastList.filter { it.color != GREY_TRIP }
+            colored.forEach { p ->
+                chipRow.addView(TextView(a).apply {
+                    text = android.text.SpannableString("● " + p.label).apply {
+                        setSpan(android.text.style.ForegroundColorSpan(p.color), 0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                    textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                    setPadding(dp(a, 10), dp(a, 5), dp(a, 10), dp(a, 5))
+                    background = GradientDrawable().apply { setColor(Color.parseColor("#12293A")); cornerRadius = dp(a, 14).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+                    setOnClickListener { focusFn(p.key) }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
+            }
+            val rest = pastList.size - colored.size
+            if (rest > 0) chipRow.addView(TextView(a).apply {
+                text = android.text.SpannableString("● 그 전 $rest").apply {
+                    setSpan(android.text.style.ForegroundColorSpan(GREY_TRIP), 0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+                textSize = 12f; setTextColor(Color.parseColor("#9FB4C2"))
+                setPadding(dp(a, 10), dp(a, 5), dp(a, 10), dp(a, 5))
+            })
+            chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+        }
         fun loadPastNow() {
             val mode = pastModeNow()
             pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
             pastNote = "\n지난 기록 불러오는 중…"
             updateLegend()
-            loadPast(excludeId, mode) { list, mine, others ->
+            loadPast(excludeId, mode) { list, mine, others, trips ->
                 past.dots = list
+                pastList = trips
+                pastRoutes.routes = trips.filter { it.track.size >= 2 }.map { PastRoutesOverlay.Route(it.key, it.color, it.track) }
+                paintChips()
                 pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +
-                    " · 그림 = 많이 잡힌 어종 · 숫자 = 마릿수 · 분홍 테두리 = 친구 · 보라 = 게시판"
+                    " · 색 = 출조 · 얇은 선 = 그 출조 이동 경로 · 숫자 = 마릿수 · 점이나 색 범례를 누르면 '이 출조만 보기'"
                 updateLegend()
                 map.invalidate()
             }
@@ -559,8 +633,11 @@ object MapDialog {
         }
         pastBtn.setOnClickListener {
             past.isEnabled = !past.isEnabled
+            pastRoutes.isEnabled = past.isEnabled
+            if (!past.isEnabled) focusFn(null)
             setOn(pastBtn, past.isEnabled)
             pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
+            chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
             if (past.isEnabled && !pastLoaded) {
                 pastLoaded = true
                 loadPastNow()
@@ -588,6 +665,7 @@ object MapDialog {
         root.addView(Ui.hscroll(a, bar))
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
+        root.addView(chipWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
 
         val frame = FrameLayout(a)
@@ -607,6 +685,39 @@ object MapDialog {
         }
         if (liveMe != null) addStatus(a, frame, liveMe)
         zoomButtons(a, frame, map, liveMe?.let { lm -> { v: TextView? -> lm.goToMe(v) } })
+        // v6.9 (256): '이 출조만 보기' 안내 줄 (지도 맨 위 · 누르면 다 보기)
+        val focusBar = TextView(a).apply {
+            textSize = 12.5f; setTextColor(Color.WHITE); setLineSpacing(0f, 1.2f)
+            setPadding(dp(a, 12), dp(a, 8), dp(a, 12), dp(a, 8))
+            background = GradientDrawable().apply { setColor(Color.argb(238, 11, 26, 38)); cornerRadius = dp(a, 12).toFloat(); setStroke(dp(a, 1), Color.parseColor("#F28C38")) }
+            visibility = android.view.View.GONE
+        }
+        frame.addView(focusBar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP).apply {
+            topMargin = dp(a, 8); leftMargin = dp(a, 10); rightMargin = dp(a, 10) })
+        focusFn = { k ->
+            val p = k?.let { pastTrips[it] }
+            past.focus = p?.key; pastRoutes.focus = p?.key
+            if (p == null) {
+                pastRoutes.marks = emptyList(); focusBar.visibility = android.view.View.GONE
+            } else {
+                if (!past.isEnabled) { past.isEnabled = true; pastRoutes.isEnabled = true }
+                pastRoutes.marks = p.catches.sortedBy { it.second }.map { PastRoutesOverlay.Mark(it.first, hmFmt.format(Date(it.second))) }
+                val head = android.text.SpannableStringBuilder("● ").apply {
+                    setSpan(android.text.style.ForegroundColorSpan(p.color), 0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    append(p.label); append(" 만 보는 중        × 다 보기\n")
+                }
+                val endT = if (p.end > 0) p.end else p.catches.maxOfOrNull { it.second } ?: p.start
+                head.append(if (p.track.size >= 2) distanceText(p.track) + " · " else if (p.src == 2) "게시판 글은 이동 경로가 없어요 · " else "이동 경로 없음 · ")
+                head.append(hmFmt.format(Date(p.start))).append("~").append(hmFmt.format(Date(endT)))
+                head.append(" · 번호 = 잡은 순서")
+                focusBar.text = head
+                focusBar.visibility = android.view.View.VISIBLE
+                val pts = p.track + p.catches.map { it.first }
+                if (pts.isNotEmpty()) map.post { fit(map, pts) }
+            }
+            map.invalidate()
+        }
+        focusBar.setOnClickListener { focusFn(null) }
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         if (live != null) root.addView(liveInfo)
         root.addView(legendView)
@@ -720,53 +831,108 @@ object MapDialog {
         else -> mode
     }
 
-    /** 지난 기록: 내 기록 + (고른 그룹 친구 / 전체 게시판). 점에는 어종 그림 */
-    private fun loadPast(excludeId: Long?, mode: String, done: (List<MapDot>, Int, Int) -> Unit) {
+    // ---------------- v6.9 (256): 지난 기록 출조별 색 · 경로 · '이 출조만 보기' ----------------
+    /** 지난 기록 출조 하나 (key = "me:id" / "g:id" / "p:id") */
+    class PastTrip(val key: String, val label: String, val start: Long, val end: Long, val src: Int,
+                   var track: List<GeoPoint>, val catches: List<Pair<GeoPoint, Long>>, val open: (Activity) -> Unit) {
+        var color: Int = GREY_TRIP
+        /** v6.9 (254): 민물 출조 (물때 대신 해 기준) */
+        var fresh = false
+    }
+    private val TRIP_COLORS = intArrayOf(Color.parseColor("#F28C38"), Color.parseColor("#5BC8DF"), Color.parseColor("#B58CF0"),
+        Color.parseColor("#5FD39A"), Color.parseColor("#F2C14E"), Color.parseColor("#F07AA0"))
+    private val GREY_TRIP = Color.parseColor("#8E9AA3")
+    /** 지금 지도에 깔린 지난 기록 출조들 (점 → 창 → '상세 ›' · '이 출조만 보기') */
+    private val pastTrips = HashMap<String, PastTrip>()
+    private val mdFmt = SimpleDateFormat("M/d", Locale.KOREA)
+
+    /**
+     * 지난 기록: 내 기록 + (고른 그룹 친구 / 전체 게시판). 점에는 어종 그림 · 색 = 출조(최근 6개, 나머지 회색)
+     *  done 은 두 번 불릴 수 있어요 (그룹 친구 이동 경로를 받은 뒤 한 번 더)
+     */
+    private fun loadPast(excludeId: Long?, mode: String, done: (List<MapDot>, Int, Int, List<PastTrip>) -> Unit) {
         val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
+        val trips = mutableListOf<PastTrip>()
         val mine = Store.history.filter { it.id != excludeId }.take(150).flatMap { t ->
             val mul = Tide.mulName(t.start).substringBefore(" (")
-            t.catches.filter { it.lat != null && it.lon != null }.map {
+            val key = "me:${t.id}"
+            val cs = t.catches.filter { it.lat != null && it.lon != null }
+            if (cs.isNotEmpty()) trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} 나", t.start, t.end, 0,
+                t.track.map { GeoPoint(it.lat, it.lon) }, cs.map { GeoPoint(it.lat!!, it.lon!!) to it.time }) { a ->
+                a.startActivity(android.content.Intent(a, TripActivity::class.java).putExtra("id", t.id)) })
+            if (t.isFresh()) trips.lastOrNull { it.key == key }?.fresh = true
+            cs.map {
                 MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                     "나 · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "나 ${t.name(it.slot)}",
-                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0, if (it.q == 1 && it.acc > 0f) it.acc.toDouble() else 0.0, it.q == 1)
+                    it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0, if (it.q == 1 && it.acc > 0f) it.acc.toDouble() else 0.0, it.q == 1, key)
+            }
+        }
+        fun finish(all: List<MapDot>, nMine: Int, nOthers: Int, groupTrips: List<Pair<String, Cloud.RemoteTrip>> = emptyList()) {
+            val sorted = trips.sortedByDescending { it.start }
+            sorted.forEachIndexed { i, p -> p.color = if (i < TRIP_COLORS.size) TRIP_COLORS[i] else GREY_TRIP }
+            pastTrips.clear(); sorted.forEach { pastTrips[it.key] = it }
+            val colored = all.map { d -> pastTrips[d.trip]?.let { d.withColor(it.color) } ?: d }
+            done(colored, nMine, nOthers, sorted)
+            // 색이 있는 그룹 친구 출조만 이동 경로 받기 (서버 읽기 줄이기)
+            val top = sorted.take(TRIP_COLORS.size).map { it.key }.toSet()
+            val need = groupTrips.filter { (_, r) -> "g:${r.id}" in top && r.hasTrack && r.track.isEmpty() }
+            if (need.isEmpty()) return
+            var left = need.groupBy { it.first }.size
+            need.groupBy { it.first }.forEach { (gid, l) ->
+                Cloud.loadTracksIn(gid, l.map { it.second }) { full ->
+                    full.forEach { r -> pastTrips["g:${r.id}"]?.track = r.track.map { GeoPoint(it.lat, it.lon) } }
+                    if (--left == 0) done(colored, nMine, nOthers, sorted)
+                }
             }
         }
         val myId = Cloud.uid
-        if (myId == null || mode == "mine") { done(mine, mine.size, 0); return }
+        if (myId == null || mode == "mine") { finish(mine, mine.size, 0); return }
         if (mode == "public") {
             PublicBoard.load(System.currentTimeMillis() - 92L * 86_400_000L) { list, _ ->
                 val others = list.orEmpty().filter { it.owner != myId && !Moderation.isBlocked(it.owner) }.flatMap { t ->
                     val mul = Tide.mulName(t.start).substringBefore(" (")
+                    val key = "p:${t.id}"
+                    val pts = t.catches.mapNotNull { c -> c.cell?.let { GeoPoint(c.exactLat ?: it.lat, c.exactLon ?: it.lon) to c.time } }
+                    if (pts.isNotEmpty()) trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} ${t.nick}", t.start, t.end, 2, emptyList(), pts) { a ->
+                        PublicBoard.openBig(a, t) })
+                    if (t.isFresh()) trips.lastOrNull { it.key == key }?.fresh = true
                     t.catches.mapNotNull { c ->
                         val cell = c.cell ?: return@mapNotNull null
                         MapDot(GeoPoint(cell.lat, cell.lon), slotCol(c.slot),
                             "${t.nick} · ${df.format(Date(c.time))} · ${t.name(c.slot)} · $mul", "${t.nick} ${t.name(c.slot)}",
-                            c.time, t.nick, t.name(c.slot), false, 2, if (t.exact) 0.0 else cell.r)
+                            c.time, t.nick, t.name(c.slot), false, 2, if (t.exact) 0.0 else cell.r, false, key)
                     }
                 }
-                done(mine + others, mine.size, others.size)
+                finish(mine + others, mine.size, others.size)
             }
             return
         }
         val gs = if (mode == "allg") Cloud.groups else Cloud.groups.filter { "g:${it.id}" == mode }
-        if (gs.isEmpty()) { done(mine, mine.size, 0); return }
-        val got = mutableListOf<Cloud.RemoteTrip>()
+        if (gs.isEmpty()) { finish(mine, mine.size, 0); return }
+        val got = mutableListOf<Pair<String, Cloud.RemoteTrip>>()
         var left = gs.size
         gs.forEach { g ->
             Cloud.recentTripsOf(g) { list, _ ->
-                list?.let { got.addAll(it) }
+                list?.let { l -> got.addAll(l.map { g.id to it }) }
                 left--
                 if (left == 0) {
-                    val friendsTrips = got.filter { it.owner != myId }.distinctBy { it.id }
-                    val friends = friendsTrips.flatMap { t ->
+                    val friendsTrips = got.filter { it.second.owner != myId }.distinctBy { it.second.id }
+                    val friends = friendsTrips.flatMap { (_, t) ->
                         val mul = Tide.mulName(t.start).substringBefore(" (")
-                        t.catches.filter { it.lat != null && it.lon != null }.map {
+                        val key = "g:${t.id}"
+                        val cs = t.catches.filter { it.lat != null && it.lon != null }
+                        if (cs.isNotEmpty()) trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} ${t.ownerName}", t.start, t.end, 1,
+                            t.track.map { GeoPoint(it.lat, it.lon) }, cs.map { GeoPoint(it.lat!!, it.lon!!) to it.time }) { a ->
+                            TripActivity.remoteView = t
+                            a.startActivity(android.content.Intent(a, TripActivity::class.java).putExtra("remote", true)) })
+                        if (t.isFresh()) trips.lastOrNull { it.key == key }?.fresh = true
+                        cs.map {
                             MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
                                 "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
-                                it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1)
+                                it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1, 0.0, false, key)
                         }
                     }
-                    done(mine + friends, mine.size, friends.size)
+                    finish(mine + friends, mine.size, friends.size, friendsTrips)
                 }
             }
         }
@@ -958,7 +1124,7 @@ object MapDialog {
             val mode = pastModeNow()
             pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
             pastNote = "\n지난 기록 불러오는 중…"; paintLegend()
-            loadPast(null, mode) { list, mine, others ->
+            loadPast(null, mode) { list, mine, others, _ ->
                 if (!dialog.isShowing) return@loadPast
                 past.dots = list
                 pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +

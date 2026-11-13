@@ -2180,6 +2180,16 @@ class MainActivity : Activity() {
     private fun refreshTideRow() {
         val now = System.currentTimeMillis()
         val loc = Spot.base(this, bestLocation())   // v5.1: 고른 지점 · 관측소 기준
+        // v6.9 (254): 민물 출조 중엔 물때 대신 해 기준 (일몰까지 · 골든타임)
+        val cur = Store.current
+        if (cur != null && cur.isFresh()) {
+            val here = Tracker.last?.let { it.latitude to it.longitude } ?: cur.anyLocation() ?: loc
+            tideTitle.text = "🏞 민물 출조 중 · " + SunPhase.riseSet(now, here?.first, here?.second)
+            tideSub.text = SunPhase.liveText(now, here?.first, here?.second)
+            paintTideWeather(here)
+            paintSun(now, here)
+            return
+        }
         paintTideTitle(now, loc)
         paintTideWeather(loc)
         paintSun(now, loc)

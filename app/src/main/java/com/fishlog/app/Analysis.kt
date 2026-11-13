@@ -24,13 +24,15 @@ object Analysis {
               /** 게시판 '대략 공개' (자리 범위만) */
               val approx: Boolean,
               /** v3.8.1 그룹 출조 기록에서 온 조과 = 그룹 이름 (아니면 "") · who = 올린 사람 */
-              val group: String = "", val who: String = "")
+              val group: String = "", val who: String = "",
+              /** v6.9 (254): 민물 출조 (물때 · 물세기 · 만조간조 계산에서 빼요) */
+              val fresh: Boolean = false)
 
     /** 내 폰 기록 (대략 위치로 잡힌 조과는 빼고) */
     fun mine(cat: String, since: Long): List<Rec> = Store.history.filter { (cat == "" || it.cat == cat) && it.start >= since }.flatMap { t ->
         val end = if (t.end > 0) t.end else t.catches.maxOfOrNull { it.time } ?: t.start
         t.catches.filter { it.lat != null && it.lon != null && it.q != 1 }.map { c ->
-            Rec(c.time, t.name(c.slot), c.lat!!, c.lon!!, "m${t.id}", t.start, end, t.wx, true, false)
+            Rec(c.time, t.name(c.slot), c.lat!!, c.lon!!, "m${t.id}", t.start, end, t.wx, true, false, fresh = t.isFresh())
         }
     }
 
@@ -39,7 +41,7 @@ object Analysis {
         t.catches.mapNotNull { c ->
             val la = c.exactLat ?: c.cell?.lat ?: return@mapNotNull null
             val lo = c.exactLon ?: c.cell?.lon ?: return@mapNotNull null
-            Rec(c.time, t.name(c.slot), la, lo, "p${t.id}", t.start, if (t.end > 0) t.end else t.start, t.wx, false, !c.hasExact)
+            Rec(c.time, t.name(c.slot), la, lo, "p${t.id}", t.start, if (t.end > 0) t.end else t.start, t.wx, false, !c.hasExact, fresh = t.isFresh())
         }
     }
 
@@ -48,7 +50,7 @@ object Analysis {
         list.filter { it.owner != skipOwner && (cat == "" || it.cat == "" || it.cat == cat) && it.start >= since }.flatMap { t ->
             val end = if (t.end > 0) t.end else t.catches.maxOfOrNull { it.time } ?: t.start
             t.catches.filter { it.lat != null && it.lon != null }.map { c ->
-                Rec(c.time, t.names.getOrElse(c.slot - 1) { "${c.slot}번" }, c.lat!!, c.lon!!, "g${t.owner}_${t.start}", t.start, end, t.wx, false, false, gname, t.ownerName)
+                Rec(c.time, t.names.getOrElse(c.slot - 1) { "${c.slot}번" }, c.lat!!, c.lon!!, "g${t.owner}_${t.start}", t.start, end, t.wx, false, false, gname, t.ownerName, t.isFresh())
             }
         }
 
@@ -82,6 +84,8 @@ object Analysis {
                 main.post { progress("물때 · 물세기 자료 받는 중 $i/${minOf(trips.size, 40)}") }
                 val r0 = rs[0]
                 val mid = rs.map { it.time }.sorted()[rs.size / 2]
+                // v6.9 (254): 민물 출조는 물때 자료 안 받음
+                if (r0.fresh) { info[k] = TripInfo(null, null, if (r0.wx.isNotBlank()) Weather.snapFromJson(r0.wx) else null); return@forEach }
                 val d = try { Tide.fetchNow(app, r0.lat, r0.lon, mid) } catch (_: Exception) { null }
                 val pct = if (d != null) try { Tide.strengthOf(app, d).pct } catch (_: Exception) { null } else null
                 val snap = if (r0.wx.isNotBlank()) Weather.snapFromJson(r0.wx) else null
@@ -126,6 +130,7 @@ object Analysis {
         // 물때 (그날 단위 → 1시간 평균)
         val mulOrder = listOf("무시~3물", "4~5물", "6~8물 (사리)", "9~11물", "12물~조금")
         out.add(Cond("mul", "🌊 물때", bucket(rs, mulOrder, th, true) {
+            if (it.fresh) return@bucket null
             when (Tide.mulIndex(it.time)) { in 0..3 -> mulOrder[0]; 4, 5 -> mulOrder[1]; in 6..8 -> mulOrder[2]; in 9..11 -> mulOrder[3]; else -> mulOrder[4] }
         }, true))
         // 물세기 %

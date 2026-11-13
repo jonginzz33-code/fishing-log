@@ -428,7 +428,7 @@ class BoardActivity : Activity() {
                 if (selMode && !canSelect(t)) alpha = 0.5f
                 setOnClickListener {
                     if (selMode) { if (canSelect(t)) { if (!selected.remove(t.id)) selected.add(t.id); render() } }
-                    else tripDetail(t)
+                    else PublicBoard.openBig(this@BoardActivity, t, REQ_PUB)   // v6.9 (255): 그룹처럼 큰 상세 화면
                 }
                 // 꾹 누르면: 내 글(운영자는 모든 글)은 선택 모드, 남의 글은 지금처럼 차단 메뉴(tripDetail 안)
                 if (canSelect(t)) {
@@ -448,7 +448,7 @@ class BoardActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { rightMargin = dp(10) })
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) +
                 (if (t.cat.isNotBlank()) " · " + Store.catShort(t.cat) else "") + " · " +
-                Tide.mulName(t.start).substringBefore(" ·")), LinearLayout.LayoutParams(0, WRAP, 1f))
+                if (t.isFresh()) "🏞 민물 · " + SunPhase.riseSet(t.start, t.anyCell()?.lat, t.anyCell()?.lon) else Tide.mulName(t.start).substringBefore(" ·")), LinearLayout.LayoutParams(0, WRAP, 1f))
             val nRep = reports[t.owner] ?: 0
             if (nRep > 0) r.addView(Ui.chip(this, "⚠ 신고 $nRep", Ui.ORANGE), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
@@ -720,7 +720,7 @@ class BoardActivity : Activity() {
             Ui.lp(this, MATCH, WRAP, top = 10))
         val hmF = SimpleDateFormat("HH:mm", Locale.KOREA)
         trips.take(80).forEachIndexed { i, t ->
-            val c = Ui.card(this).apply { isClickable = true; setOnClickListener { tripDetail(t) } }
+            val c = Ui.card(this).apply { isClickable = true; setOnClickListener { PublicBoard.openBig(this@BoardActivity, t, REQ_PUB) } }
             val r = Ui.row(this)
             val end = if (t.end > t.start) t.end else (t.catches.maxOfOrNull { it.time } ?: t.start)
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, "${i + 1}. " + dateFmt.format(Date(t.start)) + " " + hmF.format(Date(t.start)) + "~" + hmF.format(Date(end)) +
@@ -732,7 +732,7 @@ class BoardActivity : Activity() {
             c.addView(Ui.text(this, 13.5f, Ui.ORANGE, true, String.format(Locale.KOREA, "1시간에 평균 %.1f마리", rateOf(t)) +
                 (if (sp != null) " (${PublicBoard.keyLabel(sp)})" else "") + dist), Ui.lp(this, MATCH, WRAP, top = 2))
             val reg = regionOf(t)
-            c.addView(Ui.text(this, 12f, Ui.GREEN, false, Tide.mulName(t.start).substringBefore(" (") + if (reg.isNotBlank()) " · $reg" else ""),
+            c.addView(Ui.text(this, 12f, Ui.GREEN, false, (if (t.isFresh()) "🏞 민물" else Tide.mulName(t.start).substringBefore(" (")) + if (reg.isNotBlank()) " · $reg" else ""),
                 Ui.lp(this, MATCH, WRAP, top = 2))
             if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
                 MainPhoto.showBig(this, "public/${t.id}/photos/main", t.mthumb, "${t.nick} · ${dayFmt.format(Date(t.start))}")
@@ -776,13 +776,15 @@ class BoardActivity : Activity() {
         p.catches.groupBy { dateFmt.format(Date(it.first.start)) + "|" + it.first.nick }
             .entries.sortedByDescending { e -> e.value[0].first.start }
             .forEach { e -> days.append(e.key.substringBefore("|")).append("  ").append(e.key.substringAfter("|"))
-                .append("  ").append(e.value.size).append("마리 · ").append(Tide.mulName(e.value[0].first.start).substringBefore(" ·")).append("\n") }
+                .append("  ").append(e.value.size).append("마리 · ").append(if (e.value[0].first.isFresh()) "🏞 민물" else Tide.mulName(e.value[0].first.start).substringBefore(" ·")).append("\n") }
         para("날짜별", 14, true)
         para(days.toString().trimEnd(), 2)
         val cs = p.catches.map { it.second }
-        barRows("물때 단계", cs.groupingBy { Tide.mulName(it.time).substringAfter("· ").substringBefore(" (") }
+        // v6.9 (254): 물때 · 물 흐름은 바다 글만
+        val seaCs = p.catches.filter { !it.first.isFresh() }.map { it.second }
+        barRows("물때 단계", seaCs.groupingBy { Tide.mulName(it.time).substringAfter("· ").substringBefore(" (") }
             .eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value })
-        val ph = phaseText(cs)
+        val ph = phaseText(seaCs)
         if (ph.isNotBlank()) { para("물 흐름 · 만조·간조 기준", 14, true); para(ph.trimEnd(), 2) }
         val hourFmt = SimpleDateFormat("H", Locale.KOREA)
         barRows("시간대", cs.groupingBy { hourFmt.format(Date(it.time)).toInt() }.eachCount()
@@ -800,4 +802,15 @@ class BoardActivity : Activity() {
     }
 
     override fun onResume() { super.onResume(); refreshNick() }
+
+    // v6.9 (255): 큰 상세 화면에서 차단 · 내리기 하고 돌아오면 목록 새로
+    private val REQ_PUB = 7255
+    @Deprecated("startActivityForResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PUB && resultCode == RESULT_OK && data?.getBooleanExtra("pubChanged", false) == true) {
+            PublicBoard.clearCache(); loadedPeriod = -1
+            Moderation.reportCounts { m -> reports = m; refreshNick(); load() }
+        }
+    }
 }

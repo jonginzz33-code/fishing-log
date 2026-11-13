@@ -19,7 +19,7 @@ object GroupBand {
     private fun idx(cat: String): Int = Store.allCats().indexOfFirst { it.id == cat }.coerceAtLeast(0) % COLORS.size
     fun catColor(cat: String): Int = COLORS[idx(cat)]
     fun catInk(cat: String): Int = INKS[idx(cat)]
-    fun catIcon(cat: String): String = when (cat) { "boat" -> "🚤"; "night" -> "🌙"; "walk" -> "🥾"; else -> "🎣" }
+    fun catIcon(cat: String): String = when (cat) { "boat" -> "🚤"; "night" -> "🌙"; "walk" -> "🥾"; "fresh" -> "🏞"; else -> "🎣" }
 
     /** 지금 그룹에서 쓰는 종류: 내가 고른 종류가 그룹 종류에 있으면 그것, 아니면 그룹의 첫 종류 */
     fun currentCat(g: Cloud.Group?): String {

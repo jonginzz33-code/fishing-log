@@ -79,6 +79,8 @@ object PublicBoard {
         val exact: Boolean get() = prec == "exact"
         /** 어종 + 출조 종류 (같은 어종도 종류가 다르면 따로 집계) */
         fun key(slot: Int): String = speciesKey(name(slot), cat)
+        /** v6.9 (254): 민물 글 (물때 대신 일출 · 일몰) */
+        fun isFresh(): Boolean = Store.isFresh(cat, ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().filter { count(it) > 0 }.map { name(it) })
     }
 
     fun speciesKey(name: String, cat: String) = "$name|$cat"
@@ -141,6 +143,23 @@ object PublicBoard {
                 }
                 .addOnFailureListener { failed = true; one() }
         }
+    }
+
+    /** v6.9 (255): 게시판 글 → 그룹 출조와 같은 큰 상세 화면(TripActivity 보기 전용)으로 볼 수 있게 */
+    fun toRemote(t: PTrip): Cloud.RemoteTrip = Cloud.RemoteTrip(
+        id = t.id, owner = t.owner, ownerName = t.nick, start = t.start, end = t.end, names = t.names,
+        catches = t.catches.map { c ->
+            val la = c.exactLat ?: c.cell?.lat; val lo = c.exactLon ?: c.cell?.lon
+            Cloud.RemoteCatch(c.time, c.slot, la, lo)
+        },
+        track = emptyList(), cat = t.cat, photoCount = t.photoCount, paid = if (t.paid) true else null,
+        mthumb = t.mthumb, mainId = t.mainId, wx = t.wx, pubId = t.id, pubExact = t.exact)
+
+    /** 큰 상세 화면 열기 (돌아오면 차단 · 내리기 했을 수 있어서 onResult 로 알려 줌) */
+    fun openBig(a: Activity, t: PTrip, req: Int = 0) {
+        TripActivity.remoteView = toRemote(t)
+        val i = android.content.Intent(a, TripActivity::class.java).putExtra("remote", true)
+        if (req > 0) a.startActivityForResult(i, req) else a.startActivity(i)
     }
 
     private fun docId(t: Store.Trip) = "${Cloud.uid}_${t.id}"
@@ -227,7 +246,8 @@ object PublicBoard {
     private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {
         // 물 흐름 계산 (그날 물때를 받을 수 있을 때만)
         val loc = t.anyLocation()
-        val day = if (loc != null) try { Tide.fetchNow(app, loc.first, loc.second, t.start) } catch (_: Exception) { null } else null
+        // v6.9 (254): 민물 출조는 물때 계산 안 함
+        val day = if (loc != null && !t.isFresh()) try { Tide.fetchNow(app, loc.first, loc.second, t.start) } catch (_: Exception) { null } else null
         return t.catches.map { c ->
             val m = hashMapOf<String, Any>("t" to c.time, "s" to c.slot)
             if (c.lat != null && c.lon != null) {

@@ -111,10 +111,11 @@ class RemoteService : Service() {
         val min = Store.tideAlarmMin
         val now0 = System.currentTimeMillis()
         if (Store.current != null && (Store.floodAlert || Store.sunAlert)) {
-            if (Store.floodAlert && ((tideExt.isEmpty() && now0 - tideLoadedAt > 5 * 60_000L) || now0 - tideLoadedAt > 3 * 3600_000L)) loadTide()
+            if (Store.floodAlert && Store.current?.isFresh() != true && ((tideExt.isEmpty() && now0 - tideLoadedAt > 5 * 60_000L) || now0 - tideLoadedAt > 3 * 3600_000L)) loadTide()
             checkExtraAlerts(now0)
         }
-        if (Store.current == null || min <= 0) return
+        // v6.9 (254): 민물 출조 중엔 만조 · 간조 알람 안 울림
+        if (Store.current == null || min <= 0 || Store.current?.isFresh() == true) return
         val now = System.currentTimeMillis()
         if ((tideExt.isEmpty() && now - tideLoadedAt > 5 * 60_000L) || now - tideLoadedAt > 3 * 3600_000L) loadTide()
         val lead = min * 60_000L
