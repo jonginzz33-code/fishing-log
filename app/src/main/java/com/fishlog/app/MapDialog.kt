@@ -899,6 +899,9 @@ object MapDialog {
         val pEdge = route(7, ROUTE_EDGE); val pLine = route(4, ROUTE)
         val pDots = DotsOverlay(a, emptyList(), false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f }
         map.overlays.add(Zones.ZoneOverlay(a) { Zones.on(a) }.apply { onTapZones = { Zones.showInfo(a, it, map) } })   // v3.9.3
+        // v6.3 (246): 지난 기록 (맨 아래 · 반투명 · 내 지도와 같은 방식)
+        val past = DotsOverlay(a, emptyList(), true) { showCluster(a, it) }.apply { isEnabled = false; icons = true }
+        map.overlays.add(past)
         map.overlays.add(pEdge); map.overlays.add(pLine); map.overlays.add(pDots)
         val liveMe = LiveMe.attach(a, map, listOf(pt), name, autoFit = false)
         map.overlays.add(PersonOverlay(a, pt, name))
@@ -940,8 +943,55 @@ object MapDialog {
         }
         val zBar = Zones.bar(a, map)
         bar.addView(zBar.pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
+        // v6.3 (246): 📍 지난 기록 — 이 사람이 지금 있는 곳에서 예전에 뭐가 잡혔나 (내 기록 / 그룹 친구 / 전체 게시판)
+        var legendBase = ""
+        var pastNote = ""
+        var paintLegend: () -> Unit = {}
+        var pastLoaded = false
+        val pastBar = TextView(a).apply {
+            textSize = 12f; setTextColor(Color.WHITE)
+            setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+            background = GradientDrawable().apply { setColor(Color.parseColor("#12293A")); cornerRadius = dp(a, 10).toFloat() }
+            visibility = android.view.View.GONE
+        }
+        fun loadPastNow() {
+            val mode = pastModeNow()
+            pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
+            pastNote = "\n지난 기록 불러오는 중…"; paintLegend()
+            loadPast(null, mode) { list, mine, others ->
+                if (!dialog.isShowing) return@loadPast
+                past.dots = list
+                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +
+                    " · 반투명 그림 = 예전에 잡힌 어종 · 누르면 그날 상세"
+                paintLegend(); map.invalidate()
+            }
+        }
+        pastBar.setOnClickListener {
+            val modes = mutableListOf("mine")
+            Cloud.groups.forEach { modes.add("g:${it.id}") }
+            if (Cloud.groups.size > 1) modes.add("allg")
+            if (Cloud.user != null) modes.add("public")
+            val cur = pastModeNow()
+            AlertDialog.Builder(a, R.style.FlAlert)
+                .setTitle("지난 기록 보기")
+                .setItems(modes.map { (if (it == cur) "● " else "○ ") + pastModeLabel(it) }.toTypedArray()) { _, i ->
+                    Store.pastMode = modes[i]
+                    loadPastNow()
+                }
+                .show()
+        }
+        pill("지난 기록") { v ->
+            past.isEnabled = !past.isEnabled
+            (v.background as GradientDrawable).setColor(if (past.isEnabled) Color.parseColor("#2B4A5E") else Color.TRANSPARENT)
+            pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
+            if (past.isEnabled && !pastLoaded) { pastLoaded = true; loadPastNow() }
+            else { if (!past.isEnabled) pastNote = ""; paintLegend() }
+            if (!past.isEnabled) pastLoaded = false
+            map.invalidate()
+        }
         pill("닫기") { dialog.dismiss() }
         root.addView(Ui.hscroll(a, bar))
+        root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(a, 12), 0, dp(a, 12), dp(a, 6)) })
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(dp(a, 12), 0, dp(a, 12), dp(a, 6)) })
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -954,12 +1004,15 @@ object MapDialog {
             setPadding(dp(a, 16), dp(a, 8), dp(a, 16), dp(a, 12))
         }
         root.addView(legend)
+        legendBase = legend.text.toString()
+        paintLegend = { legend.text = legendBase + pastNote }
         var stopMap: () -> Unit = {}
         if (uid != null) {
             val tf = SimpleDateFormat("HH:mm", Locale.KOREA)
             stopMap = Live.watchMap(uid, gids, pub) { m ->
                 if (m == null) {
-                    legend.text = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치\n(이동 경로 · 잡은 자리는 관리자가 권한 준 사람만 보여요)\n지도 © OpenStreetMap · 위성 © Esri"
+                    legendBase = info + "\n초록 점 = $name · 파란 점 = 지금 내 위치\n(이동 경로 · 잡은 자리는 관리자가 권한 준 사람만 보여요)\n지도 © OpenStreetMap · 위성 © Esri"
+                    paintLegend()
                     return@watchMap
                 }
                 val pts = m.track.map { GeoPoint(it.lat, it.lon) }
@@ -970,8 +1023,9 @@ object MapDialog {
                         nm(c.slot), c.time, name, nm(c.slot), false, 1, 0.0, c.q == 1)
                 }
                 val counts = m.catches.groupingBy { nm(it.slot) }.eachCount().entries.joinToString(" · ") { "${it.key} ${it.value}" }
-                legend.text = info + "\n지도에 보이는 조과: " + counts.ifBlank { "아직 없음" } +
+                legendBase = info + "\n지도에 보이는 조과: " + counts.ifBlank { "아직 없음" } +
                     "\n초록 점 = $name · 분홍 선 = 이동 경로 · 숫자 = 그 자리 마릿수 · 파란 점 = 내 위치\n지도 © OpenStreetMap · 위성 © Esri"
+                paintLegend()
                 map.invalidate()
             }
         }
