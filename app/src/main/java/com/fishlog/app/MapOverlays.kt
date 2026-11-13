@@ -147,10 +147,12 @@ class DotsOverlay(
         }
         val rad = (17 + min(n, 60) * 0.12f) * d
         val bg = cl.items.groupingBy { it.color }.eachCount().maxByOrNull { it.value }!!.key
+        // v6.13: 지난 기록 출조 색이 있으면 테두리 · 이름표도 그 색 (경로 선과 같은 색)
+        val tripCol: Int? = if (cl.items.any { it.trip.isNotBlank() }) bg else null
         fill.color = bg; fill.alpha = if (allRough) 110 else 235   // 대략 위치는 흐리게
         c.drawCircle(cl.x, cl.y, rad, fill)
-        edge.color = when (src) { 1 -> PINK; 2 -> PURPLE; else -> Color.WHITE }
-        edge.strokeWidth = (if (src == 0) 2f else 3f) * d
+        edge.color = tripCol ?: when (src) { 1 -> PINK; 2 -> PURPLE; else -> Color.WHITE }
+        edge.strokeWidth = (if (tripCol != null) 3.5f else if (src == 0) 2f else 3f) * d
         c.drawCircle(cl.x, cl.y, rad, edge)
         val ink = Color.parseColor(if (Color.blue(bg) > 180) "#04222A" else "#1B0E02")
         if (top.size >= 2 && top[1].value * 4 >= top[0].value) {
@@ -191,9 +193,9 @@ class DotsOverlay(
             val label = if (names.size == 1) names[0] else "${names[0]} 외 ${names.size - 1}"
             tagTxt.textSize = 10 * d
             val w = tagTxt.measureText(label) + 10 * d
-            area.color = if (src == 1) PINK else PURPLE
+            area.color = tripCol ?: if (src == 1) PINK else PURPLE
             c.drawRoundRect(cl.x - w / 2, cl.y + below, cl.x + w / 2, cl.y + below + 14 * d, 7 * d, 7 * d, area)
-            tagTxt.color = Color.parseColor(if (src == 1) "#4B1528" else "#26215C")
+            tagTxt.color = if (tripCol != null) Color.parseColor("#0B1A26") else Color.parseColor(if (src == 1) "#4B1528" else "#26215C")
             c.drawText(label, cl.x, cl.y + below + 10.5f * d, tagTxt)
         }
     }
