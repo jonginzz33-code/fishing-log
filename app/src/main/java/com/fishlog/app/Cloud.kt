@@ -1198,6 +1198,27 @@ object Cloud {
         loadTracksIn(g.id, list, done)
     }
 
+    /**
+     * v6.15 (260): 내가 들어 있는 그룹에 같은 출조(게시판 글 id = 그룹 기록 id)가 있으면 그 어종 이름 (없으면 null)
+     *  관리자가 그룹 기록에서 고친 어종 이름을 게시판 화면에서도 보여 주려고
+     */
+    fun groupNamesOf(id: String, done: (List<String>?) -> Unit) {
+        val gs = groups.map { it.id }
+        if (gs.isEmpty() || uid == null) return done(null)
+        var i = 0
+        fun next() {
+            if (i >= gs.size) { done(null); return }
+            val gid = gs[i++]
+            db.collection("groups").document(gid).collection("trips").document(id).get()
+                .addOnSuccessListener { d ->
+                    val ns = if (d.exists()) (d.get("names") as? List<*>)?.map { it.toString() } else null
+                    if (ns != null) done(ns) else next()
+                }
+                .addOnFailureListener { next() }
+        }
+        next()
+    }
+
     /** v6.9 (256): 특정 그룹 출조들의 이동 경로 받기 (지난 기록 출조별 경로) */
     fun loadTracksIn(gid: String, list: List<RemoteTrip>, done: (List<RemoteTrip>) -> Unit) {
         val g = object { val id = gid }

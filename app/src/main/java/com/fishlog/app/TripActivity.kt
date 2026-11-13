@@ -81,7 +81,15 @@ class TripActivity : Activity() {
                 // v6.10 (257): 게시판 글 경로
                 // (경로를 안 올린 예전 글도 같은 그룹에 올라간 출조면 그 경로를 가져와요)
                 if (r.pubId.isNotBlank() && r.pubExact) PublicBoard.loadTrack(r.pubId) { pts ->
-                    if (!isFinishing && pts.size >= 2) { remote = r.withTrack(pts); remoteTrip = toTrip(remote!!); render() }
+                    val cur = remote
+                    if (!isFinishing && pts.size >= 2 && cur != null) { remote = cur.withTrack(pts); remoteTrip = toTrip(remote!!); render() }
+                }
+                // v6.15 (260): 같은 그룹에 같은 출조가 있으면 그룹 기록의 어종 이름 (관리자가 고친 이름이 게시판엔 아직 안 바뀌었을 수 있어서)
+                if (r.pubId.isNotBlank()) Cloud.groupNamesOf(r.pubId) { ns ->
+                    val cur = remote
+                    if (!isFinishing && cur != null && ns != null && ns.isNotEmpty() && ns != cur.names) {
+                        remote = cur.withNames(ns, cur.editAt, cur.editName); remoteTrip = toTrip(remote!!); render()
+                    }
                 }
                 else if (r.hasTrack && r.track.isEmpty()) Cloud.loadTracks(listOf(r)) { l ->
                     l.firstOrNull()?.let { full -> if (!isFinishing && full.track.isNotEmpty()) { remote = full; remoteTrip = toTrip(full); loadTide(); render() } }
