@@ -8,6 +8,7 @@
   - 주소는 **복사 버튼이 붙게 코드 블록(```)에 한 줄씩** 넣어서 줘요 (사용자가 복사해서 써요).
   - 플레이 콘솔 개발자 ID `7087559415015330997` (홈: https://play.google.com/console/u/0/developers/7087559415015330997/home)
   - 조과일지 스토어 앱 ID `4973437766947210735` (내부 테스트: https://play.google.com/console/u/0/developers/7087559415015330997/app/4973437766947210735/tracks/internal-testing)
+  - **테스터 참여 링크** (그룹원에게 보내는 것): https://play.google.com/apps/internaltest/4700601757102863820 · 스토어 주소 https://play.google.com/store/apps/details?id=kr.jogwailji.app
   - Firebase 프로젝트 `fishing-log-9109d` (설정: https://console.firebase.google.com/project/fishing-log-9109d/settings/general)
   - GitHub 비밀값: https://github.com/jonginzz33-code/fishing-log/settings/secrets/actions
 - 사용자가 **"만들어줘"** 라고 할 때만 코드를 만들어요. 그 전에는 메모(번호)로만 정리.
