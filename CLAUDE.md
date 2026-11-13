@@ -5,6 +5,7 @@
 ## 작업 규칙
 - 사용자는 개발자가 아니에요. 답은 쉬운 한국어로 짧게.
 - 플레이 콘솔 · Firebase · GitHub 등 **어떤 화면으로 가라고 할 때는 답 맨 위에 바로 가는 주소(링크)를 먼저** 줘요.
+  - 주소는 **복사 버튼이 붙게 코드 블록(```)에 한 줄씩** 넣어서 줘요 (사용자가 복사해서 써요).
   - 플레이 콘솔 개발자 ID `7087559415015330997` (홈: https://play.google.com/console/u/0/developers/7087559415015330997/home)
   - 조과일지 스토어 앱 ID `4973437766947210735` (내부 테스트: https://play.google.com/console/u/0/developers/7087559415015330997/app/4973437766947210735/tracks/internal-testing)
   - Firebase 프로젝트 `fishing-log-9109d` (설정: https://console.firebase.google.com/project/fishing-log-9109d/settings/general)
