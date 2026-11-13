@@ -17,11 +17,11 @@
   - `README.md` **맨 끝**에 `## v새버전` + 바뀐 것 몇 줄 (GitHub 빌드가 이 마지막 부분을 앱 '이번에 바뀐 것'으로 보여줘요)
   - `History.kt` 의 `ITEMS` **맨 위**에 항목 추가 (앱 '업데이트 내역')
   - 설명서가 바뀌면 `HelpActivity.kt` 도 같이
-- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.7(88)에서 업데이트 중단** (v6.7은 백업 넘겨주기 때문에 예외로 한 번 더 올림) (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
+- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.8(89)에서 업데이트 중단** (v6.7 · v6.8은 백업 때문에 예외로 더 올림 · 예외로 올릴 땐 워크플로를 `git show c7ddb1c^:.github/workflows/build.yml` 로 잠깐 되돌렸다가 `c7ddb1c` 판으로 복구) (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
 - 올리기 전에 빌드 확인: `gradle assembleGithubDebug assemblePlayDebug --no-daemon` (Android SDK 필요, `local.properties` 에 `sdk.dir`).
 
 ## 두 가지 판 (v6.0 · 242-2)
-- `github`: 앱 안 업데이트 있음 — **v6.7에서 업데이트 중단**. 관리자 스위치 '📦 스토어로 옮기기'(서버 `config/app.storeMove`)를 켜면 옮기기 창만 떠요. 코드는 계속 빌드되게만 유지(`assembleGithubDebug`).
+- `github`: 앱 안 업데이트 있음 — **v6.8에서 업데이트 중단**. 옮기기 창이 뜨면 폰 백업 파일(다운로드/조과일지/조과일지-백업-자동.zip) + 서버 백업 자동. 관리자 스위치 '📦 스토어로 옮기기'(서버 `config/app.storeMove`)를 켜면 옮기기 창만 떠요. 코드는 계속 빌드되게만 유지(`assembleGithubDebug`).
 - `play`: 플레이 스토어용. 패키지 이름 **`kr.jogwailji.app`** (`com.fishlog.app`은 스토어에서 이미 다른 사람이 써서 · GitHub판과 폰에 같이 깔림 · Firebase에도 따로 등록함, `app/google-services.json`에 두 앱 다 있음). 앱 안 업데이트 · 설치 권한 없음 (`BuildConfig.SELF_UPDATE = false`, `app/src/play/AndroidManifest.xml`)
 
 ## 화면 (v6.0 · 242-1 · 243)

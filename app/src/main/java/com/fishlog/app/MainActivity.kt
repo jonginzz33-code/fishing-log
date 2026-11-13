@@ -217,7 +217,7 @@ class MainActivity : Activity() {
                 p.edit().putBoolean("import_asked", true).apply()
                 AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("💾 백업 파일이 있나요?")
-                    .setMessage("예전 조과일지에서 '폰에 백업하기'로 만든 파일이 있으면 가방 · 설정 · 지도 · 출조 기록 · 사진을 그대로 가져올 수 있어요.\n(나중에 ⚙ 개인 설정 → 💾 백업에서도 할 수 있어요)")
+                    .setMessage("예전 조과일지의 백업 파일(${Backup.AUTO_PLACE} 또는 '폰에 백업하기'로 만든 파일)이 있으면 가방 · 설정 · 지도 · 출조 기록 · 사진을 그대로 가져올 수 있어요.\n(나중에 ⚙ 개인 설정 → 💾 백업에서도 할 수 있어요)")
                     .setPositiveButton("백업 파일 고르기") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("pickBackup", true)) }
                     .setNegativeButton("없어요", null).show()
             }
@@ -274,7 +274,26 @@ class MainActivity : Activity() {
 
         // ① 서버 백업
         val c1 = Ui.card(this)
-        c1.addView(Ui.text(this, 15f, Ui.TEXT, true, "① 내 출조 기록 서버에 백업"))
+        c1.addView(Ui.text(this, 15f, Ui.TEXT, true, "① 내 기록 · 설정 자동 백업"))
+        // v6.8: 폰에 백업 파일 자동 저장 (가방 · 설정 · 리모컨 · 지도 · 기록 · 사진)
+        val phone = Ui.text(this, 13.5f, Ui.SUB, false, "📱 폰에 백업 파일 저장 중…")
+        c1.addView(phone, Ui.lp(this, MATCH, WRAP, top = 6))
+        fun runPhoneBackup() {
+            phone.text = "📱 폰에 백업 파일 저장 중…"; phone.setTextColor(Ui.SUB); phone.setOnClickListener(null)
+            Thread {
+                val r = Backup.autoToDownloads(this) { n -> runOnUiThread { if (d.isShowing) phone.text = "📱 폰에 백업 파일 저장 중… (파일 ${n}개)" } }
+                runOnUiThread {
+                    if (!d.isShowing) return@runOnUiThread
+                    if (r == null) {
+                        phone.text = "📱 폰 백업 실패 (저장 공간 확인) · 눌러서 다시"; phone.setTextColor(Ui.ORANGE)
+                        phone.setOnClickListener { runPhoneBackup() }
+                    } else {
+                        phone.text = "📱 폰에 백업 끝 ✓ 가방 · 설정 · 지도 · 기록 · 사진 (파일 ${r.files}개)\n   ${Backup.AUTO_PLACE}"
+                        phone.setTextColor(Ui.GREEN)
+                    }
+                }
+            }.start()
+        }
         val status = Ui.text(this, 13.5f, Ui.SUB, false, "")
         c1.addView(status, Ui.lp(this, MATCH, WRAP, top = 6))
         val loginBtn = Ui.button(this, "구글 로그인") {}.apply { visibility = View.GONE }
@@ -282,13 +301,13 @@ class MainActivity : Activity() {
         col.addView(c1, Ui.lp(this, MATCH, WRAP, top = 16))
         fun runBackup() {
             if (Cloud.user == null) {
-                status.text = "구글 로그인이 안 돼 있어서 백업을 못 했어요. 로그인하면 바로 백업해요."
+                status.text = "☁ 구글 로그인이 안 돼 있어서 서버 백업은 못 했어요. 로그인하면 바로 백업해요."
                 status.setTextColor(Ui.ORANGE)
                 loginBtn.visibility = View.VISIBLE
                 return
             }
             loginBtn.visibility = View.GONE
-            status.text = "백업 중…"; status.setTextColor(Ui.SUB)
+            status.text = "☁ 서버에 출조 기록 백업 중…"; status.setTextColor(Ui.SUB)
             Cloud.backupPending { ok, fail ->
                 if (!d.isShowing) return@backupPending
                 val all = Store.history.count { it.backedUp }
@@ -297,7 +316,7 @@ class MainActivity : Activity() {
                     status.setTextColor(Ui.ORANGE)
                     status.setOnClickListener { runBackup() }
                 } else {
-                    status.text = "백업 끝 ✓ (서버에 있는 내 출조 ${all}개" + (if (ok > 0) " · 방금 $ok 개 올림" else "") + ")"
+                    status.text = "☁ 서버에 출조 기록 백업 끝 ✓ (${all}개" + (if (ok > 0) " · 방금 $ok 개 올림" else "") + ")"
                     status.setTextColor(Ui.GREEN)
                 }
             }
@@ -324,7 +343,7 @@ class MainActivity : Activity() {
         c3.addView(Ui.text(this, 13.5f, Ui.SUB, false,
             "같은 폰에서 스토어판을 처음 켜면 이 앱의 🎒 가방 · ⚙ 설정 · 📥 받아 둔 지도 · 📚 출조 기록 · 📷 사진을 자동으로 가져와요. " +
             "그다음 같은 구글 계정으로 로그인하세요. ⚠ 이 앱은 스토어판에서 잘 보인 걸 확인한 뒤에 지우세요.\n" +
-            "(폰을 바꾸는 경우: ⚙ 개인 설정 → 💾 폰에 백업하기 → 새 폰 스토어판에서 불러오기)").apply { setLineSpacing(0f, 1.2f) },
+            "(폰을 바꾸는 경우: ${Backup.AUTO_PLACE} 파일을 새 폰으로 옮겨서 스토어판 ⚙ 개인 설정 → 💾 백업 파일에서 불러오기)").apply { setLineSpacing(0f, 1.2f) },
             Ui.lp(this, MATCH, WRAP, top = 6))
         col.addView(c3, Ui.lp(this, MATCH, WRAP, top = 10))
 
@@ -360,6 +379,7 @@ class MainActivity : Activity() {
         storeMoveDlg = d
         d.show()
         runBackup()
+        runPhoneBackup()
     }
 
     private fun checkForced() {

@@ -139,6 +139,42 @@ object Backup {
         return Result(nPref, nFile)
     }
 
+    /** v6.8: 자동 백업 파일 이름 · 폴더 (다운로드/조과일지) */
+    const val AUTO_NAME = "조과일지-백업-자동.zip"
+    const val AUTO_PLACE = "다운로드/조과일지/조과일지-백업-자동.zip"
+
+    /**
+     * v6.8: 누르지 않아도 다운로드/조과일지 폴더에 백업 파일 저장 (같은 이름이면 새로 덮어씀)
+     *  백그라운드 스레드에서 · 성공하면 Result, 실패하면 null
+     */
+    fun autoToDownloads(c: Context, onProgress: (Int) -> Unit = {}): Result? = try {
+        val app = c.applicationContext
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            val cr = app.contentResolver
+            val col = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            val rel = android.os.Environment.DIRECTORY_DOWNLOADS + "/조과일지"
+            // 예전에 이 앱이 만든 자동 백업은 지우고 새로
+            try {
+                cr.delete(col, "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                    arrayOf(AUTO_NAME, "$rel/"))
+            } catch (_: Exception) {}
+            val v = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, AUTO_NAME)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/zip")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, rel)
+                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = cr.insert(col, v) ?: throw java.io.IOException("insert")
+            val res = cr.openOutputStream(uri)?.use { export(app, it, onProgress) } ?: throw java.io.IOException("open")
+            v.clear(); v.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+            cr.update(uri, v, null, null)
+            res
+        } else {
+            val dir = File(app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "조과일지").apply { mkdirs() }
+            File(dir, AUTO_NAME).outputStream().use { export(app, it, onProgress) }
+        }
+    } catch (_: Exception) { null }
+
     /** 불러온 뒤: 앱을 처음부터 다시 켜서 가방 · 설정 · 기록을 새로 읽게 */
     fun restart(a: Activity) {
         val i = a.packageManager.getLaunchIntentForPackage(a.packageName) ?: return
