@@ -270,16 +270,36 @@ object PublicBoard {
         return t.track.filterIndexed { i, _ -> i % step == 0 || i == t.track.size - 1 }.map { mapOf("t" to it.time, "la" to it.lat, "lo" to it.lon) }
     }
 
-    /** v6.10 (257): 게시판 글 이동 경로 받기 (없으면 빈 목록) */
-    fun loadTrack(id: String, done: (List<Store.Pt>) -> Unit) {
+    @Suppress("UNCHECKED_CAST")
+    private fun ptsOf(d: com.google.firebase.firestore.DocumentSnapshot?): List<Store.Pt> =
+        (d?.get("pts") as? List<Map<String, Any?>>)?.mapNotNull {
+            val la = (it["la"] as? Number)?.toDouble() ?: return@mapNotNull null
+            val lo = (it["lo"] as? Number)?.toDouble() ?: return@mapNotNull null
+            Store.Pt((it["t"] as? Number)?.toLong() ?: 0L, la, lo)
+        } ?: emptyList()
+
+    /**
+     * v6.10 (257): 게시판 글 이동 경로 받기 (없으면 빈 목록)
+     *  1) 게시판에 같이 올린 경로 (photos/track)
+     *  2) 없으면 → 내가 들어 있는 그룹에 같은 출조가 올라가 있으면 그 경로 (게시판 글 id = 그룹 기록 id = "올린사람_출조번호")
+     *     '정확 공개' 글만 (대략 공개 글은 경로를 보여 주지 않음)
+     */
+    fun loadTrack(id: String, exact: Boolean = true, done: (List<Store.Pt>) -> Unit) {
         Cloud.docCacheFirst(db.collection("public").document(id).collection("photos").document("track")) { d ->
-            @Suppress("UNCHECKED_CAST")
-            val list = (d?.get("pts") as? List<Map<String, Any?>>)?.mapNotNull {
-                val la = (it["la"] as? Number)?.toDouble() ?: return@mapNotNull null
-                val lo = (it["lo"] as? Number)?.toDouble() ?: return@mapNotNull null
-                Store.Pt((it["t"] as? Number)?.toLong() ?: 0L, la, lo)
-            } ?: emptyList()
-            main.post { done(list) }
+            val list = ptsOf(d)
+            if (list.size >= 2 || !exact) { main.post { done(list) }; return@docCacheFirst }
+            val gs = Cloud.groups.map { it.id }
+            if (gs.isEmpty()) { main.post { done(list) }; return@docCacheFirst }
+            var i = 0
+            fun next() {
+                if (i >= gs.size) { main.post { done(list) }; return }
+                val gid = gs[i++]
+                Cloud.docCacheFirst(db.collection("groups").document(gid).collection("trips").document(id).collection("detail").document("track")) { g ->
+                    val pts = ptsOf(g)
+                    if (pts.size >= 2) main.post { done(pts) } else next()
+                }
+            }
+            next()
         }
     }
 

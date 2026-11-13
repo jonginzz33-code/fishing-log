@@ -881,7 +881,7 @@ object MapDialog {
             if (pubNeed.isNotEmpty()) {
                 var pl = pubNeed.size
                 pubNeed.forEach { id ->
-                    PublicBoard.loadTrack(id) { pts ->
+                    PublicBoard.loadTrack(id, true) { pts ->
                         pastTrips["p:$id"]?.track = pts.map { GeoPoint(it.lat, it.lon) }
                         if (--pl == 0) done(colored, nMine, nOthers, sorted)
                     }
@@ -907,7 +907,7 @@ object MapDialog {
                     val pts = t.catches.mapNotNull { c -> c.cell?.let { GeoPoint(c.exactLat ?: it.lat, c.exactLon ?: it.lon) to c.time } }
                     if (pts.isNotEmpty()) trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} ${t.nick}", t.start, t.end, 2, emptyList(), pts) { a ->
                         PublicBoard.openBig(a, t) })
-                    if (t.hasTrack) pubWithTrack.add(t.id)
+                    if (t.exact) pubWithTrack.add(t.id)   // 경로를 올렸거나, 같은 그룹 기록에 경로가 있을 수 있음
                     if (t.isFresh()) trips.lastOrNull { it.key == key }?.fresh = true
                     t.catches.mapNotNull { c ->
                         val cell = c.cell ?: return@mapNotNull null
