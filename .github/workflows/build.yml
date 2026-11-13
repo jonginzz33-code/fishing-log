@@ -79,3 +79,22 @@ jobs:
         with:
           tag_name: latest
           files: jogwa-play-*.aab
+
+      # v6.2+: 플레이 콘솔 내부 테스트에 자동으로 올리기 (비밀값 PLAY_SERVICE_ACCOUNT_JSON 이 있을 때만)
+      - name: Check Play upload key
+        id: playkey
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$SA" ] && ls jogwa-play-*.aab >/dev/null 2>&1; then echo "ok=1" >> "$GITHUB_OUTPUT"; else echo "::warning::PLAY_SERVICE_ACCOUNT_JSON 이 없어서 플레이 콘솔 자동 올리기는 건너뛰어요"; fi
+
+      - name: Upload to Play internal testing
+        if: ${{ steps.playkey.outputs.ok == '1' }}
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: kr.jogwailji.app
+          releaseFiles: jogwa-play-*.aab
+          track: internal
+          status: completed
