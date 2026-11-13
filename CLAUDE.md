@@ -17,7 +17,7 @@
   - `README.md` **맨 끝**에 `## v새버전` + 바뀐 것 몇 줄 (GitHub 빌드가 이 마지막 부분을 앱 '이번에 바뀐 것'으로 보여줘요)
   - `History.kt` 의 `ITEMS` **맨 위**에 항목 추가 (앱 '업데이트 내역')
   - 설명서가 바뀌면 `HelpActivity.kt` 도 같이
-- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.8(89)에서 업데이트 중단** (v6.7 · v6.8은 백업 때문에 예외로 더 올림 · 예외로 올릴 땐 워크플로를 `git show c7ddb1c^:.github/workflows/build.yml` 로 잠깐 되돌렸다가 `c7ddb1c` 판으로 복구) (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
+- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.8(89)에서 완전히 끝 — 앞으로 예외 없이 절대 다시 올리지 않아요** (사용자 재확인 2026-11-13: '이제부터는 플레이 스토어만 업로드'). 워크플로의 APK 단계를 되살리지 마세요. (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
 - 올리기 전에 빌드 확인: `gradle assembleGithubDebug assemblePlayDebug --no-daemon` (Android SDK 필요, `local.properties` 에 `sdk.dir`).
 
 ## 두 가지 판 (v6.0 · 242-2)
