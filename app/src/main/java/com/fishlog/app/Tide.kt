@@ -484,7 +484,7 @@ object Tide {
 
     // ---------------- 물세기 ----------------
     /**
-     * pct      : 그날 물세기 (%) = 그날 조차(만조-간조 높이 차) ÷ 그 관측소 사리(7물) 때 조차
+     * pct      : 그날 물세기 (%) = 그날 조차(이어진 만조↔간조 높이 차들의 평균 · v6.2) ÷ 그 관측소 1년 중 가장 큰 사리 조차
      * estimated: 사리 때 자료를 못 받아서 물때(달 나이)로 짐작한 값
      * hourly   : 0~23시 각 시간 동안 물높이가 바뀌는 양(m) = 물이 들고 나는 세기
      */
@@ -510,8 +510,22 @@ object Tide {
         return (hi - lo).takeIf { it > 0 }
     }
 
-    /** 그날 조차 (m) */
-    fun dayRange(d: Day): Double? = rangeOf(extremes(d), d.dateMillis)
+    /**
+     * v6.2 (245): 그날(0~24시) 이어진 만조↔간조 높이 차들의 평균 (m)
+     *  예) 387 · 458 · 541cm → 462cm ('물때와 날씨' 조류세기와 같은 방식)
+     *  그날 안에 만조↔간조 짝이 없으면 예전 방식(가장 높은 만조 − 가장 낮은 간조)
+     */
+    private fun avgRangeOf(ext: List<Extreme>, dayStart: Long): Double? {
+        val end = dayStart + 24 * 3600_000L
+        val diffs = ext.sortedBy { it.time }.zipWithNext()
+            .filter { (a, b) -> a.high != b.high && a.time >= dayStart && b.time < end }
+            .map { (a, b) -> kotlin.math.abs(a.value - b.value) }
+        if (diffs.isEmpty()) return rangeOf(ext, dayStart)
+        return diffs.average().takeIf { it > 0 }
+    }
+
+    /** 그날 조차 (m) — v6.2 (245): 평균 방식 */
+    fun dayRange(d: Day): Double? = avgRangeOf(extremes(d), d.dateMillis)
 
     /** v4.1 (186): 그 관측소의 1년 중 큰 사리 조차 (100% 기준) · 폰에 기억 */
     fun annualRefCached(ctx: Context, code: String): Double? =
@@ -549,7 +563,8 @@ object Tide {
             val b = valueAt(d, d.dateMillis + (h + 1) * 3_600_000L)
             if (a == null || b == null) null else kotlin.math.abs(b - a)
         }
-        val today = rangeOf(extremes(d), d.dateMillis)
+        // v6.2 (245): 그날 조차 = 만조↔간조 높이 차들의 평균 (기준 100%는 그대로 1년 중 가장 큰 사리 조차)
+        val today = avgRangeOf(extremes(d), d.dateMillis)
         val code = d.stationCode
         if (today != null && code != null) {
             // v4.1 (186): 1년 중 큰 사리 조차 = 100% ('물때와 날씨' 같은 앱과 비슷하게)

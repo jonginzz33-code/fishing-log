@@ -549,7 +549,7 @@ object TideDialog {
                     flow.set(day, st)
                     flowNote.text = "막대 = 시간별 물흐름 세기 (물이 빨리 들고 나는 때일수록 높고 주황)" +
                         (if (cur == today) " · 초록 테두리 = 지금" else "") +
-                        (if (st.estimated) "\n물세기는 물때(달 나이)로 짐작한 값이에요" else if (st.annual) "\n물세기 = 그날 조차 ÷ 이 관측소 1년 중 가장 큰 사리 때 조차 (100%)" else "\n물세기 = 그날 조차 ÷ 가까운 사리(7물) 때 조차 (1년 기준을 아직 못 받음)")
+                        (if (st.estimated) "\n물세기는 물때(달 나이)로 짐작한 값이에요" else if (st.annual) "\n물세기 = 그날 조차(만조↔간조 높이 차 평균) ÷ 이 관측소 1년 중 가장 큰 사리 때 조차 (100%)" else "\n물세기 = 그날 조차 ÷ 가까운 사리(7물) 때 조차 (1년 기준을 아직 못 받음)")
                 }
             }
             Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }

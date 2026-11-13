@@ -13,8 +13,8 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 82
-        versionName = "6.1"
+        versionCode = 83
+        versionName = "6.2"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
@@ -50,9 +50,26 @@ android {
         }
     }
 
+    // v6.2 (242-4): 플레이 스토어 업로드 키 — GitHub 빌드가 keystore/play-upload.p12.enc 를
+    // 비밀값 PLAY_KEY_PASS 로 풀어서 PLAY_KEYSTORE_FILE 에 놓을 때만 씀 (없으면 스토어용은 안 만듦)
+    val playKs = System.getenv("PLAY_KEYSTORE_FILE")?.takeIf { it.isNotBlank() && file(it).exists() }
+    if (playKs != null) {
+        signingConfigs.create("play") {
+            storeFile = file(playKs)
+            storeType = "pkcs12"
+            storePassword = System.getenv("PLAY_KEY_PASS")
+            keyAlias = "upload"
+            keyPassword = System.getenv("PLAY_KEY_PASS")
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             signingConfig = signingConfigs.getByName("debug")
+        }
+        getByName("release") {
+            isMinifyEnabled = false
+            if (playKs != null) signingConfig = signingConfigs.getByName("play")
         }
     }
 

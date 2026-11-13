@@ -58,3 +58,24 @@ jobs:
             version.txt
             notes.txt
           make_latest: true
+
+      # v6.2 (242-4): 플레이 스토어용 AAB (비밀값 PLAY_KEY_PASS 가 있을 때만)
+      - name: Build Play AAB
+        env:
+          KHOA_KEY: ${{ secrets.KHOA_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          PLAY_KEY_PASS: ${{ secrets.PLAY_KEY_PASS }}
+        run: |
+          if [ -z "$PLAY_KEY_PASS" ]; then echo "::warning::PLAY_KEY_PASS 비밀값이 없어서 스토어용 AAB는 건너뛰어요"; exit 0; fi
+          export PLAY_KEYSTORE_FILE="$RUNNER_TEMP/play-upload.p12"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in keystore/play-upload.p12.enc -out "$PLAY_KEYSTORE_FILE" -pass env:PLAY_KEY_PASS
+          gradle bundlePlayRelease --no-daemon
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab jogwa-play-$(cat version.txt).aab
+          rm -f "$PLAY_KEYSTORE_FILE"
+
+      - name: Publish Play AAB
+        if: ${{ hashFiles('jogwa-play-*.aab') != '' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: jogwa-play-*.aab
