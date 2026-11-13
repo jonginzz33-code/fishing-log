@@ -482,7 +482,7 @@ class MainActivity : Activity() {
         paintBoardSub(); paintNowBtn()
         resumeAfterLoc()
         // v6.1 (244): 예전에 고친 조과가 게시판 글에 안 들어간 것 한 번 맞추기 (한 번 끝나면 다시 안 함)
-        if (Cloud.user != null) PublicBoard.resyncOnce(applicationContext)
+        if (Cloud.user != null) { PublicBoard.resyncOnce(applicationContext); PublicBoard.routeResyncOnce(applicationContext) }
         // v6.7 (252): 스토어판 처음 켤 때 같은 폰 예전 앱(GitHub판)에서 가방 · 설정 · 지도 · 기록 가져오기
         checkGithubImport()
         // v5.2 (240): 관리자가 고친 내 그룹 기록 → 폰 기록에도 (10분에 한 번)

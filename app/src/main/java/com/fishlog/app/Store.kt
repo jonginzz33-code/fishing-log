@@ -672,6 +672,14 @@ object Store {
     }
 
     /** 전체 게시판 공개 여부 표시 (exact = 위치 공개 방법, null 이면 그대로) */
+    /** v6.10 (257): 게시판에 이동 경로도 공개 (출조마다 · 기본 켬) */
+    fun pubRoute(tripId: Long): Boolean = !prefs.getStringSet("pubNoRoute", emptySet())!!.contains(tripId.toString())
+    fun setPubRoute(tripId: Long, on: Boolean) {
+        val s = prefs.getStringSet("pubNoRoute", emptySet())!!.toMutableSet()
+        if (on) s.remove(tripId.toString()) else s.add(tripId.toString())
+        prefs.edit().putStringSet("pubNoRoute", s).apply()
+    }
+
     fun setPublic(tripId: Long, v: Boolean, exact: Boolean? = null) {
         find(tripId)?.let { t ->
             t.pub = v

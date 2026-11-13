@@ -343,7 +343,7 @@ object MapDialog {
     }
 
     fun distanceText(pts: List<GeoPoint>): String {
-        if (pts.size < 2) return "이동 거리: 위치 기록이 부족해요"
+        if (pts.size < 2) return "이동 경로가 없어요 (올린 사람이 공개하지 않았거나 그때 위치 기록이 꺼져 있었어요)"
         val (total, straight) = distances(pts)
         return String.format(Locale.KOREA, "이동 %.1fkm (%.1f해리) · 출발지에서 %.1fkm",
             total / 1000, total / 1852, straight / 1000)
@@ -853,6 +853,7 @@ object MapDialog {
     private fun loadPast(excludeId: Long?, mode: String, done: (List<MapDot>, Int, Int, List<PastTrip>) -> Unit) {
         val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
         val trips = mutableListOf<PastTrip>()
+        val pubWithTrack = mutableListOf<String>()   // v6.10 (257): 경로를 공개한 게시판 글
         val mine = Store.history.filter { it.id != excludeId }.take(150).flatMap { t ->
             val mul = Tide.mulName(t.start).substringBefore(" (")
             val key = "me:${t.id}"
@@ -875,6 +876,17 @@ object MapDialog {
             done(colored, nMine, nOthers, sorted)
             // 색이 있는 그룹 친구 출조만 이동 경로 받기 (서버 읽기 줄이기)
             val top = sorted.take(TRIP_COLORS.size).map { it.key }.toSet()
+            // v6.10 (257): 색이 있는 게시판 글 중 경로를 공개한 것도
+            val pubNeed = pubWithTrack.filter { "p:$it" in top }
+            if (pubNeed.isNotEmpty()) {
+                var pl = pubNeed.size
+                pubNeed.forEach { id ->
+                    PublicBoard.loadTrack(id) { pts ->
+                        pastTrips["p:$id"]?.track = pts.map { GeoPoint(it.lat, it.lon) }
+                        if (--pl == 0) done(colored, nMine, nOthers, sorted)
+                    }
+                }
+            }
             val need = groupTrips.filter { (_, r) -> "g:${r.id}" in top && r.hasTrack && r.track.isEmpty() }
             if (need.isEmpty()) return
             var left = need.groupBy { it.first }.size
@@ -895,6 +907,7 @@ object MapDialog {
                     val pts = t.catches.mapNotNull { c -> c.cell?.let { GeoPoint(c.exactLat ?: it.lat, c.exactLon ?: it.lon) to c.time } }
                     if (pts.isNotEmpty()) trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} ${t.nick}", t.start, t.end, 2, emptyList(), pts) { a ->
                         PublicBoard.openBig(a, t) })
+                    if (t.hasTrack) pubWithTrack.add(t.id)
                     if (t.isFresh()) trips.lastOrNull { it.key == key }?.fresh = true
                     t.catches.mapNotNull { c ->
                         val cell = c.cell ?: return@mapNotNull null

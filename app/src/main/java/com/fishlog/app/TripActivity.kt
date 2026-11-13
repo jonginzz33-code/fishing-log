@@ -78,7 +78,11 @@ class TripActivity : Activity() {
             remote?.let { r ->
                 remoteTrip = toTrip(r)
                 // 이동 경로는 따로 받기 (목록에는 경로가 없음)
-                if (r.hasTrack && r.track.isEmpty()) Cloud.loadTracks(listOf(r)) { l ->
+                // v6.10 (257): 게시판 글 경로
+                if (r.pubId.isNotBlank() && r.hasTrack) PublicBoard.loadTrack(r.pubId) { pts ->
+                    if (!isFinishing && pts.size >= 2) { remote = r.withTrack(pts); remoteTrip = toTrip(remote!!); render() }
+                }
+                else if (r.hasTrack && r.track.isEmpty()) Cloud.loadTracks(listOf(r)) { l ->
                     l.firstOrNull()?.let { full -> if (!isFinishing && full.track.isNotEmpty()) { remote = full; remoteTrip = toTrip(full); loadTide(); render() } }
                 }
             }
@@ -459,7 +463,13 @@ class TripActivity : Activity() {
         m.onResume()
         root.addView(Ui.text(this, 12f, Ui.SUB, false,
             if (isPub) (if (remote?.pubExact == true) "📍 정확한 위치 공개" else "◯ 대략 공개 · 점 근처(약 500m 안) 어딘가에서 잡았어요") +
-                " · 주황 ${t.name(1)} · 하늘 ${t.name(2)} · 게시판 글은 이동 경로가 없어요 · 지도를 누르면 크게 보기"
+                " · 주황 ${t.name(1)} · 하늘 ${t.name(2)} · " +
+                (if (t.track.size >= 2) "분홍 선 이동 경로 · ${MapDialog.distanceText(t.track.map { org.osmdroid.util.GeoPoint(it.lat, it.lon) })}"
+                 else if (remote?.hasTrack == true) "이동 경로 불러오는 중…"
+                 else if (remote?.pubExact == true) "올린 사람이 이동 경로를 공개하지 않았어요" else "대략 공개 글은 이동 경로가 올라가지 않아요") +
+                " · 지도를 누르면 크게 보기"
+            else if (viewOnly && t.track.size < 2) "주황 ${t.name(1)} · 하늘 ${t.name(2)} · " +
+                (if (remote?.hasTrack == true) "이동 경로 불러오는 중…" else "올린 사람이 경로를 숨겼거나 위치 기록이 없어요") + " · 지도를 누르면 크게 보기"
             else "주황 ${t.name(1)} · 하늘 ${t.name(2)} · 분홍 선 이동 경로 · 지도를 누르면 크게 보기"), Ui.lp(this, MATCH, WRAP, top = 6))
 
         // 머문 곳

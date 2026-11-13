@@ -69,7 +69,9 @@ object PublicBoard {
         /** 대표 조과 사진 (작은 사진 base64) · 사진 목록에서 대표 사진 문서 이름 */
         val mthumb: String = "", val mainId: String = "",
         /** 그때 날씨 */
-        val wx: String = ""
+        val wx: String = "",
+        /** v6.10 (257): 이동 경로도 공개한 글 (경로는 photos/track 에 따로) */
+        val hasTrack: Boolean = false
     ) {
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
@@ -152,7 +154,7 @@ object PublicBoard {
             val la = c.exactLat ?: c.cell?.lat; val lo = c.exactLon ?: c.cell?.lon
             Cloud.RemoteCatch(c.time, c.slot, la, lo)
         },
-        track = emptyList(), cat = t.cat, photoCount = t.photoCount, paid = if (t.paid) true else null,
+        track = emptyList(), hasTrack = t.hasTrack, cat = t.cat, photoCount = t.photoCount, paid = if (t.paid) true else null,
         mthumb = t.mthumb, mainId = t.mainId, wx = t.wx, pubId = t.id, pubExact = t.exact)
 
     /** 큰 상세 화면 열기 (돌아오면 차단 · 내리기 했을 수 있어서 onResult 로 알려 줌) */
@@ -207,12 +209,31 @@ object PublicBoard {
         group.addView(exactBtn); group.addView(approxBtn, android.widget.RadioGroup.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(a, 10) })
         group.check(if (Store.pubExact) exactBtn.id else approxBtn.id)
         box.addView(group)
+        // v6.10 (257): 이동 경로도 공개 (기본 켬 · 대략 공개면 못 고름)
+        val hasRoute = t.track.size >= 2
+        val routeBox = Ui.checkFit(android.widget.CheckBox(a)).apply {
+            text = if (hasRoute) "이동 경로도 공개 (지도에 출조 경로 · 이동 거리)" else "이동 경로도 공개 (이 출조엔 경로 기록이 없어요)"
+            setTextColor(Ui.TEXT); textSize = 14.5f
+            buttonTintList = android.content.res.ColorStateList.valueOf(Ui.GREEN)
+            isChecked = hasRoute && Store.pubRoute(t.id)
+        }
+        fun paintRoute() {
+            val ex = group.checkedRadioButtonId == exactBtn.id
+            routeBox.isEnabled = ex && hasRoute
+            routeBox.alpha = if (routeBox.isEnabled) 1f else 0.45f
+        }
+        group.setOnCheckedChangeListener { _, _ -> paintRoute() }
+        paintRoute()
+        box.addView(routeBox, android.widget.LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(a, 14) })
+        box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "대략 공개를 고르면 경로는 안 올라가요 (경로로 정확한 자리가 드러나서)"),
+            android.widget.LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP).apply { topMargin = Ui.dp(a, 2) })
         AlertDialog.Builder(a, R.style.FlAlert)
             .setTitle("위치를 어떻게 공개할까요?")
             .setView(box)
             .setPositiveButton("다음") { _, _ ->
                 val exact = group.checkedRadioButtonId == exactBtn.id
                 Store.pubExact = exact
+                if (hasRoute && exact) Store.setPubRoute(t.id, routeBox.isChecked)
                 then(exact)
             }
             .setNegativeButton("취소", null)
@@ -241,6 +262,52 @@ object PublicBoard {
 
     /** "" = 익명으로 올리기, 그 외 = 내 닉네임 */
     fun nickShown(): String = if (Store.nick == "" || Cloud.nick == null) "익명" else Cloud.displayName
+
+    /** v6.10 (257): 게시판에 올릴 경로 (정확 공개 · 경로 공개 켬 · 최대 600점), 아니면 빈 목록 */
+    private fun routePts(t: Store.Trip, exact: Boolean): List<Map<String, Any>> {
+        if (!exact || !Store.pubRoute(t.id) || t.track.size < 2) return emptyList()
+        val step = if (t.track.size > 600) t.track.size / 600 + 1 else 1
+        return t.track.filterIndexed { i, _ -> i % step == 0 || i == t.track.size - 1 }.map { mapOf("t" to it.time, "la" to it.lat, "lo" to it.lon) }
+    }
+
+    /** v6.10 (257): 게시판 글 이동 경로 받기 (없으면 빈 목록) */
+    fun loadTrack(id: String, done: (List<Store.Pt>) -> Unit) {
+        Cloud.docCacheFirst(db.collection("public").document(id).collection("photos").document("track")) { d ->
+            @Suppress("UNCHECKED_CAST")
+            val list = (d?.get("pts") as? List<Map<String, Any?>>)?.mapNotNull {
+                val la = (it["la"] as? Number)?.toDouble() ?: return@mapNotNull null
+                val lo = (it["lo"] as? Number)?.toDouble() ?: return@mapNotNull null
+                Store.Pt((it["t"] as? Number)?.toLong() ?: 0L, la, lo)
+            } ?: emptyList()
+            main.post { done(list) }
+        }
+    }
+
+    /**
+     * v6.10 (257): 한 번만 — 예전에 '정확 공개'로 올린 내 글에 이동 경로 올리기 (경로 공개를 끈 글은 빼고)
+     */
+    @Volatile private var routeSyncing = false
+    fun routeResyncOnce(app: android.content.Context) {
+        val me = Cloud.uid ?: return
+        val p = app.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
+        val key = "pub_route_257_$me"
+        if (routeSyncing || p.getBoolean(key, false)) return
+        val mine = Store.history.filter { it.pub && it.pubPrec == "exact" && it.track.size >= 2 && Store.pubRoute(it.id) }
+        if (mine.isEmpty()) { p.edit().putBoolean(key, true).apply(); return }
+        routeSyncing = true
+        var left = mine.size; var failed = false
+        fun one() { if (--left == 0) { if (!failed) p.edit().putBoolean(key, true).apply(); routeSyncing = false } }
+        mine.forEach { t ->
+            val ref = db.collection("public").document(docId(t))
+            ref.get().addOnSuccessListener { d ->
+                if (!d.exists() || d.getBoolean("hasTrack") == true) return@addOnSuccessListener one()
+                val route = routePts(t, true)
+                ref.collection("photos").document("track").set(mapOf("owner" to me, "pts" to route))
+                    .addOnSuccessListener { ref.update(mapOf("hasTrack" to true, "upd" to System.currentTimeMillis())).addOnCompleteListener { cache.clear(); one() } }
+                    .addOnFailureListener { failed = true; one() }
+            }.addOnFailureListener { failed = true; one() }
+        }
+    }
 
     /** 서버에 올릴 조과 목록 (백그라운드 스레드에서) */
     private fun buildCatches(app: android.content.Context, t: Store.Trip, exact: Boolean): List<Map<String, Any>> {
@@ -284,6 +351,9 @@ object PublicBoard {
             MainPhoto.thumbB64(t)?.let { doc["mthumb"] = it }
             t.main()?.let { doc["mainId"] = MainPhoto.docId(it) }
             if (t.wx.isNotBlank()) doc["wx"] = t.wx
+            // v6.10 (257): 이동 경로 (정확 공개 + 경로 공개 켬일 때만 · 최대 600점)
+            val route = routePts(t, exact)
+            doc["hasTrack"] = route.isNotEmpty()
             // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
             Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
                 doc["gname"] = g.title
@@ -292,6 +362,8 @@ object PublicBoard {
             val ref = db.collection("public").document(docId(t))
             ref.set(doc)
                 .addOnSuccessListener {
+                    val tr = ref.collection("photos").document("track")
+                    if (route.isNotEmpty()) tr.set(mapOf("owner" to me, "pts" to route)) else tr.delete()
                     Store.setPublic(t.id, true, exact)
                     // 작은 사진만 (이미 올린 건 건너뜀, 사진을 빼고 올리면 예전 사진은 지움)
                     Cloud.uploadPhotos(ref, t, "public", limit = if (withPhotos) 8 else 0, withBig = false)
@@ -404,7 +476,8 @@ object PublicBoard {
                             },
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
-                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "")
+                            d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "",
+                            d.getBoolean("hasTrack") == true)
                     } catch (_: Exception) { null }
                 }.sortedByDescending { it.start }, null)
         }
@@ -414,7 +487,7 @@ object PublicBoard {
         // 한 번 본 사진은 폰에 저장된 것으로 (서버 안 읽음)
         Cloud.cacheFirst(db.collection("public").document(id).collection("photos")) { q ->
                 // 'main' = 대표 사진 큰 사진 (오른쪽·맨 위 대표 자리에만, 사진 목록엔 안 넣음)
-                done(q.documents.filter { it.id != "main" }.mapNotNull { d ->
+                done(q.documents.filter { it.id != "main" && it.id != "track" }.mapNotNull { d ->
                     try {
                         val bytes = android.util.Base64.decode(d.getString("data") ?: return@mapNotNull null, android.util.Base64.DEFAULT)
                         val bmp = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@mapNotNull null
