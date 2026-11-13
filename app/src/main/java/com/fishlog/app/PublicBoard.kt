@@ -110,7 +110,7 @@ object PublicBoard {
         Thread {
             val catches = buildCatches(app, t, exact)
             db.collection("public").document(docId(t))
-                .update(mapOf("catches" to catches, "total" to t.catches.size, "prec" to (if (exact) "exact" else "approx"),
+                .update(mapOf("catches" to catches, "total" to t.catches.size, "names" to t.names.toList(), "prec" to (if (exact) "exact" else "approx"),
                     "upd" to System.currentTimeMillis()))
                 .addOnSuccessListener { cache.clear(); done(null) }
                 .addOnFailureListener { main.post { done(it.message ?: "게시판 반영 실패") } }

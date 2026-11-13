@@ -635,6 +635,21 @@ class TripActivity : Activity() {
             remote?.takeIf { it.editAt > 0 }?.let { "수정됨 · ${it.editName} · " + SimpleDateFormat("MM.dd HH:mm", Locale.KOREA).format(Date(it.editAt)) })
         if (edInfo.isNotEmpty()) root.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), false, edInfo.joinToString("\n")),
             Ui.lp(this, MATCH, WRAP, top = 4))
+        // v6.12: 고치는 중 — 어종 이름 한 번에 바꾸기 (잘못 고른 어종 · 오타, 예: '니ㅏㄱ지' → 낙지)
+        if (editMode && canEd) {
+            val sp = t.slots().filter { t.count(it) > 0 }
+            if (sp.isNotEmpty()) {
+                val box = Ui.card(this)
+                box.addView(Ui.text(this, 13.5f, Ui.TEXT, true, "🐟 어종 이름 한 번에 바꾸기"))
+                box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "잘못 고른 어종이나 오타를 그 어종 전부 한 번에 고쳐요 (그룹 기록 · 게시판에도 같이)"),
+                    Ui.lp(this, MATCH, WRAP, top = 2))
+                sp.forEach { sl ->
+                    box.addView(Ui.button(this, "✎ ${t.name(sl)} ${t.count(sl)}마리 → 다른 어종으로") { renameSpecies(t, sl) }
+                        .apply { minHeight = dp(42); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
+                }
+                root.addView(box, Ui.lp(this, MATCH, WRAP, top = 8))
+            }
+        }
         val list = Ui.card(this)
         if (t.catches.isEmpty()) list.addView(Ui.text(this, 14f, Ui.SUB, false, "기록이 없어요"))
         val hourKey = java.text.SimpleDateFormat("yyyyMMddHH", java.util.Locale.KOREA)
@@ -986,6 +1001,65 @@ class TripActivity : Activity() {
             .setPositiveButton("저장") { _, _ -> Store.setPlace(t.id, boat.text.toString(), port.text.toString()) }
             .setNegativeButton("취소", null)
             .show()
+    }
+
+    /** v6.12: 이 출조의 한 어종을 전부 다른 이름으로 (조과 고치기) */
+    private fun renameSpecies(t: Store.Trip, slot: Int) {
+        val old = t.name(slot); val n = t.count(slot)
+        val cat = t.cat.ifBlank { Store.category }
+        val list = Store.species(cat).filter { it != old }
+        fun confirm(newName: String) {
+            if (newName.isBlank() || newName == old) return
+            AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("'$old' ${n}마리를 모두 '$newName'(으)로 바꿀까요?")
+                .setMessage("이 출조의 '$old' 기록이 전부 '$newName'(으)로 바뀌어요. 그룹 기록 · 게시판 글에도 같이 반영돼요.")
+                .setPositiveButton("바꾸기") { _, _ -> doRenameSpecies(t, slot, old, newName) }
+                .setNegativeButton("취소", null).show()
+        }
+        BigList.show(this, "'$old' ${n}마리 → 어떤 어종으로? (${Store.catLabel(cat)})", list, listOf("+ 직접 쓰기")) { i, label ->
+            if (i < list.size) { confirm(label); return@show }
+            val input = EditText(this).apply { hint = "어종 이름 (예: 낙지)"; inputType = InputType.TYPE_CLASS_TEXT; setSingleLine() }
+            AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("어종 이름 직접 쓰기")
+                .setView(input)
+                .setPositiveButton("다음") { _, _ -> confirm(input.text.toString().trim()) }
+                .setNegativeButton("취소", null).show()
+        }
+    }
+
+    private fun doRenameSpecies(t: Store.Trip, slot: Int, old: String, newName: String) {
+        val msg = "'$old' → '$newName'(으)로 바꿨어요"
+        val r = remote
+        if (r == null) {
+            Store.renameInTrip(t.id, slot, newName)
+            Store.find(t.id)?.let { tt -> Cloud.pushCatchEdit(tt) { e ->
+                if (!isFinishing) Toast.makeText(this, e?.let { "폰 기록은 바꿨어요 · 그룹 · 게시판은 못 바꿨어요 ($it)" } ?: msg, Toast.LENGTH_LONG).show() } }
+            keepScroll { render() }
+            return
+        }
+        val names = t.names.toMutableList()
+        while (names.size < slot) names.add("${names.size + 1}번")
+        names[slot - 1] = newName
+        val mine = r.owner == Cloud.uid
+        val local = if (mine) r.id.substringAfter("_").toLongOrNull()?.let { Store.find(it) } else null
+        val after = { e: String? ->
+            if (!isFinishing) {
+                if (e == null) {
+                    remote = r.withNames(names, System.currentTimeMillis(), if (mine) Cloud.displayName else "관리자")
+                    remoteTrip = toTrip(remote!!)
+                    setResult(RESULT_OK, Intent().putExtra("edited", true))
+                    keepScroll { render() }
+                }
+                Toast.makeText(this, e ?: msg, Toast.LENGTH_LONG).show()
+            }
+        }
+        if (local != null) {
+            Store.renameInTrip(local.id, slot, newName)
+            Cloud.pushCatchEdit(Store.find(local.id) ?: local) { e -> after(e) }
+        } else {
+            val g = Cloud.active ?: run { Toast.makeText(this, "그룹을 못 찾았어요", Toast.LENGTH_LONG).show(); return }
+            Cloud.updateCatches(g.id, r.id, t.catches.toList(), if (mine) null else r.owner, names) { e -> after(e) }
+        }
     }
 
     private fun askRename(t: Store.Trip, slot: Int) {

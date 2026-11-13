@@ -68,6 +68,9 @@ object Cloud {
         fun place(): String = listOf(boat, port).filter { it.isNotBlank() }.joinToString(" · ")
         fun withTrack(pts: List<Store.Pt>) = RemoteTrip(id, owner, ownerName, start, end, names, catches, pts,
             boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, editAt, editName, pubId, pubExact)
+        /** v6.12: 어종 이름 한 번에 바꾼 뒤 */
+        fun withNames(ns: List<String>, at: Long, by: String) = RemoteTrip(id, owner, ownerName, start, end, ns, catches, track,
+            boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, at, by, pubId, pubExact)
         fun withCatches(cs: List<RemoteCatch>, at: Long, by: String) = RemoteTrip(id, owner, ownerName, start, end, names, cs, track,
             boat, port, photoCount, cat, hasTrack, center, paid, fee, gear, mthumb, mainId, wx, at, by, pubId, pubExact)
         /** "유료 5만원" / "무료" / "" */
@@ -432,11 +435,13 @@ object Cloud {
      * 그룹 기록의 조과만 바꾸기 (사진 · 경로는 그대로)
      *  forOwner = 관리자가 남의 기록을 고칠 때 그 사람 uid → 그 사람 폰이 다음에 열 때 폰 기록도 같이 고침
      */
-    fun updateCatches(gid: String, docId: String, list: List<Store.Catch>, forOwner: String?, done: (String?) -> Unit) {
+    fun updateCatches(gid: String, docId: String, list: List<Store.Catch>, forOwner: String?, names: List<String>? = null, done: (String?) -> Unit) {
         if (uid == null) return done("로그인이 필요해요")
         val now = System.currentTimeMillis()
         val up = hashMapOf<String, Any>("catches" to catchMaps(list), "total" to list.size, "updated" to now,
             "editAt" to now, "editName" to if (forOwner != null) "관리자" else displayName)
+        // v6.12: 어종 이름도 같이 (한 번에 바꾸기)
+        if (names != null) up["names"] = names
         if (forOwner != null) up["editFor"] = forOwner
         db.collection("groups").document(gid).collection("trips").document(docId).update(up)
             .addOnSuccessListener { done(null) }
@@ -452,7 +457,7 @@ object Cloud {
         var left = gs.size + (if (pub) 1 else 0); var err: String? = null
         if (left == 0) return done(null)
         val one = { e: String? -> if (e != null) err = e; if (--left == 0) done(err) }
-        gs.forEach { gid -> updateCatches(gid, "${me}_${t.id}", t.catches.toList(), null) { e -> one(e) } }
+        gs.forEach { gid -> updateCatches(gid, "${me}_${t.id}", t.catches.toList(), null, t.names.toList()) { e -> one(e) } }
         if (pub) PublicBoard.pushCatches(appContext, t) { e -> one(e) }
     }
 
@@ -477,6 +482,10 @@ object Cloud {
                         } ?: return@forEach
                         if (Store.find(localId) != null) {
                             Store.replaceCatches(localId, list); n++
+                            // v6.12: 관리자가 바꾼 어종 이름도
+                            (d.get("names") as? List<*>)?.map { it.toString() }?.forEachIndexed { i, nm ->
+                                if (Store.find(localId)?.name(i + 1) != nm) Store.renameInTrip(localId, i + 1, nm)
+                            }
                             // v6.1 (244): 공개한 게시판 글도 (게시판 글은 올린 사람만 고칠 수 있어서 여기서)
                             Store.find(localId)?.let { t -> if (t.pub && ::appContext.isInitialized) PublicBoard.pushCatches(appContext, t) }
                         }
