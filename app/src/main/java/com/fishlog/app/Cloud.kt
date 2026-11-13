@@ -655,7 +655,63 @@ object Cloud {
             .addOnFailureListener { done(it.message ?: "그룹 삭제 실패") }
     }
 
-    /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */
+    // ---------------- v6.18: 계정 삭제 (회원 탈퇴 · 구글 플레이 필수) ----------------
+    /**
+     * 서버에 있는 내 데이터를 모두 지우고 계정(Firebase Auth)도 지워요. 폰에 있는 기록은 그대로 (따로 지울 수 있음)
+     *  지우는 것: 그룹에 올린 출조(경로 · 사진 포함) · 그룹 채팅 내 글 · 같이 출조 중 위치 · 그룹 회원 정보 · 전체 게시판 글(사진 · 경로)
+     *            · 전체 채팅 내 글 · 닉네임 · 서버 백업(users/{uid}/trips) · 내 계정 정보(users/{uid}) · 로그인 계정
+     *  그룹장인 그룹이 있으면 먼저 그룹장을 넘기거나 그룹을 지워야 해요
+     *  ⚠ 부르기 직전에 구글 로그인을 한 번 더 해야 계정 삭제가 돼요 (최근 로그인 필요)
+     */
+    private val delMain = android.os.Handler(android.os.Looper.getMainLooper())
+    fun deleteAccount(progress: (String) -> Unit, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val owned = groups.filter { it.owner == me }
+        if (owned.isNotEmpty()) return done("그룹장인 그룹이 있어요: " + owned.joinToString(", ") { it.title } +
+            "\n그룹 화면에서 먼저 그룹장을 다른 사람에게 넘기거나 그룹을 지운 뒤 다시 해 주세요.")
+        val gs = groups.toList()
+        val myNick = nick
+        Thread {
+            fun <T> w(t: com.google.android.gms.tasks.Task<T>): Boolean =
+                try { com.google.android.gms.tasks.Tasks.await(t, 30, java.util.concurrent.TimeUnit.SECONDS); true } catch (_: Exception) { false }
+            fun docs(q: Query): List<com.google.firebase.firestore.DocumentSnapshot> =
+                try { com.google.android.gms.tasks.Tasks.await(q.get(), 30, java.util.concurrent.TimeUnit.SECONDS).documents } catch (_: Exception) { emptyList() }
+            fun say(s: String) = delMain.post { progress(s) }
+            gs.forEachIndexed { i, g ->
+                say("그룹 기록 지우는 중 (${i + 1}/${gs.size}) · ${g.title}")
+                val gref = db.collection("groups").document(g.id)
+                docs(gref.collection("trips").whereEqualTo("owner", me)).forEach { d ->
+                    listOf("detail", "photos", "photosBig").forEach { sub -> docs(d.reference.collection(sub)).forEach { w(it.reference.delete()) } }
+                    w(d.reference.delete())
+                }
+                for (k in 1..5) { val l = docs(gref.collection("chat").whereEqualTo("uid", me).limit(300)); if (l.isEmpty()) break; l.forEach { w(it.reference.delete()) } }
+                w(gref.collection("live").document(me).delete())
+                w(gref.collection("members").document(me).delete())
+                w(gref.update("members", FieldValue.arrayRemove(me)))
+            }
+            say("전체 게시판 글 지우는 중")
+            docs(db.collection("public").whereEqualTo("owner", me)).forEach { d ->
+                docs(d.reference.collection("photos")).forEach { w(it.reference.delete()) }
+                w(d.reference.delete())
+            }
+            say("채팅 · 백업 지우는 중")
+            for (k in 1..10) { val l = docs(db.collection("chat").whereEqualTo("uid", me).limit(300)); if (l.isEmpty()) break; l.forEach { w(it.reference.delete()) } }
+            w(db.collection("publicLive").document(me).delete())
+            w(db.collection("publicLiveMap").document(me).delete())
+            if (myNick != null) w(db.collection("nicknames").document(nickKey(myNick)).delete())
+            val uref = db.collection("users").document(me)
+            for (k in 1..20) { val l = docs(uref.collection("trips").limit(300)); if (l.isEmpty()) break; l.forEach { w(it.reference.delete()) } }
+            w(uref.delete())
+            say("계정 지우는 중")
+            val user = auth.currentUser
+            val ok = user != null && user.uid == me && w(user.delete())
+            delMain.post {
+                if (ok) done(null)
+                else done("서버에 있던 내 데이터는 지웠어요. 그런데 로그인 계정 삭제가 안 됐어요 (인터넷 확인 후 '계정 삭제'를 한 번 더 눌러 주세요)")
+            }
+        }.start()
+    }
+
     // ---------------- 그룹 탈퇴 (그룹원 스스로) ----------------
     /** 그룹에 탈퇴 알림(그룹 채팅에 한 줄)을 남기고 나감. 그룹장은 먼저 그룹장을 넘겨야 함 */
     fun leaveGroup(g: Group, done: (String?) -> Unit) {
@@ -715,6 +771,7 @@ object Cloud {
         task.addOnSuccessListener { imgCache[gid] = b64; GroupIcon.put(gid, b64); done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
     }
 
+    /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */
     fun kickMember(memberUid: String, removeTrips: Boolean, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
         if (memberUid == uid) return done("자기 자신은 내보낼 수 없어요")

@@ -57,6 +57,7 @@
 - 261 — **②만 v6.16에서 함** (사용자: '2번으로 적용' · `TripActivity.catchFlow/loadNearTides`, Analysis `TripInfo.flows`, Tide.kt 안 건드림 · Store.tideStation 있으면 예전처럼 그 관측소만) · ①(직접 고른 관측소를 출조 기록에서 무시)은 안 함: 출조 기록 물때 기준 = 지금은 `t.anyLocation()`(첫 조과 자리, 없으면 경로 첫 점) → 가장 가까운 관측소 · 단 `Store.tideStation`(물때 창에서 직접 고른 관측소)이 있으면 그게 모든 출조 기록에도 쓰임(버그성). ① 출조 기록 · 분석은 직접 고른 관측소 무시하고 잡은 자리 기준 ② 조과마다 가까운 관측소로 물살 % (물때 그래프는 첫 자리 그대로) · **출조 하나에 관측소 최대 3곳** (KHOA 인증키 공유 · 폰 캐시 khoa/ 있음). 물때 계산 방법 자체는 건드리지 않음. 배터리 · Firebase 영향 없음.
 - ~~263~~ (v6.17에서 함): 물살 계산 통일 — ① 게시판 포인트 도감 상세(`BoardActivity.pointDetail`)에 '💧 잡은 때 물살' 막대 ② 지도 하루 상세(`MapDialog.showDay`) 시각별 줄에 💧% ③ Analysis '💧 물세기'(그날 값) 이름을 '🌊 그날 물세기'로 (잡은 때 물살과 구분). 지도 원 통계(PointMap → Analysis.run)는 v6.15부터 이미 '💧 잡은 때 물살' 있음.
 - **262 (제안만):** 💧% 분 단위로 (지금은 시간 단위라 같은 시간대는 같은 값) — 앞뒤 시간 값 이어서 표시만.
+- ~~264~~ (v6.18에서 함 · 정식 출시 준비): ⚙ 개인 설정 맨 아래 '📄 개인정보처리방침 보기'(`SettingsActivity.PRIVACY_URL`) · '📄 동의 내용 다시 보기' · '🚪 계정 삭제 (회원 탈퇴)'(`Cloud.deleteAccount` — 다시 로그인 → 서버 내 데이터 · 계정 삭제, 그룹장이면 먼저 넘기기). 웹페이지 `docs/privacy.html` · `docs/delete-account.html` (GitHub Pages, main /docs) → https://jonginzz33-code.github.io/fishing-log/privacy.html · /delete-account.html. 남은 것(사용자 손): 플레이 콘솔 앱 콘텐츠(개인정보처리방침 주소 · 데이터 보안 · 계정 삭제 주소 · 포그라운드 서비스 설명) · 스토어 등록정보 · 비공개 테스트 12명 14일.
 - **195:** 내용 확인 필요 (예전 대화방 메모)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)
 - ~~229 메타버스~~ — 삭제함 (2026-11-11)

@@ -43,6 +43,68 @@ class SettingsActivity : Activity() {
         if (intent.getBooleanExtra("pickBackup", false) && savedInstanceState == null) pickBackup()
     }
 
+    // ---------------- v6.18: 개인정보처리방침 · 계정 삭제 (구글 플레이 필수) ----------------
+    companion object {
+        const val PRIVACY_URL = "https://jonginzz33-code.github.io/fishing-log/privacy.html"
+        const val DELETE_URL = "https://jonginzz33-code.github.io/fishing-log/delete-account.html"
+    }
+
+    private fun renderAccount() {
+        section("📄 개인정보 · 계정")
+        box.addView(Ui.button(this, "📄 개인정보처리방침 보기") {
+            try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(PRIVACY_URL))) } catch (_: Exception) { toast("인터넷 창을 열 수 없어요") }
+        }.apply { minHeight = dp(44) }, Ui.lp(this, MATCH, WRAP, top = 6))
+        box.addView(Ui.button(this, "📄 동의 내용 다시 보기") { Consent.show(this, true) {} }.apply { minHeight = dp(44) },
+            Ui.lp(this, MATCH, WRAP, top = 6))
+        if (Cloud.user == null) return
+        box.addView(Ui.button(this, "🚪 계정 삭제 (회원 탈퇴)") { askDeleteAccount() }.apply {
+            minHeight = dp(44); setTextColor(Color.parseColor("#FF8A92"))
+        }, Ui.lp(this, MATCH, WRAP, top = 14))
+        box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "서버에 있는 내 출조 기록 · 사진 · 게시판 글 · 채팅 · 백업과 로그인 계정을 지워요. 되돌릴 수 없어요."),
+            Ui.lp(this, MATCH, WRAP, top = 4))
+    }
+
+    private fun askDeleteAccount() {
+        AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle("계정을 삭제할까요?")
+            .setMessage("서버에서 지워지는 것:\n" +
+                "• 그룹에 올린 내 출조 (경로 · 사진 포함), 그룹 채팅 내 글, 그룹 회원 정보\n" +
+                "• 전체 게시판에 올린 글 (사진 · 경로 포함), 전체 채팅 내 글\n" +
+                "• 서버 백업, 닉네임, 내 계정 정보, 구글 로그인 계정\n\n" +
+                "• 이 폰에 있는 출조 기록 · 사진 · 가방은 그대로예요 (필요 없으면 앱을 지우세요).\n" +
+                "• 1:1 문의 내용은 운영자가 따로 지워요.\n" +
+                "• 그룹장인 그룹이 있으면 먼저 그룹장을 넘기거나 그룹을 지워야 해요.\n\n" +
+                "지운 뒤에는 되돌릴 수 없어요.")
+            .setPositiveButton("다음") { _, _ ->
+                AlertDialog.Builder(this, R.style.FlAlert)
+                    .setTitle("정말 삭제할까요?")
+                    .setMessage("본인 확인을 위해 구글 로그인을 한 번 더 하고 바로 지워요.")
+                    .setPositiveButton("삭제하기") { _, _ -> AccountUi(this).signIn { runDeleteAccount() } }
+                    .setNegativeButton("취소", null).show()
+            }
+            .setNegativeButton("취소", null).show()
+    }
+
+    private fun runDeleteAccount() {
+        val tv = busyDialog("🚪 계정 삭제 중…")
+        Cloud.deleteAccount({ msg -> tv.text = msg }) { err ->
+            busy?.dismiss()
+            if (err != null) {
+                AlertDialog.Builder(this, R.style.FlAlert).setTitle("계정 삭제를 끝내지 못했어요").setMessage(err)
+                    .setPositiveButton("알겠어요", null).show()
+                return@deleteAccount
+            }
+            Cloud.signOut(this)
+            AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("계정을 삭제했어요")
+                .setMessage("그동안 조과일지를 써 주셔서 고마워요. 이 폰에 남은 기록이 필요 없으면 앱을 지워 주세요.")
+                .setCancelable(false)
+                .setPositiveButton("확인") { _, _ ->
+                    startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+                }.show()
+        }
+    }
+
     // ---------------- v6.7 (252): 💾 폰에 백업 · 불러오기 ----------------
     private val REQ_SAVE = 7301
     private val REQ_OPEN = 7302
@@ -199,6 +261,7 @@ class SettingsActivity : Activity() {
         renderBackup()
         renderOffline()
         renderData()
+        renderAccount()
     }
 
     /** v4.1 (185): 📶 이 앱이 쓴 데이터 */
