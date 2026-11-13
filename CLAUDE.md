@@ -15,7 +15,7 @@
 
 ## 두 가지 판 (v6.0 · 242-2)
 - `github`: 앱 안 업데이트 있음 (지금 쓰는 사람용, 기본 빌드)
-- `play`: 플레이 스토어용. 앱 안 업데이트 · 설치 권한 없음 (`BuildConfig.SELF_UPDATE = false`, `app/src/play/AndroidManifest.xml`)
+- `play`: 플레이 스토어용. 패키지 이름 **`kr.jogwailji.app`** (`com.fishlog.app`은 스토어에서 이미 다른 사람이 써서 · GitHub판과 폰에 같이 깔림 · Firebase에도 따로 등록함, `app/google-services.json`에 두 앱 다 있음). 앱 안 업데이트 · 설치 권한 없음 (`BuildConfig.SELF_UPDATE = false`, `app/src/play/AndroidManifest.xml`)
 
 ## 화면 (v6.0 · 242-1 · 243)
 - 안드로이드 16(API 36) 기준이라 화면이 상태바 · 하단 버튼 밑까지 그려져요. 여백은 `Ui.edge()` 가 모든 액티비티(자동)와 전체 창(`Dialog` 만든 뒤 `Ui.edge(dlg.window)`)에 넣어요. **새 전체 창을 만들면 꼭 `Ui.edge` 호출.**

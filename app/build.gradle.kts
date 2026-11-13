@@ -32,6 +32,8 @@ android {
         }
         create("play") {
             dimension = "store"
+            // com.fishlog.app 은 플레이 스토어에서 이미 다른 사람이 써서 스토어판은 새 이름 (GitHub판과 폰에 같이 깔 수 있음)
+            applicationId = "kr.jogwailji.app"
             buildConfigField("boolean", "SELF_UPDATE", "false")
         }
     }

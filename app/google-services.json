@@ -41,6 +41,35 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1061777523109:android:1f15ef5604d4fd0acde84c",
+        "android_client_info": {
+          "package_name": "kr.jogwailji.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1061777523109-vgkf98of3avjntd044g197hk0j644ov7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXg8f5Ekzm-Dp9zULrKN5qq6kksPzEVU0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1061777523109-vgkf98of3avjntd044g197hk0j644ov7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
