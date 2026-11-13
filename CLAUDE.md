@@ -4,6 +4,10 @@
 
 ## 작업 규칙
 - 사용자는 개발자가 아니에요. 답은 쉬운 한국어로 짧게.
+- 플레이 콘솔 · Firebase · GitHub 등 **어떤 화면으로 가라고 할 때는 답 맨 위에 바로 가는 주소(링크)를 먼저** 줘요.
+  - 플레이 콘솔 개발자 ID `7087559415015330997` (홈: https://play.google.com/console/u/0/developers/7087559415015330997/home)
+  - Firebase 프로젝트 `fishing-log-9109d` (설정: https://console.firebase.google.com/project/fishing-log-9109d/settings/general)
+  - GitHub 비밀값: https://github.com/jonginzz33-code/fishing-log/settings/secrets/actions
 - 사용자가 **"만들어줘"** 라고 할 때만 코드를 만들어요. 그 전에는 메모(번호)로만 정리.
 - 새 버전을 만들 때마다:
   - `app/build.gradle.kts` 의 `versionCode` +1, `versionName` 올리기
