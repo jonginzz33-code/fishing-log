@@ -159,7 +159,7 @@ object Analysis {
         }, true))
         // 물세기 %
         val pctOrder = listOf("~40%", "40~55%", "55~70%", "70~85%", "85%~")
-        out.add(Cond("pct", "💧 물세기", bucket(rs, pctOrder, th, true) { r ->
+        out.add(Cond("pct", "🌊 그날 물세기", bucket(rs, pctOrder, th, true) { r ->
             val p = info[r.trip]?.pct ?: return@bucket null
             when { p < 40 -> pctOrder[0]; p < 55 -> pctOrder[1]; p < 70 -> pctOrder[2]; p < 85 -> pctOrder[3]; else -> pctOrder[4] }
         }, true))

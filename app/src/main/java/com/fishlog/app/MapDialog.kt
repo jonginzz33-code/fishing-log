@@ -227,6 +227,7 @@ object MapDialog {
             .setView(android.widget.ScrollView(a).apply { addView(tv) })
             .setPositiveButton("닫기", null)
             .show()
+        var dayStrength: Tide.Strength? = null   // v6.17 (263): 잡은 때 물살용
         fun render(day: Tide.Day?) {
             val sb = StringBuilder()
             sb.append("물때: ").append(Tide.mulName(first.time)).append("\n")
@@ -257,8 +258,10 @@ object MapDialog {
                     p.first?.let { sb.append(" · ").append(if (it) "들물" else "날물") }
                     if (p.second.isNotBlank()) sb.append(" · ").append(p.second)
                 }
+                BiteMemo.flowAt(day, dayStrength, d.time)?.let { f -> sb.append(" · 💧").append(f).append("%") }
                 sb.append("\n")
             }
+            if (dayStrength != null) sb.append("\n💧 = 잡은 때 물살 (그날 물세기 ").append(dayStrength!!.pct).append("% 기준 · 가장 빠를 때 잡으면 그날 물세기와 같아요)")
             tv.text = sb.toString().trimEnd()
         }
         // v6.9 (254): 민물이면 물때 대신 해 기준
@@ -277,7 +280,10 @@ object MapDialog {
             tv.text = sb.toString().trimEnd()
             return
         }
-        Tide.fetch(a, first.point.latitude, first.point.longitude, first.time) { d, _ -> render(d) }
+        Tide.fetch(a, first.point.latitude, first.point.longitude, first.time) { d, _ ->
+            render(d)
+            if (d != null) Tide.strength(a, d) { st -> dayStrength = st; render(d) }
+        }
     }
 
     private fun showClusterOld(a: Activity, items: List<MapDot>) {

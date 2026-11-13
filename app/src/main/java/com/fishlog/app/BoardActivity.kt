@@ -753,11 +753,11 @@ class BoardActivity : Activity() {
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "파란 점 = 지금 내 위치 · 점선과 위 글씨 = 포인트까지 방향·거리"),
             Ui.lp(this, MATCH, WRAP, top = 6))
         // 글자는 보통 글꼴, 막대는 줄 맞춰 그림 (예전엔 고정폭 글꼴이라 글자 사이가 벌어져 보였음)
-        fun para(text: String, top: Int = 10, bold: Boolean = false) =
-            box.addView(Ui.text(this, 13.5f, Ui.TEXT, bold, text).apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = top))
-        fun barRows(title: String, rows: List<Pair<String, Int>>) {
+        fun para(text: String, top: Int = 10, bold: Boolean = false, into: LinearLayout = box) =
+            into.addView(Ui.text(this, 13.5f, Ui.TEXT, bold, text).apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = top))
+        fun barRows(title: String, rows: List<Pair<String, Int>>, into: LinearLayout = box) {
             if (rows.isEmpty()) return
-            para(title, 14, true)
+            para(title, 14, true, into)
             val max = rows.maxOf { it.second }.coerceAtLeast(1)
             rows.forEach { (k, v) ->
                 val r = Ui.row(this)
@@ -768,7 +768,7 @@ class BoardActivity : Activity() {
                 track.addView(View(this), LinearLayout.LayoutParams(0, dp(10), 1f - v.toFloat() / max + 0.0001f))
                 r.addView(track, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.text(this, 13f, Ui.TEXT, true, v.toString()), LinearLayout.LayoutParams(dp(32), WRAP).apply { leftMargin = dp(8) })
-                box.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
+                into.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
             }
         }
         para(String.format(Locale.KOREA, "%s %d마리 · 출조 %d번 · 1시간에 평균 %.1f마리", spLabel, p.total, p.trips.size, p.rate), 10, true)
@@ -786,6 +786,32 @@ class BoardActivity : Activity() {
             .eachCount().entries.sortedByDescending { it.value }.map { it.key to it.value })
         val ph = phaseText(seaCs)
         if (ph.isNotBlank()) { para("물 흐름 · 만조·간조 기준", 14, true); para(ph.trimEnd(), 2) }
+        // v6.17 (263): 💧 잡은 때 물살 (그날 물세기 × 그 시각 물흐름 ÷ 그날 최고) — 바다 글만 · 출조 20개까지
+        val seaPairs = p.catches.filter { !it.first.isFresh() }
+        if (seaPairs.isNotEmpty()) {
+            val flowBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            box.addView(flowBox, Ui.lp(this, MATCH, WRAP))
+            para("💧 잡은 때 물살 계산 중…", 14, false, flowBox)
+            val app = applicationContext
+            Thread {
+                val flows = ArrayList<Int>()
+                seaPairs.groupBy { it.first.id }.entries.take(20).forEach { (_, l) ->
+                    val t0 = l[0].first; val c0 = l[0].second
+                    val la = c0.exactLat ?: c0.cell?.lat ?: return@forEach
+                    val lo = c0.exactLon ?: c0.cell?.lon ?: return@forEach
+                    val d = try { Tide.fetchNow(app, la, lo, t0.start) } catch (_: Exception) { null } ?: return@forEach
+                    val st = try { Tide.strengthOf(app, d) } catch (_: Exception) { null } ?: return@forEach
+                    l.forEach { (_, c) -> BiteMemo.flowAt(d, st, c.time)?.let { flows.add(it) } }
+                }
+                runOnUiThread {
+                    flowBox.removeAllViews()
+                    if (flows.isEmpty()) { para("💧 잡은 때 물살: 물때 자료를 못 받았어요", 14, false, flowBox); return@runOnUiThread }
+                    val order = listOf("~20%", "20~40%", "40~60%", "60~80%", "80%~")
+                    val m = flows.groupingBy { f -> when { f < 20 -> order[0]; f < 40 -> order[1]; f < 60 -> order[2]; f < 80 -> order[3]; else -> order[4] } }.eachCount()
+                    barRows("💧 잡은 때 물살 (그날 물세기 기준)", order.map { it to (m[it] ?: 0) }, flowBox)
+                }
+            }.start()
+        }
         val hourFmt = SimpleDateFormat("H", Locale.KOREA)
         barRows("시간대", cs.groupingBy { hourFmt.format(Date(it.time)).toInt() }.eachCount()
             .entries.sortedBy { it.key }.map { "${it.key}시" to it.value })
