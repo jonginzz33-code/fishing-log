@@ -13,8 +13,8 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 84
-        versionName = "6.3"
+        versionCode = 85
+        versionName = "6.4"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
@@ -97,6 +97,9 @@ dependencies {
 
     // 업데이트 설치용 파일 공유
     implementation("androidx.core:core:1.13.1")
+
+    // v6.4 (249): 플레이 스토어판 '업데이트 확인' (구글 공식 앱 업데이트 기능)
+    "playImplementation"("com.google.android.play:app-update:2.1.0")
 
     // 지도 (키 없이 쓰는 오픈 지도)
     implementation("org.osmdroid:osmdroid-android:6.1.20")

@@ -209,7 +209,29 @@ class MainActivity : Activity() {
         else Updater.showDialog(this, true)
     }
 
+    // ---------------- v6.4 (249): 🔄 업데이트 확인 ----------------
+    private var updDot: View? = null
+    private var storeChecked = false
+    private fun paintUpdDot() { updDot?.visibility = if (StoreUpdate.available) View.VISIBLE else View.GONE }
+    private fun checkUpdateNow() {
+        showMessage("업데이트 확인 중…")
+        StoreUpdate.check(this) { has, err ->
+            if (isFinishing) return@check
+            paintUpdDot(); paintVersion()
+            when {
+                err != null -> showMessage(err)
+                has -> StoreUpdate.open(this)
+                else -> AlertDialog.Builder(this, R.style.FlAlert)
+                    .setTitle("✓ 최신 버전이에요")
+                    .setMessage("지금 버전 ${BuildConfigInfo.VERSION} 이 가장 새 버전이에요." +
+                        if (!BuildConfig.SELF_UPDATE) "\n(새 버전을 올린 직후 몇 분은 스토어에 늦게 보일 수 있어요)" else "")
+                    .setPositiveButton("알겠어요", null).show()
+            }
+        }
+    }
+
     private fun paintVersion() {
+        paintUpdDot()
         if (!::versionText.isInitialized) return
         versionText.text = "버전 ${BuildConfigInfo.VERSION}" + if (Updater.latestCode != null) "  ·  새 버전 있음 (눌러서 업데이트)" else ""
         versionText.setTextColor(if (Updater.latestCode != null) Ui.GREEN else Ui.SUB)
@@ -325,6 +347,11 @@ class MainActivity : Activity() {
         Photos.cleanOldShareCopies(this)
         GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         // 새 버전: 큰 창으로 알림 (한 번 켤 때마다 한 번) · 최소 버전보다 낮으면 업데이트해야 쓸 수 있음
+        // v6.4 (249): 스토어판은 켤 때 한 번 몰래 확인 → 🔄 빨간 점
+        if (!BuildConfig.SELF_UPDATE && !storeChecked) {
+            storeChecked = true
+            StoreUpdate.check(this) { _, _ -> if (!isFinishing) paintUpdDot() }
+        }
         if (!Updater.checkedThisRun) {
             Updater.checkedThisRun = true
             Updater.check(this) { v ->
@@ -449,6 +476,20 @@ class MainActivity : Activity() {
         // v4.8 (219): ⚙ 바로 왼쪽 네모 퀵바 (3개까지 · 4개부터는 제목 아래 한 줄)
         quickInline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         header.addView(quickInline, LinearLayout.LayoutParams(WRAP, WRAP))
+        // v6.4 (249): 🔄 업데이트 확인 (⚙ 바로 왼쪽 · 새 버전 있으면 빨간 점)
+        val updBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        updBox.addView(Ui.text(this, 17f, Ui.GREEN, true, "🔄").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Ui.CARD, 99, Ui.GREEN)
+            contentDescription = "업데이트 확인"
+            setOnClickListener { checkUpdateNow() }
+        }, android.widget.FrameLayout.LayoutParams(dp(40), dp(40)))
+        updDot = View(this).apply {
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
+        }
+        updBox.addView(updDot, android.widget.FrameLayout.LayoutParams(dp(12), dp(12), Gravity.TOP or Gravity.END))
+        header.addView(updBox, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(4) })
+        paintUpdDot()
         // v4.7.1: ⚙ 기본 설정은 오른쪽 맨 위에 꼭 (더보기에도 같이 있음)
         header.addView(Ui.text(this, 19f, Ui.BLUE, true, "⚙").apply {
             gravity = Gravity.CENTER
