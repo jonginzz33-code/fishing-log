@@ -304,6 +304,11 @@ class TripActivity : Activity() {
             LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = dp(10) })
         r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot) + if (c.lat != null) "" else "  (위치 없음)"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        // v6.15 (259): 잡은 때 물살 % (그날 물세기 기준)
+        if (!t.isFresh()) BiteMemo.flowAt(tideDay, tideStrength, c.time)?.let { f ->
+            val fc = when (BiteMemo.flowLevel(f)) { 2 -> Ui.ORANGE; 1 -> Ui.BLUE; else -> android.graphics.Color.parseColor("#8E9AA3") }
+            r.addView(Ui.text(this, 12f, fc, true, "💧$f%"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+        }
         return r
     }
 

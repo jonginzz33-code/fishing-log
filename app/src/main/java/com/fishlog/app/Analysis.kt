@@ -70,7 +70,7 @@ object Analysis {
     class Species(val name: String, val count: Int, val trips: Int, val rate: Double, val conds: List<Cond>)
     class Result(val total: Int, val trips: Int, val from: Long, val to: Long, val species: List<Species>, val note: String)
 
-    private class TripInfo(val day: Tide.Day?, val pct: Int?, val snap: Weather.Snap?)
+    private class TripInfo(val day: Tide.Day?, val pct: Int?, val snap: Weather.Snap?, val st: Tide.Strength? = null)
 
     /** 백그라운드에서 물때·물세기를 받아 계산 (progress = "물때 자료 받는 중 3/9") */
     fun run(ctx: Context, recs: List<Rec>, progress: (String) -> Unit, done: (Result) -> Unit) {
@@ -87,9 +87,10 @@ object Analysis {
                 // v6.9 (254): 민물 출조는 물때 자료 안 받음
                 if (r0.fresh) { info[k] = TripInfo(null, null, if (r0.wx.isNotBlank()) Weather.snapFromJson(r0.wx) else null); return@forEach }
                 val d = try { Tide.fetchNow(app, r0.lat, r0.lon, mid) } catch (_: Exception) { null }
-                val pct = if (d != null) try { Tide.strengthOf(app, d).pct } catch (_: Exception) { null } else null
+                val stg = if (d != null) try { Tide.strengthOf(app, d) } catch (_: Exception) { null } else null
+                val pct = stg?.pct
                 val snap = if (r0.wx.isNotBlank()) Weather.snapFromJson(r0.wx) else null
-                info[k] = TripInfo(d, pct ?: Tide.estimatePct(mid), snap)
+                info[k] = TripInfo(d, pct ?: Tide.estimatePct(mid), snap, stg)
             }
             val res = compute(recs, info, trips.size > 40)
             main.post { done(res) }
@@ -139,6 +140,13 @@ object Analysis {
             val p = info[r.trip]?.pct ?: return@bucket null
             when { p < 40 -> pctOrder[0]; p < 55 -> pctOrder[1]; p < 70 -> pctOrder[2]; p < 85 -> pctOrder[3]; else -> pctOrder[4] }
         }, true))
+        // v6.15 (259): 잡은 때 물살 (그날 물세기 × 그 시각 물흐름 ÷ 그날 최고)
+        val flowOrder = listOf("~20%", "20~40%", "40~60%", "60~80%", "80%~")
+        out.add(Cond("flow", "💧 잡은 때 물살", bucket(rs, flowOrder, th, false) { r ->
+            val inf = info[r.trip] ?: return@bucket null
+            val f = BiteMemo.flowAt(inf.day, inf.st, r.time) ?: return@bucket null
+            when { f < 20 -> flowOrder[0]; f < 40 -> flowOrder[1]; f < 60 -> flowOrder[2]; f < 80 -> flowOrder[3]; else -> flowOrder[4] }
+        }, false))
         // 만조 · 간조 기준 (가까운 만조·간조에서 몇 시간 전/후)
         val tideOrder = listOf("만조 3시간 전~", "만조 2~1시간 전", "만조 1시간 전~만조", "만조~1시간 뒤", "만조 1~2시간 뒤",
             "간조 3시간 전~", "간조 2~1시간 전", "간조 1시간 전~간조", "간조~1시간 뒤", "간조 1~2시간 뒤")

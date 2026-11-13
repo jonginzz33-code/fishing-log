@@ -21,6 +21,19 @@ object BiteMemo {
 
     private fun locOf(t: Store.Trip): Pair<Double, Double>? = t.anyLocation()
 
+    /**
+     * v6.15 (259): 잡은 때 물살 % = 그날 물세기 % × (그 시각 시간별 물흐름 ÷ 그날 가장 빠른 물흐름)
+     *  그날 물세기 68% → 가장 빠를 때 잡으면 68, 물돌이 무렵이면 10 정도 (물때 계산은 그대로 · 이미 계산된 값만 씀)
+     */
+    fun flowAt(day: Tide.Day?, st: Tide.Strength?, time: Long): Int? {
+        if (day == null || st == null || st.maxRate <= 0) return null
+        val h = ((time - day.dateMillis) / 3_600_000L).toInt()
+        val r = st.hourly.getOrNull(h) ?: return null
+        return Math.round(st.pct * (r / st.maxRate)).toInt().coerceIn(0, 100)
+    }
+    /** 약함 30 아래 · 보통 30~60 · 셈 60 이상 */
+    fun flowLevel(p: Int) = when { p < 30 -> 0; p < 60 -> 1; else -> 2 }
+
     /** 출조 하나의 어종별 입질 피크 (3마리 이상 잡은 어종만) */
     fun forTrip(t: Store.Trip, day: Tide.Day?, st: Tide.Strength? = null): List<Peak> {
         val loc = locOf(t)
@@ -46,17 +59,10 @@ object BiteMemo {
                 } ?: Tide.rising(d, mid)?.let { r -> if (r) "들물 때" else "날물 때" }
             }
             // v6.14 (258): 그 시간대 물흐름 세기 (시간별 물흐름 막대와 같은 값)
+            // v6.15 (259): 그 시간대 잡은 조과들의 '잡은 때 물살 %' 평균 (그날 물세기와 같은 잣대)
             var flowPct: Int? = null; var flowLv = -1
-            if (day != null && st != null && st.maxRate > 0) {
-                val h0 = ((a - day.dateMillis) / 3_600_000L).toInt().coerceIn(0, 23)
-                val h1 = ((b - day.dateMillis) / 3_600_000L).toInt().coerceIn(0, 23)
-                val vals = (minOf(h0, h1)..maxOf(h0, h1)).mapNotNull { st.hourly.getOrNull(it) }
-                if (vals.isNotEmpty()) {
-                    val r = vals.average()
-                    flowPct = Math.round(r / st.maxRate * 100).toInt().coerceIn(0, 100)
-                    flowLv = when { r < st.maxRate * 0.35 -> 0; r < st.maxRate * 0.7 -> 1; else -> 2 }
-                }
-            }
+            val fs = cs.subList(bi, bj + 1).mapNotNull { flowAt(day, st, it.time) }
+            if (fs.isNotEmpty()) { flowPct = Math.round(fs.average()).toInt(); flowLv = flowLevel(flowPct) }
             out.add(Peak(t.name(slot), cs.size, best, label, Math.round(dayN * 100f / cs.size), note, flowPct, flowLv))
         }
         return out
@@ -139,13 +145,13 @@ object BiteMemo {
         p.flowPct?.let { f ->
             val fc = when (p.flowLv) { 2 -> Ui.ORANGE; 1 -> Ui.BLUE; else -> Color.parseColor("#8E9AA3") }
             val name = when (p.flowLv) { 2 -> "셈"; 1 -> "보통"; else -> "약함" }
-            tideRow.addView(Ui.text(c, 12f, fc, true, "💧 물살 $name $f%").apply {
+            tideRow.addView(Ui.text(c, 12f, fc, true, "💧 물살 $f% · $name").apply {
                 setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
                 background = Ui.bg(c, Color.argb(45, Color.red(fc), Color.green(fc), Color.blue(fc)), 8)
             }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP))
         }
         if (tideRow.childCount > 0) card.addView(tideRow, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 4) })
-        if (p.flowPct != null) card.addView(Ui.text(c, 10.5f, Ui.SUB, false, "물살 % = 그 시간대 물흐름 ÷ 그날 가장 셀 때 (위 물흐름 막대와 같은 값)"),
+        if (p.flowPct != null) card.addView(Ui.text(c, 10.5f, Ui.SUB, false, "물살 % = 잡은 때 물살 (그날 물세기 기준 · 가장 빠를 때 잡으면 그날 물세기와 같아요)"),
             LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 3) })
         card
     }
