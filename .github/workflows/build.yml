@@ -23,8 +23,41 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
-      # v6.6 이후: GitHub판(APK)은 더 이상 만들지 않아요 (마지막 v6.6 · Releases의 fishing-log.apk / version.txt 그대로)
-      #  → 스토어판 AAB만 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요
+      - name: Build
+        env:
+          KHOA_KEY: ${{ secrets.KHOA_KEY }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+        run: |
+          if [ -z "$KHOA_KEY" ]; then echo "::warning::KHOA_KEY 비밀값이 비어 있어요 (물때가 Open-Meteo로 나와요)"; else echo "KHOA_KEY 길이: ${#KHOA_KEY}"; fi
+          if [ -z "$KAKAO_REST_KEY" ]; then echo "::warning::KAKAO_REST_KEY 비밀값이 비어 있어요 (카카오 장소 검색이 안 돼요)"; else echo "KAKAO_REST_KEY 길이: ${#KAKAO_REST_KEY}"; fi
+          gradle assembleGithubDebug --no-daemon
+
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/github/debug/app-github-debug.apk fishing-log.apk
+          grep -m1 versionCode app/build.gradle.kts | grep -o '[0-9]\+' > version.txt
+          cat version.txt
+          # 업데이트 창에 보여줄 '이번에 바뀐 것' (README 맨 마지막 버전 내용)
+          awk '/^## v/{buf=""} {buf=buf $0 "\n"} END{printf "%s", buf}' README.md > notes.txt
+          cat notes.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fishing-log-apk
+          path: fishing-log.apk
+
+      # 폰에서 받기 쉽도록 Releases 에도 올림 (항상 최신 = latest)
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: 조과기록 최신 버전
+          body: "커밋 ${{ github.sha }} 에서 자동 빌드"
+          files: |
+            fishing-log.apk
+            version.txt
+            notes.txt
+          make_latest: true
 
       # v6.2 (242-4): 플레이 스토어용 AAB (비밀값 PLAY_KEY_PASS 가 있을 때만)
       - name: Build Play AAB
@@ -37,8 +70,7 @@ jobs:
           export PLAY_KEYSTORE_FILE="$RUNNER_TEMP/play-upload.p12"
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in keystore/play-upload.p12.enc -out "$PLAY_KEYSTORE_FILE" -pass env:PLAY_KEY_PASS
           gradle bundlePlayRelease --no-daemon
-          V=$(grep -m1 versionCode app/build.gradle.kts | grep -o '[0-9]\+')
-          cp app/build/outputs/bundle/playRelease/app-play-release.aab jogwa-play-$V.aab
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab jogwa-play-$(cat version.txt).aab
           rm -f "$PLAY_KEYSTORE_FILE"
 
       - name: Publish Play AAB

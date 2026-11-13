@@ -3,4 +3,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
+    <!-- v6.7 (252): 같은 폰의 GitHub판에서 가방 · 설정 · 기록 가져오기 -->
+    <queries>
+        <package android:name="com.fishlog.app" />
+    </queries>
 </manifest>

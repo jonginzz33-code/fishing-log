@@ -17,11 +17,11 @@
   - `README.md` **맨 끝**에 `## v새버전` + 바뀐 것 몇 줄 (GitHub 빌드가 이 마지막 부분을 앱 '이번에 바뀐 것'으로 보여줘요)
   - `History.kt` 의 `ITEMS` **맨 위**에 항목 추가 (앱 '업데이트 내역')
   - 설명서가 바뀌면 `HelpActivity.kt` 도 같이
-- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.6(87)에서 업데이트 중단** (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
+- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.7(88)에서 업데이트 중단** (v6.7은 백업 넘겨주기 때문에 예외로 한 번 더 올림) (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
 - 올리기 전에 빌드 확인: `gradle assembleGithubDebug assemblePlayDebug --no-daemon` (Android SDK 필요, `local.properties` 에 `sdk.dir`).
 
 ## 두 가지 판 (v6.0 · 242-2)
-- `github`: 앱 안 업데이트 있음 — **v6.6에서 업데이트 중단**. 관리자 스위치 '📦 스토어로 옮기기'(서버 `config/app.storeMove`)를 켜면 옮기기 창만 떠요. 코드는 계속 빌드되게만 유지(`assembleGithubDebug`).
+- `github`: 앱 안 업데이트 있음 — **v6.7에서 업데이트 중단**. 관리자 스위치 '📦 스토어로 옮기기'(서버 `config/app.storeMove`)를 켜면 옮기기 창만 떠요. 코드는 계속 빌드되게만 유지(`assembleGithubDebug`).
 - `play`: 플레이 스토어용. 패키지 이름 **`kr.jogwailji.app`** (`com.fishlog.app`은 스토어에서 이미 다른 사람이 써서 · GitHub판과 폰에 같이 깔림 · Firebase에도 따로 등록함, `app/google-services.json`에 두 앱 다 있음). 앱 안 업데이트 · 설치 권한 없음 (`BuildConfig.SELF_UPDATE = false`, `app/src/play/AndroidManifest.xml`)
 
 ## 화면 (v6.0 · 242-1 · 243)
@@ -40,7 +40,7 @@
 - ~~248~~ (v6.6에서 함 · 스위치는 관리자 페이지 '📦 스토어로 옮기기', 아직 꺼짐): GitHub판 **마지막 업데이트 v6.6** — 관리자 페이지 '스토어로 옮기기' 스위치(서버 `config/app` 에 `storeMove: true`) 켜면 GitHub판(`SELF_UPDATE=true`)은 닫을 수 없는 창: "플레이 스토어로 옮겼어요 · 이 버전은 더 이상 쓸 수 없어요" + ① 서버 백업 자동(`Cloud.backupPending`, 끝나면 ✓) ② [플레이 스토어에서 받기] https://play.google.com/store/apps/details?id=kr.jogwailji.app ③ 스토어판에서 같은 계정 로그인 → 지난 출조 → 복원 안내. ④ "스토어에서 '항목을 찾을 수 없습니다'가 나오면 아직 테스터 등록 전 → 관리자에게 구글 이메일을 알려 주세요" + [✉ 관리자에게 문의] 버튼(InquiryActivity, 이 창이 떠 있어도 문의는 가능). 관리자는 닫고 쓸 수 있음. 스토어판에는 안 뜸. **그 뒤 GitHub판 업데이트 중단** — 워크플로가 스토어판 AAB만 만들고 Releases의 `fishing-log.apk`/`version.txt` 는 v6.6에서 멈춤. 켜기 전에 그룹원 이메일을 내부 테스트 목록에 넣어야 함(아니면 스토어에서 못 받음). 사진 원본 · 가방 · 리모컨 등록 · 설정은 폰에만 있어 안 넘어감.
 - ~~249~~ (v6.4에서 함 · 위치는 사용자 요청으로 **메인 ⚙ 왼쪽**, `StoreUpdate` 가 src/play · src/github 에 따로) 더보기 버전 줄 옆 **[🔄 업데이트 확인]** 버튼 — 스토어판: Play In-App Updates(`com.google.android.play:app-update-ktx`, `playImplementation` + `src/play` · `src/github` 에 같은 이름 클래스로 나눔) 로 확인 → 있으면 업데이트 창(스토어 열기 또는 앱 안에서 받기) · 없으면 '최신 버전이에요' · 켤 때 몰래 확인해서 빨간 점. GitHub판: 지금 Updater 창 바로 띄우기 / 없으면 '최신 버전이에요'. 스토어 주소 https://play.google.com/store/apps/details?id=kr.jogwailji.app (안 바뀜)
 - ~~250~~ (v6.6에서 함) 그룹원 '지금 출조 중' 지도(`MapDialog.showPerson` watchMap)에 이동 거리 줄 — `distanceText(pts)` (이동 km · 해리 · 출발지에서 km) 를 설명 첫 줄에, 경로 갱신 때마다. 내 지도(show · showTrip)에는 이미 있음.
-- **252 ('만들어줘' 대기 · 사용자 요청으로 바꿈: 서버 X, 폰에 백업):** ① 두 판 모두 ⚙ 개인 설정(`SettingsActivity`)에 '💾 백업' — [폰에 백업하기] = 다운로드/조과일지/조과일지-백업-날짜.zip (MediaStore), [백업 파일에서 불러오기] = 파일 고르기(SAF). 담는 것: SharedPreferences "fishlog"(가방 · 설정 · 리모컨 키 · 즐겨찾기 등, 캐시 키 제외) + 출조 파일(filesDir/trips) + 사진 원본 + 오프라인 지도 타일. ② 스토어판 첫 실행 때 같은 폰에 GitHub판(com.fishlog.app, v6.7+)이 있으면 **자동으로 가져오기** — GitHub판에 내보내기용 ContentProvider(호출한 앱이 kr.jogwailji.app + Play 앱 서명 SHA-1 `4f:f0:f1:5e:19:6f:95:6c:85:44:0b:96:e3:ac:9a:e9:05:93:86:2f` 인지 확인), 스토어판 매니페스트에 `<queries>` com.fishlog.app. 없으면 "백업 파일 불러올까요?". **GitHub판도 v6.7 한 번 더 올림(예외)** — 워크플로 APK 단계 잠깐 되살리기. 옮기기 창 ①에도 '폰에 백업' 안내.
+- ~~252~~ (v6.7에서 함 · `Backup.kt`, GitHub판 `src/github/.../BackupProvider.kt`, 스토어판 `MainActivity.checkGithubImport`): ① 두 판 모두 ⚙ 개인 설정(`SettingsActivity`)에 '💾 백업' — [폰에 백업하기] = 다운로드/조과일지/조과일지-백업-날짜.zip (MediaStore), [백업 파일에서 불러오기] = 파일 고르기(SAF). 담는 것: SharedPreferences "fishlog"(가방 · 설정 · 리모컨 키 · 즐겨찾기 등, 캐시 키 제외) + 출조 파일(filesDir/trips) + 사진 원본 + 오프라인 지도 타일. ② 스토어판 첫 실행 때 같은 폰에 GitHub판(com.fishlog.app, v6.7+)이 있으면 **자동으로 가져오기** — GitHub판에 내보내기용 ContentProvider(호출한 앱이 kr.jogwailji.app + Play 앱 서명 SHA-1 `4f:f0:f1:5e:19:6f:95:6c:85:44:0b:96:e3:ac:9a:e9:05:93:86:2f` 인지 확인), 스토어판 매니페스트에 `<queries>` com.fishlog.app. 없으면 "백업 파일 불러올까요?". **GitHub판도 v6.7 한 번 더 올림(예외)** — 워크플로 APK 단계 잠깐 되살리기. 옮기기 창 ①에도 '폰에 백업' 안내.
 - **251 (제안만):** 관리자 메뉴 목록에 '📦 스토어로 옮기기' 바로 넣기 (지금은 관리자 페이지 → 👥 사용자 목록 · 권한 · 최소 버전 · 정지 → 최소 버전 아래).
 - **195:** 내용 확인 필요 (예전 대화방 메모)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)

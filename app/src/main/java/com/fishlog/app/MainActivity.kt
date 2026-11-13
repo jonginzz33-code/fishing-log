@@ -203,6 +203,54 @@ class MainActivity : Activity() {
     private var guideOpen = false
     private lateinit var versionText: TextView
 
+    // ---------------- v6.7 (252): 스토어판 ← GitHub판 자동 가져오기 ----------------
+    private var importChecked = false
+    private fun checkGithubImport() {
+        if (BuildConfig.SELF_UPDATE || importChecked || isFinishing || Store.current != null) return
+        importChecked = true
+        val p = getSharedPreferences("fishlog", MODE_PRIVATE)
+        if (p.getBoolean("imported_from_github", false)) return
+        val hasOld = try { packageManager.getPackageInfo(Backup.GITHUB_PKG, 0); true } catch (_: Exception) { false }
+        if (!hasOld) {
+            // 예전 앱이 없으면 (폰을 바꾼 경우) 처음 한 번만 백업 파일 물어보기
+            if (!p.getBoolean("import_asked", false) && Store.history.isEmpty()) {
+                p.edit().putBoolean("import_asked", true).apply()
+                AlertDialog.Builder(this, R.style.FlAlert)
+                    .setTitle("💾 백업 파일이 있나요?")
+                    .setMessage("예전 조과일지에서 '폰에 백업하기'로 만든 파일이 있으면 가방 · 설정 · 지도 · 출조 기록 · 사진을 그대로 가져올 수 있어요.\n(나중에 ⚙ 개인 설정 → 💾 백업에서도 할 수 있어요)")
+                    .setPositiveButton("백업 파일 고르기") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("pickBackup", true)) }
+                    .setNegativeButton("없어요", null).show()
+            }
+            return
+        }
+        val tv = Ui.text(this, 14f, Ui.TEXT, false, "예전 앱(GitHub판)에서 가방 · 설정 · 지도 · 출조 기록 · 사진을 가져오고 있어요…")
+            .apply { setPadding(dp(22), dp(10), dp(22), dp(10)) }
+        val dlg = AlertDialog.Builder(this, R.style.FlAlert).setTitle("📦 예전 앱에서 가져오는 중").setView(tv).setCancelable(false).show()
+        Thread {
+            val res = try {
+                contentResolver.openInputStream(android.net.Uri.parse(Backup.PROVIDER_URI))?.use {
+                    Backup.import(this, it) { n -> runOnUiThread { tv.text = "파일 ${n}개 가져오는 중…" } }
+                }
+            } catch (_: Exception) { null }
+            runOnUiThread {
+                dlg.dismiss()
+                if (res != null) {
+                    p.edit().putBoolean("imported_from_github", true).commit()
+                    AlertDialog.Builder(this, R.style.FlAlert)
+                        .setTitle("✓ 예전 앱에서 가져왔어요")
+                        .setMessage("설정 ${res.prefs}개 · 파일 ${res.files}개를 가져왔어요. 앱을 다시 켜서 적용할게요.\n잘 보이면 예전 앱(GitHub판)은 지워도 돼요.")
+                        .setCancelable(false)
+                        .setPositiveButton("다시 켜기") { _, _ -> Backup.restart(this) }.show()
+                } else {
+                    AlertDialog.Builder(this, R.style.FlAlert)
+                        .setTitle("예전 앱을 먼저 업데이트해 주세요")
+                        .setMessage("예전 앱(GitHub판)을 6.7 이상으로 업데이트하면 가방 · 설정 · 지도 · 기록을 자동으로 가져와요.\n예전 앱을 한 번 켜서 업데이트한 뒤 이 앱을 다시 켜 주세요. (예전 앱은 아직 지우지 마세요)")
+                        .setPositiveButton("알겠어요", null).show()
+                }
+            }
+        }.start()
+    }
+
     // ---------------- v6.6 (248): GitHub판 → 플레이 스토어로 옮기기 ----------------
     private var storeMoveDlg: android.app.Dialog? = null
     private var storeMoveSkipped = false
@@ -272,9 +320,11 @@ class MainActivity : Activity() {
 
         // ③ 복원
         val c3 = Ui.card(this)
-        c3.addView(Ui.text(this, 15f, Ui.TEXT, true, "③ 스토어판에서 내 기록 가져오기"))
+        c3.addView(Ui.text(this, 15f, Ui.TEXT, true, "③ 스토어판 켜기 → 자동으로 가져와요"))
         c3.addView(Ui.text(this, 13.5f, Ui.SUB, false,
-            "스토어판을 열고 같은 구글 계정으로 로그인 → ⋯ 더보기 → '지난 출조 · 내 기록 보관함' → '서버에서 내 기록 복원하기'").apply { setLineSpacing(0f, 1.2f) },
+            "같은 폰에서 스토어판을 처음 켜면 이 앱의 🎒 가방 · ⚙ 설정 · 📥 받아 둔 지도 · 📚 출조 기록 · 📷 사진을 자동으로 가져와요. " +
+            "그다음 같은 구글 계정으로 로그인하세요. ⚠ 이 앱은 스토어판에서 잘 보인 걸 확인한 뒤에 지우세요.\n" +
+            "(폰을 바꾸는 경우: ⚙ 개인 설정 → 💾 폰에 백업하기 → 새 폰 스토어판에서 불러오기)").apply { setLineSpacing(0f, 1.2f) },
             Ui.lp(this, MATCH, WRAP, top = 6))
         col.addView(c3, Ui.lp(this, MATCH, WRAP, top = 10))
 
@@ -292,8 +342,8 @@ class MainActivity : Activity() {
         col.addView(c4, Ui.lp(this, MATCH, WRAP, top = 12))
 
         col.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "• 사진 원본 · 🎒 가방 · 리모컨 버튼 등록 · 설정은 이 폰의 이 앱에만 있어서 넘어가지 않아요. 스토어판에서 다시 해 주세요.\n" +
-            "• 스토어판을 잘 쓰게 되면 이 앱(GitHub판)은 지워도 돼요.").apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 14))
+            "• 진행 중인 출조는 넘어가지 않아요 (끝낸 뒤에 옮기세요).\n" +
+            "• 스토어판에서 잘 보이면 이 앱(GitHub판)은 지워도 돼요.").apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 14))
 
         if (Cloud.isAdmin) col.addView(Ui.button(this, "🛠 관리자: 닫고 이 앱 계속 쓰기") {
             storeMoveSkipped = true; d.dismiss()
@@ -413,6 +463,8 @@ class MainActivity : Activity() {
         resumeAfterLoc()
         // v6.1 (244): 예전에 고친 조과가 게시판 글에 안 들어간 것 한 번 맞추기 (한 번 끝나면 다시 안 함)
         if (Cloud.user != null) PublicBoard.resyncOnce(applicationContext)
+        // v6.7 (252): 스토어판 처음 켤 때 같은 폰 예전 앱(GitHub판)에서 가방 · 설정 · 지도 · 기록 가져오기
+        checkGithubImport()
         // v5.2 (240): 관리자가 고친 내 그룹 기록 → 폰 기록에도 (10분에 한 번)
         if (Cloud.user != null && Cloud.groups.isNotEmpty() && System.currentTimeMillis() - adminEditCheckAt > 10 * 60_000L) {
             adminEditCheckAt = System.currentTimeMillis()

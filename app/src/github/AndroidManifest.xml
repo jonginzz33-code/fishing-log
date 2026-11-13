@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v6.7 (252): GitHub판만 — 같은 폰의 스토어판에 가방 · 설정 · 지도 · 기록 넘겨주기 (스토어판 서명만 허용) -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name=".BackupProvider"
+            android:authorities="com.fishlog.app.backup"
+            android:exported="true" />
+    </application>
+</manifest>

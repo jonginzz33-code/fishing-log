@@ -2,6 +2,7 @@ package com.fishlog.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
@@ -38,6 +39,98 @@ class SettingsActivity : Activity() {
         col.addView(box, Ui.lp(this, MATCH, WRAP, top = 6))
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
         if (intent.getBooleanExtra("askNick", false)) toast("다른 사람에게 보일 닉네임을 먼저 정해 주세요")
+        // v6.7 (252): 스토어판 첫 실행 → '백업 파일에서 불러오기' 바로
+        if (intent.getBooleanExtra("pickBackup", false) && savedInstanceState == null) pickBackup()
+    }
+
+    // ---------------- v6.7 (252): 💾 폰에 백업 · 불러오기 ----------------
+    private val REQ_SAVE = 7301
+    private val REQ_OPEN = 7302
+    private var busy: android.app.AlertDialog? = null
+
+    private fun busyDialog(title: String): android.widget.TextView {
+        val tv = Ui.text(this, 14f, Ui.TEXT, false, "준비 중…").apply { setPadding(dp(22), dp(10), dp(22), dp(10)) }
+        busy = android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle(title).setView(tv).setCancelable(false).show()
+        return tv
+    }
+
+    private fun renderBackup() {
+        section("💾 백업 (폰에 저장)")
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
+        }
+        card.addView(Ui.text(this, 13f, Ui.TEXT, false,
+            "🎒 가방(재고표) · ⚙ 앱 설정(퀵바 · 기록 방식 · 리모컨 버튼 · 화면 크기 · 알람 · ⭐ 즐겨찾기 지점) · 📥 받아 둔 지도 · 📚 출조 기록 · 📷 사진 원본을 파일 하나로 저장해요.").apply { setLineSpacing(0f, 1.2f) })
+        card.addView(Ui.text(this, 11.5f, Ui.SUB, false,
+            "• 저장할 곳을 고르는 창이 떠요 (기본: 다운로드 폴더) · 폰을 바꾸면 이 파일을 옮겨서 '불러오기'\n• 진행 중인 출조는 빠져요 (끝낸 뒤에 백업하세요)" +
+            if (!BuildConfig.SELF_UPDATE) "\n• 같은 폰에 예전 앱(GitHub판 6.7 이상)이 있으면 처음 켤 때 자동으로 가져와요" else ""),
+            Ui.lp(this, MATCH, WRAP, top = 6))
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        r.addView(Ui.button(this, "💾 폰에 백업하기", true) {
+            try {
+                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE); type = "application/zip"; putExtra(Intent.EXTRA_TITLE, Backup.fileName())
+                }, REQ_SAVE)
+            } catch (_: Exception) { toast("파일 저장 창을 열 수 없어요") }
+        }.apply { minHeight = dp(46); textSize = 14f }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        r.addView(Ui.button(this, "📂 백업 파일에서 불러오기") { pickBackup() }.apply { minHeight = dp(46); textSize = 14f },
+            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        card.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        box.addView(card, Ui.lp(this, MATCH, WRAP, top = 6))
+    }
+
+    private fun pickBackup() {
+        try {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+            }, REQ_OPEN)
+        } catch (_: Exception) { toast("파일 고르는 창을 열 수 없어요") }
+    }
+
+    @Deprecated("startActivityForResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) return
+        when (requestCode) {
+            REQ_SAVE -> {
+                val tv = busyDialog("💾 백업하는 중…")
+                Thread {
+                    val res = try {
+                        contentResolver.openOutputStream(uri)?.use { out -> Backup.export(this, out) { n -> runOnUiThread { tv.text = "파일 ${n}개 담는 중…" } } }
+                    } catch (e: Exception) { null }
+                    runOnUiThread {
+                        busy?.dismiss()
+                        if (res == null) toast("백업 실패 (저장 공간 확인)")
+                        else android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("✓ 백업했어요")
+                            .setMessage("설정 ${res.prefs}개 · 파일 ${res.files}개를 저장했어요.\n폰을 바꾸면 이 파일을 옮겨서 '백업 파일에서 불러오기'를 누르세요.")
+                            .setPositiveButton("알겠어요", null).show()
+                    }
+                }.start()
+            }
+            REQ_OPEN -> android.app.AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("이 백업을 불러올까요?")
+                .setMessage("가방 · 설정 · 지도 · 출조 기록 · 사진을 백업한 때로 되돌려요 (같은 출조는 백업 것으로). 다 되면 앱이 다시 켜져요.")
+                .setPositiveButton("불러오기") { _, _ ->
+                    val tv = busyDialog("📂 불러오는 중…")
+                    Thread {
+                        val res = try {
+                            contentResolver.openInputStream(uri)?.use { Backup.import(this, it) { n -> runOnUiThread { tv.text = "파일 ${n}개 가져오는 중…" } } }
+                        } catch (e: Exception) { null }
+                        runOnUiThread {
+                            busy?.dismiss()
+                            if (res == null) toast("불러오기 실패 (조과일지 백업 파일이 맞는지 확인)")
+                            else {
+                                getSharedPreferences("fishlog", MODE_PRIVATE).edit().putBoolean("imported_from_github", true).commit()
+                                toast("불러왔어요 ✓ (설정 ${res.prefs}개 · 파일 ${res.files}개) · 앱을 다시 켜요")
+                                window.decorView.postDelayed({ Backup.restart(this) }, 1200)
+                            }
+                        }
+                    }.start()
+                }
+                .setNegativeButton("취소", null).show()
+        }
     }
 
     override fun onResume() { super.onResume(); render() }
@@ -103,6 +196,7 @@ class SettingsActivity : Activity() {
         box.addView(rr, Ui.lp(this, MATCH, WRAP, top = 6))
         box.addView(Ui.text(this, 12f, Ui.SUB, false, "기본 1km · 해루질은 500m 넘게 떨어질 때도 있어요 · '거리 상관없이' = 같은 그룹에서 출조 중인 사람 모두"),
             Ui.lp(this, MATCH, WRAP, top = 4))
+        renderBackup()
         renderOffline()
         renderData()
     }
