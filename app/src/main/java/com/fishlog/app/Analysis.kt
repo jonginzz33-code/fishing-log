@@ -70,7 +70,9 @@ object Analysis {
     class Species(val name: String, val count: Int, val trips: Int, val rate: Double, val conds: List<Cond>)
     class Result(val total: Int, val trips: Int, val from: Long, val to: Long, val species: List<Species>, val note: String)
 
-    private class TripInfo(val day: Tide.Day?, val pct: Int?, val snap: Weather.Snap?, val st: Tide.Strength? = null)
+    private class TripInfo(val day: Tide.Day?, val pct: Int?, val snap: Weather.Snap?, val st: Tide.Strength? = null,
+                           /** v6.16 (261-2): 조과마다 가장 가까운 관측소 기준 잡은 때 물살 % */
+                           val flows: Map<Rec, Int> = emptyMap())
 
     /** 백그라운드에서 물때·물세기를 받아 계산 (progress = "물때 자료 받는 중 3/9") */
     fun run(ctx: Context, recs: List<Rec>, progress: (String) -> Unit, done: (Result) -> Unit) {
@@ -90,7 +92,28 @@ object Analysis {
                 val stg = if (d != null) try { Tide.strengthOf(app, d) } catch (_: Exception) { null } else null
                 val pct = stg?.pct
                 val snap = if (r0.wx.isNotBlank()) Weather.snapFromJson(r0.wx) else null
-                info[k] = TripInfo(d, pct ?: Tide.estimatePct(mid), snap, stg)
+                // v6.16 (261-2): 조과마다 가장 가까운 관측소 (출조 기준과 다르면 최대 2곳 더 받기 · 직접 고른 관측소가 있으면 그대로)
+                val flows = HashMap<Rec, Int>()
+                val mainCode = d?.stationCode
+                val near = HashMap<String, Pair<Tide.Day, Tide.Strength>>()
+                if (mainCode != null && stg != null && Store.tideStation == null) {
+                    val codeOf = rs.associateWith { r -> try { Tide.stationsNear(app, r.lat, r.lon).firstOrNull()?.code } catch (_: Exception) { null } }
+                    codeOf.entries.filter { it.value != null && it.value != mainCode }.groupBy { it.value!! }
+                        .entries.sortedByDescending { it.value.size }.take(2).forEach { (code, l) ->
+                            val r1 = l.first().key
+                            val dd = try { Tide.fetchNow(app, r1.lat, r1.lon, mid) } catch (_: Exception) { null }
+                            if (dd != null && dd.stationCode == code) {
+                                val s2 = try { Tide.strengthOf(app, dd) } catch (_: Exception) { null }
+                                if (s2 != null) near[code] = dd to s2
+                            }
+                        }
+                    rs.forEach { r ->
+                        val e = codeOf[r]?.let { near[it] }
+                        val f = if (e != null) BiteMemo.flowAt(e.first, e.second, r.time) else BiteMemo.flowAt(d, stg, r.time)
+                        if (f != null) flows[r] = f
+                    }
+                }
+                info[k] = TripInfo(d, pct ?: Tide.estimatePct(mid), snap, stg, flows)
             }
             val res = compute(recs, info, trips.size > 40)
             main.post { done(res) }
@@ -144,7 +167,7 @@ object Analysis {
         val flowOrder = listOf("~20%", "20~40%", "40~60%", "60~80%", "80%~")
         out.add(Cond("flow", "💧 잡은 때 물살", bucket(rs, flowOrder, th, false) { r ->
             val inf = info[r.trip] ?: return@bucket null
-            val f = BiteMemo.flowAt(inf.day, inf.st, r.time) ?: return@bucket null
+            val f = inf.flows[r] ?: BiteMemo.flowAt(inf.day, inf.st, r.time) ?: return@bucket null
             when { f < 20 -> flowOrder[0]; f < 40 -> flowOrder[1]; f < 60 -> flowOrder[2]; f < 80 -> flowOrder[3]; else -> flowOrder[4] }
         }, false))
         // 만조 · 간조 기준 (가까운 만조·간조에서 몇 시간 전/후)

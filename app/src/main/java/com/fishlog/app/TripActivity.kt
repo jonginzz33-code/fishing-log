@@ -142,11 +142,53 @@ class TripActivity : Activity() {
             tideDay = day
             tideMsg = err ?: ""
             render()
-            if (day != null) Tide.strength(this, day) { st -> tideStrength = st; if (!isFinishing) render() }
+            if (day != null) Tide.strength(this, day) { st -> tideStrength = st; if (!isFinishing) { render(); loadNearTides(t) } }
         }
     }
 
     private val openHours = mutableSetOf<String>()
+
+    // ---------------- v6.16 (261-2): 조과마다 가장 가까운 관측소로 물살 % ----------------
+    /** 출조 기준과 다른 관측소의 물때 (관측소 코드 → 그날 물때 · 물세기) · 출조 하나에 최대 2곳 더 (총 3곳) */
+    private val nearTides = HashMap<String, Pair<Tide.Day, Tide.Strength>>()
+    private val nearNames = LinkedHashMap<String, String>()
+    private fun nearCode(lat: Double, lon: Double): String? = try { Tide.stationsNear(this, lat, lon).firstOrNull()?.code } catch (_: Exception) { null }
+
+    /** 잡은 때 물살 % — 그 조과 자리에서 가장 가까운 관측소 기준 (못 받았으면 출조 기준 관측소) */
+    private fun catchFlow(c: Store.Catch): Int? {
+        val main = BiteMemo.flowAt(tideDay, tideStrength, c.time)
+        val la = c.lat ?: return main; val lo = c.lon ?: return main
+        val code = nearCode(la, lo) ?: return main
+        if (code == tideDay?.stationCode) return main
+        val e = nearTides[code] ?: return main
+        return BiteMemo.flowAt(e.first, e.second, c.time) ?: main
+    }
+
+    private var nearLoading = false
+    private fun loadNearTides(t: Store.Trip) {
+        // 물때 창에서 관측소를 직접 골라 둔 경우엔 그 관측소만 씀 (기존 방식 그대로)
+        if (nearLoading || t.isFresh() || Store.tideStation != null) return
+        val mainCode = tideDay?.stationCode ?: return
+        val groups = t.catches.filter { it.lat != null && it.lon != null }
+            .groupBy { nearCode(it.lat!!, it.lon!!) }
+            .filterKeys { it != null && it != mainCode && it !in nearTides }
+            .entries.sortedByDescending { it.value.size }.take(2)
+        if (groups.isEmpty()) return
+        nearLoading = true
+        val app = applicationContext
+        Thread {
+            groups.forEach { (code, cs) ->
+                val c0 = cs.first()
+                val d = try { Tide.fetchNow(app, c0.lat!!, c0.lon!!, t.start) } catch (_: Exception) { null }
+                if (d != null && d.stationCode == code) {
+                    val st = try { Tide.strengthOf(app, d) } catch (_: Exception) { null }
+                    val name = try { Tide.stations(app).firstOrNull { it.code == code }?.name } catch (_: Exception) { null }
+                    if (st != null) runOnUiThread { nearTides[code!!] = d to st; if (name != null) nearNames[code] = name }
+                }
+            }
+            runOnUiThread { nearLoading = false; if (!isFinishing) render() }
+        }.start()
+    }
 
     // ---------------- v5.2 (240): 출조 후 조과 고치기 (올린 사람 · 관리자만) ----------------
     private var editMode = false
@@ -313,7 +355,7 @@ class TripActivity : Activity() {
         r.addView(Ui.text(this, 14f, Ui.TEXT, false, t.name(c.slot) + if (c.lat != null) "" else "  (위치 없음)"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         // v6.15 (259): 잡은 때 물살 % (그날 물세기 기준)
-        if (!t.isFresh()) BiteMemo.flowAt(tideDay, tideStrength, c.time)?.let { f ->
+        if (!t.isFresh()) catchFlow(c)?.let { f ->
             val fc = when (BiteMemo.flowLevel(f)) { 2 -> Ui.ORANGE; 1 -> Ui.BLUE; else -> android.graphics.Color.parseColor("#8E9AA3") }
             r.addView(Ui.text(this, 12f, fc, true, "💧$f%"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
         }
@@ -528,6 +570,8 @@ class TripActivity : Activity() {
             }
             tideCard.addView(Ui.text(this, 13f, Ui.TEXT, false, TideDialog.describe(d, t)), Ui.lp(this, MATCH, WRAP, top = 6))
             tideCard.addView(Ui.text(this, 11f, Ui.SUB, false, d.source), Ui.lp(this, MATCH, WRAP, top = 4))
+            if (nearNames.isNotEmpty()) tideCard.addView(Ui.text(this, 11f, Ui.SUB, false,
+                "💧 잡은 때 물살 %는 조과마다 가장 가까운 관측소 기준 (그 밖에 " + nearNames.values.joinToString(" · ") + ")"), Ui.lp(this, MATCH, WRAP, top = 2))
         } else {
             tideCard.addView(Ui.text(this, 13f, Ui.SUB, false, tideMsg))
         }
@@ -535,7 +579,7 @@ class TripActivity : Activity() {
         }
 
         // 입질 시간 메모 (일출·일몰 기준)
-        val peaks = BiteMemo.forTrip(t, if (fresh) null else tideDay, if (fresh) null else tideStrength)
+        val peaks = BiteMemo.forTrip(t, if (fresh) null else tideDay, if (fresh) null else tideStrength, if (fresh) null else { c -> catchFlow(c) })
         if (peaks.isNotEmpty()) {
             section("입질 시간 메모 (일출·일몰 기준)")
             Sun.times(t.start, t.anyLocation()?.first, t.anyLocation()?.second)?.let { s ->

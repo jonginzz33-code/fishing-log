@@ -35,7 +35,7 @@ object BiteMemo {
     fun flowLevel(p: Int) = when { p < 30 -> 0; p < 60 -> 1; else -> 2 }
 
     /** 출조 하나의 어종별 입질 피크 (3마리 이상 잡은 어종만) */
-    fun forTrip(t: Store.Trip, day: Tide.Day?, st: Tide.Strength? = null): List<Peak> {
+    fun forTrip(t: Store.Trip, day: Tide.Day?, st: Tide.Strength? = null, flowOf: ((Store.Catch) -> Int?)? = null): List<Peak> {
         val loc = locOf(t)
         val out = mutableListOf<Peak>()
         for (slot in t.slots()) {
@@ -61,7 +61,7 @@ object BiteMemo {
             // v6.14 (258): 그 시간대 물흐름 세기 (시간별 물흐름 막대와 같은 값)
             // v6.15 (259): 그 시간대 잡은 조과들의 '잡은 때 물살 %' 평균 (그날 물세기와 같은 잣대)
             var flowPct: Int? = null; var flowLv = -1
-            val fs = cs.subList(bi, bj + 1).mapNotNull { flowAt(day, st, it.time) }
+            val fs = cs.subList(bi, bj + 1).mapNotNull { c -> if (flowOf != null) flowOf(c) else flowAt(day, st, c.time) }
             if (fs.isNotEmpty()) { flowPct = Math.round(fs.average()).toInt(); flowLv = flowLevel(flowPct) }
             out.add(Peak(t.name(slot), cs.size, best, label, Math.round(dayN * 100f / cs.size), note, flowPct, flowLv))
         }
