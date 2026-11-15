@@ -19,6 +19,8 @@ service cloud.firestore {
     function hasPerm(p) {
       return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('perms', {}).get(p, false) == true;
     }
+    // v6.19 보안: 폰 시계가 조금 틀려도 되게 앞뒤 6시간
+    function nearNow(ms) { return ms is int && ms > request.time.toMillis() - 21600000 && ms < request.time.toMillis() + 21600000; }
     function trashDoc(tid) { return get(/databases/$(database)/documents/trash/$(tid)).data; }
     function reportDoc(target) { return /databases/$(database)/documents/reports/$(target); }
     function reportBy(target) { return /databases/$(database)/documents/reports/$(target)/by/$(request.auth.uid); }
@@ -144,24 +146,45 @@ service cloud.firestore {
       }
     }
     match /notify/{nid} {
-      allow create: if signedIn();
+      // 휴지통에 넣은 사람만, 그 글 주인에게만 알림
+      allow create: if signedIn() && request.resource.data.trash is string
+        && trashDoc(request.resource.data.trash).by == request.auth.uid
+        && request.resource.data.to == trashDoc(request.resource.data.trash).owner;
       allow read, delete: if signedIn() && resource.data.to == request.auth.uid;
     }
 
     // ---- 날씨 저장 (최신 값을 못 받을 때 대비) ----
     match /wx/{id} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create, update: if notBanned()
+        && request.resource.data.keys().hasOnly(['h', 't'])
+        && request.resource.data.h is string && request.resource.data.h.size() < 60000
+        && nearNow(request.resource.data.t);
+      allow delete: if isAdmin();
     }
     // ---- 지운 글 번호 (다른 폰이 새 글 받을 때 같이 받아서 바로 지움) ----
     match /deleted/{k}/items/{id} {
       allow read: if signedIn();
-      allow create, update: if signedIn() && request.resource.data.by == request.auth.uid;
+      // 내 글 번호 · 관리자 · 그 그룹의 그룹장만 (k = 'public' 또는 'g_그룹번호', id = '주인uid_출조번호')
+      allow create, update: if signedIn() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['t', 'by'])
+        && (id.matches(request.auth.uid + '_.*') || isAdmin()
+            || (k.matches('g_.+') && isGroupOwner(k.split('_')[1])));
       allow delete: if isAdmin();
     }
     // ---- 물때 저장 (관측소_날짜, 하루 두 번 정도 새로 받아 모두 같이 씀) ----
     match /tide/{id} {
       allow read: if signedIn();
-      allow create, update: if notBanned() && request.resource.data.by == request.auth.uid;
+      allow create: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ext', 'at', 'by'])
+        && request.resource.data.ext is string && request.resource.data.ext.size() < 8000
+        && nearNow(request.resource.data.at);
+      // 새로 고치기는 저장된 지 30분 지난 것만 (아무나 계속 덮어쓰지 못하게)
+      allow update: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ext', 'at', 'by'])
+        && request.resource.data.ext is string && request.resource.data.ext.size() < 8000
+        && nearNow(request.resource.data.at)
+        && (!(resource.data.at is int) || resource.data.at < request.time.toMillis() - 1800000);
       allow delete: if isAdmin();
     }
 
@@ -192,7 +215,11 @@ service cloud.firestore {
       allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       match /photos/{ph} {
         allow read: if signedIn();
-        allow create, update: if notBanned() && request.resource.data.owner == request.auth.uid;
+        // 글 주인만 (남의 글에 사진 · 경로 넣기 / 덮어쓰기 막기)
+        allow create: if notBanned() && request.resource.data.owner == request.auth.uid
+          && get(/databases/$(database)/documents/public/$(pid)).data.owner == request.auth.uid;
+        allow update: if notBanned() && request.resource.data.owner == request.auth.uid
+          && resource.data.owner == request.auth.uid;
         allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       }
     }
@@ -266,17 +293,26 @@ service cloud.firestore {
         allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
         match /photos/{pid} {
           allow read: if isMember(gid);
-          allow create, update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
           allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
         }
         match /photosBig/{pid} {
           allow read: if isMember(gid);
-          allow create, update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
           allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
         }
         match /detail/{did} {
           allow read: if isMember(gid);
-          allow create, update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
           allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
         }
       }
