@@ -3,6 +3,13 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    # 스토어 글 · 웹페이지 · 메모만 바꿀 땐 앱을 다시 만들지 않아요
+    paths-ignore:
+      - 'store/**'
+      - 'docs/**'
+      - 'rules-test/**'
+      - 'CLAUDE.md'
+      - '.github/workflows/store.yml'
   workflow_dispatch:
 
 permissions:
