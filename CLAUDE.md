@@ -6,6 +6,7 @@
 - 사용자는 개발자가 아니에요. 답은 쉬운 한국어로 짧게.
 - 플레이 콘솔 · Firebase · GitHub 등 **어떤 화면으로 가라고 할 때는 답 맨 위에 바로 가는 주소(링크)를 먼저** 줘요.
   - 주소는 **복사 버튼이 붙게 코드 블록(```)에 한 줄씩** 넣어서 줘요 (사용자가 복사해서 써요).
+  - **누르면 바로 열리는 링크도 같이** 줘요 (`[이름](주소)`) — 사용자 요청 2026-11-15. 붙여 넣을 내용(규칙 등)은 링크로 보내지 말고 **답에 코드 블록으로 바로** 줘요.
   - 플레이 콘솔 개발자 ID `7087559415015330997` (홈: https://play.google.com/console/u/0/developers/7087559415015330997/home)
   - 조과일지 스토어 앱 ID `4973437766947210735` (내부 테스트: https://play.google.com/console/u/0/developers/7087559415015330997/app/4973437766947210735/tracks/internal-testing)
   - **테스터 참여 링크** (그룹원에게 보내는 것): https://play.google.com/apps/internaltest/4700601757102863820 · 스토어 주소 https://play.google.com/store/apps/details?id=kr.jogwailji.app
