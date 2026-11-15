@@ -829,11 +829,13 @@ object Weather {
 
     private fun loadWeek(lat: Double, lon: Double): List<WeekDay> {
         val sp = if (Store.windSea) seaPoint(lat, lon) else null
-        val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+        // v6.19 (265): Open-Meteo 가 안 되면(일시 장애 · 통신사 공용 IP 요청 제한) 한 번 더, 그래도 안 되면 기상청 자료만으로
+        val omUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
             "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max" +
-            "&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=14")   // v4.9 (222): 14일 (8~14일은 참고)
-        val dd = JSONObject(body).getJSONObject("daily")
-        val days = dd.getJSONArray("time")
+            "&wind_speed_unit=ms&timezone=Asia%2FSeoul&forecast_days=14"   // v4.9 (222): 14일 (8~14일은 참고)
+        val dd: JSONObject? = try { JSONObject(get(omUrl)).getJSONObject("daily") } catch (_: Exception) {
+            try { Thread.sleep(1500); JSONObject(get(omUrl)).getJSONObject("daily") } catch (_: Exception) { null }
+        }
         // 바다: 최대 파고 + 하루 평균 수온 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로)
         val waveBy = HashMap<String, Double>(); val sstBy = HashMap<String, Double>()
         val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16,
@@ -859,11 +861,31 @@ object Weather {
                 if (waveBy.isNotEmpty()) break
             } catch (_: Exception) {}
         }
-        val list = (0 until days.length()).map { i ->
-            val ds = days.getString(i)
-            WeekDay(dayFmt.parse(ds)!!.time, num(dd.optJSONArray("temperature_2m_min"), i), num(dd.optJSONArray("temperature_2m_max"), i),
-                num(dd.optJSONArray("precipitation_probability_max"), i)?.toInt(), num(dd.optJSONArray("wind_speed_10m_max"), i),
-                waveBy[ds], sstBy[ds], num(dd.optJSONArray("weather_code"), i)?.toInt())
+        val own = grid(lat, lon)
+        val windCell = sp?.cell?.takeIf { it != own }
+        // 기상청으로 덮어쓰기: 오늘~3일 뒤 = 단기예보, 그 뒤 = 중기예보 (못 받으면 Open-Meteo 그대로)
+        val notes = mutableListOf<String>()
+        val short = try { kmaShortWeek(lat, lon, windCell) } catch (e: Exception) { notes.add("단기예보 못 받음"); emptyMap() }
+        val (mid, midNote) = try { kmaMidWeek(lat, lon) } catch (e: Exception) { emptyMap<String, Wx>() to (e.message ?: "기상청 중기예보를 못 받았어요") }
+        val list: List<WeekDay> = if (dd != null) {
+            val days = dd.getJSONArray("time")
+            (0 until days.length()).map { i ->
+                val ds = days.getString(i)
+                WeekDay(dayFmt.parse(ds)!!.time, num(dd.optJSONArray("temperature_2m_min"), i), num(dd.optJSONArray("temperature_2m_max"), i),
+                    num(dd.optJSONArray("precipitation_probability_max"), i)?.toInt(), num(dd.optJSONArray("wind_speed_10m_max"), i),
+                    waveBy[ds], sstBy[ds], num(dd.optJSONArray("weather_code"), i)?.toInt())
+            }
+        } else {
+            // Open-Meteo 없이: 기상청 단기 · 중기 날짜로 목록 (오늘부터)
+            val today = keyFmt.format(Date())
+            val keys = (short.keys + mid.keys).filter { it >= today }.toSortedSet()
+            if (keys.isEmpty()) throw java.io.IOException("no weather")
+            notes.add("날씨 서버(Open-Meteo) 응답 없음 · 기상청 자료로 보여 줘요")
+            keys.map { k ->
+                val t = keyFmt.parse(k)!!.time
+                val ds = dayFmt.format(Date(t + 12 * 3_600_000L))
+                WeekDay(t, null, null, null, null, waveBy[ds], sstBy[ds], null)
+            }
         }
         // v5.0 (230) · v5.1: 해상이면 바람 최대는 해상 기준점 값
         if (sp != null) try {
@@ -873,12 +895,6 @@ object Weather {
             val byDay = (0 until st.length()).mapNotNull { i -> num(sw, i)?.let { st.getString(i) to it } }.toMap()
             list.forEach { wd -> byDay[dayFmt.format(Date(wd.dayStart + 12 * 3_600_000L))]?.let { wd.wind = it } }
         } catch (_: Exception) {}
-        val own = grid(lat, lon)
-        val windCell = sp?.cell?.takeIf { it != own }
-        // 기상청으로 덮어쓰기: 오늘~3일 뒤 = 단기예보, 그 뒤 = 중기예보 (못 받으면 Open-Meteo 그대로)
-        val notes = mutableListOf<String>()
-        val short = try { kmaShortWeek(lat, lon, windCell) } catch (e: Exception) { notes.add("단기예보 못 받음"); emptyMap() }
-        val (mid, midNote) = try { kmaMidWeek(lat, lon) } catch (e: Exception) { emptyMap<String, Wx>() to (e.message ?: "기상청 중기예보를 못 받았어요") }
         list.forEach { wd ->
             val ymd = keyFmt.format(Date(wd.dayStart))
             val s = short[ymd]
