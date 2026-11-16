@@ -79,6 +79,7 @@
 - ~~281~~ (v6.28에서 함): '자주 가는 사이트' 그림을 배(⛴) → **🌐 인터넷 모양**으로 — 퀵바 '사이트' 칸(`MainActivity` QItem "boats") · ⋯ 더보기 버튼 · `Boats.kt` 창 제목. 목록 안 '🌐 열기' 버튼은 그대로.
 - ~~282~~ (v6.30에서 함 · 2026-11-17 사용자 '메모하고 만들어줘' · `QuickWidget.kt` · layout widget_quick (5×2칸) · prefs w_quick = MainActivity.paintQuick 저장 · open "q:id" → quickAction · saver 는 위젯 브로드캐스트로 바로 · `QuickWidget.pin/pinMenu` requestPinAppWidget): ⚡ **퀵바 위젯** (앱 퀵바 칸 그대로 · 누르면 그 화면 · 맨 끝 ⚡ 설정) + 📱 **앱에서 위젯 추가 버튼** (퀵바 설정 맨 위 · ⋯ 더보기 '홈 화면에 위젯 추가 (퀵바 · 물때 · 가방)' · 지원 안 하는 홈 화면 앱은 손으로 넣는 법 안내).
 - **283 (메모 · '만들어줘' 대기 · 2026-11-17):** 📱 앱에서 위젯 추가할 때 삼성 '홈 화면에 추가' 창 미리보기에 '위젯을 추가할 수 없습니다'가 보임 (실제 추가는 됨). 원인: 미리보기를 빈 initialLayout 으로 그림 + 내 토스트가 가림. 고칠 것: ① `QuickWidget.pin` 의 requestPinAppWidget 에 extras `AppWidgetManager.EXTRA_APPWIDGET_PREVIEW` = 지금 퀵바 칸으로 그린 RemoteViews (물때 · 가방 위젯도 같은 방식 — 각 draw 를 build(c) RemoteViews 로 나누기) ② 성공 토스트 없애기 ③ 위젯 목록용 미리보기 그림(widget info `android:previewImage` 또는 `previewLayout`에 예시 칸).
+- **284 (메모 · '만들어줘' 대기 · 2026-11-17):** 🌡 지난 날짜(−2일부터) 물때 창 수온이 전부 '예상' — `Weather.measuredTemp` 가 KHOA '최신 관측데이터'(dtRecent · 오늘·어제만)라서 (Weather.kt '수온 실측 (오늘·어제)' diff in -1..0). 고칠 것: ① **받은 실측 저장 (추천)** — 오늘·어제 실측을 받을 때마다 관측소별 · 날짜별 시각 값을 폰(filesDir) + 서버 공유 문서(tide 처럼 · 예: wtemp/{관측소}_{날짜} · 규칙 추가 → rules-test 후 사용자 게시)에 저장 → 지난 날짜는 저장분이 있으면 '실측'으로 · 저장 시작 이후부터만 쌓임 ② 과거 관측 자료 API (KHOA 다른 서비스 · 공공데이터포털 활용신청 필요할 수 있음) — 만들기 전에 먼저 찾아보고 사용자에게 알려 주기.
 - ~~195~~ — 삭제함 (2026-11-17 사용자)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)
 - ~~229 메타버스~~ — 삭제함 (2026-11-11)
