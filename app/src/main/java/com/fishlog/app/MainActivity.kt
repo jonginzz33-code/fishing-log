@@ -461,6 +461,8 @@ class MainActivity : Activity() {
         when (what) {
             "tide" -> openTodayTide()
             "bag" -> Inventory.show(this)
+            // v6.30 (282): ⚡ 퀵바 위젯 칸
+            else -> if (what.startsWith("q:")) what.removePrefix("q:").let { id -> if (id == "qset") openQuickSettings() else quickAction(id) }
         }
     }
 
@@ -922,6 +924,8 @@ class MainActivity : Activity() {
         }, Ui.lp(this, MATCH, WRAP))
         menuBox.addView(Ui.button(this, "🌐 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        // v6.30 (282): 앱에서 바로 홈 화면에 위젯 놓기
+        menuBox.addView(Ui.button(this, "📱 홈 화면에 위젯 추가 (퀵바 · 물때 · 가방)") { QuickWidget.pinMenu(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
 
@@ -1092,6 +1096,9 @@ class MainActivity : Activity() {
         if (!::quickInline.isInitialized || !::quickRow.isInitialized) return
         val ids = quickIds()
         val items = ids.mapNotNull { id -> QUICK.firstOrNull { it.id == id } }
+        // v6.30 (282): 홈 화면 퀵바 위젯도 같은 칸으로
+        QuickWidget.save(this, items.map { Triple(it.id, it.icon, it.label) },
+            items.mapNotNull { q -> q.state?.let { st -> q.id to (try { st() } catch (_: Exception) { false }) } }.toMap())
         quickInline.removeAllViews(); quickRow.removeAllViews()
         // v4.9 (221): '⚡ 퀵바 설정' 칸은 고정 (뺄 수 없음 · 늘 맨 끝)
         val fixed = QItem("qset", "⚡", "퀵바설정", "#1E2A12", "#C9E26A")
@@ -1111,6 +1118,10 @@ class MainActivity : Activity() {
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(4), dp(18), dp(4)) }
         fun draw() {
             box.removeAllViews()
+            // v6.30 (282): 홈 화면 퀵바 위젯
+            box.addView(Ui.button(this, "📱 홈 화면에 퀵바 위젯 추가") { QuickWidget.pin(this, QuickWidget::class.java, "⚡ 조과일지 퀵바") }.apply { minHeight = dp(44); textSize = 14f },
+                Ui.lp(this, MATCH, WRAP))
+            box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "여기서 고른 칸이 위젯에도 같은 순서로 보여요 · 세로로 늘리면 두 줄").apply { setPadding(0, dp(4), 0, dp(10)) })
             box.addView(Ui.text(this, 12f, Ui.SUB, false, "체크한 메뉴가 맨 위 네모 칸으로 보여요 · ▲▼로 순서 · 2개까지는 ⚙ 옆, 3개부터는 제목 아래 한 줄 · ⚡ 퀵바 설정 칸은 늘 맨 끝에 고정"))
             val ids = quickIds().toMutableList()
             val avail = QUICK.filter { !it.admin || Cloud.isAdmin }

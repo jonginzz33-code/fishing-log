@@ -2,4 +2,5 @@
 <resources>
     <string name="widget_tide_desc">오늘 물때 · 들물/날물 · 다음 만조/간조 · 물세기 · 날씨 (크게 놓으면 물때 그래프)</string>
     <string name="widget_bag_desc">내 가방 카테고리별 수량 · −/＋</string>
+    <string name="widget_quick_desc">앱 퀵바에 넣은 메뉴 칸 · 누르면 그 화면 바로 (세로로 늘리면 두 줄)</string>
 </resources>
