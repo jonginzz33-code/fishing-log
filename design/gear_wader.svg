@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- 가슴장화: 기존 장비 그림처럼 색 채운 평면 -->
+  <path d="M38 14 L38 8 M82 14 L82 8" stroke="#2F6A48" stroke-width="5" stroke-linecap="round"/>
+  <path d="M34 14 H86 V52 Q86 58 80 60 L78 60 L80 98 H64 L60 64 L56 98 H40 L42 60 L40 60 Q34 58 34 52 Z" fill="#3E8E5E"/>
+  <rect x="44" y="22" width="32" height="16" rx="4" fill="#2F6A48"/>
+  <path d="M34 50 H86" stroke="#2F6A48" stroke-width="4"/>
+  <path d="M38 98 H60 Q62 104 56 106 H36 Q32 104 38 98Z M60 98 H82 Q88 104 84 106 H64 Q58 104 60 98Z" fill="#24543A"/>
+  <circle cx="40" cy="18" r="3" fill="#F2C14E"/><circle cx="80" cy="18" r="3" fill="#F2C14E"/>
+</svg>

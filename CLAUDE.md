@@ -12,7 +12,7 @@
   - **테스터 참여 링크** (그룹원에게 보내는 것): https://play.google.com/apps/internaltest/4700601757102863820 · 스토어 주소 https://play.google.com/store/apps/details?id=kr.jogwailji.app
   - Firebase 프로젝트 `fishing-log-9109d` (설정: https://console.firebase.google.com/project/fishing-log-9109d/settings/general)
   - GitHub 비밀값: https://github.com/jonginzz33-code/fishing-log/settings/secrets/actions
-- 사용자가 **"만들어줘"** 라고 할 때만 코드를 만들어요. 그 전에는 메모(번호)로만 정리.
+- 사용자가 **"만들어줘"** 라고 할 때만 코드를 만들어요. 그 전에는 메모(번호)로만 정리. **(사용자 재확인 2026-11-17: '다 메모야 · 만들어줘 하기 전까진 업뎃하지 말고 메모 정리' — '고쳐줘' · '나눠줘' 같은 말도 만들어줘 전엔 메모만)**
 - 사용자가 아이디어 · 바꾸고 싶은 걸 말하면 **답 끝에 꼭 "메모해 둘까요?"** 라고 물어요 (사용자 요청 2026-11-16).
 - 새 버전을 만들 때마다:
   - `app/build.gradle.kts` 의 `versionCode` +1, `versionName` 올리기
@@ -72,6 +72,7 @@
 - ~~274~~ (v6.25에서 함 · `ChatPhoto.kt` · Chat.sendPhoto/loadBig · th(320px ≤25KB 인라인) + chatImg/{id}(1280px ≤280KB) · 규칙 전엔 720px 인라인으로 · 문의는 img 인라인 · firestore.rules chatImg 추가(사용자 게시 필요) · rules-test 51개 통과 · 카메라 바로 찍기는 안 넣음): 📷 **채팅 · 관리자 1:1 문의에 사진 보내기** — 지금은 글자만(Chat.kt · ChatActivity · InquiryActivity 사진 없음). 입력칸 옆 📷(고르기 · 찍기) → 앱이 줄여서(긴 변 ~1280 · JPEG · 100~200KB, GPS 등 EXIF 빼기) Firestore 에 바로(Storage 안 씀 · 게시판 사진처럼 base64) · 채팅 목록엔 작은 미리보기(인라인 ~20KB) + 누르면 큰 사진(따로 문서에서 그때만 받기). 1회 1장 · 하루 장수 제한 · 정지/채팅금지면 못 보냄 · 관리자/그룹장 삭제 · 채팅방 비우기/한 달 보관 규칙 같이. 규칙: chatMsg 는 키 제한 없어 그대로 되지만 큰 사진 문서 · 크기 제한은 firestore.rules 추가 → rules-test 로 시험 후 사용자 게시.
 - ~~275~~ (v6.26에서 함 · 2026-11-17 사용자 '다 나눠줘'): 메인 그룹 창 '달력 · 멤버 · 그룹 관리 · 초대' 버튼 → 📅 출조 달력 · 👥 멤버 · ✉ 초대 · ⚙ 그룹 관리 4칸. `GroupActivity` extra "part"(cal/members/invite/manage · 없으면 예전처럼 전부 · AccountUi 에서 여는 건 전부).
 - ~~276~~ (v6.27에서 함 · 2026-11-17): 지도 '지난 기록 보기'에 'publicAll' = 내 기록 + 전체 게시판 (전체 기간 · PublicBoard.load(0) · 최근 300개 글).
+- **277 (메모 · '만들어줘' 대기 · 2026-11-17):** 🎒 가방 장비 그림에 **가슴장화** 추가 — 시안 `design/gear_wader.svg`(기존 gear_* 처럼 색 채운 평면 · 초록) → drawable-nodpi/gear_wader.png(120×120) · Inventory 그림 목록에 넣기 · 이름에 '가슴장화' · '웨이더' 있으면 자동. (장비 그림 전체 다시 그리기는 사용자가 거절 '이미지는 냅둬')
 - **195:** 내용 확인 필요 (예전 대화방 메모)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)
 - ~~229 메타버스~~ — 삭제함 (2026-11-11)
