@@ -19,7 +19,7 @@
   - `README.md` **맨 끝**에 `## v새버전` + 바뀐 것 몇 줄 (GitHub 빌드가 이 마지막 부분을 앱 '이번에 바뀐 것'으로 보여줘요)
   - `History.kt` 의 `ITEMS` **맨 위**에 항목 추가 (앱 '업데이트 내역')
   - 설명서가 바뀌면 `HelpActivity.kt` 도 같이
-- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 내부 테스트에 자동으로 올려요. **GitHub판(APK)은 v6.8(89)에서 완전히 끝 — 앞으로 예외 없이 절대 다시 올리지 않아요** (사용자 재확인 2026-11-13: '이제부터는 플레이 스토어만 업로드'). 워크플로의 APK 단계를 되살리지 마세요. (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
+- `main` 에 올리면 GitHub Actions(`.github/workflows/build.yml`)가 **스토어판 AAB만** 만들어 플레이 콘솔 **비공개 테스트(alpha)** 에 자동으로 올려요 (사용자 결정 2026-11-17: '내부 테스트는 업로드하지 말고 비공개 테스트만' · 출시 노트 = README 맨 끝 · 올리면 구글 검토 자동). **GitHub판(APK)은 v6.8(89)에서 완전히 끝 — 앞으로 예외 없이 절대 다시 올리지 않아요** (사용자 재확인 2026-11-13: '이제부터는 플레이 스토어만 업로드'). 워크플로의 APK 단계를 되살리지 마세요. (사용자 결정 2026-11-13) — Releases의 `fishing-log.apk`/`version.txt` 는 그대로 둬요. 메모만 바꿀 땐 커밋 메시지에 `[skip ci]`.
 - 올리기 전에 빌드 확인: `gradle assembleGithubDebug assemblePlayDebug --no-daemon` (Android SDK 필요, `local.properties` 에 `sdk.dir`).
 
 ## 두 가지 판 (v6.0 · 242-2)
@@ -71,6 +71,7 @@
 - ~~273~~ (v6.24에서 함 · `Backup.Opts/sizes/prefsJson/applyPrefs/uploadSettings/downloadSettings` · users/{uid}.prefsBak · SettingsActivity.renderBackup · 항목별 크기 + 사진/지도 체크(bak_photos · bak_maps) · Inventory 서버 버튼 없앰): ⚙ 설정 백업을 **'💾 모든 데이터 백업하기'** 버튼 하나로 정리 (+ '📂 백업 파일에서 불러오기'는 남김). ① 폰 백업(zip): 앱 설정 · 가방 · 리모컨 · 퀵바 · 즐겨찾기 지점 · 사이트 목록 · 출조 기록 · 사진 원본 · **받아 둔 지도(osmdroid · 폰에만)** — 빼는 것: 🦀 해루질 지도(filesDir/haeru, 너무 큼) · 물때/날씨 저장분(khoa · weather, 다시 받으면 됨) ② 같은 버튼으로 **작은 것(설정 · 가방 · 사이트 · 리모컨 등 prefs, 수십 KB)은 서버에도** (users/{uid} 아래 문서 하나 · 비용 거의 0) → 새 폰 로그인 때 불러오기 ③ 🎒 가방 '☁ 서버에 저장하기' 버튼은 없애고 ②에 합침 ④ **출조 기록 서버 자동 백업은 그대로 둠** (사용자 확정) ⑤ 백업 창에 주의사항: '받아 둔 지도 · 사진 원본은 서버에 안 올라가고 폰 백업 파일에만 들어가요 (해루질 지도는 백업 안 됨 · 새 폰에서 다시 받기)'. ⑥ 해루질 정보는 백업에서 빼고 백업 창에 크기 줄도 안 보임 (사용자 2026-11-16 '이거는 빼줘').
 - ~~274~~ (v6.25에서 함 · `ChatPhoto.kt` · Chat.sendPhoto/loadBig · th(320px ≤25KB 인라인) + chatImg/{id}(1280px ≤280KB) · 규칙 전엔 720px 인라인으로 · 문의는 img 인라인 · firestore.rules chatImg 추가(사용자 게시 필요) · rules-test 51개 통과 · 카메라 바로 찍기는 안 넣음): 📷 **채팅 · 관리자 1:1 문의에 사진 보내기** — 지금은 글자만(Chat.kt · ChatActivity · InquiryActivity 사진 없음). 입력칸 옆 📷(고르기 · 찍기) → 앱이 줄여서(긴 변 ~1280 · JPEG · 100~200KB, GPS 등 EXIF 빼기) Firestore 에 바로(Storage 안 씀 · 게시판 사진처럼 base64) · 채팅 목록엔 작은 미리보기(인라인 ~20KB) + 누르면 큰 사진(따로 문서에서 그때만 받기). 1회 1장 · 하루 장수 제한 · 정지/채팅금지면 못 보냄 · 관리자/그룹장 삭제 · 채팅방 비우기/한 달 보관 규칙 같이. 규칙: chatMsg 는 키 제한 없어 그대로 되지만 큰 사진 문서 · 크기 제한은 firestore.rules 추가 → rules-test 로 시험 후 사용자 게시.
 - ~~275~~ (v6.26에서 함 · 2026-11-17 사용자 '다 나눠줘'): 메인 그룹 창 '달력 · 멤버 · 그룹 관리 · 초대' 버튼 → 📅 출조 달력 · 👥 멤버 · ✉ 초대 · ⚙ 그룹 관리 4칸. `GroupActivity` extra "part"(cal/members/invite/manage · 없으면 예전처럼 전부 · AccountUi 에서 여는 건 전부).
+- ~~276~~ (v6.27에서 함 · 2026-11-17): 지도 '지난 기록 보기'에 'publicAll' = 내 기록 + 전체 게시판 (전체 기간 · PublicBoard.load(0) · 최근 300개 글).
 - **195:** 내용 확인 필요 (예전 대화방 메모)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)
 - ~~229 메타버스~~ — 삭제함 (2026-11-11)

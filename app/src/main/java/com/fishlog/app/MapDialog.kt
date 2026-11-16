@@ -617,7 +617,7 @@ object MapDialog {
                 pastList = trips
                 pastRoutes.routes = trips.filter { it.track.size >= 2 }.map { PastRoutesOverlay.Route(it.key, it.color, it.track) }
                 paintChips()
-                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +
+                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode.startsWith("public")) "게시판" else "친구") + " 조과 $others)" +
                     " · 색 = 출조 · 얇은 선 = 그 출조 이동 경로 · 숫자 = 마릿수 · 점이나 색 범례를 누르면 '이 출조만 보기'"
                 updateLegend()
                 map.invalidate()
@@ -627,7 +627,7 @@ object MapDialog {
             val modes = mutableListOf("mine")
             Cloud.groups.forEach { modes.add("g:${it.id}") }
             if (Cloud.groups.size > 1) modes.add("allg")
-            if (Cloud.user != null) modes.add("public")
+            if (Cloud.user != null) { modes.add("public"); modes.add("publicAll") }   // v6.26: 전체 기간도
             val cur = pastModeNow()
             AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("지난 기록 보기")
@@ -833,6 +833,7 @@ object MapDialog {
         mode == "mine" -> "내 기록만"
         mode == "allg" -> "내 기록 + 가입한 그룹 전부"
         mode == "public" -> "내 기록 + 전체 게시판 (최근 3개월)"
+        mode == "publicAll" -> "내 기록 + 전체 게시판 (전체 기간)"
         mode.startsWith("g:") -> "내 기록 + " + (Cloud.groups.firstOrNull { "g:${it.id}" == mode }?.let { groupLabel(it) } ?: "그룹") + " 친구 기록"
         else -> mode
     }
@@ -905,8 +906,9 @@ object MapDialog {
         }
         val myId = Cloud.uid
         if (myId == null || mode == "mine") { finish(mine, mine.size, 0); return }
-        if (mode == "public") {
-            PublicBoard.load(System.currentTimeMillis() - 92L * 86_400_000L) { list, _ ->
+        if (mode == "public" || mode == "publicAll") {
+            // v6.26: 전체 기간 = 기간 거르기 없이 (게시판 최근 300개)
+            PublicBoard.load(if (mode == "publicAll") 0L else System.currentTimeMillis() - 92L * 86_400_000L) { list, _ ->
                 val others = list.orEmpty().filter { it.owner != myId && !Moderation.isBlocked(it.owner) }.flatMap { t ->
                     val mul = Tide.mulName(t.start).substringBefore(" (")
                     val key = "p:${t.id}"
@@ -1146,7 +1148,7 @@ object MapDialog {
             loadPast(null, mode) { list, mine, others, _ ->
                 if (!dialog.isShowing) return@loadPast
                 past.dots = list
-                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode == "public") "게시판" else "친구") + " 조과 $others)" +
+                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode.startsWith("public")) "게시판" else "친구") + " 조과 $others)" +
                     " · 반투명 그림 = 예전에 잡힌 어종 · 누르면 그날 상세"
                 paintLegend(); map.invalidate()
             }
@@ -1155,7 +1157,7 @@ object MapDialog {
             val modes = mutableListOf("mine")
             Cloud.groups.forEach { modes.add("g:${it.id}") }
             if (Cloud.groups.size > 1) modes.add("allg")
-            if (Cloud.user != null) modes.add("public")
+            if (Cloud.user != null) { modes.add("public"); modes.add("publicAll") }   // v6.26: 전체 기간도
             val cur = pastModeNow()
             AlertDialog.Builder(a, R.style.FlAlert)
                 .setTitle("지난 기록 보기")

@@ -63,7 +63,15 @@ jobs:
         run: |
           if [ -n "$SA" ] && ls jogwa-play-*.aab >/dev/null 2>&1; then echo "ok=1" >> "$GITHUB_OUTPUT"; else echo "::warning::PLAY_SERVICE_ACCOUNT_JSON 이 없어서 플레이 콘솔 자동 올리기는 건너뛰어요"; fi
 
-      - name: Upload to Play internal testing
+      # v6.26 (사용자 결정 2026-11-17): 내부 테스트 말고 비공개 테스트(alpha)에만 올려요 · '이번에 바뀐 것' = README 맨 끝
+      - name: Release notes
+        if: ${{ steps.playkey.outputs.ok == '1' }}
+        run: |
+          mkdir -p whatsnew
+          python3 -c "t=open('README.md',encoding='utf-8').read().split('\n## ')[-1].splitlines()[1:]; open('whatsnew/whatsnew-ko-KR','w',encoding='utf-8').write('\n'.join(l.lstrip('- ').strip() for l in t if l.strip())[:500])"
+          cat whatsnew/whatsnew-ko-KR
+
+      - name: Upload to Play closed testing
         if: ${{ steps.playkey.outputs.ok == '1' }}
         continue-on-error: true
         uses: r0adkll/upload-google-play@v1
@@ -71,5 +79,6 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: kr.jogwailji.app
           releaseFiles: jogwa-play-*.aab
-          tracks: internal
+          tracks: alpha
           status: completed
+          whatsNewDirectory: whatsnew
