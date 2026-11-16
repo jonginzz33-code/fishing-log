@@ -29,16 +29,99 @@ object Backup {
     /** "fishlog" 안에서 빼는 값 */
     private fun skipKey(k: String) = k == "current" || k == "history" || k == "minVersion" || k == "storeMove" ||
         k.startsWith("dl_") || k == "imported_from_github" || k == "import_asked"
-    /** 담을 폴더 (filesDir 아래) */
-    private val FILE_DIRS = listOf("trips", "photos", "khoa", "haeru", "osmdroid")
+    /** v6.24 (273): 담을 폴더 — 출조 기록은 늘, 사진 · 받아 둔 지도는 고를 수 있음
+     *  🦀 해루질 정보(haeru) · 물때/날씨 저장분(khoa · weather)은 서버에서 다시 받으면 돼서 뺌 */
+    class Opts(val photos: Boolean = true, val maps: Boolean = true)
 
     class Result(val prefs: Int, val files: Int)
+
+    /** 항목별 크기 (바이트) — 폰 안 파일만 셈 (인터넷 안 씀) */
+    class Sizes(val settings: Long, val trips: Long, val photos: Long, val maps: Long)
+
+    private fun dirSize(f: File): Long = if (!f.exists()) 0L else f.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    fun sizes(c: Context): Sizes {
+        val app = c.applicationContext
+        return Sizes(prefsJson(app).toString().toByteArray().size.toLong(), dirSize(File(app.filesDir, "trips")),
+            dirSize(File(app.filesDir, "photos")), dirSize(File(app.filesDir, "osmdroid")) + dirSize(File(app.cacheDir, "osmdroid-tiles")))
+    }
+
+    /** 설정 저장소 전체를 JSON 하나로 { 파일이름: { 키: {t, v} } } */
+    fun prefsJson(c: Context): JSONObject {
+        val root = JSONObject()
+        PREF_FILES.forEach { name ->
+            val o = JSONObject()
+            c.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (k, v) ->
+                if (name == "fishlog" && skipKey(k)) return@forEach
+                val e = when (v) {
+                    is Boolean -> JSONObject().put("t", "b").put("v", v)
+                    is Int -> JSONObject().put("t", "i").put("v", v)
+                    is Long -> JSONObject().put("t", "l").put("v", v)
+                    is Float -> JSONObject().put("t", "f").put("v", v.toDouble())
+                    is String -> JSONObject().put("t", "s").put("v", v)
+                    is Set<*> -> JSONObject().put("t", "ss").put("v", JSONArray(v.filterIsInstance<String>()))
+                    else -> null
+                } ?: return@forEach
+                o.put(k, e)
+            }
+            root.put(name, o)
+        }
+        return root
+    }
+
+    /** prefsJson 으로 만든 걸 되살리기 · 되살린 개수 */
+    fun applyPrefs(c: Context, pref: String, o: JSONObject): Int {
+        if (pref !in PREF_FILES) return 0
+        var n = 0
+        val ed = c.getSharedPreferences(pref, Context.MODE_PRIVATE).edit()
+        o.keys().forEach { k ->
+            if (pref == "fishlog" && skipKey(k)) return@forEach
+            val x = o.optJSONObject(k) ?: return@forEach
+            when (x.optString("t")) {
+                "b" -> ed.putBoolean(k, x.getBoolean("v"))
+                "i" -> ed.putInt(k, x.getInt("v"))
+                "l" -> ed.putLong(k, x.getLong("v"))
+                "f" -> ed.putFloat(k, x.getDouble("v").toFloat())
+                "s" -> ed.putString(k, x.getString("v"))
+                "ss" -> { val a = x.getJSONArray("v"); ed.putStringSet(k, (0 until a.length()).map { a.getString(it) }.toSet()) }
+                else -> return@forEach
+            }
+            n++
+        }
+        ed.commit()
+        return n
+    }
+
+    // ---------------- v6.24 (273): 작은 것(설정 · 가방 · 사이트 · 리모컨 등)은 서버에도 ----------------
+    //  users/{uid} 문서의 prefsBak (글자 하나 · 수십 KB) — 규칙 바꾸기 없이 내 문서에 (가방 inv2 와 같은 곳)
+    fun uploadSettings(c: Context, done: (String?) -> Unit) {
+        val me = Cloud.uid ?: return done("로그인이 안 돼 있어요")
+        val txt = prefsJson(c.applicationContext).toString()
+        if (txt.length > 700_000) return done("설정이 너무 커서 서버에 못 올렸어요")
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(me)
+            .set(mapOf("prefsBak" to txt, "prefsBakAt" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
+            .addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "서버 저장 실패") }
+    }
+
+    /** 서버에 저장된 설정 되살리기 · done(되살린 개수, 저장 시각, 오류) */
+    fun downloadSettings(c: Context, done: (Int, Long, String?) -> Unit) {
+        val me = Cloud.uid ?: return done(0, 0, "로그인이 안 돼 있어요")
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("users").document(me).get()
+            .addOnSuccessListener { d ->
+                val txt = d.getString("prefsBak") ?: return@addOnSuccessListener done(0, 0, "서버에 저장된 설정이 없어요")
+                try {
+                    val root = JSONObject(txt); var n = 0
+                    root.keys().forEach { pref -> root.optJSONObject(pref)?.let { n += applyPrefs(c.applicationContext, pref, it) } }
+                    done(n, d.getLong("prefsBakAt") ?: 0L, null)
+                } catch (e: Exception) { done(0, 0, "서버 설정을 읽지 못했어요") }
+            }.addOnFailureListener { done(0, 0, it.message ?: "불러오기 실패") }
+    }
 
     /** 백업 파일 이름: 조과일지-백업-20261113-1530.zip */
     fun fileName(): String = "조과일지-백업-" + java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.KOREA).format(java.util.Date()) + ".zip"
 
     /** 백업 만들기 (백그라운드 스레드에서) · onProgress(지금까지 담은 파일 수) */
-    fun export(c: Context, out: OutputStream, onProgress: (Int) -> Unit = {}): Result {
+    fun export(c: Context, out: OutputStream, opts: Opts = Opts(), onProgress: (Int) -> Unit = {}): Result {
         val app = c.applicationContext
         var nPref = 0; var nFile = 0
         ZipOutputStream(out.buffered()).use { zip ->
@@ -46,22 +129,10 @@ object Backup {
             zip.write(JSONObject().put("app", app.packageName).put("ver", BuildConfig.VERSION_NAME)
                 .put("code", BuildConfig.VERSION_CODE).put("at", System.currentTimeMillis()).toString().toByteArray())
             zip.closeEntry()
+            val pj = prefsJson(app)
             PREF_FILES.forEach { name ->
-                val all = app.getSharedPreferences(name, Context.MODE_PRIVATE).all
-                val o = JSONObject()
-                all.forEach { (k, v) ->
-                    if (name == "fishlog" && skipKey(k)) return@forEach
-                    val e = when (v) {
-                        is Boolean -> JSONObject().put("t", "b").put("v", v)
-                        is Int -> JSONObject().put("t", "i").put("v", v)
-                        is Long -> JSONObject().put("t", "l").put("v", v)
-                        is Float -> JSONObject().put("t", "f").put("v", v.toDouble())
-                        is String -> JSONObject().put("t", "s").put("v", v)
-                        is Set<*> -> JSONObject().put("t", "ss").put("v", JSONArray(v.filterIsInstance<String>()))
-                        else -> null
-                    } ?: return@forEach
-                    o.put(k, e); nPref++
-                }
+                val o = pj.optJSONObject(name) ?: JSONObject()
+                nPref += o.length()
                 zip.putNextEntry(ZipEntry("prefs/$name.json"))
                 zip.write(o.toString().toByteArray())
                 zip.closeEntry()
@@ -79,9 +150,13 @@ object Backup {
                     } catch (_: Exception) {}
                 }
             }
-            FILE_DIRS.forEach { d -> addDir(File(app.filesDir, d), "files/$d") }
-            // 지도 그림 저장분 (오프라인으로 본 곳)
-            addDir(File(app.cacheDir, "osmdroid-tiles"), "cache/osmdroid-tiles")
+            addDir(File(app.filesDir, "trips"), "files/trips")
+            if (opts.photos) addDir(File(app.filesDir, "photos"), "files/photos")
+            if (opts.maps) {
+                addDir(File(app.filesDir, "osmdroid"), "files/osmdroid")
+                // 지도 그림 저장분 (오프라인으로 본 곳)
+                addDir(File(app.cacheDir, "osmdroid-tiles"), "cache/osmdroid-tiles")
+            }
         }
         onProgress(nFile)
         return Result(nPref, nFile)
@@ -103,21 +178,7 @@ object Backup {
                         val pref = name.removePrefix("prefs/").removeSuffix(".json")
                         if (pref !in PREF_FILES) continue
                         val o = JSONObject(zip.readBytes().toString(Charsets.UTF_8))
-                        val ed = app.getSharedPreferences(pref, Context.MODE_PRIVATE).edit()
-                        o.keys().forEach { k ->
-                            if (pref == "fishlog" && skipKey(k)) return@forEach
-                            val x = o.getJSONObject(k)
-                            when (x.getString("t")) {
-                                "b" -> ed.putBoolean(k, x.getBoolean("v"))
-                                "i" -> ed.putInt(k, x.getInt("v"))
-                                "l" -> ed.putLong(k, x.getLong("v"))
-                                "f" -> ed.putFloat(k, x.getDouble("v").toFloat())
-                                "s" -> ed.putString(k, x.getString("v"))
-                                "ss" -> { val a = x.getJSONArray("v"); ed.putStringSet(k, (0 until a.length()).map { a.getString(it) }.toSet()) }
-                            }
-                            nPref++
-                        }
-                        ed.commit()
+                        nPref += applyPrefs(app, pref, o)
                     }
                     name.startsWith("files/") || name.startsWith("cache/osmdroid-tiles/") -> {
                         val dest = if (name.startsWith("files/")) File(filesRoot, name.removePrefix("files/"))
@@ -165,13 +226,13 @@ object Backup {
                 put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val uri = cr.insert(col, v) ?: throw java.io.IOException("insert")
-            val res = cr.openOutputStream(uri)?.use { export(app, it, onProgress) } ?: throw java.io.IOException("open")
+            val res = cr.openOutputStream(uri)?.use { export(app, it, onProgress = onProgress) } ?: throw java.io.IOException("open")
             v.clear(); v.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
             cr.update(uri, v, null, null)
             res
         } else {
             val dir = File(app.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS), "조과일지").apply { mkdirs() }
-            File(dir, AUTO_NAME).outputStream().use { export(app, it, onProgress) }
+            File(dir, AUTO_NAME).outputStream().use { export(app, it, onProgress = onProgress) }
         }
     } catch (_: Exception) { null }
 

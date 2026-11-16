@@ -117,27 +117,74 @@ class SettingsActivity : Activity() {
     }
 
     private fun renderBackup() {
-        section("💾 백업 (폰에 저장)")
+        // v6.24 (273): 💾 모든 데이터 백업하기 — 버튼 하나 · 항목별 크기 · 사진 / 받아 둔 지도는 골라서 (폰에만)
+        section("💾 모든 데이터 백업하기")
+        val p = getSharedPreferences("fishlog", MODE_PRIVATE)
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
         }
-        card.addView(Ui.text(this, 13f, Ui.TEXT, false,
-            "🎒 가방(재고표) · ⚙ 앱 설정(퀵바 · 기록 방식 · 리모컨 버튼 · 화면 크기 · 알람 · ⭐ 즐겨찾기 지점) · 📥 받아 둔 지도 · 📚 출조 기록 · 📷 사진 원본을 파일 하나로 저장해요.").apply { setLineSpacing(0f, 1.2f) })
-        card.addView(Ui.text(this, 11.5f, Ui.SUB, false,
-            "• 저장할 곳을 고르는 창이 떠요 (기본: 다운로드 폴더) · 폰을 바꾸면 이 파일을 옮겨서 '불러오기'\n• 진행 중인 출조는 빠져요 (끝낸 뒤에 백업하세요)" +
-            if (!BuildConfig.SELF_UPDATE) "\n• 같은 폰에 예전 앱(GitHub판 6.7 이상)이 있으면 처음 켤 때 자동으로 가져와요" else ""),
+        fun mb(b: Long) = if (b < 0) "…" else if (b < 1024 * 1024) "${(b + 1023) / 1024}KB" else String.format(java.util.Locale.KOREA, "%.1fMB", b / 1048576.0)
+        fun line(label: String, sub: String, check: android.widget.CheckBox?): android.widget.TextView {
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+            if (check != null) r.addView(check, LinearLayout.LayoutParams(WRAP, WRAP))
+            else r.addView(Ui.text(this, 15f, Ui.GREEN, true, "✅").apply { setPadding(dp(4), 0, dp(8), 0) })
+            val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            t.addView(Ui.text(this, 13.5f, Ui.TEXT, true, label))
+            t.addView(Ui.text(this, 11f, Ui.SUB, false, sub))
+            r.addView(t, LinearLayout.LayoutParams(0, WRAP, 1f))
+            val size = Ui.text(this, 13f, android.graphics.Color.parseColor("#FFB27A"), true, "…")
+            r.addView(size)
+            card.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
+            return size
+        }
+        val cPhotos = Ui.checkFit(android.widget.CheckBox(this)).apply { isChecked = p.getBoolean("bak_photos", true) }
+        val cMaps = Ui.checkFit(android.widget.CheckBox(this)).apply { isChecked = p.getBoolean("bak_maps", true) }
+        val sSet = line("⚙ 설정 · 🎒 가방 · ⛴ 사이트 · 🎮 리모컨", "퀵바 · 기록 방식 · 화면 크기 · 알람 · ⭐ 즐겨찾기 지점 · 서버에도 저장", null)
+        val sTrips = line("📚 출조 기록", "서버에도 자동 백업돼요 (지금처럼)", null)
+        val sPhotos = line("📷 사진 원본", "폰에만", cPhotos)
+        val sMaps = line("🗺 받아 둔 지도", "폰에만 · 안 넣어도 새 폰에서 다시 받으면 돼요", cMaps)
+        val total = Ui.text(this, 13.5f, Ui.TEXT, true, "백업 파일 크기 계산 중…")
+        card.addView(total, Ui.lp(this, MATCH, WRAP, top = 10))
+        card.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), false,
+            "⚠ 받아 둔 지도 · 사진 원본은 서버에 안 올라가고 폰 백업 파일에만 들어가요.\n" +
+            "• 저장할 곳을 고르는 창이 떠요 (기본: 다운로드 폴더) · 폰을 바꾸면 이 파일을 옮겨서 '불러오기'\n" +
+            "• 진행 중인 출조는 빠져요 (끝낸 뒤에 백업하세요)" +
+            if (!BuildConfig.SELF_UPDATE) "\n• 같은 폰에 예전 앱(GitHub판 6.7 이상)이 있으면 처음 켤 때 자동으로 가져와요" else "").apply { setLineSpacing(0f, 1.15f) },
             Ui.lp(this, MATCH, WRAP, top = 6))
-        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        r.addView(Ui.button(this, "💾 폰에 백업하기", true) {
+        var sz: Backup.Sizes? = null
+        fun paintTotal() {
+            val z = sz ?: return
+            sSet.text = mb(z.settings); sTrips.text = mb(z.trips); sPhotos.text = mb(z.photos); sMaps.text = mb(z.maps)
+            sPhotos.alpha = if (cPhotos.isChecked) 1f else 0.4f; sMaps.alpha = if (cMaps.isChecked) 1f else 0.4f
+            val t = z.settings + z.trips + (if (cPhotos.isChecked) z.photos else 0) + (if (cMaps.isChecked) z.maps else 0)
+            total.text = "백업 파일 크기 약 ${mb(t)}"
+        }
+        cPhotos.setOnCheckedChangeListener { _, v -> p.edit().putBoolean("bak_photos", v).apply(); paintTotal() }
+        cMaps.setOnCheckedChangeListener { _, v -> p.edit().putBoolean("bak_maps", v).apply(); paintTotal() }
+        Thread { val z = try { Backup.sizes(this) } catch (_: Exception) { null }; runOnUiThread { sz = z; paintTotal() } }.start()
+
+        card.addView(Ui.button(this, "💾 모든 데이터 백업하기", true) {
             try {
                 startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE); type = "application/zip"; putExtra(Intent.EXTRA_TITLE, Backup.fileName())
                 }, REQ_SAVE)
             } catch (_: Exception) { toast("파일 저장 창을 열 수 없어요") }
-        }.apply { minHeight = dp(46); textSize = 14f }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        r.addView(Ui.button(this, "📂 백업 파일에서 불러오기") { pickBackup() }.apply { minHeight = dp(46); textSize = 14f },
-            LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-        card.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        }.apply { minHeight = dp(48); textSize = 15f }, Ui.lp(this, MATCH, WRAP, top = 10))
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        r.addView(Ui.button(this, "📂 백업 파일에서 불러오기") { pickBackup() }.apply { minHeight = dp(44); textSize = 13f },
+            LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (Cloud.user != null) r.addView(Ui.button(this, "☁ 서버에서 설정 불러오기") {
+            android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("서버에 저장한 설정을 불러올까요?")
+                .setMessage("설정 · 가방 · 사이트 · 리모컨 버튼 · 즐겨찾기 지점을 마지막으로 백업한 때로 바꿔요 (지금 폰 설정은 덮어써요). 출조 기록은 '지난 출조 → 복원'으로 받아요. 다 되면 앱이 다시 켜져요.")
+                .setPositiveButton("불러오기") { _, _ ->
+                    Backup.downloadSettings(this) { n, at, err ->
+                        if (err != null) { toast(err); return@downloadSettings }
+                        toast("서버 설정 ${n}개를 불러왔어요 ✓ (" + java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.KOREA).format(java.util.Date(at)) + " 백업) · 앱을 다시 켜요")
+                        window.decorView.postDelayed({ Backup.restart(this) }, 1200)
+                    }
+                }.setNegativeButton("취소", null).show()
+        }.apply { minHeight = dp(44); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+        card.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
         box.addView(card, Ui.lp(this, MATCH, WRAP, top = 6))
     }
 
@@ -160,14 +207,23 @@ class SettingsActivity : Activity() {
                 val tv = busyDialog("💾 백업하는 중…")
                 Thread {
                     val res = try {
-                        contentResolver.openOutputStream(uri)?.use { out -> Backup.export(this, out) { n -> runOnUiThread { tv.text = "파일 ${n}개 담는 중…" } } }
+                        val p = getSharedPreferences("fishlog", MODE_PRIVATE)
+                        val opts = Backup.Opts(photos = p.getBoolean("bak_photos", true), maps = p.getBoolean("bak_maps", true))
+                        contentResolver.openOutputStream(uri)?.use { out -> Backup.export(this, out, opts) { n -> runOnUiThread { tv.text = "파일 ${n}개 담는 중…" } } }
                     } catch (e: Exception) { null }
                     runOnUiThread {
                         busy?.dismiss()
                         if (res == null) toast("백업 실패 (저장 공간 확인)")
-                        else android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("✓ 백업했어요")
-                            .setMessage("설정 ${res.prefs}개 · 파일 ${res.files}개를 저장했어요.\n폰을 바꾸면 이 파일을 옮겨서 '백업 파일에서 불러오기'를 누르세요.")
-                            .setPositiveButton("알겠어요", null).show()
+                        else {
+                            val msg = "📱 폰: 설정 ${res.prefs}개 · 파일 ${res.files}개를 저장했어요.\n폰을 바꾸면 이 파일을 옮겨서 '백업 파일에서 불러오기'를 누르세요."
+                            val dlg = android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("✓ 백업했어요")
+                                .setMessage("$msg\n\n☁ 서버: 설정 저장하는 중…").setPositiveButton("알겠어요", null).show()
+                            // v6.24 (273): 작은 것(설정 · 가방 · 사이트 · 리모컨)은 서버에도
+                            Backup.uploadSettings(this) { err ->
+                                if (dlg.isShowing) dlg.setMessage("$msg\n\n" + if (err == null) "☁ 서버: 설정 · 가방 · 사이트 · 리모컨도 저장했어요 ✓ (새 폰에서 로그인 → '서버에서 설정 불러오기')"
+                                    else "☁ 서버: 설정은 못 올렸어요 ($err) · 폰 백업 파일은 잘 저장됐어요")
+                            }
+                        }
                     }
                 }.start()
             }

@@ -18,7 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * v6.23 (270): ⛴ 자주 가는 선사 — 배(선사) 이름 · 예약 사이트 주소 · 전화 · 메모
+ * v6.23 (270): ⛴ 자주 가는 사이트 — 배(선사) 이름 · 예약 사이트 주소 · 전화 · 메모
  *  [🌐 열기] = 크롬 등 인터넷 창으로 · [📞] 전화 · [✎] 수정 · [🗑] 삭제 · ▲▼ 순서
  *  저장은 폰 (SharedPreferences "fishlog" 의 boat_sites → 💾 백업에 자동 포함)
  */
@@ -61,13 +61,13 @@ object Boats {
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(a, 20f, Ui.TEXT, true, "⛴ 자주 가는 선사"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        top.addView(Ui.text(a, 20f, Ui.TEXT, true, "⛴ 자주 가는 사이트"), LinearLayout.LayoutParams(0, WRAP, 1f))
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(16), dp(8), dp(16), dp(8))
             background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { dlg.dismiss() }
         })
         root.addView(top)
-        root.addView(Ui.text(a, 12f, Ui.SUB, false, "🌐 열기를 누르면 그 선사 예약 사이트가 인터넷 창(크롬 등)으로 열려요"), Ui.lp(a, MATCH, WRAP, top = 6))
+        root.addView(Ui.text(a, 12f, Ui.SUB, false, "🌐 열기를 누르면 그 예약 사이트가 인터넷 창(크롬 등)으로 열려요"), Ui.lp(a, MATCH, WRAP, top = 6))
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         root.addView(ScrollView(a).apply { addView(box) }, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(8) })
         lateinit var render: () -> Unit
@@ -88,7 +88,7 @@ object Boats {
             val phone = et("전화번호 (선택)", s?.phone ?: "", InputType.TYPE_CLASS_PHONE)
             val memo = et("메모 (선택 · 예: 쭈갑 · 오천항 · 새벽 5시)", s?.memo ?: "", InputType.TYPE_CLASS_TEXT)
             f.addView(name); f.addView(url); f.addView(phone); f.addView(memo)
-            AlertDialog.Builder(a, R.style.FlAlert).setTitle(if (s == null) "＋ 선사 추가" else "선사 수정").setView(f)
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle(if (s == null) "＋ 사이트 추가" else "사이트 수정").setView(f)
                 .setPositiveButton("저장") { _, _ ->
                     val n = name.text.toString().trim()
                     if (n.isBlank()) { Ui.toast(a, "배(선사) 이름을 적어 주세요"); return@setPositiveButton }
@@ -106,7 +106,7 @@ object Boats {
 
         render = {
             box.removeAllViews()
-            if (list.isEmpty()) box.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 저장한 선사가 없어요.\n아래 '＋ 선사 추가'로 배 이름과 예약 사이트 주소를 넣어 보세요.").apply {
+            if (list.isEmpty()) box.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 저장한 사이트가 없어요.\n아래 '＋ 사이트 추가'로 배(선사) 이름과 예약 사이트 주소를 넣어 보세요.").apply {
                 gravity = Gravity.CENTER; setPadding(0, dp(30), 0, dp(10))
             }, Ui.lp(a, MATCH, WRAP))
             list.forEachIndexed { i, s ->
@@ -138,7 +138,7 @@ object Boats {
                 card.addView(row, Ui.lp(a, MATCH, WRAP, top = 10))
                 box.addView(card, Ui.lp(a, MATCH, WRAP, top = if (i == 0) 0 else 10))
             }
-            box.addView(Ui.button(a, "＋ 선사 추가") { edit(null) }, Ui.lp(a, MATCH, WRAP, top = 14))
+            box.addView(Ui.button(a, "＋ 사이트 추가") { edit(null) }, Ui.lp(a, MATCH, WRAP, top = 14))
         }
         render()
         dlg.setContentView(root)

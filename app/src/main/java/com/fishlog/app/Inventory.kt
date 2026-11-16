@@ -350,21 +350,10 @@ object Inventory {
                 setOnClickListener { editCat(null) }
             }, Ui.lp(a, MATCH, WRAP, top = 10))
             box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "카테고리를 누르면 안의 항목 · ✎ = 이름 · 그림 · 순서 바꾸기 · 🗑 = 삭제").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
-            // 서버 저장 · 불러오기
-            val dirty = prefs(a).getBoolean("inv_dirty", false)
-            val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            sr.addView(Ui.button(a, if (dirty) "☁ 서버에 저장하기 •" else "☁ 서버에 저장하기") { upload(a, cats) { render() } }.apply {
-                minHeight = dp(44); setTextColor(Ui.GREEN); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.GREEN)
-            }, LinearLayout.LayoutParams(0, WRAP, 1f))
-            sr.addView(Ui.button(a, "서버에서 불러오기") {
-                AlertDialog.Builder(a, R.style.FlAlert)
-                    .setMessage("서버에 저장해 둔 가방으로 바꿀까요? (지금 폰의 가방은 덮어써요)")
-                    .setPositiveButton("불러오기") { _, _ -> download(a) { ok -> if (ok) { cats = load(a); cur = null; render() } } }
-                    .setNegativeButton("취소", null).show()
-            }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-            box.addView(sr, Ui.lp(a, MATCH, WRAP, top = 16))
-            box.addView(Ui.text(a, 11f, Ui.SUB, false, "폰에는 바로 저장돼요 · 폰을 바꿀 때를 대비해 가끔 '서버에 저장하기'를 눌러 두세요" +
-                if (dirty) "\n• 서버에 아직 안 올린 변경이 있어요" else ""), Ui.lp(a, MATCH, WRAP, top = 4))
+            // v6.24 (273): 가방 서버 저장 버튼은 ⚙ 설정 '💾 모든 데이터 백업하기'로 합침 (폰 + 서버)
+            box.addView(Ui.text(a, 11f, Ui.SUB, false, "가방은 폰에 바로 저장돼요 · 폰을 바꿀 때를 대비해 ⚙ 설정 → '💾 모든 데이터 백업하기'를 눌러 두세요 (서버에도 같이 저장)").apply {
+                gravity = Gravity.CENTER
+            }, Ui.lp(a, MATCH, WRAP, top = 14))
         }
 
         fun renderItems(c: Cat) {
