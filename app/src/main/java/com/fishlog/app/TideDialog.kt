@@ -180,6 +180,16 @@ object TideDialog {
         // 물세기: 그날 % + 시간별 물흐름 세기
         val strength = Ui.text(a, 15f, Ui.TEXT, true, "")
         col.addView(strength, Ui.lp(a, MATCH, WRAP, top = 10))
+        // v6.22 (271): ↗ 사는 물때 / ↘ 죽는 물때 + 앞뒤 7일 물세기 작은 막대 (표시만 · 물때 계산 · 물세기 %는 그대로)
+        val lifeChip = Ui.text(a, 12.5f, Ui.TEXT, true, "").apply { setPadding(dp(10), dp(3), dp(10), dp(3)) }
+        val lifeSub = Ui.text(a, 11.5f, Ui.SUB, false, "")
+        val lifeBars = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
+        val lifeLeg = Ui.text(a, 10f, Ui.SUB, false, "초록 = 사는 물때(세지는 중) · 보라 = 죽는 물때(약해지는 중) · 노란 테두리 = 고른 날")
+        col.addView(LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; addView(lifeChip, LinearLayout.LayoutParams(WRAP, WRAP)) },
+            Ui.lp(a, MATCH, WRAP, top = 6))
+        col.addView(lifeSub, Ui.lp(a, MATCH, WRAP, top = 4))
+        col.addView(lifeBars, Ui.lp(a, MATCH, dp(78), top = 8))
+        col.addView(lifeLeg, Ui.lp(a, MATCH, WRAP, top = 2))
         val flow = FlowBarView(a)
         col.addView(flow, Ui.lp(a, MATCH, dp(70), top = 4))
         val flowNote = Ui.text(a, 11f, Ui.SUB, false, "")
@@ -458,9 +468,52 @@ object TideDialog {
             }
         }
 
+        /** v6.22 (271): 물때 번호로 사는/죽는 물때 (0 무시~6물 = 사는 · 7물 = 사리 · 8~13물 = 죽는 · 조금) */
+        fun lifeOf(idx: Int): Int = when (idx) { in 0..6 -> 1; in 8..13 -> -1; else -> 0 }   // 7물·조금 = 바뀌는 날
+        val LIVE = Color.parseColor("#2F8F63"); val DIE = Color.parseColor("#7A5CA8")
+        fun renderLife(noon: Long, id: Int) {
+            val idx = Tide.mulIndex(noon)
+            val (chip, sub) = when {
+                idx in 0..6 -> "↗ 사는 물때" to "조금 → 사리로 가는 중 · 사리(7물)까지 ${7 - idx}일 · 날마다 물살이 세져요"
+                idx == 7 -> "● 사리 (가장 셈)" to "오늘이 사리 · 내일부터 죽는 물때 (물살이 약해져요)"
+                idx in 8..13 -> "↘ 죽는 물때" to "사리 지나 조금으로 가는 중 · 조금까지 ${14 - idx}일 · 날마다 물살이 약해져요"
+                else -> "● 조금 (가장 약함)" to "오늘이 조금 · 내일(무시)부터 사는 물때 (물살이 세져요)"
+            }
+            val life = lifeOf(idx)
+            lifeChip.text = chip
+            lifeChip.setTextColor(when (life) { 1 -> Color.parseColor("#5BE3A0"); -1 -> Color.parseColor("#C9A7FF"); else -> Color.parseColor("#F2C14E") })
+            lifeChip.background = Ui.bg(a, when (life) { 1 -> Color.parseColor("#123A2A"); -1 -> Color.parseColor("#2C2236"); else -> Color.parseColor("#2A2310") }, 99,
+                when (life) { 1 -> LIVE; -1 -> DIE; else -> Color.parseColor("#F2C14E") })
+            lifeSub.text = sub
+            // 앞뒤 7일 (고른 날 앞 3일 · 뒤 3일) — 먼저 달 나이로 짐작한 %, 물때를 받아 오면 정확한 %로
+            lifeBars.removeAllViews()
+            val md = SimpleDateFormat("M/d", Locale.KOREA)
+            for (k in -3..3) {
+                val n = noon + k * 86_400_000L
+                val i2 = Tide.mulIndex(n)
+                val cell = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM }
+                val bar = View(a)
+                val l2 = lifeOf(i2)
+                val colr = when (l2) { 1 -> LIVE; -1 -> DIE; else -> Color.parseColor("#3B5568") }
+                bar.background = if (k == 0) Ui.bg(a, colr, 5, Color.parseColor("#F2C14E")) else Ui.bg(a, colr, 5)
+                val mulShort = when (i2) { 0 -> "무시"; 14 -> "조금"; else -> "${i2}물" }
+                val lab = Ui.text(a, 9.5f, if (k == 0) Color.parseColor("#F2C14E") else Ui.SUB, k == 0, md.format(Date(n)) + "\n" + mulShort).apply {
+                    gravity = Gravity.CENTER; maxLines = 2
+                }
+                fun setH(p: Int) { bar.layoutParams = LinearLayout.LayoutParams(MATCH, dp((8 + 40 * p.coerceIn(0, 100) / 100))) }
+                setH(Tide.estimatePct(n))
+                cell.addView(bar); cell.addView(lab, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) })
+                lifeBars.addView(cell, LinearLayout.LayoutParams(0, MATCH, 1f).apply { leftMargin = if (k == -3) 0 else dp(4) })
+                Tide.fetch(a, lat, lon, n) { day, _ ->
+                    if (day != null && dlg.isShowing && id == loadId) Tide.strength(a, day) { st -> if (dlg.isShowing && id == loadId) setH(st.pct) }
+                }
+            }
+        }
+
         fun load() {
             val id = ++loadId
             val noon = cur + 12 * 3_600_000L
+            renderLife(noon, id)
             // v3.8: 맨 위 제목과 날씨 칸 제목에도 지금 보는 날짜
             titleView.text = titleText(a, lat, lon, cur)
             uvLine.visibility = View.GONE
