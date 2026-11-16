@@ -2,6 +2,7 @@ package com.fishlog.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
@@ -94,6 +95,14 @@ class ChatActivity : Activity() {
         root.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(6) })
 
         val bar = Ui.row(this)
+        // v6.25 (274): 📷 사진 보내기
+        bar.addView(Ui.text(this, 20f, Ui.TEXT, false, "📷").apply {
+            gravity = Gravity.CENTER; background = Ui.bg(this@ChatActivity, Ui.CARD, 14, Ui.LINE)
+            setOnClickListener {
+                if (!ChatPhoto.canSend(this@ChatActivity)) { toast("사진은 하루 ${ChatPhoto.DAY_LIMIT}장까지 보낼 수 있어요"); return@setOnClickListener }
+                try { startActivityForResult(ChatPhoto.pickIntent(), REQ_PHOTO) } catch (_: Exception) { toast("사진 고르는 창을 열 수 없어요") }
+            }
+        }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { rightMargin = dp(8) })
         input = EditText(this).apply {
             hint = "메시지 입력…"
             setHintTextColor(Ui.SUB); setTextColor(Ui.TEXT); textSize = 15f
@@ -111,7 +120,7 @@ class ChatActivity : Activity() {
         }, LinearLayout.LayoutParams(WRAP, dp(46)).apply { leftMargin = dp(8) })
         root.addView(bar, Ui.lp(this, MATCH, WRAP, top = 4))
         root.addView(Ui.text(this, 10.5f, Ui.SUB, false,
-            "내 글 꾹 누르면 수정·삭제 · 남의 글 꾹 누르면 신고·차단 · 욕설은 자동으로 ** · 최근 3일만 보여요"),
+            "내 글 꾹 누르면 수정·삭제 · 남의 글 꾹 누르면 신고·차단 · 욕설은 자동으로 ** · 최근 3일만 보여요 · 📷 사진은 하루 ${ChatPhoto.DAY_LIMIT}장 (위치 정보는 빠져요)"),
             Ui.lp(this, MATCH, WRAP, top = 4))
         setContentView(root)
 
@@ -283,7 +292,14 @@ class ChatActivity : Activity() {
             gravity = if (m.mine) Gravity.END else Gravity.START
         }, LinearLayout.LayoutParams(WRAP, WRAP))
         val masked = m.text.count { it == '*' }
-        col.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
+        // v6.25 (274): 사진 (누르면 크게 · 큰 사진은 그때 받음)
+        if (m.th.isNotBlank()) ChatPhoto.thumbView(this, m.th, (Ui.contentW(this) * 0.62).toInt()) {
+            ChatPhoto.showFull(this, m.th) { show -> Chat.loadBig(m.room, m.imgId, show) }
+        }?.let { iv ->
+            iv.setOnLongClickListener { menu(m); true }
+            col.addView(iv, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
+        }
+        if (m.text.isNotBlank() || m.th.isBlank()) col.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8))
             setLineSpacing(0f, 1.15f)
             maxWidth = (Ui.contentW(context) * 0.78).toInt()
@@ -348,6 +364,35 @@ class ChatActivity : Activity() {
             .setMessage("이 글을 지울까요?")
             .setPositiveButton("삭제") { _, _ -> Chat.delete(m) { err -> if (err != null) toast(err) } }
             .setNegativeButton("취소", null).show()
+    }
+
+    private val REQ_PHOTO = 7401
+
+    @Deprecated("startActivityForResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (requestCode != REQ_PHOTO || resultCode != RESULT_OK || uri == null) return
+        if (sending) return
+        sending = true
+        val r = room
+        val cap = input.text.toString()
+        toast("사진 보내는 중…")
+        Thread {
+            val big = ChatPhoto.load(this, uri, 1280)
+            val made = big?.let { b ->
+                Triple(ChatPhoto.b64(Bitmap.createScaledBitmap(b, maxOf(1, b.width * 320 / maxOf(b.width, b.height)), maxOf(1, b.height * 320 / maxOf(b.width, b.height)), true), 25_000, 65),
+                    ChatPhoto.b64(Bitmap.createScaledBitmap(b, maxOf(1, b.width * 720 / maxOf(b.width, b.height)), maxOf(1, b.height * 720 / maxOf(b.width, b.height)), true), 90_000, 70),
+                    ChatPhoto.b64(b, 280_000, 78))   // base64 로 늘어나도 규칙 400KB 안
+            }
+            runOnUiThread {
+                if (made == null) { sending = false; toast("사진을 읽지 못했어요"); return@runOnUiThread }
+                Chat.sendPhoto(r, made.first, made.second, made.third, cap) { err ->
+                    sending = false
+                    if (err != null) toast(err) else { ChatPhoto.countSent(this); input.setText("") }
+                }
+            }
+        }.start()
     }
 
     private var sending = false

@@ -117,6 +117,18 @@ service cloud.firestore {
       allow update: if chatOk() && resource.data.uid == request.auth.uid && chatMsg();
       allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || hasPerm('chatMod'));
     }
+    // v6.25 (274): 채팅 큰 사진 (누를 때만 받음) — 채팅 쓸 수 있는 사람이 자기 것만 · 400KB 아래
+    function chatImg() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'd', 't'])
+        && request.resource.data.d is string && request.resource.data.d.size() < 400000
+        && request.resource.data.t is int;
+    }
+    match /chatImg/{id} {
+      allow read: if signedIn();
+      allow create: if chatOk() && chatImg();
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || hasPerm('chatMod'));
+    }
     match /chatMute/{uid} {
       allow read: if signedIn();
       allow write: if isAdmin();
@@ -273,6 +285,11 @@ service cloud.firestore {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && chatOk() && chatMsg();
         allow update: if isMember(gid) && chatOk() && resource.data.uid == request.auth.uid && chatMsg();
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGroupOwner(gid) || isAdmin());
+      }
+      match /chatImg/{iid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && chatOk() && chatImg();
         allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGroupOwner(gid) || isAdmin());
       }
       match /notices/{nid} {

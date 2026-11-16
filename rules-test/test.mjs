@@ -12,6 +12,7 @@ await env.withSecurityRulesDisabled(async c => {
   await setDoc(doc(d, 'tide/old'), { ext: '[]', at: now - 3 * 3600e3, by: 'X' });
   await setDoc(doc(d, 'tide/fresh'), { ext: '[]', at: now - 60e3, by: 'X' });
   await setDoc(doc(d, 'public/B_9'), { owner: 'B' });
+  await setDoc(doc(d, 'chatImg/i9'), { uid: 'B', d: 'x', t: now });
 });
 const A = env.authenticatedContext('A', { email: 'a@x.com' }).firestore();
 const B = env.authenticatedContext('B', { email: 'b@x.com' }).firestore();
@@ -47,6 +48,13 @@ await ok('주인이 휴지통에서 복구', setDoc(doc(B, 'groups/g1/trips/B_6'
 await ok('복구 경로', setDoc(doc(B, 'groups/g1/trips/B_6/detail/track'), { owner: 'B', pts: [] }));
 await ok('계정 삭제: 내 그룹 글', deleteDoc(doc(B, 'groups/g1/trips/B_6')));
 await ok('계정 삭제: 내 게시판 글', deleteDoc(doc(B, 'public/B_9')));
+await ok('전체 채팅 큰 사진', setDoc(doc(B, 'chatImg/i1'), { uid: 'B', d: 'x'.repeat(300000), t: now }));
+await ok('전체 채팅 사진 메시지', setDoc(doc(B, 'chat/m1'), { uid: 'B', name: 'b', text: '', t: now, th: 'abc', imgId: 'i1' }));
+await ok('큰 사진 보기', getDoc(doc(A, 'chatImg/i1')));
+await ok('그룹 채팅 큰 사진', setDoc(doc(B, 'groups/g1/chatImg/i2'), { uid: 'B', d: 'x', t: now }));
+await ok('그룹장이 그룹 사진 지우기', deleteDoc(doc(A, 'groups/g1/chatImg/i2')));
+await ok('문의 사진', setDoc(doc(B, 'inquiries/B/msgs/q1'), { admin: false, text: '', t: now, img: 'x'.repeat(250000) }));
+await ok('내 큰 사진 지우기', deleteDoc(doc(B, 'chatImg/i1')));
 console.log('[막아야 하는 일]');
 await no('남의 게시판 경로 덮어쓰기', setDoc(doc(B, 'public/A_1/photos/track'), { owner: 'B', pts: [9] }));
 await no('남의 게시판 글에 사진 넣기', setDoc(doc(B, 'public/A_1/photos/evil'), { owner: 'B' }));
@@ -61,6 +69,10 @@ await no('남의 게시판 글 숨기기', setDoc(doc(B, 'deleted/public/items/A
 await no('그룹장 아닌데 남의 그룹 글 숨기기', setDoc(doc(B, 'deleted/g_g1/items/A_1'), { t: now, by: 'B' }));
 await no('휴지통 없이 가짜 알림', setDoc(doc(B, 'notify/n2'), { to: 'A', t: now, trash: 'nope', text: '가짜' }));
 await no('남의 휴지통으로 가짜 알림', setDoc(doc(B, 'notify/n3'), { to: 'B', t: now, trash: 't1', text: '가짜' }));
+await no('남 이름으로 큰 사진', setDoc(doc(B, 'chatImg/i3'), { uid: 'A', d: 'x', t: now }));
+await no('너무 큰 사진 (400KB 넘음)', setDoc(doc(B, 'chatImg/i4'), { uid: 'B', d: 'x'.repeat(420000), t: now }));
+await no('그룹 아닌 사람이 그룹 사진', setDoc(doc(ADM, 'groups/g1/chatImg/i5'), { uid: 'ADM', d: 'x', t: now }));
+await no('남의 큰 사진 지우기', deleteDoc(doc(A, 'chatImg/i9')));
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

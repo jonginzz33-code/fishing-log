@@ -59,6 +59,21 @@ object Inquiry {
             .addOnFailureListener { done(it.message ?: "보내기 실패 (보안 규칙 확인)") }
     }
 
+    /** v6.25 (274): 사진 문의 (문의방은 사람이 적어서 사진을 글 안에 바로 · 오류 화면 캡처용) */
+    fun sendPhoto(room: String, img: String, caption: String, done: (String?) -> Unit) {
+        val admin = Cloud.isAdmin && room != Cloud.uid
+        val now = System.currentTimeMillis()
+        val cap = caption.trim().take(1000)
+        ref(room).collection("msgs").document().set(mapOf("admin" to admin, "text" to cap, "t" to now, "img" to img))
+            .addOnSuccessListener {
+                val m = hashMapOf<String, Any>("last" to ("📷 사진 " + cap).take(60), "t" to now)
+                if (admin) m["unreadUser"] = FieldValue.increment(1) else { m["unreadAdmin"] = FieldValue.increment(1); m["name"] = Cloud.displayName }
+                ref(room).set(m, SetOptions.merge())
+                done(null)
+            }
+            .addOnFailureListener { done(it.message ?: "보내기 실패 (보안 규칙 확인)") }
+    }
+
     fun markRead(room: String) {
         val admin = Cloud.isAdmin && room != Cloud.uid
         ref(room).set(mapOf(if (admin) "unreadAdmin" to 0 else "unreadUser" to 0), SetOptions.merge())
@@ -114,11 +129,20 @@ class InquiryActivity : Activity() {
         root.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(6) })
         if (room != null) {
             val bar = Ui.row(this)
+            // v6.25 (274): 📷 사진 보내기 (오류 화면 캡처 등)
+            bar.addView(Ui.text(this, 20f, Ui.TEXT, false, "📷").apply {
+                gravity = Gravity.CENTER; background = Ui.bg(this@InquiryActivity, Ui.CARD, 14, Ui.LINE)
+                setOnClickListener {
+                    if (!ChatPhoto.canSend(this@InquiryActivity)) { toast("사진은 하루 ${ChatPhoto.DAY_LIMIT}장까지 보낼 수 있어요"); return@setOnClickListener }
+                    try { startActivityForResult(ChatPhoto.pickIntent(), REQ_PHOTO) } catch (_: Exception) { toast("사진 고르는 창을 열 수 없어요") }
+                }
+            }, LinearLayout.LayoutParams(dp(46), dp(46)).apply { rightMargin = dp(8) })
             val input = EditText(this).apply {
                 hint = "문의 내용을 적어 주세요…"; setHintTextColor(Ui.SUB); setTextColor(Ui.TEXT); textSize = 15f
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE; maxLines = 5
                 background = Ui.bg(this@InquiryActivity, Ui.CARD, 14, Ui.LINE); setPadding(dp(12), dp(10), dp(12), dp(10))
             }
+            inputBox = input
             bar.addView(input, LinearLayout.LayoutParams(0, WRAP, 1f))
             bar.addView(Ui.text(this, 15f, Color.parseColor("#08311F"), true, "보내기").apply {
                 gravity = Gravity.CENTER; setPadding(dp(14), 0, dp(14), 0)
@@ -143,7 +167,7 @@ class InquiryActivity : Activity() {
                 q.documents.forEach { d ->
                     val fromAdmin = d.getBoolean("admin") == true
                     val mine = if (Cloud.isAdmin && r != Cloud.uid) fromAdmin else !fromAdmin
-                    list.addView(bubble(d.getString("text") ?: "", d.getLong("t") ?: 0L, mine, fromAdmin), Ui.lp(this, MATCH, WRAP, top = 10))
+                    list.addView(bubble(d.getString("text") ?: "", d.getLong("t") ?: 0L, mine, fromAdmin, d.getString("img")), Ui.lp(this, MATCH, WRAP, top = 10))
                 }
                 scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
                 Inquiry.markRead(r)
@@ -153,11 +177,34 @@ class InquiryActivity : Activity() {
 
     override fun onPause() { reg?.remove(); reg = null; super.onPause() }
 
-    private fun bubble(text: String, t: Long, mine: Boolean, fromAdmin: Boolean): View {
+    private var inputBox: EditText? = null
+    private val REQ_PHOTO = 7402
+
+    @Deprecated("startActivityForResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data; val r = room
+        if (requestCode != REQ_PHOTO || resultCode != RESULT_OK || uri == null || r == null) return
+        toast("사진 보내는 중…")
+        val cap = inputBox?.text?.toString() ?: ""
+        Thread {
+            val img = ChatPhoto.load(this, uri, 1280)?.let { ChatPhoto.b64(it, 300_000, 78) }
+            runOnUiThread {
+                if (img == null) { toast("사진을 읽지 못했어요"); return@runOnUiThread }
+                Inquiry.sendPhoto(r, img, cap) { e -> if (e != null) toast(e) else { ChatPhoto.countSent(this); inputBox?.setText("") } }
+            }
+        }.start()
+    }
+
+    private fun bubble(text: String, t: Long, mine: Boolean, fromAdmin: Boolean, img: String? = null): View {
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = if (mine) Gravity.END else Gravity.START }
         col.addView(Ui.text(this, 11f, Ui.SUB, false, (if (fromAdmin) "운영자" else if (mine) "나" else (intent.getStringExtra("name") ?: "문의자")) + " · " + tf.format(Date(t))),
             LinearLayout.LayoutParams(WRAP, WRAP))
-        col.addView(Ui.text(this, 14.5f, if (mine) Color.parseColor("#04342C") else Ui.TEXT, false, text).apply {
+        // v6.25 (274): 사진 (누르면 크게)
+        ChatPhoto.thumbView(this, img, (Ui.contentW(this) * 0.62).toInt()) { ChatPhoto.showFull(this, img) }?.let {
+            col.addView(it, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(2) })
+        }
+        if (text.isNotBlank() || img.isNullOrBlank()) col.addView(Ui.text(this, 14.5f, if (mine) Color.parseColor("#04342C") else Ui.TEXT, false, text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8)); setLineSpacing(0f, 1.15f)
             maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = Ui.bg(this@InquiryActivity, if (mine) Ui.BLUE else Color.parseColor(if (fromAdmin) "#2A2310" else "#1E3247"), 14)

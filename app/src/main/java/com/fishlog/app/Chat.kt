@@ -29,7 +29,9 @@ object Chat {
     private const val LIMIT = 80L
 
     class Msg(val id: String, val room: String, val uid: String, val name: String, val text: String,
-              val time: Long, val edited: Long) {
+              val time: Long, val edited: Long,
+              /** v6.25 (274): 사진 미리보기(작은 JPEG base64) · 큰 사진 문서 번호(chatImg) */
+              val th: String = "", val imgId: String = "") {
         val mine get() = uid == Cloud.uid
     }
 
@@ -39,6 +41,9 @@ object Chat {
 
     fun ref(room: String): CollectionReference =
         if (room == ALL) db.collection("chat") else db.collection("groups").document(room).collection("chat")
+    /** v6.25 (274): 큰 사진은 따로 (채팅 목록을 받을 때 같이 안 받게 · 누를 때만) */
+    fun imgRef(room: String): CollectionReference =
+        if (room == ALL) db.collection("chatImg") else db.collection("groups").document(room).collection("chatImg")
 
     // ---------------- 실시간 받기 ----------------
     private val latest = HashMap<String, List<Msg>>()
@@ -65,7 +70,7 @@ object Chat {
                     if (q == null) return@addSnapshotListener
                     latest[r] = q.documents.map { d ->
                         Msg(d.id, r, d.getString("uid") ?: "", d.getString("name") ?: "?", d.getString("text") ?: "",
-                            d.getLong("t") ?: 0L, d.getLong("edited") ?: 0L)
+                            d.getLong("t") ?: 0L, d.getLong("edited") ?: 0L, d.getString("th") ?: "", d.getString("imgId") ?: "")
                     }.sortedBy { it.time }
                     fire()
                 }
@@ -144,17 +149,45 @@ object Chat {
             .addOnFailureListener { done(failMsg(it)) }
     }
 
+    /** v6.25 (274): 사진 보내기 — big 은 따로 문서(chatImg), 그게 안 되면(규칙 전) mid 를 미리보기 자리에 */
+    fun sendPhoto(room: String, th: String, mid: String, big: String, caption: String, done: (String?) -> Unit) {
+        val me = Cloud.uid ?: return done("로그인이 필요해요")
+        val cap = caption.trim().take(500)
+        val now = System.currentTimeMillis()
+        fun post(thumb: String, imgId: String) {
+            val m = hashMapOf<String, Any>("uid" to me, "name" to nameFor(room), "text" to Profanity.mask(cap), "t" to now, "th" to thumb)
+            if (imgId.isNotBlank()) m["imgId"] = imgId
+            ref(room).document().set(m)
+                .addOnSuccessListener { markSeen(room); done(null) }
+                .addOnFailureListener { done(failMsg(it)) }
+        }
+        val bd = imgRef(room).document()
+        bd.set(mapOf("uid" to me, "d" to big, "t" to now))
+            .addOnSuccessListener { post(th, bd.id) }
+            .addOnFailureListener { post(mid, "") }   // 큰 사진 칸(규칙)이 아직 없으면 중간 크기만
+    }
+
+    /** 큰 사진 받기 (없으면 null) */
+    fun loadBig(room: String, imgId: String, done: (String?) -> Unit) {
+        if (imgId.isBlank()) return done(null)
+        imgRef(room).document(imgId).get().addOnSuccessListener { done(it.getString("d")) }.addOnFailureListener { done(null) }
+    }
+
     fun edit(m: Msg, text: String, done: (String?) -> Unit) {
         val t = text.trim()
-        if (t.isEmpty()) return done("내용을 적어 주세요")
+        if (t.isEmpty() && m.th.isBlank()) return done("내용을 적어 주세요")
         if (t.length > 500) return done("한 번에 500자까지 보낼 수 있어요")
-        ref(m.room).document(m.id).set(mapOf("uid" to m.uid, "name" to m.name, "text" to Profanity.mask(t),
-            "t" to m.time, "edited" to System.currentTimeMillis()))
+        val doc = hashMapOf<String, Any>("uid" to m.uid, "name" to m.name, "text" to Profanity.mask(t),
+            "t" to m.time, "edited" to System.currentTimeMillis())
+        if (m.th.isNotBlank()) doc["th"] = m.th
+        if (m.imgId.isNotBlank()) doc["imgId"] = m.imgId
+        ref(m.room).document(m.id).set(doc)
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(failMsg(it)) }
     }
 
     fun delete(m: Msg, done: (String?) -> Unit) {
+        if (m.imgId.isNotBlank()) imgRef(m.room).document(m.imgId).delete()
         ref(m.room).document(m.id).delete()
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "지우기 실패") }
@@ -169,15 +202,18 @@ object Chat {
     /** 관리자: 전체 채팅방만 초기화 (그룹방·1:1 문의방은 그대로) */
     fun resetAll(done: (String?) -> Unit) {
         if (!Cloud.isAdmin) return done("운영자만 할 수 있어요")
+        wipe(imgRef(ALL)) { }
         wipe(ref(ALL), done)
     }
 
     /** 그룹장: 그룹 채팅방 비우기 */
-    fun clearGroup(gid: String, done: (String?) -> Unit) = wipe(ref(gid), done)
+    fun clearGroup(gid: String, done: (String?) -> Unit) { wipe(imgRef(gid)) { }; wipe(ref(gid), done) }
 
     /** 그룹장이 열면: 한 달 지난 그룹 채팅 지우기 */
     fun purgeOld(gid: String) {
         ref(gid).whereLessThan("t", System.currentTimeMillis() - GROUP_KEEP_MS).limit(300).get()
+            .addOnSuccessListener { q -> q.documents.forEach { it.reference.delete() } }
+        imgRef(gid).whereLessThan("t", System.currentTimeMillis() - GROUP_KEEP_MS).limit(100).get()
             .addOnSuccessListener { q -> q.documents.forEach { it.reference.delete() } }
     }
 
