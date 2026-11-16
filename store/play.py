@@ -22,9 +22,13 @@ def session():
     cred = service_account.Credentials.from_service_account_info(info, scopes=["https://www.googleapis.com/auth/androidpublisher"])
     return AuthorizedSession(cred)
 
+def errmsg(r):
+    try: return r.json().get("error", {}).get("message", r.text)
+    except Exception: return r.text
 def check(r, what):
     if r.status_code >= 300:
-        print(f"::error::{what} 실패 ({r.status_code}): {r.text[:800]}")
+        # 비밀값 가리기(***)에 안 걸리게 중괄호 없이 메시지만
+        print(f"::error::{what} 실패 ({r.status_code}): " + errmsg(r)[:600].replace("{", "(").replace("}", ")"))
         sys.exit(1)
     return r.json() if r.text else {}
 
@@ -54,7 +58,7 @@ def listing(s, eid):
     images("featureGraphic", ["feature-1024x500.png"])
     images("phoneScreenshots", SHOTS)
 
-def closed(s, eid, group):
+def closed(s, eid, group, status="completed"):
     tr = check(s.get(f"{API}/edits/{eid}/tracks/internal"), "내부 테스트 읽기")
     codes = []
     for rel in tr.get("releases", []):
@@ -62,10 +66,10 @@ def closed(s, eid, group):
     if not codes:
         print("::error::내부 테스트에 올라간 버전이 없어요"); sys.exit(1)
     top = str(max(codes))
-    body = {"track": "alpha", "releases": [{"versionCodes": [top], "status": "completed",
+    body = {"track": "alpha", "releases": [{"versionCodes": [top], "status": status,
             "releaseNotes": [{"language": LANG, "text": release_notes()}]}]}
     check(s.put(f"{API}/edits/{eid}/tracks/alpha", json=body), "비공개 테스트(alpha)에 올리기")
-    print(f"✓ 비공개 테스트(alpha) ← 버전 {top}")
+    print(f"✓ 비공개 테스트(alpha) ← 버전 {top} ({status})")
     if group:
         check(s.put(f"{API}/edits/{eid}/testers/alpha", json={"googleGroups": [group]}), "테스터 그룹")
         print(f"✓ 테스터 그룹: {group}")
@@ -77,12 +81,19 @@ def main():
     if what == "listing":
         listing(s, eid)
     elif what == "closed":
-        closed(s, eid, sys.argv[2].strip() if len(sys.argv) > 2 and sys.argv[2].strip() else None)
+        group = sys.argv[2].strip() if len(sys.argv) > 2 and sys.argv[2].strip() else None
+        closed(s, eid, group)
     else:
         print("::error::listing 또는 closed"); sys.exit(1)
     r = s.post(f"{API}/edits/{eid}:commit")
     if r.status_code >= 300 and "changesNotSentForReview" in r.text:
         r = s.post(f"{API}/edits/{eid}:commit?changesNotSentForReview=true")
+    # 아직 한 번도 공개 안 된 앱(초안)은 출시를 '초안'으로만 만들 수 있음 → 초안으로 다시
+    if r.status_code >= 300 and what == "closed" and "draft" in errmsg(r).lower():
+        print("… 앱이 아직 초안이라 비공개 테스트 출시를 '초안'으로 만들어요")
+        eid = check(s.post(f"{API}/edits"), "편집 다시 시작")["id"]
+        closed(s, eid, group, "draft")
+        r = s.post(f"{API}/edits/{eid}:commit")
     check(r, "저장(커밋)")
     print("✓ 플레이 콘솔에 저장했어요")
 
