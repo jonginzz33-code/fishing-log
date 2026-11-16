@@ -148,14 +148,13 @@ object TideDialog {
         nav.addView(dateText, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(6) })
         nav.addView(next, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(6) })
         nav.addView(todayBtn, LinearLayout.LayoutParams(dp(56), dp(44)).apply { leftMargin = dp(6) })
-        col.addView(nav)
+        // v6.21: 날짜 줄 · 알람/관측소 줄은 아래 제목 칸(titleBox)에 붙여서 스크롤해도 맨 위에 고정
         // 만조·간조 알람 · 관측소 바꾸기 (맨 위로)
         val setRow = Ui.row(a)
         val alarmBtn = Ui.button(a, alarmLabel()).apply { minHeight = dp(44); textSize = 13f }
         val changeBtn = Ui.button(a, "📍 지점 · 관측소 검색").apply { minHeight = dp(44); textSize = 13f }
         setRow.addView(alarmBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
         setRow.addView(changeBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-        col.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 8))
 
         val head = Ui.text(a, 16f, Ui.TEXT, true, "")
         // 관리자(나)에게만: 물때 새로고침 (폰·서버에 저장된 물때 무시하고 국립해양조사원에서 바로 다시 받아 서버도 덮어씀)
@@ -289,7 +288,9 @@ object TideDialog {
         val stationBtn = Ui.text(a, 12f, Ui.BLUE, true, stationSub(a, lat, lon))
         titleBox.addView(titleView)
         titleBox.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 3))
-        titleBox.isClickable = true
+        // v6.21: 날짜 고르기 · 알람 · 지점/관측소 검색은 고정 (스크롤해도 안 사라짐)
+        titleBox.addView(nav, Ui.lp(a, MATCH, WRAP, top = 10))
+        titleBox.addView(setRow, Ui.lp(a, MATCH, WRAP, top = 8))
 
         val dlg = AlertDialog.Builder(a, R.style.FlAlertRight)
             .setCustomTitle(titleBox)
@@ -783,7 +784,9 @@ object TideDialog {
                 show(a, gpsLat, gpsLon, cur, trip, onChanged)
             }
         }
-        titleBox.setOnClickListener { pickStation() }
+        // v6.21: 제목 칸에 날짜 · 버튼이 들어가서, 관측소 바꾸기는 제목 글씨 · 관측소 줄을 눌렀을 때만
+        titleView.setOnClickListener { pickStation() }
+        stationBtn.setOnClickListener { pickStation() }
         changeBtn.setOnClickListener { pickStation() }
         alarmBtn.setOnClickListener { pickAlarm(a) { alarmBtn.text = alarmLabel(); onChanged?.invoke() } }
 
