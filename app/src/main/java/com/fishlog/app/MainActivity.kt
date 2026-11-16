@@ -2950,7 +2950,11 @@ class MainActivity : Activity() {
             startActivity(Intent(this, ChatActivity::class.java).putExtra("room", activeId))
         }
         if (chatN > 0) { chatG.setTextColor(Color.parseColor("#F2C14E")); chatG.background = Ui.bg(this, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E")) }
-        pair(chatG, gbtn("달력 · 멤버 · 그룹 관리 · 초대") { startActivity(Intent(this, GroupActivity::class.java)) }.apply { maxLines = 1; setAutoSizeTextTypeUniformWithConfiguration(10, 13, 1, android.util.TypedValue.COMPLEX_UNIT_SP) })
+        // v6.26: '달력 · 멤버 · 그룹 관리 · 초대'를 네 칸으로 나눔
+        fun openPart(p: String) = startActivity(Intent(this, GroupActivity::class.java).putExtra("part", p))
+        pair(chatG, gbtn("📅 출조 달력") { openPart("cal") })
+        pair(gbtn("👥 멤버") { openPart("members") }, gbtn("✉ 초대") { openPart("invite") })
+        groupBox.addView(gbtn("⚙ 그룹 관리") { openPart("manage") }, Ui.lp(this, MATCH, WRAP, top = 8))
         // 그룹 탈퇴 (그룹원만, 빨갛게)
         if (g != null && g.owner != Cloud.uid) {
             groupBox.addView(Ui.text(this, 14f, Color.WHITE, true).apply {

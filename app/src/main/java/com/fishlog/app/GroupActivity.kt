@@ -41,6 +41,12 @@ class GroupActivity : Activity() {
     private val month: Calendar = Calendar.getInstance()
     private var selected: String? = null
     private var membersOpen = false
+    /** v6.26: 메인 그룹 창에서 나눠 연 칸 — "" = 전부(예전처럼) · cal 달력 · members 멤버 · invite 초대 · manage 그룹 관리 */
+    private val part by lazy { intent.getStringExtra("part") ?: "" }
+    private val pAll get() = part.isEmpty()
+    private val pCal get() = pAll || part == "cal"
+    private val pInv get() = pAll || part == "invite"
+    private val pMan get() = pAll || part == "manage"
 
     private val keyFmt = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
     private val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
@@ -60,7 +66,8 @@ class GroupActivity : Activity() {
 
         val top = Ui.row(this)
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
-        top.addView(Ui.text(this, 20f, Ui.TEXT, true, "그룹"),
+        if (part == "members") membersOpen = true
+        top.addView(Ui.text(this, 20f, Ui.TEXT, true, when (part) { "cal" -> "📅 출조 달력"; "members" -> "👥 멤버"; "invite" -> "✉ 초대"; "manage" -> "⚙ 그룹 관리"; else -> "그룹" }),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         root.addView(top)
         bandBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -74,13 +81,13 @@ class GroupActivity : Activity() {
         membersBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(membersBox, Ui.lp(this, MATCH, WRAP, top = 8))
 
-        root.addView(Ui.text(this, 16f, Ui.TEXT, true, "출조 달력"), Ui.lp(this, MATCH, WRAP, top = 22))
-        calBox = Ui.card(this)
+        root.addView(Ui.text(this, 16f, Ui.TEXT, true, "출조 달력").apply { if (!pCal) visibility = View.GONE }, Ui.lp(this, MATCH, WRAP, top = 22))
+        calBox = Ui.card(this).apply { if (!pCal) visibility = View.GONE }
         root.addView(calBox, Ui.lp(this, MATCH, WRAP, top = 10))
-        dayBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        dayBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; if (!pCal) visibility = View.GONE }
         root.addView(dayBox, Ui.lp(this, MATCH, WRAP, top = 6))
         // 맨 아래: 그룹 탈퇴 (그룹원만, 빨갛게 강조)
-        leaveBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        leaveBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; if (!pMan) visibility = View.GONE }
         root.addView(leaveBox, Ui.lp(this, MATCH, WRAP, top = 28))
 
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(root) })
@@ -205,6 +212,16 @@ class GroupActivity : Activity() {
             head.addView(card)
             return
         }
+        // v6.26: 달력 · 멤버 칸이면 위 카드는 그룹 이름만
+        if (part == "cal" || part == "members") {
+            head.addView(Ui.text(this, 18f, Ui.TEXT, true, g.name).apply {
+                append(android.text.SpannableStringBuilder("  ${g.tag}").apply {
+                    setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
+                    setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#5A7486")), 0, length, 0)
+                })
+            })
+            return
+        }
         // 대표 이미지 (그룹장: 올리기·바꾸기·지우기)
         val imgRow = Ui.row(this)
         val img = android.widget.ImageView(this).apply {
@@ -229,7 +246,7 @@ class GroupActivity : Activity() {
             }.apply { minHeight = dp(34); textSize = 12f; maxLines = 1 }, Ui.lp(this, MATCH, dp(34), top = 6))
             imgRow.addView(ib, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
         } else imgRow.addView(Ui.text(this, 12f, Ui.SUB, false, "그룹 대표 이미지"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
-        card.addView(imgRow, Ui.lp(this, MATCH, WRAP, top = 0))
+        if (pMan) card.addView(imgRow, Ui.lp(this, MATCH, WRAP, top = 0))
         val nameRow = Ui.row(this)
         nameRow.addView(Ui.text(this, 22f, Ui.TEXT, true, g.name).apply {
             append(android.text.SpannableStringBuilder("  ${g.tag}").apply {
@@ -237,14 +254,14 @@ class GroupActivity : Activity() {
                 setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#5A7486")), 0, length, 0)
             })
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { topMargin = dp(8) })
-        if (Cloud.isOwner) {
+        if (Cloud.isOwner && pMan) {
             nameRow.addView(Ui.button(this, "✎ 이름") { askRename(g.name) }.apply { minHeight = dp(40); textSize = 13f; maxLines = 1 },
                 LinearLayout.LayoutParams(WRAP, dp(40)).apply { leftMargin = dp(8); topMargin = dp(8) })
         }
         // 대표 이미지 버튼들과 겹치지 않게 간격 (그룹장 카드)
         card.addView(nameRow, Ui.lp(this, MATCH, WRAP, top = 10))
         // 공지 한 줄 (그룹장만 쓰기)
-        if (g.notice.isNotBlank() || Cloud.isOwner) {
+        if (pMan && (g.notice.isNotBlank() || Cloud.isOwner)) {
             val nb = Ui.row(this).apply {
                 background = Ui.bg(this@GroupActivity, Color.parseColor("#2A2310"), 12, if (g.notice.isNotBlank()) Ui.ORANGE else Ui.LINE)
                 setPadding(dp(12), dp(8), dp(8), dp(8))
@@ -267,8 +284,8 @@ class GroupActivity : Activity() {
                 }
             }.apply { minHeight = dp(40); textSize = 13f }, LinearLayout.LayoutParams(WRAP, WRAP))
         }
-        card.addView(typeRow, Ui.lp(this, MATCH, WRAP, top = 4))
-        card.addView(Ui.text(this, 15f, Ui.SUB, false, "초대 코드  ").apply {
+        if (pMan) card.addView(typeRow, Ui.lp(this, MATCH, WRAP, top = 4))
+        if (pInv) card.addView(Ui.text(this, 15f, Ui.SUB, false, "초대 코드  ").apply {
             append(g.code)
         }, Ui.lp(this, MATCH, WRAP, top = 4))
         val row = Ui.row(this)
@@ -278,19 +295,20 @@ class GroupActivity : Activity() {
         }.apply { minHeight = dp(44); textSize = 14f }, LinearLayout.LayoutParams(0, WRAP, 1f))
         row.addView(Ui.button(this, "카톡으로 보내기") { account.shareCode() }.apply { minHeight = dp(44); textSize = 14f },
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
-        card.addView(row, Ui.lp(this, MATCH, WRAP, top = 10))
+        if (pInv) card.addView(row, Ui.lp(this, MATCH, WRAP, top = 10))
+        if (part == "invite") card.addView(Ui.text(this, 12f, Ui.SUB, false, "초대 코드를 받은 사람은 앱 → 그룹 → '그룹 바꾸기 · 만들기 · 가입'에서 코드를 넣으면 들어와요"), Ui.lp(this, MATCH, WRAP, top = 6))
         val memberBtn = Ui.button(this, "멤버 ${if (members.isEmpty()) "" else "${members.size}명 "}${if (membersOpen) "접기 ▲" else "보기 ▼"}", true) {
             membersOpen = !membersOpen
             renderHead(); renderMembers()
         }.apply { minHeight = dp(44); textSize = 14f }
-        card.addView(memberBtn, Ui.lp(this, MATCH, WRAP, top = 8))
-        if (Cloud.isOwner) {
+        if (pAll) card.addView(memberBtn, Ui.lp(this, MATCH, WRAP, top = 8))
+        if (Cloud.isOwner && pInv) {
             card.addView(Ui.button(this, "초대 코드 새로 만들기") { askNewCode() }.apply { minHeight = dp(44); textSize = 14f },
                 Ui.lp(this, MATCH, WRAP, top = 8))
         }
-        card.addView(Ui.button(this, "그룹 바꾸기 · 만들기 · 가입") { account.openGroups() }.apply { minHeight = dp(44); textSize = 14f },
+        if (pMan) card.addView(Ui.button(this, "그룹 바꾸기 · 만들기 · 가입") { account.openGroups() }.apply { minHeight = dp(44); textSize = 14f },
             Ui.lp(this, MATCH, WRAP, top = 8))
-        if (Cloud.isOwner) {
+        if (Cloud.isOwner && pMan) {
             val orow = Ui.row(this)
             orow.addView(Ui.button(this, "그룹장 넘겨주기") { askTransfer() }.apply { minHeight = dp(44); textSize = 13f },
                 LinearLayout.LayoutParams(0, WRAP, 1f))
