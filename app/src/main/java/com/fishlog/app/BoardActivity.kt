@@ -38,10 +38,13 @@ class BoardActivity : Activity() {
     private var all: List<PublicBoard.PTrip> = emptyList()
     private var tab = 0            // 0 = 최근 조황, 1 = 포인트 도감
     private var cat = ""           // "" = 전체
-    private var period = 1         // 0 = 1개월, 1 = 3개월, 2 = 전체
+    // v6.28 (280): 기간 = 📅 날짜 칸 (시작일 ~ 끝일) 또는 '전체 기간' · 마지막으로 고른 기간 기억
+    private var allTime = false
+    private var fromDay = 0L       // 시작일 0시
+    private var toDay = 0L         // 끝일 0시 (그날 끝까지)
     private var species: String? = null
     private var nearFirst = false
-    private var loadedPeriod = -1
+    private var loaded = false
 
     // 차단·신고·정지 (불러온 값)
     private var reports: Map<String, Int> = emptyMap()
@@ -157,6 +160,7 @@ class BoardActivity : Activity() {
             addView(ScrollView(this@BoardActivity).apply { isFillViewport = true; addView(col) }, LinearLayout.LayoutParams(MATCH, 0, 1f))
             addView(delBar, LinearLayout.LayoutParams(MATCH, WRAP))
         })
+        loadRange()
         renderControls()
         load()
     }
@@ -210,18 +214,147 @@ class BoardActivity : Activity() {
                 }
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) })
         }
+        // v6.28 (280): 출조 종류 = 글자 밑줄 탭 (옆으로 밀기)
         catRow.removeAllViews()
         (listOf("") + Store.CATS).forEachIndexed { i, c ->
-            catRow.addView(pill(if (c == "") "전체" else Store.catShort(c), cat == c, 13f) {
-                cat = c; species = null; renderControls(); render()
-            }.apply { maxLines = 1 }, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) })
+            val on = cat == c
+            catRow.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(if (i == 0) 2 else 10), dp(6), dp(10), 0)
+                addView(Ui.text(this@BoardActivity, 15f, if (on) Ui.TEXT else Ui.SUB, on, if (c == "") "전체" else Store.catShort(c)).apply { maxLines = 1 })
+                addView(View(this@BoardActivity).apply { background = Ui.bg(this@BoardActivity, if (on) Ui.ORANGE else android.graphics.Color.TRANSPARENT, 2) },
+                    LinearLayout.LayoutParams(MATCH, dp(3)).apply { topMargin = dp(6) })
+                setOnClickListener { cat = c; species = null; renderControls(); render() }
+            }, LinearLayout.LayoutParams(WRAP, WRAP))
         }
+        // 기간: 📅 날짜 칸 + '전체 기간'
         periodRow.removeAllViews()
-        listOf("최근 1개월", "3개월", "전체 기간").forEachIndexed { i, s ->
-            periodRow.addView(pill(s, period == i, 13f) {
-                period = i; renderControls(); load()
-            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(6) })
+        val field = Ui.row(this).apply {
+            setPadding(dp(12), 0, dp(12), 0); minimumHeight = dp(44)
+            background = Ui.bg(this@BoardActivity, if (allTime) Ui.CARD else android.graphics.Color.parseColor("#163447"), 12, if (allTime) Ui.LINE else Ui.BLUE)
+            addView(Ui.text(this@BoardActivity, 14f, if (allTime) Ui.SUB else Ui.TEXT, !allTime, "📅  " + if (allTime) "날짜 고르기" else rangeText()).apply { maxLines = 1 },
+                LinearLayout.LayoutParams(0, WRAP, 1f))
+            addView(Ui.text(this@BoardActivity, 12f, Ui.SUB, false, "▾"))
+            isClickable = true
+            setOnClickListener { pickRange() }
         }
+        periodRow.addView(field, LinearLayout.LayoutParams(0, WRAP, 1f))
+        periodRow.addView(pill("전체 기간", allTime, 13f) {
+            allTime = true; saveRange(); renderControls(); render()
+        }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
+    }
+
+    // ---------------- v6.28 (280): 기간 ----------------
+    private val DAY = 86_400_000L
+    private fun dayStart(ms: Long): Long = java.util.Calendar.getInstance().apply {
+        timeInMillis = ms; set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+    private fun addDays(day: Long, n: Int): Long = java.util.Calendar.getInstance().apply { timeInMillis = day; add(java.util.Calendar.DAY_OF_MONTH, n) }.timeInMillis
+    private fun rangeText(f: Long = fromDay, t: Long = toDay): String {
+        val a = SimpleDateFormat("yyyy.MM.dd", Locale.KOREA).format(Date(f))
+        val sameY = SimpleDateFormat("yyyy", Locale.KOREA).let { it.format(Date(f)) == it.format(Date(t)) }
+        val b = SimpleDateFormat(if (sameY) "MM.dd" else "yyyy.MM.dd", Locale.KOREA).format(Date(t))
+        return if (f == t) a else "$a ~ $b"
+    }
+    private fun periodLabel() = if (allTime) "전체 기간" else rangeText()
+    /** 기간 안에 든 글인가 */
+    private fun inRange(t: PublicBoard.PTrip) = allTime || (t.start >= fromDay && t.start < addDays(toDay, 1))
+    private fun loadRange() {
+        val p = getSharedPreferences("fishlog", MODE_PRIVATE)
+        val today = dayStart(System.currentTimeMillis())
+        allTime = p.getBoolean("board_all", false)
+        fromDay = p.getLong("board_from", 0L); toDay = p.getLong("board_to", 0L)
+        // 기본 = 최근 1개월 (오늘 끝 · 한 달 전 시작)
+        if (fromDay <= 0L || toDay < fromDay) { toDay = today; fromDay = java.util.Calendar.getInstance().apply { timeInMillis = today; add(java.util.Calendar.MONTH, -1) }.timeInMillis }
+    }
+    private fun saveRange() {
+        try { getSharedPreferences("fishlog", MODE_PRIVATE).edit().putBoolean("board_all", allTime).putLong("board_from", fromDay).putLong("board_to", toDay).apply() } catch (_: Exception) {}
+    }
+
+    /** 📅 날짜 칸 → 밑에서 달력: 시작일 → 끝일 · 출조 글 있는 날 주황 점 · 빠른 선택 */
+    private fun pickRange() {
+        val sh = Sheet(this, 0.74f)
+        var a: Long? = if (allTime) null else fromDay
+        var b: Long? = if (allTime) null else toDay
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = b ?: System.currentTimeMillis(); set(java.util.Calendar.DAY_OF_MONTH, 1) }
+        var month = dayStart(cal.timeInMillis)
+        val postDays = all.filter { visible(it) && (cat == "" || it.cat == cat) }.map { dayStart(it.start) }.toHashSet()
+        val today = dayStart(System.currentTimeMillis())
+        lateinit var paint: () -> Unit
+        val sel = Ui.text(this, 13f, Ui.BLUE, true, "")
+        sh.head.addView(Ui.text(this, 17f, Ui.TEXT, true, "기간 고르기"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        sh.head.addView(sel)
+        val ok = Ui.text(this, 16f, Ui.BG, true, "이 기간으로 보기").apply {
+            gravity = Gravity.CENTER; minHeight = dp(50)
+            setOnClickListener {
+                val s0 = a ?: return@setOnClickListener toast("시작일을 눌러 주세요")
+                fromDay = s0; toDay = b ?: s0; allTime = false
+                saveRange(); renderControls(); render(); sh.close()
+            }
+        }
+        sh.foot.visibility = View.VISIBLE
+        sh.foot.addView(ok, LinearLayout.LayoutParams(MATCH, WRAP))
+        fun quick(label: String, f: Long, t: Long) = pill(label, false, 12.5f) { a = f; b = t; month = java.util.Calendar.getInstance().apply { timeInMillis = t; set(java.util.Calendar.DAY_OF_MONTH, 1) }.let { dayStart(it.timeInMillis) }; paint() }.apply { minHeight = dp(34) }
+        paint = {
+            sh.body.removeAllViews()
+            sel.text = when { a == null -> "시작일을 눌러요"; b == null -> rangeText(a!!, a!!).substring(5) + " ~ 끝일?"; else -> rangeText(a!!, b!!).substring(5) }
+            ok.background = Ui.bg(this, if (a != null) Ui.BLUE else Ui.LINE, 14)
+            // 빠른 선택
+            val qs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val wk = java.util.Calendar.getInstance().apply { timeInMillis = today; set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.SUNDAY) }.timeInMillis
+            val m1 = java.util.Calendar.getInstance().apply { timeInMillis = today; set(java.util.Calendar.DAY_OF_MONTH, 1) }.timeInMillis
+            val pm1 = java.util.Calendar.getInstance().apply { timeInMillis = m1; add(java.util.Calendar.MONTH, -1) }.timeInMillis
+            listOf(quick("오늘", today, today), quick("이번 주", wk, today), quick("이번 달", m1, today), quick("지난달", pm1, addDays(m1, -1))).forEachIndexed { i, v ->
+                qs.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(6) })
+            }
+            sh.body.addView(Ui.hscroll(this, qs), Ui.lp(this, MATCH, WRAP, top = 2))
+            // 달 넘기기
+            val nav = Ui.row(this)
+            fun mv(d: Int) { month = java.util.Calendar.getInstance().apply { timeInMillis = month; add(java.util.Calendar.MONTH, d) }.timeInMillis; paint() }
+            nav.addView(Ui.text(this, 20f, Ui.TEXT, true, "‹").apply { gravity = Gravity.CENTER; setOnClickListener { mv(-1) } }, LinearLayout.LayoutParams(dp(44), dp(40)))
+            nav.addView(Ui.text(this, 16f, Ui.TEXT, true, SimpleDateFormat("yyyy년 M월", Locale.KOREA).format(Date(month))).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            nav.addView(Ui.text(this, 20f, Ui.TEXT, true, "›").apply { gravity = Gravity.CENTER; setOnClickListener { mv(1) } }, LinearLayout.LayoutParams(dp(44), dp(40)))
+            sh.body.addView(nav, Ui.lp(this, MATCH, WRAP, top = 8))
+            val wd = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, w ->
+                wd.addView(Ui.text(this, 11.5f, if (i == 0) android.graphics.Color.parseColor("#FF8A92") else Ui.SUB, false, w).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            }
+            sh.body.addView(wd, Ui.lp(this, MATCH, WRAP, top = 4))
+            val mc = java.util.Calendar.getInstance().apply { timeInMillis = month }
+            val first = mc.get(java.util.Calendar.DAY_OF_WEEK) - 1
+            val days = mc.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+            val lo = a; val hi = b ?: a
+            var row: LinearLayout? = null
+            for (cell in 0 until ((first + days + 6) / 7) * 7) {
+                if (cell % 7 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; sh.body.addView(row, Ui.lp(this, MATCH, WRAP, top = 3)) }
+                val dn = cell - first + 1
+                if (dn < 1 || dn > days) { row!!.addView(View(this), LinearLayout.LayoutParams(0, dp(42), 1f)); continue }
+                val d = addDays(month, dn - 1)
+                val edge = d == lo || d == hi
+                val inside = lo != null && hi != null && d > lo && d < hi
+                val future = d > today
+                val v = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                    background = when { edge -> Ui.bg(this@BoardActivity, Ui.BLUE, 99); inside -> Ui.bg(this@BoardActivity, android.graphics.Color.parseColor("#1D4A5E"), 4); else -> null }
+                    addView(Ui.text(this@BoardActivity, 14f, when { edge -> Ui.BG; future -> android.graphics.Color.parseColor("#55697A"); else -> Ui.TEXT }, edge || d == today, "$dn").apply { gravity = Gravity.CENTER })
+                    addView(View(this@BoardActivity).apply { background = Ui.bg(this@BoardActivity, if (d in postDays) Ui.ORANGE else android.graphics.Color.TRANSPARENT, 99) },
+                        LinearLayout.LayoutParams(dp(5), dp(5)).apply { topMargin = dp(2) })
+                    setOnClickListener {
+                        val x = a; val y = b
+                        when {
+                            x == null || y != null -> { a = d; b = null }
+                            d < x -> { a = d }
+                            else -> b = d
+                        }
+                        paint()
+                    }
+                }
+                row!!.addView(v, LinearLayout.LayoutParams(0, dp(42), 1f))
+            }
+            sh.body.addView(Ui.text(this, 11.5f, Ui.SUB, false, "시작일 → 끝일 순서로 눌러요 · 주황 점 = 출조 글 있는 날").apply { gravity = Gravity.CENTER }, Ui.lp(this, MATCH, WRAP, top = 10))
+        }
+        paint()
+        sh.show()
     }
 
     private fun load() {
@@ -230,29 +363,29 @@ class BoardActivity : Activity() {
             listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "구글 로그인을 하면 전체 조황을 볼 수 있어요"), Ui.lp(this, MATCH, WRAP, top = 14))
             return
         }
-        if (loadedPeriod == period) { render(); return }
+        if (loaded) { render(); return }
         listBox.removeAllViews()
         listBox.addView(Ui.text(this, 14f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 14))
-        val day = 86_400_000L
-        val since = when (period) { 0 -> System.currentTimeMillis() - 31 * day; 1 -> System.currentTimeMillis() - 92 * day; else -> 0L }
-        val want = period
         var left = 5
         var got: List<PublicBoard.PTrip>? = null
         var err: String? = null
         fun step() {
             left--
-            if (left > 0 || want != period) return
+            if (left > 0) return
             val list = got
             if (list == null) {
                 listBox.removeAllViews()
                 listBox.addView(Ui.text(this, 14f, Ui.ORANGE, false, err ?: "실패"), Ui.lp(this, MATCH, WRAP, top = 14))
                 return
             }
-            all = list; loadedPeriod = want
+            all = list; loaded = true
+            // v6.28 (279): 글의 그룹 번호로 지금 그룹 이름 받기 (바뀐 게 있으면 다시 그림)
+            GroupNames.load(list.map { it.gid }) { if (!isFinishing && !selMode) render() }
             refreshNick()
             render()
         }
-        PublicBoard.load(since) { list, e -> got = list; err = e; step() }
+        // v6.28 (280): 최근 글 전부 받고 기간은 폰에서 거름 (기간을 바꿔도 다시 안 받음)
+        PublicBoard.load(0L) { list, e -> got = list; err = e; step() }
         Moderation.syncBlocked { step() }
         Moderation.reportCounts { m -> reports = m; step() }
         Moderation.loadLimit { step() }
@@ -270,10 +403,10 @@ class BoardActivity : Activity() {
         return (reports[t.owner] ?: 0) < Moderation.reportLimit
     }
 
-    private fun filtered() = all.filter { (cat == "" || it.cat == cat) && visible(it) }
+    private fun filtered() = all.filter { (cat == "" || it.cat == cat) && inRange(it) && visible(it) }
 
     private fun render() {
-        if (Cloud.user == null || loadedPeriod != period) return
+        if (Cloud.user == null || !loaded) return
         listBox.removeAllViews()
         if (tab == 0) renderRecent() else renderPoints()
     }
@@ -327,7 +460,7 @@ class BoardActivity : Activity() {
         val spots = spotDots(hits) { t, _ -> MapDialog.FRIEND_COLORS[owners.indexOf(t.owner).coerceAtLeast(0) % MapDialog.FRIEND_COLORS.size] }
         val label = PublicBoard.keyLabel(key)
         if (spots.isEmpty()) { toast("$label 은(는) 위치가 있는 기록이 없어요"); return }
-        val periodText = listOf("최근 1개월", "최근 3개월", "전체 기간")[period]
+        val periodText = periodLabel()
         val radii = HashMap<MapDot, Double>().apply { spots.forEach { put(it.dot, it.radius) } }
         MapDialog.showSpots(this, "$label · $periodText", spots.map { it.dot }, { d -> radii[d] ?: 0.0 },
             "$label ${spots.size}마리 · ${spotLegend(spots)}\n진할수록 많이 잡힌 곳 · 숫자 = 마릿수 · 누르면 날짜별 요약")
@@ -454,14 +587,15 @@ class BoardActivity : Activity() {
             if (t.photoCount > 0) r.addView(Ui.chip(this, "사진 ${t.photoCount}"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
             c.addView(r)
             val pr = Ui.row(this)
-            if (t.gimg.isNotBlank()) try {
-                val bytes = android.util.Base64.decode(t.gimg, android.util.Base64.DEFAULT)
+            val gImg = t.groupImg(); val gName = t.groupName()   // v6.28 (279): 그룹 번호로 지금 이름
+            if (gImg.isNotBlank()) try {
+                val bytes = android.util.Base64.decode(gImg, android.util.Base64.DEFAULT)
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bm ->
                     pr.addView(android.widget.ImageView(this).apply { setImageBitmap(GroupIcon.circle(bm, dp(26))) },
                         LinearLayout.LayoutParams(dp(26), dp(26)).apply { rightMargin = dp(6) })
                 }
             } catch (_: Exception) {}
-            pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick}" + (if (t.gname.isNotBlank()) " · ${t.gname}" else "") +
+            pr.addView(Ui.text(this, 14f, Ui.TEXT, false, "${t.nick}" + (if (gName.isNotBlank()) " · $gName" else "") +
                 " · ${t.speciesLine()} · 총 ${t.catches.size}"),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
             if (MapDialog.paidMark(t.cat, t.paid)) pr.addView(Ui.chip(this, "유료", android.graphics.Color.parseColor("#F2C14E")),
@@ -601,7 +735,7 @@ class BoardActivity : Activity() {
             toast("바꾸는 중…")
             PublicBoard.changePrecision(this, t.id, !t.exact) { err ->
                 toast(err ?: if (!t.exact) "정확한 위치로 공개해요" else "대략적인 위치로만 공개해요")
-                if (err == null) { loadedPeriod = -1; load() }
+                if (err == null) { loaded = false; load() }
             }
         }
         else b.setNeutralButton("이 사람 차단") { _, _ -> askBlock(t) }
@@ -674,9 +808,7 @@ class BoardActivity : Activity() {
             addView(Ui.text(this@BoardActivity, 11f, Ui.SUB, false, "☑ 전체 포인트 · ☑ 나만의 포인트(안 올린 내 기록, 나만 보여요)").apply { gravity = Gravity.CENTER })
             isClickable = true
             setOnClickListener {
-                val day = 86_400_000L
-                val since = when (period) { 0 -> System.currentTimeMillis() - 31 * day; 1 -> System.currentTimeMillis() - 92 * day; else -> 0L }
-                PointMap.open(this@BoardActivity, list, cat, since)
+                PointMap.open(this@BoardActivity, list, cat, if (allTime) 0L else fromDay)
             }
         }, Ui.lp(this, MATCH, WRAP, top = 10))
         // 출조 한 건씩 (지역으로 쪼개지 않음) — 자리별 분석은 위 '포인트 지도'에서 원 그리기로
@@ -835,7 +967,7 @@ class BoardActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_PUB && resultCode == RESULT_OK && data?.getBooleanExtra("pubChanged", false) == true) {
-            PublicBoard.clearCache(); loadedPeriod = -1
+            PublicBoard.clearCache(); loaded = false
             Moderation.reportCounts { m -> reports = m; refreshNick(); load() }
         }
     }

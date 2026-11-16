@@ -38,4 +38,10 @@
     <style name="FlFullZoom" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
         <item name="android:windowAnimationStyle">@style/FlAnimZoom</item>
     </style>
+    <!-- v6.28 (278 · 280): 밑에서 올라오는 창 · 움직임은 Sheet.kt 가 직접 -->
+    <style name="FlSheet" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 </resources>

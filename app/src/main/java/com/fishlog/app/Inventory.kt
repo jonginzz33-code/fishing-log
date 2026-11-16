@@ -47,7 +47,9 @@ object Inventory {
         "vest" to "구명조끼", "cooler" to "쿨러", "lamp" to "집어등", "glove" to "장갑",
         // v4.9 (227 · 228)
         "clothes" to "의류", "tacklebox" to "태클박스", "net" to "뜰채", "knife" to "칼 · 가위", "bait" to "미끼통", "chum" to "밑밥통",
-        "cap" to "모자", "glasses" to "편광안경", "boots" to "장화", "headlamp" to "헤드랜턴", "tongs" to "집게", "gaff" to "갈고리", "basket" to "망 · 바구니")
+        "cap" to "모자", "glasses" to "편광안경", "boots" to "장화", "headlamp" to "헤드랜턴", "tongs" to "집게", "gaff" to "갈고리", "basket" to "망 · 바구니",
+        // v6.28 (277)
+        "wader" to "가슴장화")
 
     /** 이름으로 그림 고르기 (구체적인 것부터) · 없으면 "" */
     fun autoIcon(name: String): String {
@@ -57,7 +59,7 @@ object Inventory {
             listOf("편광", "선글라스", "안경") to "glasses", listOf("뜰채") to "net", listOf("밑밥통", "주걱", "밑밥") to "chum",
             listOf("미끼", "크릴", "갯지렁이", "청갯") to "bait", listOf("집게") to "tongs", listOf("갈고리", "호미") to "gaff",
             listOf("바구니", "망태", "살림망", "그물망") to "basket", listOf("가위", "칼", "나이프") to "knife",
-            listOf("장화", "웨이더", "신발") to "boots", listOf("모자", "캡") to "cap",
+            listOf("가슴장화", "웨이더", "웨이다", "멜빵장화") to "wader", listOf("장화", "신발") to "boots", listOf("모자", "캡") to "cap",
             listOf("의류", "옷", "자켓", "재킷", "우의", "바지", "방한복", "상의", "하의") to "clothes",
             listOf("텅스텐") to "tungsten", listOf("형광", "야광") to "glow", listOf("막대봉돌", "막대") to "stick",
             listOf("쇠봉돌", "무쇠") to "iron", listOf("구멍봉돌", "관통") to "hole", listOf("도래봉돌") to "swsinker",
@@ -183,7 +185,6 @@ object Inventory {
     fun show(a: Activity) {
         fun dp(v: Int) = Ui.dp(a, v)
         var cats = load(a)
-        var cur: Cat? = null
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
@@ -315,6 +316,7 @@ object Inventory {
             gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 10, Ui.LINE); setOnClickListener { onClick() }
         }
 
+        var openCatRef: (Cat) -> Unit = {}
         fun renderCats() {
             top.removeAllViews()
             top.addView(Ui.text(a, 18f, Ui.TEXT, true, "🎒 내 가방"), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -327,7 +329,7 @@ object Inventory {
                 val r = LinearLayout(a).apply {
                     orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12))
                     background = Ui.bg(a, Ui.CARD, 14)
-                    setOnClickListener { cur = c; render() }
+                    setOnClickListener { openCatRef(c) }
                 }
                 r.addView(iconView(a, c.icon, 46).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 12) },
                     LinearLayout.LayoutParams(dp(46), dp(46)))
@@ -356,74 +358,85 @@ object Inventory {
             }, Ui.lp(a, MATCH, WRAP, top = 14))
         }
 
-        fun renderItems(c: Cat) {
-            top.removeAllViews()
-            top.addView(Ui.text(a, 15f, Color.parseColor("#FFB27A"), true, "‹ 가방").apply {
-                setPadding(0, dp(6), dp(10), dp(6)); setOnClickListener { cur = null; render() }
-            })
-            val ttl = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-            ttl.addView(iconView(a, c.icon, 32), LinearLayout.LayoutParams(dp(32), dp(32)))
-            ttl.addView(Ui.text(a, 17f, Ui.TEXT, true, c.name).apply { maxLines = 1; setPadding(dp(6), 0, 0, 0) })
-            top.addView(ttl, LinearLayout.LayoutParams(0, WRAP, 1f))
-            top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
-                gravity = Gravity.CENTER; setPadding(dp(14), dp(6), dp(14), dp(6)); background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
-                setOnClickListener { dlg.dismiss() }
-            })
-            if (c.items.isEmpty()) box.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 항목이 없어요 · 아래 '＋ 항목 추가'"), Ui.lp(a, MATCH, WRAP, top = 10))
-            c.items.forEach { it ->
-                val card = LinearLayout(a).apply {
-                    orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(10), dp(10))
-                    background = Ui.bg(a, Ui.CARD, 14, if (it.isLow()) Color.parseColor("#E8505B") else Color.TRANSPARENT)
-                    setOnClickListener { _ -> editItem(c, it) }
-                }
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-                val iic = if (it.icon == "-") "" else it.icon.ifBlank { autoIcon(it.name) }
-                if (iic.isNotEmpty()) r.addView(iconView(a, iic, 34).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 10) },
-                    LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(8) })
-                r.addView(Ui.text(a, 15.5f, Ui.TEXT, true, it.name), LinearLayout.LayoutParams(0, WRAP, 1f))
-                if (it.subs.isEmpty()) r.addView(qtyRow(it.qty, it.isLow(), 18f) { d -> it.qty = maxOf(0, it.qty + d); save(a, cats); render() })
-                else r.addView(Ui.text(a, 18f, if (it.isLow()) Color.parseColor("#FF8A92") else Ui.ORANGE, true, "${it.total()}").apply { setPadding(dp(8), 0, dp(14), 0) })
-                card.addView(r)
-                it.subs.forEach { s ->
-                    val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(4), 0, 0) }
-                    sr.addView(Ui.text(a, 13.5f, Ui.SUB, false, "· ${s.name}"), LinearLayout.LayoutParams(0, WRAP, 1f))
-                    sr.addView(qtyRow(s.qty, false, 15f) { d -> s.qty = maxOf(0, s.qty + d); save(a, cats); render() })
-                    card.addView(sr)
-                }
-                val notes = listOfNotNull(it.note.takeIf { n -> n.isNotBlank() }, if (it.low > 0) (if (it.isLow()) "⚠ 부족 (${it.low}개 아래)" else "부족 기준 ${it.low}개") else null)
-                if (notes.isNotEmpty()) card.addView(Ui.text(a, 11.5f, if (it.isLow()) Color.parseColor("#FF8A92") else Ui.SUB, false, notes.joinToString(" · ")), Ui.lp(a, MATCH, WRAP, top = 4))
-                // 수정 · 삭제 (눈에 보이게)
-                val act = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        /** v6.28 (278): 카테고리를 누르면 밑에서 올라오는 창 — 가방 목록은 뒤에 흐리게 보임 */
+        var sheetRender: (() -> Unit)? = null
+        val opened = HashSet<Item>()   // 호수(세부) 펼친 항목
+        fun openCat(c: Cat) {
+            val sh = Sheet(a)
+            fun itemMenu(it: Item) {
                 val idx = c.items.indexOf(it)
-                if (idx > 0) act.addView(smallBtn("▲", Ui.SUB) { c.items.removeAt(idx); c.items.add(idx - 1, it); save(a, cats); render() },
-                    LinearLayout.LayoutParams(dp(34), dp(32)).apply { rightMargin = dp(6) })
-                if (idx < c.items.size - 1) act.addView(smallBtn("▼", Ui.SUB) { c.items.removeAt(idx); c.items.add(idx + 1, it); save(a, cats); render() },
-                    LinearLayout.LayoutParams(dp(34), dp(32)).apply { rightMargin = dp(6) })
-                act.addView(smallBtn("✎ 수정", Ui.TEXT) { editItem(c, it) }, LinearLayout.LayoutParams(dp(70), dp(32)))
-                act.addView(smallBtn("🗑 삭제", Color.parseColor("#FF8A92")) {
-                    confirm("'${it.name}'을(를) 지울까요?") { c.items.remove(it); save(a, cats); render() }
-                }, LinearLayout.LayoutParams(dp(70), dp(32)).apply { leftMargin = dp(6) })
-                card.addView(act, Ui.lp(a, MATCH, WRAP, top = 6))
-                box.addView(card, Ui.lp(a, MATCH, WRAP, top = 8))
+                val acts = mutableListOf<Pair<String, () -> Unit>>()
+                acts.add("✎ 수정 (이름 · 비고 · 호수 · 부족 기준)" to { editItem(c, it) })
+                if (idx > 0) acts.add("▲ 위로" to { c.items.removeAt(idx); c.items.add(idx - 1, it); save(a, cats); render() })
+                if (idx in 0 until c.items.size - 1) acts.add("▼ 아래로" to { c.items.removeAt(idx); c.items.add(idx + 1, it); save(a, cats); render() })
+                acts.add("🗑 삭제" to { confirm("'${it.name}'을(를) 지울까요?") { c.items.remove(it); save(a, cats); render() } })
+                AlertDialog.Builder(a, R.style.FlAlert).setTitle(it.name)
+                    .setItems(acts.map { p -> p.first }.toTypedArray()) { _, w -> acts[w].second() }
+                    .setNegativeButton("닫기", null).show()
             }
-            box.addView(Ui.text(a, 14f, Ui.TEXT, true, "＋ 항목 추가").apply {
-                gravity = Gravity.CENTER; minHeight = dp(46); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.LINE)
-                setOnClickListener { editItem(c, null) }
-            }, Ui.lp(a, MATCH, WRAP, top = 10))
-            box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "＋ − = 수량 · ✎ 수정 = 이름 · 비고 · 세부(호수) · 부족 기준 · 🗑 삭제 · ▲▼ 순서").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
+            fun paint() {
+                if (!cats.contains(c)) { sh.close(); return }
+                sh.head.removeAllViews(); sh.body.removeAllViews()
+                sh.head.addView(iconView(a, c.icon, 32), LinearLayout.LayoutParams(dp(32), dp(32)))
+                sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, c.name).apply { maxLines = 1; setPadding(dp(8), 0, 0, 0) }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                sh.head.addView(Ui.text(a, 12f, Ui.SUB, false, "${c.total()}개 · 아래로 내리면 닫혀요"))
+                if (c.items.isEmpty()) sh.body.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 항목이 없어요 · 아래 '＋ 항목 추가'"), Ui.lp(a, MATCH, WRAP, top = 6))
+                c.items.forEach { it ->
+                    val low = it.isLow()
+                    val card = LinearLayout(a).apply {
+                        orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(8), dp(8))
+                        background = Ui.bg(a, Ui.CARD, 12, if (low) Color.parseColor("#E8505B") else Color.TRANSPARENT)
+                    }
+                    val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(40) }
+                    val iic = if (it.icon == "-") "" else it.icon.ifBlank { autoIcon(it.name) }
+                    if (iic.isNotEmpty()) r.addView(iconView(a, iic, 34).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 10) },
+                        LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(8) })
+                    val tc = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    tc.addView(Ui.text(a, 15f, Ui.TEXT, true, it.name).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    val subLine = if (it.subs.isNotEmpty()) it.subs.joinToString(" · ") { s -> "${s.name} ${s.qty}" } else ""
+                    val info = listOf(subLine, it.note, if (low) "⚠ 부족 (${it.low}개 아래)" else "").filter { x -> x.isNotBlank() }.joinToString(" · ")
+                    if (info.isNotBlank()) tc.addView(Ui.text(a, 11.5f, if (low) Color.parseColor("#FF8A92") else Ui.SUB, false, info).apply {
+                        maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
+                    r.addView(tc, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    if (it.subs.isEmpty()) r.addView(qtyRow(it.qty, low, 17f) { d -> it.qty = maxOf(0, it.qty + d); save(a, cats); render() })
+                    else {
+                        val open = it in opened
+                        r.addView(Ui.text(a, 17f, if (low) Color.parseColor("#FF8A92") else Ui.ORANGE, true, "${it.total()}").apply { setPadding(dp(8), 0, dp(6), 0) })
+                        r.addView(Ui.text(a, 20f, Ui.SUB, true, if (open) "⌄" else "›").apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(28), dp(36)))
+                        card.setOnClickListener { _ -> if (!opened.remove(it)) opened.add(it); paint() }
+                    }
+                    card.addView(r)
+                    if (it.subs.isNotEmpty() && it in opened) it.subs.forEach { s ->
+                        val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(42), dp(4), 0, 0) }
+                        sr.addView(Ui.text(a, 13.5f, Ui.SUB, false, "· ${s.name}"), LinearLayout.LayoutParams(0, WRAP, 1f))
+                        sr.addView(qtyRow(s.qty, false, 15f) { d -> s.qty = maxOf(0, s.qty + d); save(a, cats); render() })
+                        card.addView(sr)
+                    }
+                    card.setOnLongClickListener { _ -> itemMenu(it); true }
+                    sh.body.addView(card, Ui.lp(a, MATCH, WRAP, top = 6))
+                }
+                sh.body.addView(Ui.text(a, 14f, Ui.TEXT, true, "＋ 항목 추가").apply {
+                    gravity = Gravity.CENTER; minHeight = dp(46); background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.LINE)
+                    setOnClickListener { editItem(c, null) }
+                }, Ui.lp(a, MATCH, WRAP, top = 10))
+                sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "＋ − = 수량 · 꾹 누르면 수정 · 삭제 · 순서 · 호수 있는 건 › 눌러 펼치기").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 6))
+            }
+            sheetRender = { paint() }
+            sh.onClose = { sheetRender = null }
+            paint()
+            sh.show()
         }
 
+        openCatRef = { c -> openCat(c) }
         render = {
             box.removeAllViews()
-            val c = cur
-            if (c != null && cats.contains(c)) renderItems(c) else { cur = null; renderCats() }
+            renderCats()
+            sheetRender?.invoke()
         }
         render()
         dlg.setContentView(root)
         Ui.edge(dlg.window)   // v6.0 (242-1 · 243): 상태바 · 하단 버튼 여백 · 큰 화면 가운데
-        dlg.setOnKeyListener { _, code, ev ->
-            if (code == android.view.KeyEvent.KEYCODE_BACK && ev.action == android.view.KeyEvent.ACTION_UP && cur != null) { cur = null; render(); true } else false
-        }
         dlg.show()
     }
 }

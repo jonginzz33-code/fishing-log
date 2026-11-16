@@ -222,8 +222,10 @@ service cloud.firestore {
     match /public/{pid} {
       allow read: if signedIn();
       allow create: if notBanned() && request.resource.data.owner == request.auth.uid;
-      allow update: if notBanned() && resource.data.owner == request.auth.uid
-        && request.resource.data.owner == request.auth.uid;
+      allow update: if (notBanned() && resource.data.owner == request.auth.uid
+        && request.resource.data.owner == request.auth.uid)
+        // v6.28 (279): 관리자가 예전 글에 그룹 번호 채우기 (그룹 번호 · 이름 · 그림 · 바뀐 시각만)
+        || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gid', 'gname', 'gimg', 'upd']));
       allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       match /photos/{ph} {
         allow read: if signedIn();
@@ -235,8 +237,18 @@ service cloud.firestore {
         allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
       }
     }
+    // v6.28 (279): 게시판에 보일 그룹 이름표 (그룹 고유 번호 → 지금 이름 · 작은 그림) — 읽기 모두 · 쓰기 그 그룹 그룹장 · 관리자
+    match /groupNames/{gid} {
+      allow read: if signedIn();
+      allow create, update: if (isAdmin() || isGroupOwner(gid))
+        && request.resource.data.keys().hasOnly(['name', 'img', 't'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.img is string && request.resource.data.img.size() <= 20000;
+      allow delete: if isAdmin() || isGroupOwner(gid);
+    }
     match /groups/{gid} {
-      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      // v6.28 (279): 관리자도 그룹 이름 읽기 (게시판 그룹 번호 채우기)
+      allow read: if signedIn() && (request.auth.uid in resource.data.members || isAdmin());
       // 그룹 만들기: 운영자 또는 '그룹 만들기' 권한을 받은 사람만
       allow create: if notBanned() && (isAdmin() || hasPerm('group'))
         && request.resource.data.owner == request.auth.uid

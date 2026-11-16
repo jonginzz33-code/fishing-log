@@ -2030,12 +2030,15 @@ class MainActivity : Activity() {
             .setTitle("${Store.catLabel(cat)} 어종 추가" + if (Cloud.isAdmin) " (모든 사용자)" else " (내 목록)")
             .setView(input)
             .setPositiveButton("추가") { _, _ ->
-                val n = input.text.toString().trim()
-                if (n.isEmpty()) return@setPositiveButton
-                // 관리자: 모두의 목록에 · 일반 사용자: 내 목록에만
-                if (Cloud.isAdmin) { Store.addSpecies(cat, n); saveSpeciesToServer() }
-                else { Store.addMySpecies(cat, n); showMessage("'$n'을(를) 내 어종 목록에 추가했어요 (나만 보여요)") }
-                then?.invoke(n)
+                val n0 = input.text.toString().trim()
+                if (n0.isEmpty()) return@setPositiveButton
+                // v6.28 (253): 오타면 "혹시 '낙지'인가요?"
+                SpeciesFix.check(this, n0) { n ->
+                    // 관리자: 모두의 목록에 · 일반 사용자: 내 목록에만
+                    if (Cloud.isAdmin) { Store.addSpecies(cat, n); saveSpeciesToServer() }
+                    else { Store.addMySpecies(cat, n); showMessage("'$n'을(를) 내 어종 목록에 추가했어요 (나만 보여요)") }
+                    then?.invoke(n)
+                }
             }
             .setNegativeButton("취소", null)
             .show()

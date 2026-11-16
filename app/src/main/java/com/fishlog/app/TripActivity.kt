@@ -1072,7 +1072,8 @@ class TripActivity : Activity() {
     private fun renameSpecies(t: Store.Trip, slot: Int) {
         val old = t.name(slot); val n = t.count(slot)
         val cat = t.cat.ifBlank { Store.category }
-        val list = Store.species(cat).filter { it != old }
+        // v6.28 (253): '니ㅏㄱ지' 처럼 오타 같으면 비슷한 어종(낙지)을 맨 위에
+        val list = (listOfNotNull(SpeciesFix.guess(old, SpeciesFix.known())) + Store.species(cat)).distinct().filter { it != old }
         fun confirm(newName: String) {
             if (newName.isBlank() || newName == old) return
             AlertDialog.Builder(this, R.style.FlAlert)
@@ -1087,7 +1088,7 @@ class TripActivity : Activity() {
             AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("어종 이름 직접 쓰기")
                 .setView(input)
-                .setPositiveButton("다음") { _, _ -> confirm(input.text.toString().trim()) }
+                .setPositiveButton("다음") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { n0 -> SpeciesFix.check(this, n0) { n -> confirm(n) } } }
                 .setNegativeButton("취소", null).show()
         }
     }
@@ -1137,8 +1138,8 @@ class TripActivity : Activity() {
                 .setTitle("${Store.catLabel(cat)} 어종 추가")
                 .setView(input)
                 .setPositiveButton("추가") { _, _ ->
-                    val n = input.text.toString().trim()
-                    if (n.isNotEmpty()) { if (Cloud.isAdmin) Store.addSpecies(cat, n) else Store.addMySpecies(cat, n); Store.renameInTrip(t.id, slot, n) }
+                    val n0 = input.text.toString().trim()
+                    if (n0.isNotEmpty()) SpeciesFix.check(this, n0) { n -> if (Cloud.isAdmin) Store.addSpecies(cat, n) else Store.addMySpecies(cat, n); Store.renameInTrip(t.id, slot, n) }
                 }
                 .setNegativeButton("취소", null)
                 .show()

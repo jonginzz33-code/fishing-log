@@ -71,8 +71,13 @@ object PublicBoard {
         /** 그때 날씨 */
         val wx: String = "",
         /** v6.10 (257): 이동 경로도 공개한 글 (경로는 photos/track 에 따로) */
-        val hasTrack: Boolean = false
+        val hasTrack: Boolean = false,
+        /** v6.28 (279): 그룹 고유 번호 → groupNames 에서 지금 이름 (없으면 gname 그대로) */
+        val gid: String = ""
     ) {
+        /** 지금 그룹 이름 · 작은 그림 (그룹장이 이름을 바꿨으면 바뀐 이름) */
+        fun groupName(): String = GroupNames.get(gid)?.name?.takeIf { it.isNotBlank() } ?: gname
+        fun groupImg(): String = GroupNames.get(gid)?.let { n -> n.img.ifBlank { if (n.name.isNotBlank()) "" else gimg } } ?: gimg
         fun name(slot: Int) = names.getOrElse(slot - 1) { "${slot}번" }
         fun count(slot: Int) = catches.count { it.slot == slot }
         fun speciesLine(): String = ((1..maxOf(2, names.size)).toList() + catches.map { it.slot }).distinct().sorted()
@@ -377,6 +382,7 @@ object PublicBoard {
             // 고른 그룹 표시 (이름 + 아주 작은 그룹 이미지)
             Cloud.groups.firstOrNull { it.id == Store.pubGroup }?.let { g ->
                 doc["gname"] = g.title
+                doc["gid"] = g.id   // v6.28 (279)
                 GroupIcon.cached(g.id)?.let { b -> smallB64(b)?.let { doc["gimg"] = it } }
             }
             val ref = db.collection("public").document(docId(t))
@@ -497,7 +503,7 @@ object PublicBoard {
                             (d.get("names") as? List<*>)?.map { it.toString() } ?: listOf("1번", "2번"), cs,
                             (d.getLong("photoCount") ?: 0L).toInt(), prec, d.getBoolean("paid") == true,
                             d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "",
-                            d.getBoolean("hasTrack") == true)
+                            d.getBoolean("hasTrack") == true, d.getString("gid") ?: "")
                     } catch (_: Exception) { null }
                 }.sortedByDescending { it.start }, null)
         }

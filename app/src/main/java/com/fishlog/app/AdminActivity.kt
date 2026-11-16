@@ -149,6 +149,7 @@ class AdminActivity : Activity() {
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
         renderMinVersion()
         renderStoreMove()
+        renderGroupFill()
         renderCatAdmin()
         renderLimit()
         renderReports()
@@ -179,6 +180,20 @@ class AdminActivity : Activity() {
             Cloud.setMinVersion(0) { e -> toast(e ?: "막기를 풀었어요"); load() }
         }.apply { minHeight = dp(44); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         c.addView(r, Ui.lp(this, MATCH, WRAP, top = 10))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    // ---------------- v6.28 (279): 예전 게시판 글에 그룹 번호 채우기 ----------------
+    private fun renderGroupFill() {
+        section("🏷 게시판 그룹 번호 채우기", "예전 글 1회")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 12.5f, Ui.SUB, false, "그룹 이름을 바꾸면 게시판 글에도 바뀐 이름이 보이게, 예전 글에 그룹 고유 번호를 넣어요. 같은 출조가 올라간 그룹을 찾아서 넣어요 (한 번만 누르면 돼요 · 새 글은 자동)."))
+        val st = Ui.text(this, 12.5f, Ui.TEXT, false, "")
+        c.addView(Ui.button(this, "번호 채우기 시작", true) {
+            st.text = "찾는 중…"
+            GroupNames.backfill({ p -> runOnUiThread { st.text = "찾는 중… $p" } }) { msg -> runOnUiThread { st.text = msg; toast(msg); PublicBoard.clearCache() } }
+        }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(st, Ui.lp(this, MATCH, WRAP, top = 6))
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 

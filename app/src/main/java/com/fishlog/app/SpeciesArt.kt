@@ -282,7 +282,7 @@ object SpeciesArt {
 
     /** 어종 이름 → 그림판 그림 이름 ("" = 없음, 손그림 사용) */
     fun imgKeyOf(name: String): String {
-        val n = name.replace(" ", "")
+        val n = SpeciesFix.forArt(name).replace(" ", "")   // v6.28 (253): '니ㅏㄱ지' → 낙지
         return when {
             n.contains("쭈갑") -> ""
             n.contains("해마") || n.contains("불가사리") || n.contains("쏨뱅이") -> ""
@@ -400,7 +400,7 @@ object SpeciesArt {
 
     /** 어종 이름 → 그림 이름 */
     fun keyOf(name: String): String {
-        val n = name.replace(" ", "")
+        val n = SpeciesFix.forArt(name).replace(" ", "")   // v6.28 (253)
         if (n in NAMES) return n
         return when {
             n.contains("쭈꾸미") || n.contains("주꾸미") -> "주꾸미"

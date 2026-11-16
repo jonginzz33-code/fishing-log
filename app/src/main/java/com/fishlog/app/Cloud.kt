@@ -161,6 +161,8 @@ object Cloud {
                                     db.collection("groups").document(gr.id).collection("members").get()
                                         .addOnSuccessListener { q -> q.documents.forEach { m -> m.getString("name")?.let { memberNames[m.id] = it } }; fireChanged() }
                                 }
+                                // v6.28 (279): 내가 그룹장인 그룹의 게시판 이름표 맞추기 (바뀐 것만)
+                                GroupNames.syncMine()
                                 fireChanged()
                                 done?.invoke(null)
                             }
@@ -571,7 +573,7 @@ object Cloud {
     fun renameGroup(name: String, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
         db.collection("groups").document(g.id).update("name", name)
-            .addOnSuccessListener { refresh(done) }
+            .addOnSuccessListener { refresh(done) }   // refresh 끝에 GroupNames.syncMine() 로 게시판 이름표도 (279)
             .addOnFailureListener { done(it.message ?: "이름 바꾸기 실패") }
     }
 
@@ -768,7 +770,7 @@ object Cloud {
     fun setGroupImage(gid: String, b64: String?, done: (String?) -> Unit) {
         val ref = db.collection("groups").document(gid).collection("meta").document("img")
         val task = if (b64 == null) ref.delete() else ref.set(mapOf("data" to b64, "t" to System.currentTimeMillis()))
-        task.addOnSuccessListener { imgCache[gid] = b64; GroupIcon.put(gid, b64); done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
+        task.addOnSuccessListener { imgCache[gid] = b64; GroupIcon.put(gid, b64); groups.firstOrNull { it.id == gid }?.let { GroupNames.push(it) }; done(null) }.addOnFailureListener { done(it.message ?: "저장 실패 (그룹장만 바꿀 수 있어요)") }
     }
 
     /** 멤버 내보내기 (그룹장만). removeTrips = 그 사람이 올린 출조도 지우기 */

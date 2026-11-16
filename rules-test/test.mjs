@@ -12,6 +12,7 @@ await env.withSecurityRulesDisabled(async c => {
   await setDoc(doc(d, 'tide/old'), { ext: '[]', at: now - 3 * 3600e3, by: 'X' });
   await setDoc(doc(d, 'tide/fresh'), { ext: '[]', at: now - 60e3, by: 'X' });
   await setDoc(doc(d, 'public/B_9'), { owner: 'B' });
+  await setDoc(doc(d, 'public/B_8'), { owner: 'B', names: ['낙지'] });
   await setDoc(doc(d, 'chatImg/i9'), { uid: 'B', d: 'x', t: now });
 });
 const A = env.authenticatedContext('A', { email: 'a@x.com' }).firestore();
@@ -55,7 +56,19 @@ await ok('그룹 채팅 큰 사진', setDoc(doc(B, 'groups/g1/chatImg/i2'), { ui
 await ok('그룹장이 그룹 사진 지우기', deleteDoc(doc(A, 'groups/g1/chatImg/i2')));
 await ok('문의 사진', setDoc(doc(B, 'inquiries/B/msgs/q1'), { admin: false, text: '', t: now, img: 'x'.repeat(250000) }));
 await ok('내 큰 사진 지우기', deleteDoc(doc(B, 'chatImg/i1')));
+await ok('그룹장이 그룹 이름표 쓰기', setDoc(doc(A, 'groupNames/g1'), { name: '테스트 그룹', img: '', t: now }));
+await ok('누구나 그룹 이름표 읽기', getDoc(doc(B, 'groupNames/g1')));
+await ok('관리자가 그룹 이름표 쓰기', setDoc(doc(ADM, 'groupNames/g1'), { name: '테스트 그룹', img: 'abc', t: now }));
+await ok('관리자가 그룹 이름 읽기', getDoc(doc(ADM, 'groups/g1')));
+await ok('관리자가 게시판 글에 그룹 번호 채우기', updateDoc(doc(ADM, 'public/B_8'), { gid: 'g1', gname: '테스트 그룹', upd: now }));
+await ok('글 주인이 그룹 번호 넣어 올리기', setDoc(doc(A, 'public/A_1'), { owner: 'A', hasTrack: true, gid: 'g1', gname: '테스트 그룹' }));
 console.log('[막아야 하는 일]');
+await no('그룹장 아닌 그룹원이 이름표 바꾸기', setDoc(doc(B, 'groupNames/g1'), { name: '가짜', img: '', t: now }));
+await no('이름표에 다른 값 끼워 넣기', setDoc(doc(A, 'groupNames/g1'), { name: 'x', img: '', t: now, evil: 1 }));
+await no('그룹장 아닌 사람이 이름표 지우기', deleteDoc(doc(B, 'groupNames/g1')));
+await no('관리자가 남의 글 내용 바꾸기', updateDoc(doc(ADM, 'public/B_8'), { gid: 'g1', names: ['가짜'] }));
+await no('남의 게시판 글에 그룹 번호 넣기', updateDoc(doc(A, 'public/B_8'), { gid: 'g9' }));
+await no('그룹원 아닌 사람이 그룹 읽기', getDoc(doc(env.authenticatedContext('C', { email: 'c@x.com' }).firestore(), 'groups/g1')));
 await no('남의 게시판 경로 덮어쓰기', setDoc(doc(B, 'public/A_1/photos/track'), { owner: 'B', pts: [9] }));
 await no('남의 게시판 글에 사진 넣기', setDoc(doc(B, 'public/A_1/photos/evil'), { owner: 'B' }));
 await no('남의 그룹 경로 덮어쓰기', setDoc(doc(B, 'groups/g1/trips/A_1/detail/track'), { owner: 'B', pts: [9] }));
