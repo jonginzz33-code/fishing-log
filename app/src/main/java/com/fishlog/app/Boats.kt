@@ -61,7 +61,7 @@ object Boats {
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
         val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        top.addView(Ui.text(a, 20f, Ui.TEXT, true, "⛴ 자주 가는 사이트"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        top.addView(Ui.text(a, 20f, Ui.TEXT, true, "🌐 자주 가는 사이트"), LinearLayout.LayoutParams(0, WRAP, 1f))
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(16), dp(8), dp(16), dp(8))
             background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { dlg.dismiss() }

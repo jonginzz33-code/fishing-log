@@ -920,7 +920,7 @@ class MainActivity : Activity() {
         menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
             startActivity(Intent(this, HelpActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP))
-        menuBox.addView(Ui.button(this, "⛴ 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        menuBox.addView(Ui.button(this, "🌐 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         innerRecent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         menuBox.addView(innerRecent, Ui.lp(this, MATCH, WRAP))
@@ -990,7 +990,7 @@ class MainActivity : Activity() {
         QItem("map", "🗺", "지도", "#1C5F86", "#7FD3E8"),
         QItem("chat", "💬", "채팅", "#2A2310", "#F2C14E"),
         QItem("bag", "🎒", "가방", "#12301F", "#5FD39A"),
-        QItem("boats", "⛴", "사이트", "#10283A", "#5BC8DF"),   // v6.23 (270) · v6.24 (272) 자주 가는 사이트
+        QItem("boats", "🌐", "사이트", "#10283A", "#5BC8DF"),   // v6.23 (270) · v6.24 (272) 자주 가는 사이트
         QItem("groupwin", "👥", "그룹", "#12301F", "#2F6A48"),
         QItem("settings", "⚙", "설정", "#1A2A30", "#5FC4E0"),
         QItem("cal", "🎣", "추천", "#2A2410", "#6A5A22"),

@@ -139,7 +139,7 @@ class SettingsActivity : Activity() {
         }
         val cPhotos = Ui.checkFit(android.widget.CheckBox(this)).apply { isChecked = p.getBoolean("bak_photos", true) }
         val cMaps = Ui.checkFit(android.widget.CheckBox(this)).apply { isChecked = p.getBoolean("bak_maps", true) }
-        val sSet = line("⚙ 설정 · 🎒 가방 · ⛴ 사이트 · 🎮 리모컨", "퀵바 · 기록 방식 · 화면 크기 · 알람 · ⭐ 즐겨찾기 지점 · 서버에도 저장", null)
+        val sSet = line("⚙ 설정 · 🎒 가방 · 🌐 사이트 · 🎮 리모컨", "퀵바 · 기록 방식 · 화면 크기 · 알람 · ⭐ 즐겨찾기 지점 · 서버에도 저장", null)
         val sTrips = line("📚 출조 기록", "서버에도 자동 백업돼요 (지금처럼)", null)
         val sPhotos = line("📷 사진 원본", "폰에만", cPhotos)
         val sMaps = line("🗺 받아 둔 지도", "폰에만 · 안 넣어도 새 폰에서 다시 받으면 돼요", cMaps)
