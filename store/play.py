@@ -14,8 +14,8 @@ LANG = "ko-KR"
 API = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{PKG}"
 UP = f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PKG}"
 HERE = os.path.dirname(os.path.abspath(__file__))
-# 스토어에 올릴 스크린샷 (순서대로) — 3번은 다른 사람 경로가 보여서 사용자 확인 전까지 뺌
-SHOTS = ["screenshot-1.png", "screenshot-2.png", "screenshot-4.png"]
+# 스토어에 올릴 스크린샷 (순서대로 · 최대 8장) — 2026-11-17 사용자가 보낸 화면 · 닉네임 · 선사 이름/주소는 흐리게
+SHOTS = ["screenshot-1.png", "screenshot-2.png", "screenshot-3.png", "screenshot-7.png", "screenshot-5.png", "screenshot-6.png", "screenshot-4.png"]
 
 def session():
     info = json.loads(os.environ["PLAY_SERVICE_ACCOUNT_JSON"])
