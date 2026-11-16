@@ -449,6 +449,14 @@ class TripActivity : Activity() {
             (if (viewOnly) t.place() else if (t.place().isBlank()) "배·항구 입력 ✎" else t.place() + " ✎")).apply {
             if (!viewOnly) setOnClickListener { askPlace(t) }
         }, Ui.lp(this, MATCH, WRAP, top = 2))
+        // v6.23 (270): 자주 가는 선사에 같은 배 이름이 있으면 예약 사이트 바로가기
+        if (!viewOnly) Boats.find(this, t.boat)?.let { site ->
+            root.addView(Ui.text(this, 13f, Ui.BLUE, true, "🌐 ${site.name} 예약 사이트 열기 ›").apply {
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.BLUE)
+                setOnClickListener { Boats.openUrl(this@TripActivity, site.url) }
+            }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(6) })
+        }
         val fresh = t.isFresh()
         root.addView(Ui.text(this, 13f, Ui.SUB, false,
             (if (t.cat.isNotBlank()) Store.catLabel(t.cat) + " · " else if (fresh) "🏞 민물 · " else "") +
