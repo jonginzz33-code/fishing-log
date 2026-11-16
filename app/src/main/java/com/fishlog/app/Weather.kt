@@ -312,14 +312,26 @@ object Weather {
         // 기억 시간: 오늘은 30분(낙뢰·지금 날씨), 다른 날은 3시간 30분 (기상청 예보는 3시간마다 바뀜)
         val ttl = if (dayStart == dayStartOf(System.currentTimeMillis())) 30 * 60_000L else KEEP_MS
         cache[key]?.let { (at, d) -> if (System.currentTimeMillis() - at < ttl) { done(d); return } }
+        // v6.20 (266): 폰 파일에 저장된 것 (앱을 껐다 켜도 기억 시간 안이면 다시 안 받음 · 새로고침 직후는 건너뜀)
+        if (System.currentTimeMillis() >= skipFreshUntil) diskDay(key)?.let { (at, d) ->
+            if (System.currentTimeMillis() - at < ttl) { cache[key] = at to d; done(d); return }
+        }
         val app = ctx.applicationContext
         Thread {
             val d = try { load(app, lat, lon, dayStart) } catch (e: Exception) {
                 Day(dayStart, emptyList(), "바람 정보를 못 받았어요 (인터넷 확인)", "", null, "")
             }
+            var out = d
+            if (d.hours.isNotEmpty()) saveDay(key, d)
+            else diskDay(key)?.let { (at, old) ->
+                // 못 받았으면 마지막에 받은 날씨라도 (몇 시간 전인지 표시)
+                out = Day(old.dayStart, old.hours, "📦 ${ago(at)} 받은 날씨예요 (지금은 못 받음 · 인터넷 확인)" +
+                    (if (old.windNote.isNotBlank()) " · " + old.windNote else ""), old.seaNote, old.measured, old.measuredNote,
+                    old.kmaNote, old.fromKma, old.windBasis)
+            }
             main.post {
                 if (d.hours.isNotEmpty()) cache[key] = System.currentTimeMillis() to d
-                done(d)
+                done(out)
             }
         }.start()
     }
@@ -811,17 +823,129 @@ object Weather {
     }
 
     /** 새로고침: 기억해 둔 값 모두 버리기 (서버 저장값은 그대로) */
-    fun clearCache() { cache.clear(); kmaCache.clear(); weekCache = null }
+    fun clearCache() { cache.clear(); kmaCache.clear(); weekCache = null; skipFreshUntil = System.currentTimeMillis() + 60_000L }
+
+    // ---------------- v6.20 (266): 받은 날씨를 폰 파일에도 (filesDir/weather) ----------------
+    //  앱을 껐다 켜도 기억 시간 안이면 다시 안 받고, 받기에 실패하면 마지막 저장분을 'N시간 전' 표시와 함께 보여 줌
+    //  새로고침은 새로 받기만 시도 (실패해도 저장분은 그대로)
+    @Volatile private var skipFreshUntil = 0L
+    private const val DISK_KEEP_MS = 3 * 86_400_000L
+
+    private fun diskFile(key: String): java.io.File? = Cloud.appContext?.let {
+        java.io.File(java.io.File(it.filesDir, "weather").apply { mkdirs() }, key.replace(Regex("[^A-Za-z0-9._-]"), "_") + ".json")
+    }
+
+    private fun diskWrite(key: String, o: JSONObject) {
+        try {
+            val f = diskFile(key) ?: return
+            val tmp = java.io.File(f.path + ".tmp")
+            tmp.writeText(JSONObject().put("at", System.currentTimeMillis()).put("d", o).toString())
+            if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+            // 3일 넘은 파일 정리
+            val now = System.currentTimeMillis()
+            f.parentFile?.listFiles()?.forEach { if (now - it.lastModified() > DISK_KEEP_MS) it.delete() }
+        } catch (_: Exception) {}
+    }
+
+    private fun diskRead(key: String): Pair<Long, JSONObject>? = try {
+        val f = diskFile(key)
+        if (f == null || !f.exists()) null else {
+            val o = JSONObject(f.readText())
+            val at = o.getLong("at")
+            if (System.currentTimeMillis() - at > DISK_KEEP_MS) null else at to o.getJSONObject("d")
+        }
+    } catch (_: Exception) { null }
+
+    private fun ago(at: Long): String {
+        val m = ((System.currentTimeMillis() - at) / 60_000L).coerceAtLeast(0)
+        return when { m < 60 -> "${m}분 전"; m < 24 * 60 -> "${m / 60}시간 전"; else -> "${m / (24 * 60)}일 전" }
+    }
+
+    private fun JSONObject.dd(k: String): Double? = if (has(k) && !isNull(k)) optDouble(k).takeIf { !it.isNaN() } else null
+    private fun JSONObject.ii(k: String): Int? = if (has(k) && !isNull(k)) optInt(k) else null
+    private fun JSONObject.putN(k: String, v: Any?): JSONObject = if (v == null) this else put(k, v)
+
+    private fun saveDay(key: String, d: Day) {
+        val hs = JSONArray()
+        d.hours.forEach { h ->
+            hs.put(JSONObject().put("t", h.time).putN("w", h.wind).putN("d", h.dir).putN("g", h.gust).putN("wv", h.wave)
+                .putN("s", h.sst).putN("tp", h.temp).putN("sk", h.sky).putN("pt", h.pty).putN("p", h.pop)
+                .putN("pd", h.period).putN("wd", h.waveDir).put("th", h.thunder).putN("c", h.wcode))
+        }
+        val o = JSONObject().put("ds", d.dayStart).put("h", hs).put("wn", d.windNote).put("sn", d.seaNote)
+            .put("mn", d.measuredNote).put("kn", d.kmaNote).put("fk", d.fromKma).put("wb", d.windBasis)
+        d.measured?.let { m ->
+            val se = JSONObject(); m.series.forEach { (t, v) -> se.put(t.toString(), v) }
+            val sa = JSONObject(); m.stationAt.forEach { (t, v) -> sa.put(t.toString(), v) }
+            o.put("m", JSONObject().put("temp", m.temp).put("at", m.at).put("st", m.station).put("se", se).put("sa", sa).put("home", m.home))
+        }
+        diskWrite(key, o)
+    }
+
+    private fun diskDay(key: String): Pair<Long, Day>? {
+        val (at, o) = diskRead(key) ?: return null
+        return try {
+            val hs = o.getJSONArray("h")
+            val hours = (0 until hs.length()).map { i ->
+                val j = hs.getJSONObject(i)
+                Hour(j.getLong("t"), j.dd("w"), j.dd("d"), j.dd("g"), j.dd("wv"), j.dd("s"), j.dd("tp"), j.ii("sk"), j.ii("pt"),
+                    j.ii("p"), j.dd("pd"), j.dd("wd"), j.optBoolean("th", false), j.ii("c"))
+            }
+            if (hours.isEmpty()) return null
+            val m = o.optJSONObject("m")?.let { mj ->
+                val se = mj.optJSONObject("se"); val sa = mj.optJSONObject("sa")
+                Measured(mj.getDouble("temp"), mj.optString("at"), mj.optString("st"),
+                    se?.keys()?.asSequence()?.mapNotNull { k -> k.toLongOrNull()?.let { it to se.getDouble(k) } }?.toMap() ?: emptyMap(),
+                    sa?.keys()?.asSequence()?.mapNotNull { k -> k.toLongOrNull()?.let { it to sa.getString(k) } }?.toMap() ?: emptyMap(),
+                    mj.optString("home", mj.optString("st")))
+            }
+            at to Day(o.getLong("ds"), hours, o.optString("wn"), o.optString("sn"), m, o.optString("mn"),
+                o.optString("kn"), o.optBoolean("fk", false), o.optString("wb"))
+        } catch (_: Exception) { null }
+    }
+
+    private fun saveWeek(key: String, list: List<WeekDay>, note: String) {
+        val a = JSONArray()
+        list.forEach { w ->
+            a.put(JSONObject().put("ds", w.dayStart).putN("mn", w.tmin).putN("mx", w.tmax).putN("p", w.pop).putN("w", w.wind)
+                .putN("wv", w.wave).putN("s", w.sst).putN("c", w.code).put("src", w.src).putN("wr", w.waveRange).put("th", w.thunder))
+        }
+        diskWrite(key, JSONObject().put("l", a).put("note", note))
+    }
+
+    private fun diskWeek(key: String): Triple<Long, List<WeekDay>, String>? {
+        val (at, o) = diskRead(key) ?: return null
+        return try {
+            val a = o.getJSONArray("l")
+            val list = (0 until a.length()).map { i ->
+                val j = a.getJSONObject(i)
+                WeekDay(j.getLong("ds"), j.dd("mn"), j.dd("mx"), j.ii("p"), j.dd("w"), j.dd("wv"), j.dd("s"), j.ii("c")).apply {
+                    src = j.optString("src"); waveRange = if (j.has("wr")) j.optString("wr") else null; thunder = j.optBoolean("th", false)
+                }
+            }
+            if (list.isEmpty()) null else Triple(at, list, o.optString("note"))
+        } catch (_: Exception) { null }
+    }
     /** 주간 화면 아래에 보일 출처·안내 */
     @Volatile var weekNote: String = ""
 
     fun fetchWeek(lat: Double, lon: Double, done: (List<WeekDay>?) -> Unit) {
         val key = String.format(Locale.US, "%.2f,%.2f", lat, lon) + if (Store.windSea) ",sea" else ""
         weekCache?.let { (k, v) -> if (k == key && System.currentTimeMillis() - v.first < KEEP_MS) { done(v.second); return } }
+        // v6.20 (266): 폰 파일에 저장된 주간 날씨
+        val dk = "week_$key"
+        if (System.currentTimeMillis() >= skipFreshUntil) diskWeek(dk)?.let { (at, list, note) ->
+            if (System.currentTimeMillis() - at < KEEP_MS) { weekNote = note; weekCache = key to (at to list); done(list); return }
+        }
         Thread {
-            val r = try { loadWeek(lat, lon) } catch (_: Exception) { null }
+            var r = try { loadWeek(lat, lon) } catch (_: Exception) { null }
+            if (!r.isNullOrEmpty()) saveWeek(dk, r, weekNote)
+            else diskWeek(dk)?.let { (at, list, note) ->
+                weekNote = "📦 ${ago(at)} 받은 주간 날씨예요 (지금은 못 받음 · 인터넷 확인)\n" + note
+                r = list
+            }
             main.post {
-                if (!r.isNullOrEmpty()) weekCache = key to (System.currentTimeMillis() to r)
+                if (!r.isNullOrEmpty() && !weekNote.startsWith("📦")) weekCache = key to (System.currentTimeMillis() to r!!)
                 done(r)
             }
         }.start()

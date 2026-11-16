@@ -57,11 +57,13 @@ object ButtonRouter {
 
     fun startLearning(n: Int = 1) {
         learningStep = n.coerceIn(1, Store.MAX_REMOTE)
+        VolumeWatch.learning(true)   // v6.20 (269): 볼륨 버튼이 음량 신호로 와도 등록되게
         onMessage?.invoke("리모컨에서 ${learningStep}번으로 쓸 버튼을 한 번 눌러주세요")
     }
 
     fun cancelLearning() {
         learningStep = 0
+        VolumeWatch.learning(false)
         onMessage?.invoke("버튼 등록을 취소했어요")
     }
 
@@ -138,6 +140,7 @@ object ButtonRouter {
             Store.setKey(n, code)
             if (n > Store.remoteRows) Store.remoteRows = n
             learningStep = 0
+            VolumeWatch.learning(false)
             Haptics.slot(ctx, if (n % 2 == 1) 1 else 2)
             onMessage?.invoke("리모컨 ${n}번 = ${label(code)} 등록!" + if (was != 0 && was != n) " (${was}번에서 옮겼어요)" else "")
             return

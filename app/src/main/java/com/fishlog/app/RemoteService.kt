@@ -148,6 +148,7 @@ class RemoteService : Service() {
         setupSession()
         goForeground()
         updateSilence()
+        VolumeWatch.trip(true)   // v6.20 (269)
         Store.addListener(storeListener)
         handler.postDelayed(checker, 60_000L)
         handler.postDelayed(tideChecker, 20_000L)
@@ -189,6 +190,7 @@ class RemoteService : Service() {
     }
 
     override fun onDestroy() {
+        VolumeWatch.trip(false)
         handler.removeCallbacksAndMessages(null)
         if (Store.current == null) try { Live.clear(Store.history.firstOrNull()) } catch (_: Exception) {}
         Tracker.stop()
