@@ -74,12 +74,24 @@ def closed(s, eid, group, status="completed"):
         check(s.put(f"{API}/edits/{eid}/testers/alpha", json={"googleGroups": [group]}), "테스터 그룹")
         print(f"✓ 테스터 그룹: {group}")
 
+def status(s, eid):
+    """트랙별 출시 상태 · 테스터 (읽기만)"""
+    for t in ["internal", "alpha"]:
+        tr = s.get(f"{API}/edits/{eid}/tracks/{t}")
+        if tr.status_code >= 300: print(f"{t}: 읽기 실패 ({tr.status_code})"); continue
+        for rel in tr.json().get("releases", []):
+            print(f"{t}: 버전 {','.join(rel.get('versionCodes', []))} · 상태 {rel.get('status')} · 이름 {rel.get('name', '')}")
+    te = s.get(f"{API}/edits/{eid}/testers/alpha")
+    if te.status_code < 300: print("alpha 테스터 그룹:", te.json().get("googleGroups", []))
+
 def main():
     what = sys.argv[1] if len(sys.argv) > 1 else "listing"
     s = session()
     eid = check(s.post(f"{API}/edits"), "편집 시작")["id"]
     if what == "listing":
         listing(s, eid)
+    elif what == "status":
+        status(s, eid); s.delete(f"{API}/edits/{eid}"); print("✓ 확인 끝 (바꾼 것 없음)"); return
     elif what == "closed":
         group = sys.argv[2].strip() if len(sys.argv) > 2 and sys.argv[2].strip() else None
         closed(s, eid, group)

@@ -12,11 +12,11 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'listing = 등록정보 · closed = 비공개 테스트로 올리기'
+        description: 'listing = 등록정보 · closed = 비공개 테스트로 올리기 · status = 상태 보기'
         required: true
         default: 'listing'
         type: choice
-        options: [ listing, closed ]
+        options: [ listing, closed, status ]
       group:
         description: '비공개 테스트 테스터 구글 그룹 메일 (closed 때만, 없으면 비워 둠)'
         required: false
