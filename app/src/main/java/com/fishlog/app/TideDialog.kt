@@ -191,7 +191,9 @@ object TideDialog {
         col.addView(lifeBars, Ui.lp(a, MATCH, dp(78), top = 8))
         col.addView(lifeLeg, Ui.lp(a, MATCH, WRAP, top = 2))
         val flow = FlowBarView(a)
-        col.addView(flow, Ui.lp(a, MATCH, dp(70), top = 4))
+        // v6.31 (285): 선상낚시면 막대 위 '선수 · 선미' 글자 자리만큼 조금 더 높게 (막대 비율은 그대로)
+        val boatMode = Store.category == "boat" || Store.catLabel(Store.category).contains("선상")
+        col.addView(flow, Ui.lp(a, MATCH, dp(if (boatMode) 86 else 70), top = 4))
         val flowNote = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(flowNote, Ui.lp(a, MATCH, WRAP, top = 2))
         val info = Ui.text(a, 13f, Ui.SUB, false, "")
@@ -314,7 +316,33 @@ object TideDialog {
         val tick = object : Runnable { override fun run() { if (dlg.isShowing) { graph.invalidate(); graph.postDelayed(this, 60_000L) } } }
         graph.postDelayed(tick, 60_000L)
 
+        // ---- v6.31 (285): ⛴ 선수 · 선미 자리 예상 (대충) = 그 시각 바람 세기 vs 잡은 때 물살 % ----
+        var sideDay: Tide.Day? = null; var sideSt: Tide.Strength? = null; var sideW: Weather.Day? = null
+        var sideText = ""
+        fun paintSides() {
+            val dy = sideDay; val st = sideSt; val w = sideW
+            if (!boatMode || dy == null || st == null || w == null || w.dayStart != dayStart(dy.dateMillis + 12 * 3_600_000L)) { flow.setSides(null); sideText = ""; return }
+            val out = IntArray(8)
+            for (b in 0 until 8) {
+                val winds = (0..2).mapNotNull { k -> w.at(b * 3 + k)?.wind }
+                val flows = (0..2).mapNotNull { k -> BiteMemo.flowAt(dy, st, dy.dateMillis + (b * 3 + k) * 3_600_000L + 30 * 60_000L) }
+                if (winds.isEmpty() || flows.isEmpty()) continue
+                val ws = winds.average() / 8.0      // 바람 8m/s ≈ 1
+                val fs = flows.average() / 60.0     // 물살 60% ≈ 1
+                out[b] = when {
+                    ws < 0.45 && fs < 0.45 -> 0          // 둘 다 약함
+                    ws - fs > 0.25 -> 1                  // 바람이 이김 → 가벼운 앞(선수)이 밀려 앞장
+                    fs - ws > 0.25 -> 2                  // 물살이 이김 → 무거운 뒤(선미)가 끌려 앞장
+                    else -> 0
+                }
+            }
+            flow.setSides(out)
+            sideText = "\n⛴ 막대 위 = 자리 예상(대충): 바람 셈 → 선수 · 물살 셈 → 선미 · 없으면 비슷 · 배와 선장님에 따라 달라요"
+            if (!flowNote.text.contains("⛴")) flowNote.append(sideText)
+        }
+
         fun renderWeather(w: Weather.Day) {
+            sideW = w; paintSides()
             val sstOff = Weather.sstOffset(w)
             if (w.dayStart == today && sstOff != null) todaySstOff = sstOff
             if (w.dayStart == today && w.measured != null) todayMeasured = w.measured
@@ -575,6 +603,7 @@ object TideDialog {
             info.text = "물때 불러오는 중…"
             strength.text = "물세기 계산 중…"
             flowNote.text = ""; src.text = ""
+            sideDay = null; sideSt = null; sideW = null; flow.setSides(null)
             wxSummary.text = "바람·파도·수온 불러오는 중…"; wxGrid.removeAllViews(); wxNote.text = ""
             // 그날 출조한 기록이면 그래프에 조과 점
             val t = trip?.takeIf { dayStart(it.start) == cur }
@@ -601,9 +630,11 @@ object TideDialog {
                     }
                     strength.text = strengthLine(day, st)
                     flow.set(day, st)
+                    sideDay = day; sideSt = st
                     flowNote.text = "막대 = 시간별 물흐름 세기 (물이 빨리 들고 나는 때일수록 높고 주황)" +
                         (if (cur == today) " · 초록 테두리 = 지금" else "") +
                         (if (st.estimated) "\n물세기는 물때(달 나이)로 짐작한 값이에요" else if (st.annual) "\n물세기 = 그날 조차(만조↔간조 높이 차 평균) ÷ 이 관측소 1년 중 가장 큰 사리 때 조차 (100%)" else "\n물세기 = 그날 조차 ÷ 가까운 사리(7물) 때 조차 (1년 기준을 아직 못 받음)")
+                    paintSides()
                 }
             }
             Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }

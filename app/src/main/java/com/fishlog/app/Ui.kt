@@ -793,6 +793,12 @@ class FlowBarView(c: Context) : View(c) {
 
     fun set(dd: Tide.Day, s: Tide.Strength) { day = dd; st = s; invalidate() }
 
+    /** v6.31 (285): 3시간 칸마다 ⛴ 자리 예상 (1 = 선수 · 2 = 선미 · 0 = 비슷) — 막대 위에 작은 글자만 (막대 계산 · 모양은 그대로) */
+    private var sides: IntArray? = null
+    fun setSides(v: IntArray?) { sides = v; invalidate() }
+    private val sideP = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val sideT = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 9.5f * d; textAlign = Paint.Align.CENTER; isFakeBoldText = true }
+
     override fun onDraw(canvas: Canvas) {
         val dy = day ?: return
         val s = st ?: return
@@ -801,6 +807,8 @@ class FlowBarView(c: Context) : View(c) {
         val w = width.toFloat(); val h = height.toFloat()
         val left = 12 * d; val right = w - 14 * d
         val bottom = h - 14 * d
+        // 자리 예상 글자 자리(위 16dp)는 보기만 늘린 것 · 막대 높이 비율은 예전과 같음
+        val extra = if (sides != null) 16 * d else 0f
         val slot = (right - left) / 24
         val nowH = ((System.currentTimeMillis() - dy.dateMillis) / 3_600_000L).toInt()
         for (i in 0 until 24) {
@@ -809,11 +817,25 @@ class FlowBarView(c: Context) : View(c) {
             p.color = when { f < 0.35f -> WEAK; f < 0.7f -> Ui.BLUE; else -> Ui.ORANGE }
             val x0 = left + i * slot + slot * 0.15f
             val x1 = left + (i + 1) * slot - slot * 0.15f
-            val top = bottom - (bottom - 4 * d) * f.coerceAtLeast(0.05f)
+            val top = bottom - (bottom - 4 * d - extra) * f.coerceAtLeast(0.05f)
             canvas.drawRoundRect(x0, top, x1, bottom, 2 * d, 2 * d, p)
             if (i == nowH) canvas.drawRoundRect(x0 - 1.5f * d, top - 1.5f * d, x1 + 1.5f * d, bottom + 1.5f * d, 3 * d, 3 * d, nowP)
         }
         for (hh in 0..24 step 3) canvas.drawText(hh.toString(), left + hh * slot, h - 2 * d, tp)
+        // ⛴ 3시간 칸 중 가장 높은 막대 바로 위에 '선수'(주황) / '선미'(파랑)
+        sides?.forEachIndexed { b, v ->
+            if (v != 1 && v != 2) return@forEachIndexed
+            val f = (0..2).mapNotNull { k -> s.hourly.getOrNull(b * 3 + k) }.maxOrNull()?.let { (it / max).toFloat() } ?: 0f
+            val top = bottom - (bottom - 4 * d - extra) * f.coerceAtLeast(0.05f)
+            val cx = left + (b * 3 + 1.5f) * slot
+            val label = if (v == 1) "선수" else "선미"
+            val tw = sideT.measureText(label)
+            sideP.color = if (v == 1) Ui.ORANGE else Color.parseColor("#3A8FD8")
+            val y1 = top - 3 * d; val y0 = y1 - 13 * d
+            canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
+            sideT.color = if (v == 1) Color.parseColor("#1B0E02") else Color.WHITE
+            canvas.drawText(label, cx, y1 - 3.5f * d, sideT)
+        }
     }
 }
 

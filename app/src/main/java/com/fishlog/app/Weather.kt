@@ -478,7 +478,11 @@ object Weather {
             val r = measuredTemp(ctx, lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L)))
             measured = r.first; mNote = r.second
         } else if (diff > 0) mNote = "실측 수온은 아직 측정 전이에요 (예측만 보여요)"
-        else mNote = "실측 수온은 오늘·어제만 볼 수 있어요"
+        else {
+            // v6.31 (284): 지난 날짜 = 오늘·어제 받아 둔 실측 (폰 · 서버 공유 저장분)
+            val r = measuredPast(ctx, lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L)), dayStart)
+            measured = r.first; mNote = r.second
+        }
         return Day(dayStart, hours, windNote, seaNote, measured, mNote, kmaNote, kma.isNotEmpty(), windBasis)
     }
 
@@ -758,6 +762,8 @@ object Weather {
                         }
                     }
                 }
+                // v6.31 (284): 받은 실측을 관측소 · 날짜별로 저장 (지난 날짜에도 '실측'으로 보이게)
+                if (series.isNotEmpty()) saveStationTemp(ctx, s.code, s.name, ymd, series)
                 if (best != null) {
                     val hm = Regex("\\d{1,2}:\\d{2}").find(best.second)?.value ?: best.second
                     if (primary == null) {
@@ -782,6 +788,70 @@ object Weather {
         }
         primary?.let { return it to "" }
         return null to note.ifBlank { "근처 관측소(60km 안)에 수온계가 없어 예상 수온만 보여요" }
+    }
+
+    // ---------------- v6.31 (284): 실측 수온 저장 (관측소_날짜 · 폰 filesDir/wtemp + 서버 wtemp 공유) ----------------
+    private fun wtFile(ctx: Context, code: String, ymd: String) = java.io.File(java.io.File(ctx.filesDir, "wtemp").apply { mkdirs() }, "${code}_$ymd.json")
+    private fun hourIdx(t: Long, dayStart: Long) = ((t - dayStart) / 3_600_000L).toInt()
+
+    /** 시각별 실측을 저장 (예전 저장분과 합쳐서 · 늘었을 때만 서버에) */
+    private fun saveStationTemp(ctx: Context, code: String, name: String, ymd: String, series: Map<Long, Double>) {
+        try {
+            val dayStart = keyFmt.parse(ymd)?.time ?: return
+            val f = wtFile(ctx, code, ymd)
+            val old = try { JSONObject(f.readText()).optJSONObject("s") ?: JSONObject() } catch (_: Exception) { JSONObject() }
+            val before = old.length()
+            series.forEach { (t, v) -> val h = hourIdx(t, dayStart); if (h in 0..23) old.put(h.toString(), Math.round(v * 10) / 10.0) }
+            if (old.length() <= before && f.exists()) return
+            f.writeText(JSONObject().put("n", name).put("s", old).toString())
+            val me = Cloud.uid ?: return
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("wtemp").document("${code}_$ymd")
+                .set(mapOf("n" to name, "s" to old.toString(), "at" to System.currentTimeMillis(), "by" to me))
+        } catch (_: Exception) {}
+    }
+
+    /** 저장된 실측 (폰 먼저 · 없으면 서버 3초) → 이름 · 시각별 값 */
+    private fun loadStationTemp(ctx: Context, code: String, ymd: String, dayStart: Long): Pair<String, Map<Long, Double>>? {
+        fun parse(o: JSONObject, sObj: JSONObject?): Pair<String, Map<Long, Double>>? {
+            val so = sObj ?: return null
+            val m = so.keys().asSequence().mapNotNull { k -> k.toIntOrNull()?.let { h -> (dayStart + h * 3_600_000L) to so.optDouble(k) } }
+                .filter { !it.second.isNaN() }.toMap()
+            return if (m.isEmpty()) null else o.optString("n") to m
+        }
+        val f = wtFile(ctx, code, ymd)
+        if (f.exists()) try { val o = JSONObject(f.readText()); parse(o, o.optJSONObject("s"))?.let { return it } } catch (_: Exception) {}
+        if (Cloud.user == null) return null
+        return try {
+            val d = com.google.android.gms.tasks.Tasks.await(com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("wtemp").document("${code}_$ymd").get(), 3, java.util.concurrent.TimeUnit.SECONDS)
+            val sStr = d.getString("s") ?: return null
+            val o = JSONObject().put("n", d.getString("n") ?: "").put("s", JSONObject(sStr))
+            // 지난 날짜는 안 바뀌니 폰에 저장
+            f.writeText(o.toString())
+            parse(o, o.optJSONObject("s"))
+        } catch (_: Exception) { null }
+    }
+
+    /** 지난 날짜(그저께부터) 실측: 가까운 관측소 저장분을 오늘처럼 합침 (가까운 곳 먼저 · 빈 시간은 다음 관측소 · 최대 3곳) */
+    private fun measuredPast(ctx: Context, lat: Double, lon: Double, ymd: String, dayStart: Long): Pair<Measured?, String> {
+        val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 60f }.take(6)
+        var primary: Measured? = null
+        var used = 0
+        for (s in near) {
+            val (nm0, series) = loadStationTemp(ctx, s.code, ymd, dayStart) ?: continue
+            val nm = nm0.ifBlank { s.name }
+            primary = if (primary == null) Measured(series.maxByOrNull { it.key }!!.value,
+                String.format(Locale.US, "%02d:00", hourIdx(series.keys.max(), dayStart)), nm, series, series.keys.associateWith { nm })
+            else {
+                val p0 = primary
+                val merged = HashMap(p0.series); val at = HashMap(p0.stationAt)
+                series.forEach { (k, v) -> if (!merged.containsKey(k)) { merged[k] = v; at[k] = nm } }
+                Measured(p0.temp, p0.at, p0.station, merged, at, p0.home)
+            }
+            if (++used >= 3 || primary.series.size >= 24) break
+        }
+        primary?.let { return it to "지난 날짜 실측은 그날 앱 사용자들이 받아 둔 값이에요" }
+        return null to "이 날은 저장된 실측 수온이 없어요 (2026.11.17부터 오늘·어제 받은 실측이 쌓여요)"
     }
 
     // ---------------- 주간 (7일) · Open-Meteo ----------------

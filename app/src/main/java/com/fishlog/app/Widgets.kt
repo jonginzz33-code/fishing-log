@@ -87,9 +87,14 @@ class TideWidget : AppWidgetProvider() {
 
         fun draw(c: Context, m: AppWidgetManager, id: Int) {
             val opt: Bundle = m.getAppWidgetOptions(id)
-            val dens = c.resources.displayMetrics.density
             val wDp = opt.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250).coerceAtLeast(180)
             val hDp = opt.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 70).coerceAtLeast(56)
+            m.updateAppWidget(id, build(c, wDp, hDp))
+        }
+
+        /** v6.31 (283): 위젯 모양 (홈 화면 추가 창 미리보기에도 씀) */
+        fun build(c: Context, wDp: Int, hDp: Int): RemoteViews {
+            val dens = c.resources.displayMetrics.density
             val scale = minOf(dens, 2.5f)
             val w = (wDp * scale).toInt(); val h = (hDp * scale).toInt()
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -97,7 +102,7 @@ class TideWidget : AppWidgetProvider() {
             val rv = RemoteViews(c.packageName, R.layout.widget_image)
             rv.setImageViewBitmap(R.id.w_img, bmp)
             rv.setOnClickPendingIntent(R.id.w_img, WidgetData.openIntent(c, "tide", 7101))
-            m.updateAppWidget(id, rv)
+            return rv
         }
 
         private fun render(c: Context, cv: Canvas, w: Float, h: Float, s: Float, big: Boolean) {
@@ -256,7 +261,10 @@ class BagWidget : AppWidgetProvider() {
             PendingIntent.getBroadcast(c, req, Intent(c, BagWidget::class.java).setAction(ACT).putExtra("cmd", cmd).putExtra("i", idx),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        fun draw(c: Context, m: AppWidgetManager, id: Int) {
+        fun draw(c: Context, m: AppWidgetManager, id: Int) = m.updateAppWidget(id, build(c))
+
+        /** v6.31 (283): 위젯 모양 (홈 화면 추가 창 미리보기에도 씀) */
+        fun build(c: Context): RemoteViews {
             val cats = Inventory.load(c)
             val rv = RemoteViews(c.packageName, R.layout.widget_bag)
             rv.setOnClickPendingIntent(R.id.wb_title, WidgetData.openIntent(c, "bag", 7201))
@@ -265,7 +273,7 @@ class BagWidget : AppWidgetProvider() {
                 rv.setTextViewText(R.id.wb_low, "")
                 rv.setTextViewText(R.id.wb_empty, "앱 → 🎒 가방에서 카테고리를 만들어 주세요")
                 ROWS.forEach { rv.setViewVisibility(it, android.view.View.GONE) }
-                m.updateAppWidget(id, rv); return
+                return rv
             }
             val ci = prefs(c).getInt("w_bag_cat", 0).let { if (it in cats.indices) it else 0 }
             val cat = cats[ci]
@@ -292,7 +300,7 @@ class BagWidget : AppWidgetProvider() {
                 rv.setOnClickPendingIntent(PLUS[r], pi(c, "plus", r, 7310 + r))
                 rv.setOnClickPendingIntent(NAMES[r], WidgetData.openIntent(c, "bag", 7203))
             }
-            m.updateAppWidget(id, rv)
+            return rv
         }
     }
 

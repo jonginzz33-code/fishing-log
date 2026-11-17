@@ -14,6 +14,7 @@ await env.withSecurityRulesDisabled(async c => {
   await setDoc(doc(d, 'public/B_9'), { owner: 'B' });
   await setDoc(doc(d, 'public/B_8'), { owner: 'B', names: ['낙지'] });
   await setDoc(doc(d, 'chatImg/i9'), { uid: 'B', d: 'x', t: now });
+  await setDoc(doc(d, 'wtemp/fresh'), { n: '인천', s: '{}', at: now - 60e3, by: 'X' });
 });
 const A = env.authenticatedContext('A', { email: 'a@x.com' }).firestore();
 const B = env.authenticatedContext('B', { email: 'b@x.com' }).firestore();
@@ -62,7 +63,13 @@ await ok('관리자가 그룹 이름표 쓰기', setDoc(doc(ADM, 'groupNames/g1'
 await ok('관리자가 그룹 이름 읽기', getDoc(doc(ADM, 'groups/g1')));
 await ok('관리자가 게시판 글에 그룹 번호 채우기', updateDoc(doc(ADM, 'public/B_8'), { gid: 'g1', gname: '테스트 그룹', upd: now }));
 await ok('글 주인이 그룹 번호 넣어 올리기', setDoc(doc(A, 'public/A_1'), { owner: 'A', hasTrack: true, gid: 'g1', gname: '테스트 그룹' }));
+await ok('실측 수온 저장', setDoc(doc(A, 'wtemp/DT_0001_20261117'), { n: '인천', s: '{"0":15.2}', at: now, by: 'A' }));
+await ok('실측 수온 읽기', getDoc(doc(B, 'wtemp/DT_0001_20261117')));
 console.log('[막아야 하는 일]');
+await no('방금 저장된 수온 덮어쓰기', setDoc(doc(B, 'wtemp/fresh'), { n: '인천', s: '{}', at: now, by: 'B' }));
+await no('수온에 다른 값 끼워 넣기', setDoc(doc(B, 'wtemp/x1'), { n: '인천', s: '{}', at: now, by: 'B', evil: 1 }));
+await no('남 이름으로 수온 저장', setDoc(doc(B, 'wtemp/x2'), { n: '인천', s: '{}', at: now, by: 'A' }));
+await no('수온 지우기', deleteDoc(doc(B, 'wtemp/fresh')));
 await no('그룹장 아닌 그룹원이 이름표 바꾸기', setDoc(doc(B, 'groupNames/g1'), { name: '가짜', img: '', t: now }));
 await no('이름표에 다른 값 끼워 넣기', setDoc(doc(A, 'groupNames/g1'), { name: 'x', img: '', t: now, evil: 1 }));
 await no('그룹장 아닌 사람이 이름표 지우기', deleteDoc(doc(B, 'groupNames/g1')));

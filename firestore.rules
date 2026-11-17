@@ -200,6 +200,24 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ---- v6.31 (284): 실측 수온 저장 (관측소_날짜 · 오늘·어제 받은 실측을 모두 같이 씀) ----
+    match /wtemp/{id} {
+      allow read: if signedIn();
+      allow create: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['n', 's', 'at', 'by'])
+        && request.resource.data.s is string && request.resource.data.s.size() < 2000
+        && request.resource.data.n is string && request.resource.data.n.size() <= 40
+        && nearNow(request.resource.data.at);
+      // 새로 고치기는 저장된 지 30분 지난 것만
+      allow update: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['n', 's', 'at', 'by'])
+        && request.resource.data.s is string && request.resource.data.s.size() < 2000
+        && request.resource.data.n is string && request.resource.data.n.size() <= 40
+        && nearNow(request.resource.data.at)
+        && (!(resource.data.at is int) || resource.data.at < request.time.toMillis() - 1800000);
+      allow delete: if isAdmin();
+    }
+
     match /invites/{code} {
       allow get: if signedIn();
       allow create: if signedIn() && request.resource.data.owner == request.auth.uid;

@@ -7,6 +7,7 @@
     android:targetCellWidth="4"
     android:targetCellHeight="2"
     android:updatePeriodMillis="0"
+    android:previewLayout="@layout/widget_bag"
     android:initialLayout="@layout/widget_bag"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"

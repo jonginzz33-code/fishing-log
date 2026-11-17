@@ -58,8 +58,12 @@ class QuickWidget : AppWidgetProvider() {
         }
 
         fun draw(c: Context, m: AppWidgetManager, wid: Int) {
-            val opt: Bundle = m.getAppWidgetOptions(wid)
-            val hDp = opt.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 70)
+            val hDp = m.getAppWidgetOptions(wid).getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 70)
+            m.updateAppWidget(wid, build(c, hDp))
+        }
+
+        /** v6.31 (283): 위젯 모양 (홈 화면 추가 창 미리보기에도 씀) */
+        fun build(c: Context, hDp: Int): RemoteViews {
             val all = items(c)
             val two = hDp >= 110 && all.size + 1 > 5
             val slots = if (two) 10 else 5
@@ -80,7 +84,7 @@ class QuickWidget : AppWidgetProvider() {
                 else WidgetData.openIntent(c, "q:" + t.id, 7300 + i)
                 rv.setOnClickPendingIntent(tid, pi)
             }
-            m.updateAppWidget(wid, rv)
+            return rv
         }
 
         /**
@@ -90,10 +94,17 @@ class QuickWidget : AppWidgetProvider() {
         fun pin(a: Activity, cls: Class<out AppWidgetProvider>, name: String) {
             val m = a.getSystemService(AppWidgetManager::class.java)
             val ok = try { Build.VERSION.SDK_INT >= 26 && m != null && m.isRequestPinAppWidgetSupported } catch (_: Exception) { false }
-            if (ok && try { m!!.requestPinAppWidget(ComponentName(a, cls), null, null) } catch (_: Exception) { false }) {
-                android.widget.Toast.makeText(a, "'추가'를 누르면 홈 화면에 $name 위젯이 놓여요 (꾹 눌러 옮기기)", android.widget.Toast.LENGTH_LONG).show()
-                return
-            }
+            // v6.31 (283): '홈 화면에 추가' 창에 진짜 위젯 모양 미리보기 (빈 기본 모양 → '위젯을 추가할 수 없습니다' 대신) · 가리던 안내는 없앰
+            val preview: RemoteViews? = try {
+                when (cls) {
+                    QuickWidget::class.java -> build(a, 70)
+                    TideWidget::class.java -> TideWidget.build(a, 250, 70)
+                    BagWidget::class.java -> BagWidget.build(a)
+                    else -> null
+                }
+            } catch (_: Exception) { null }
+            val extras = preview?.let { Bundle().apply { putParcelable(AppWidgetManager.EXTRA_APPWIDGET_PREVIEW, it) } }
+            if (ok && try { m!!.requestPinAppWidget(ComponentName(a, cls), extras, null) } catch (_: Exception) { false }) return
             AlertDialog.Builder(a, R.style.FlAlert).setTitle("📱 $name 위젯 넣는 법")
                 .setMessage("이 폰의 홈 화면 앱은 바로 넣기를 지원하지 않아요.\n\n① 홈 화면 빈 곳을 꾹 누르기\n② '위젯' 누르기\n③ '조과일지' 찾기 → '$name' 을 꾹 눌러 홈 화면에 놓기")
                 .setPositiveButton("확인", null).show()
