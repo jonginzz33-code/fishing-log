@@ -170,6 +170,13 @@ object Tide {
         if (!force) prefs.getString(cacheKey, null)?.let { s -> fromJson(s)?.takeIf { complete(it, ymd) }?.let { return it } }
         // 빠진 채로 받은 건 폰·서버에 저장 안 하고, 앱이 켜져 있는 동안만 12시간 기억 (계속 다시 부르지 않게)
         if (!force) partial[cacheKey]?.let { (at, l) -> if (System.currentTimeMillis() - at < SERVER_FRESH_MS) return l }
+        // v6.33 (286): 빠진 채로 받은 날도 폰에 기억 (앱을 다시 켜도 하루 한 번만 다시 받기) — 저장만 바꿈 · 계산은 그대로
+        if (!force) prefs.getString("p_$cacheKey", null)?.let { s ->
+            try {
+                val o = JSONObject(s)
+                if (System.currentTimeMillis() - o.getLong("at") < 24 * 3600_000L) fromJson(o.getString("l"))?.let { l -> partial[cacheKey] = o.getLong("at") to l; return l }
+            } catch (_: Exception) {}
+        }
         // ② 서버에 저장된 것 (12시간 안에 받은 것, 빠진 게 없을 때만)
         var server: List<Extreme>? = null
         if (!force) serverGet(cacheKey, ymd)?.let { (at, list) ->
@@ -187,6 +194,7 @@ object Tide {
                 serverPut(cacheKey, fresh)
             } else {
                 partial[cacheKey] = System.currentTimeMillis() to fresh
+                prefs.edit().putString("p_$cacheKey", JSONObject().put("at", System.currentTimeMillis()).put("l", toJson(fresh)).toString()).apply()
                 lastError = "국립해양조사원 응답에 만조·간조가 빠져 있어 추정으로 채웠어요"
             }
             return fresh
@@ -428,6 +436,11 @@ object Tide {
             if (ymd.length == 8 && ymd.all { it.isDigit() } && ymd < cut) e.remove(k)
         }
         e.putString("_pruned", today).apply()
+        // v6.33 (286): 출조 추천 달력 요약도 30일 지난 것 지우기 (미래 날짜는 그대로)
+        val cp = ctx.getSharedPreferences("tidecal", Context.MODE_PRIVATE)
+        val ce = cp.edit()
+        cp.all.keys.forEach { k -> val ymd = k.substringAfterLast("_", ""); if (ymd.length == 8 && ymd.all { it.isDigit() } && ymd < cut) ce.remove(k) }
+        ce.apply()
     }
 
     /** 출조 시작할 때 오늘·내일 물때를 미리 받아 둠 (바다에서 인터넷이 없어도 보이게) */

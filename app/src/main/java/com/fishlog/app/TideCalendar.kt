@@ -126,6 +126,24 @@ object TideCalendar {
         val minLow: Double? get() = lows.minOfOrNull { it.value }
     }
     private val infoCache = HashMap<String, DayInfo>()
+
+    // v6.33 (286): 달력 요약을 폰에도 저장 (앱을 다시 켜도 그달 물때를 다시 꺼내 계산하지 않게) · 키 끝 = yyyyMMdd → Tide.prune 이 30일 지난 것 지움
+    private val ymdFmt = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+    private fun calPrefs(c: Context) = c.getSharedPreferences("tidecal", Context.MODE_PRIVATE)
+    private fun diskKey(stKey: String, st: String, day: Long) = "${stKey}_${st.replace("_", " ")}_" + ymdFmt.format(java.util.Date(day))
+    private fun saveInfo(c: Context, k: String, i: DayInfo) {
+        try {
+            val a = JSONArray(); i.lows.forEach { e -> a.put(JSONArray().put(e.time).put(e.value).put(e.est)) }
+            calPrefs(c).edit().putString(k, org.json.JSONObject().put("l", a).put("r", i.range ?: org.json.JSONObject.NULL).toString()).apply()
+        } catch (_: Exception) {}
+    }
+    private fun loadInfo(c: Context, k: String): DayInfo? = try {
+        calPrefs(c).getString(k, null)?.let { s ->
+            val o = org.json.JSONObject(s); val a = o.getJSONArray("l")
+            DayInfo((0 until a.length()).map { j -> val e = a.getJSONArray(j); Tide.Extreme(e.getLong(0), false, e.getDouble(1), e.optBoolean(2)) },
+                if (o.isNull("r")) null else o.getDouble("r"), true)
+        }
+    } catch (_: Exception) { null }
     fun haeruCm(c: Context) = prefs(c).getInt("haeru_cm", 100)
     private fun setHaeruCm(c: Context, v: Int) = prefs(c).edit().putInt("haeru_cm", v).apply()
 
@@ -158,7 +176,8 @@ object TideCalendar {
         val stKey = "${Math.round(lat * 100)}_${Math.round(lon * 100)}"
         var annRef: Double? = null
         var loadSeq = 0
-        fun infoOf(day: Long) = infoCache["${stKey}_$day"]
+        fun infoOf(day: Long): DayInfo? = infoCache["${stKey}_$day"]
+            ?: loadInfo(a, diskKey(stKey, station, day))?.also { infoCache["${stKey}_$day"] = it }
         fun pctOf(day: Long): Int {
             val i = infoOf(day); val ref = annRef
             return if (i?.range != null && ref != null && ref > 0) (i.range / maxOf(ref, i.range) * 100).toInt().coerceIn(5, 100)
@@ -414,11 +433,14 @@ object TideCalendar {
                 if (my != loadSeq || !dlg.isShowing && i > 0) return
                 if (i >= days.size) { loadView.visibility = View.GONE; redraw(); return }
                 val day = days[i++]
+                // v6.33 (286): 폰에 저장된 날은 위에서 이미 빠짐 → 이 글자는 정말 새로 받을 때만
                 loadView.visibility = View.VISIBLE; loadView.text = "🌊 실제 물때 받는 중 $i / ${days.size} (처음 한 번만 · 다음부턴 바로)"
                 Tide.fetch(a, lat, lon, day + 12 * 3_600_000L) { d, _ ->
                     if (d != null) {
                         val ex = Tide.extremes(d).filter { it.time >= day && it.time < day + 86_400_000L }
-                        infoCache["${stKey}_$day"] = DayInfo(ex.filter { !it.high }, Tide.dayRange(d), d.stationCode != null)
+                        val info = DayInfo(ex.filter { !it.high }, Tide.dayRange(d), d.stationCode != null)
+                        infoCache["${stKey}_$day"] = info
+                        if (info.exact) saveInfo(a, diskKey(stKey, station, day), info)
                         val code = d.stationCode
                         if (annRef == null && code != null) {
                             annRef = Tide.annualRefCached(a, code)
