@@ -1036,7 +1036,7 @@ object Cloud {
     fun noticeOf(d: com.google.firebase.firestore.DocumentSnapshot) =
         Notice(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "그룹장"),
             d.getString("title") ?: "", d.getString("body") ?: "",
-            d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L)
+            d.getLong("created") ?: 0L, d.getLong("edited") ?: 0L, d.getString("eid") ?: "")
 
     /** 실시간: 그룹 일정·공지가 바뀌면 바로 알려줌 (앱이 켜져 있는 동안만) */
     fun watchGroup(g: Group, onEvents: (List<Event>) -> Unit, onNotices: (List<Notice>) -> Unit,
@@ -1087,7 +1087,8 @@ object Cloud {
 
     // ---------------- 그룹 공지 (그룹장만 쓰기) ----------------
     class Notice(val id: String, val owner: String, val ownerName: String, val title: String, val body: String,
-                 val created: Long, val edited: Long)
+                 val created: Long, val edited: Long,
+                 /** v6.36 (296): 일정에서 '공지에 올리기'로 온 공지면 그 일정 번호 */ val eid: String = "")
 
     fun loadNoticesOf(g: Group, done: (List<Notice>?, String?) -> Unit) {
         db.collection("groups").document(g.id).collection("notices").get()
@@ -1107,6 +1108,18 @@ object Cloud {
             "created" to (old?.created ?: now), "edited" to now))
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "공지 저장 실패 (보안 규칙 확인)") }
+    }
+
+    /** v6.36 (296): 일정 → 공지에 올리기 (그룹원 누구나 · 공지 번호 = ev_일정번호 라 두 번 안 올라감) */
+    fun pinEvent(e: Event, title: String, body: String, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        val now = System.currentTimeMillis()
+        db.collection("groups").document(g.id).collection("notices").document("ev_${e.id}")
+            .set(mapOf("owner" to me, "ownerName" to displayName, "title" to title.take(100), "body" to body.take(1000),
+                "created" to now, "edited" to now, "eid" to e.id))
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done(it.message ?: "공지에 올리기 실패 (보안 규칙 확인)") }
     }
 
     fun deleteNotice(id: String, done: (String?) -> Unit) {

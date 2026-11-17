@@ -81,16 +81,25 @@ class NoticeActivity : Activity() {
             val c = Ui.card(this)
             c.background = Ui.bg(this, Ui.CARD, 14, Color.parseColor("#F2C14E"))
             val head = Ui.row(this)
-            head.addView(Ui.text(this, 11f, Color.parseColor("#3A2A02"), true, "공지").apply {
+            head.addView(Ui.text(this, 11f, Color.parseColor("#3A2A02"), true, if (n.eid.isNotBlank()) "일정" else "공지").apply {
                 setPadding(dp(6), dp(2), dp(6), dp(2)); background = Ui.bg(this@NoticeActivity, Color.parseColor("#F2C14E"), 6)
             })
             head.addView(Ui.text(this, 16f, Ui.TEXT, true, n.title), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
             c.addView(head)
-            c.addView(Ui.text(this, 11f, Ui.SUB, false, n.ownerName + " · " + df.format(Date(n.created)) +
+            c.addView(Ui.text(this, 11f, Ui.SUB, false, (if (n.eid.isNotBlank()) "📢 올린 사람: " else "") + n.ownerName + " · " + df.format(Date(n.created)) +
                 (if (n.edited > n.created + 60_000L) " · 고침 " + df.format(Date(n.edited)) else "")), Ui.lp(this, MATCH, WRAP, top = 4))
             if (n.body.isNotBlank()) c.addView(Ui.text(this, 14f, Ui.TEXT, false, n.body).apply { setLineSpacing(0f, 1.3f); setTextIsSelectable(true) },
                 Ui.lp(this, MATCH, WRAP, top = 8))
-            if (Cloud.isOwner) {
+            // v6.36 (296): 일정에서 올린 공지 = 올린 사람 · 그룹장이 [내리기]
+            if (n.eid.isNotBlank() && (n.owner == Cloud.uid || Cloud.isOwner)) {
+                c.addView(Ui.button(this, "내리기 (공지에서 빼기 · 일정은 그대로)") {
+                    AlertDialog.Builder(this, R.style.FlAlert)
+                        .setTitle("이 공지를 내릴까요?")
+                        .setMessage("일정은 그대로 남아요")
+                        .setPositiveButton("내리기") { _, _ -> Cloud.deleteNotice(n.id) { e -> toast(e ?: "공지에서 내렸어요"); load() } }
+                        .setNegativeButton("취소", null).show()
+                }.apply { minHeight = dp(38); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 10))
+            } else if (Cloud.isOwner) {
                 val r = Ui.row(this)
                 r.addView(Ui.button(this, "고치기") { edit(n) }.apply { minHeight = dp(38); textSize = 13f }, LinearLayout.LayoutParams(0, WRAP, 1f))
                 r.addView(Ui.button(this, "지우기") {

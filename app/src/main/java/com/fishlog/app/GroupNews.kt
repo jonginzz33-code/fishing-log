@@ -50,6 +50,8 @@ object GroupNews {
     fun newTrips(gid: String?): Int = items(gid).count { it.kind == "trip" }
     /** 공지 전체 개수 (내가 쓴 것 포함) */
     fun notices(gid: String?): Int = gid?.let { rawNotices[it]?.size } ?: 0
+    /** v6.36 (296): 그룹 창 공지 칸용 (새것부터) */
+    fun noticeList(gid: String?): List<Cloud.Notice> = gid?.let { rawNotices[it] }.orEmpty().sortedByDescending { it.created }
 
     // ---------------- 실시간 (앱이 켜져 있는 동안) ----------------
     private var watching: List<com.google.firebase.firestore.ListenerRegistration> = emptyList()

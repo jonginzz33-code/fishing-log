@@ -32,6 +32,13 @@ object Boats {
         (0 until a.length()).map { i -> a.getJSONObject(i).let { Site(it.optString("n"), it.optString("u"), it.optString("p"), it.optString("m")) } }.toMutableList()
     } catch (_: Exception) { mutableListOf() }
 
+    /** v6.36 (294): 그룹 사이트 메모 → 내 사이트에 담기 (같은 주소면 안 겹침) · true = 담음 */
+    fun addMine(c: Context, s: Site): Boolean {
+        val l = load(c)
+        if (l.any { it.url.trim().equals(s.url.trim(), true) && s.url.isNotBlank() }) return false
+        l.add(s); save(c, l); return true
+    }
+
     private fun save(c: Context, list: List<Site>) {
         val a = JSONArray(); list.forEach { a.put(JSONObject().put("n", it.name).put("u", it.url).put("p", it.phone).put("m", it.memo)) }
         c.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()

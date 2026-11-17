@@ -324,7 +324,29 @@ service cloud.firestore {
       }
       match /notices/{nid} {
         allow read: if isMember(gid);
-        allow create, update, delete: if isGroupOwner(gid);
+        // v6.36 (296): 그룹장은 지금처럼 · 그룹원은 일정에서 '공지에 올리기'(eid 있는 공지 · 내 이름으로)만
+        allow create: if isGroupOwner(gid) || (isMember(gid) && notBanned()
+          && request.resource.data.owner == request.auth.uid
+          && request.resource.data.eid is string && request.resource.data.eid.size() > 0
+          && request.resource.data.title is string && request.resource.data.title.size() <= 100
+          && request.resource.data.body is string && request.resource.data.body.size() <= 1000);
+        allow update: if isGroupOwner(gid);
+        // 내리기: 올린 사람 · 그룹장
+        allow delete: if isGroupOwner(gid) || (isMember(gid) && resource.data.owner == request.auth.uid);
+      }
+      // v6.36 (294): 🔖 그룹 사이트 메모 — 그룹원 누구나 추가 · 올린 사람 · 그룹장 고치기/지우기
+      match /sites/{sid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order'])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 40
+          && request.resource.data.url is string && request.resource.data.url.size() <= 300
+          && request.resource.data.memo is string && request.resource.data.memo.size() <= 200;
+        allow update: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid))
+          && request.resource.data.owner == resource.data.owner
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order'])
+          && request.resource.data.name.size() <= 40 && request.resource.data.url.size() <= 300 && request.resource.data.memo.size() <= 200;
+        allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
       }
       match /events/{eid} {
         allow read: if isMember(gid);

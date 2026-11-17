@@ -29,6 +29,8 @@ class ScheduleActivity : Activity() {
 
     private lateinit var listBox: LinearLayout
     private var events: List<Cloud.Event> = emptyList()
+    /** v6.36 (296): 이미 공지에 올라간 일정 번호 */
+    private var pinned: Set<String> = emptySet()
     private var showPast = false
     private val keyFmt = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
     private val niceFmt = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
@@ -66,7 +68,10 @@ class ScheduleActivity : Activity() {
             if (list == null) { toast(err ?: "불러오기 실패"); return@loadEvents }
             events = list
             Cloud.active?.id?.let { gid -> GroupNews.putEvents(gid, list); GroupNews.markKindSeen(gid, "event") }
+            pinned = GroupNews.noticeList(Cloud.active?.id).map { it.eid }.filter { it.isNotBlank() }.toSet()
             render()
+            Cloud.active?.let { g -> Cloud.loadNoticesOf(g) { ns, _ -> if (ns != null && !isFinishing) {
+                GroupNews.putNotices(g.id, ns); pinned = ns.map { it.eid }.filter { it.isNotBlank() }.toSet(); render() } } }
         }
     }
 
@@ -107,7 +112,23 @@ class ScheduleActivity : Activity() {
         val where = listOf(Store.catShort(e.cat), e.place, e.boat).filter { it.isNotBlank() }.joinToString(" · ")
         if (where.isNotBlank()) c.addView(Ui.text(this, 14f, Ui.TEXT, false, where), Ui.lp(this, MATCH, WRAP, top = 4))
         if (e.memo.isNotBlank()) c.addView(Ui.text(this, 13f, Ui.SUB, false, e.memo).apply { maxLines = 2 }, Ui.lp(this, MATCH, WRAP, top = 2))
-        c.addView(Ui.text(this, 11f, Ui.SUB, false, "올린 사람 ${e.ownerName}"), Ui.lp(this, MATCH, WRAP, top = 4))
+        // v6.36 (296): 올린 사람 + [📢 공지에 올리기] (그룹원 누구나 · 이미 올렸으면 '✓ 공지에 올라감')
+        val br = Ui.row(this)
+        br.addView(Ui.text(this, 11f, Ui.SUB, false, "올린 사람 ${e.ownerName}"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val on = e.id in pinned
+        br.addView(Ui.text(this, 12.5f, if (on) android.graphics.Color.parseColor("#9FE7C1") else android.graphics.Color.parseColor("#FFB27A"), true,
+            if (on) "✓ 공지에 올라감" else "📢 공지에 올리기").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), dp(5), dp(12), dp(5))
+            background = if (on) Ui.bg(this@ScheduleActivity, android.graphics.Color.parseColor("#1D3A2A"), 99, Ui.GREEN)
+                else Ui.bg(this@ScheduleActivity, android.graphics.Color.parseColor("#3A2814"), 99, android.graphics.Color.parseColor("#FFB27A"))
+            setOnClickListener {
+                if (on) { startActivity(android.content.Intent(this@ScheduleActivity, NoticeActivity::class.java)); return@setOnClickListener }
+                val title = dateText(e) + (if (e.time.isNotBlank()) " ${e.time}" else "") +
+                    listOf(Store.catShort(e.cat), e.place, e.boat).filter { it.isNotBlank() }.joinToString(" · ").let { if (it.isBlank()) "" else " · $it" }
+                Cloud.pinEvent(e, title, e.memo) { err -> toast(err ?: "공지에 올렸어요 · 그룹원 모두에게 보여요"); load() }
+            }
+        })
+        c.addView(br, Ui.lp(this, MATCH, WRAP, top = 6))
         return c
     }
 

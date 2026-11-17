@@ -67,7 +67,7 @@ class GroupActivity : Activity() {
         val top = Ui.row(this)
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
         if (part == "members") membersOpen = true
-        top.addView(Ui.text(this, 20f, Ui.TEXT, true, when (part) { "cal" -> "📅 출조 달력"; "members" -> "👥 멤버"; "invite" -> "✉ 초대"; "manage" -> "⚙ 그룹 관리"; else -> "그룹" }),
+        top.addView(Ui.text(this, 20f, Ui.TEXT, true, when (part) { "cal" -> "📅 출조 달력"; "members" -> "👥 멤버"; "invite" -> "💌 초대"; "manage" -> "⚙ 그룹 관리"; else -> "그룹" }),
             LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         root.addView(top)
         bandBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
