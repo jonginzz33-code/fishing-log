@@ -1298,16 +1298,20 @@ object Cloud {
         if (need.isEmpty()) return done(list)
         val got = HashMap<String, List<Store.Pt>>()
         var left = need.size
+        fun one() { left--; if (left == 0) done(list.map { r -> got[r.id]?.let { r.withTrack(it) } ?: r }) }
         need.forEach { t ->
-            db.collection("groups").document(g.id).collection("trips").document(t.id).collection("detail").document("track").get()
+            val ref = db.collection("groups").document(g.id).collection("trips").document(t.id).collection("detail").document("track")
+            // v6.38 (299): 끝난 출조 경로는 안 바뀌니까 폰에 저장된 것 먼저 (없을 때만 서버)
+            if (t.end > 0) docCacheFirst(ref) { d ->
+                @Suppress("UNCHECKED_CAST")
+                d?.let { got[t.id] = parsePts(it.get("pts") as? List<Map<String, Any?>>) }
+                one()
+            } else ref.get()
                 .addOnSuccessListener { d ->
                     @Suppress("UNCHECKED_CAST")
                     got[t.id] = parsePts(d.get("pts") as? List<Map<String, Any?>>)
                 }
-                .addOnCompleteListener {
-                    left--
-                    if (left == 0) done(list.map { r -> got[r.id]?.let { r.withTrack(it) } ?: r })
-                }
+                .addOnCompleteListener { one() }
         }
     }
 
@@ -1319,14 +1323,15 @@ object Cloud {
     /** 그룹의 최근 출조 목록 */
     fun recentTrips(done: (List<RemoteTrip>?, String?) -> Unit) {
         val g = active ?: return done(null, "그룹이 없어요")
-        recentTripsOf(g, done)
+        recentTripsOf(g, done = done)
     }
 
     /** 특정 그룹의 최근 출조 (지난 기록 겹치기에서 그룹을 골라 볼 때) */
-    fun recentTripsOf(g: Group, done: (List<RemoteTrip>?, String?) -> Unit) {
+    fun recentTripsOf(g: Group, quick: ((List<RemoteTrip>) -> Unit)? = null, done: (List<RemoteTrip>?, String?) -> Unit) {
         tripsCache[g.id]?.let { (at, list) -> if (System.currentTimeMillis() - at < 10 * 60_000L) { done(list, null); return } }
         val col = db.collection("groups").document(g.id).collection("trips")
-        smartList(col, col.orderBy("start", Query.Direction.DESCENDING).limit(300), "updated", "gtrips_${g.id}", tomb = "g_${g.id}") { docs, err ->
+        smartList(col, col.orderBy("start", Query.Direction.DESCENDING).limit(300), "updated", "gtrips_${g.id}", tomb = "g_${g.id}",
+            quick = quick?.let { q -> { docs -> q(docs.mapNotNull { parse(it) }.sortedByDescending { it.start }) } }) { docs, err ->
             if (docs == null) { done(null, err ?: "불러오기 실패"); return@smartList }
             val list = docs.mapNotNull { parse(it) }.sortedByDescending { it.start }
             tripsCache[g.id] = System.currentTimeMillis() to list
@@ -1341,6 +1346,7 @@ object Cloud {
      */
     fun smartList(col: com.google.firebase.firestore.CollectionReference, base: Query, field: String, key: String,
                   fullEveryMs: Long = 24 * 3600_000L, tomb: String? = null,
+                  quick: ((List<com.google.firebase.firestore.DocumentSnapshot>) -> Unit)? = null,
                   done: (List<com.google.firebase.firestore.DocumentSnapshot>?, String?) -> Unit) {
         val p = appContext.getSharedPreferences("smart_q", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
@@ -1364,6 +1370,9 @@ object Cloud {
                         .addOnFailureListener { done(null, e.message) }
                 }
         }
+        // v6.38 (299): 폰에 저장된 것 먼저 바로 (서버 확인 전) → 그 뒤 새 글 · 바뀐 글 합쳐서 한 번 더
+        if (quick != null && lastMax > 0L) base.get(com.google.firebase.firestore.Source.CACHE)
+            .addOnSuccessListener { cq -> val dead = gone(); val l = cq.documents.filter { it.exists() && it.id !in dead }; if (l.isNotEmpty()) quick(l) }
         if (now - lastFull > fullEveryMs || lastMax == 0L) { full(); return }
         val since = lastMax - 5 * 60_000L   // 폰마다 시계가 조금씩 달라서 5분 겹치게
         fun merge(delta: List<com.google.firebase.firestore.DocumentSnapshot>) {

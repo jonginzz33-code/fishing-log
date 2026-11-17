@@ -463,24 +463,30 @@ object PublicBoard {
     /** 잠깐 저장 (3분): 같은 화면을 다시 열어도 또 받지 않게 */
     private val cache = HashMap<Long, Pair<Long, List<PTrip>>>()
 
-    fun load(since: Long, done: (List<PTrip>?, String?) -> Unit) {
+    fun load(since: Long, quick: ((List<PTrip>) -> Unit)? = null, done: (List<PTrip>?, String?) -> Unit) {
         // 한 번 받은 목록(최근 300개)을 10분 기억 → 기간은 폰에서 거름 (기간을 바꿔도 다시 안 받음)
         cache[0L]?.let { (at, list) ->
             if (System.currentTimeMillis() - at < 10 * 60_000L) { done(list.filter { since <= 0 || it.start > since }, null); return }
         }
-        loadServer(0L) { list, err ->
+        loadServer(0L, quick?.let { q -> { l: List<PTrip> -> q(l.filter { since <= 0 || it.start > since }) } }) { list, err ->
             if (list != null) cache[0L] = System.currentTimeMillis() to list
             done(list?.filter { since <= 0 || it.start > since }, err)
         }
     }
 
-    private fun loadServer(since: Long, done: (List<PTrip>?, String?) -> Unit) {
+    private fun loadServer(since: Long, quick: ((List<PTrip>) -> Unit)? = null, done: (List<PTrip>?, String?) -> Unit) {
         var q: Query = db.collection("public").orderBy("start", Query.Direction.DESCENDING)
         if (since > 0) q = q.whereGreaterThan("start", since)
         // 폰에 저장된 글 + 그 뒤에 새로 올라오거나 바뀐 글만 서버에서 (3시간마다 한 번 전체)
-        Cloud.smartList(db.collection("public"), q.limit(300), "upd", "public_$since", tomb = "public") { docs, err ->
+        Cloud.smartList(db.collection("public"), q.limit(300), "upd", "public_$since", tomb = "public",
+            quick = quick?.let { qk -> { docs -> qk(parseDocs(docs)) } }) { docs, err ->
             if (docs == null) { done(null, err ?: "불러오기 실패 (보안 규칙 확인)"); return@smartList }
-            done(docs.mapNotNull { d ->
+            done(parseDocs(docs), null)
+        }
+    }
+
+    private fun parseDocs(docs: List<com.google.firebase.firestore.DocumentSnapshot>): List<PTrip> =
+            docs.mapNotNull { d ->
                     try {
                         @Suppress("UNCHECKED_CAST")
                         val prec = d.getString("prec") ?: ""
@@ -505,9 +511,7 @@ object PublicBoard {
                             d.getString("gname") ?: "", d.getString("gimg") ?: "", d.getString("mthumb") ?: "", d.getString("mainId") ?: "", d.getString("wx") ?: "",
                             d.getBoolean("hasTrack") == true, d.getString("gid") ?: "")
                     } catch (_: Exception) { null }
-                }.sortedByDescending { it.start }, null)
-        }
-    }
+                }.sortedByDescending { it.start }
 
     fun loadPhotos(id: String, done: (List<Cloud.RemotePhoto>) -> Unit) {
         // 한 번 본 사진은 폰에 저장된 것으로 (서버 안 읽음)

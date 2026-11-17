@@ -684,6 +684,8 @@ object MapDialog {
             map.invalidate()
         }
         addPill(quakeBtn)
+        // v6.38 (299): 메인 지도(내 위치)는 🌋 지진 · 지난 기록 처음부터 켜짐 (폰에 저장된 것 먼저 · 새 글만 서버)
+        if (layers.isEmpty()) { quakeBtn.performClick(); pastBtn.performClick() }
         val zBar = Zones.bar(a, map) { updateLegend() }
         addPill(zBar.pill)
 
@@ -919,12 +921,18 @@ object MapDialog {
                     it.time, "나", t.name(it.slot), paidMark(t.cat, t.paid), 0, if (it.q == 1 && it.acc > 0f) it.acc.toDouble() else 0.0, it.q == 1, key)
             }
         }
-        fun finish(all: List<MapDot>, nMine: Int, nOthers: Int, groupTrips: List<Pair<String, Cloud.RemoteTrip>> = emptyList()) {
+        val mineTrips = trips.toList()
+        // v6.38 (299): 폰에 저장된 것으로 먼저 한 번(final=false) → 서버에서 새 글까지 합친 뒤 한 번 더(final=true)
+        var finalDone = false
+        fun finish(all: List<MapDot>, nMine: Int, nOthers: Int, groupTrips: List<Pair<String, Cloud.RemoteTrip>> = emptyList(), final: Boolean = true) {
+            if (!final && finalDone) return
+            if (final) finalDone = true
             val sorted = trips.sortedByDescending { it.start }
             sorted.forEachIndexed { i, p -> p.color = if (i < TRIP_COLORS.size) TRIP_COLORS[i] else GREY_TRIP }
             pastTrips.clear(); sorted.forEach { pastTrips[it.key] = it }
             val colored = all.map { d -> pastTrips[d.trip]?.let { d.withColor(it.color) } ?: d }
             done(colored, nMine, nOthers, sorted)
+            if (!final) return
             // 색이 있는 그룹 친구 출조만 이동 경로 받기 (서버 읽기 줄이기)
             val top = sorted.take(TRIP_COLORS.size).map { it.key }.toSet()
             // v6.10 (257): 색이 있는 게시판 글 중 경로를 공개한 것도
@@ -952,7 +960,9 @@ object MapDialog {
         if (myId == null || mode == "mine") { finish(mine, mine.size, 0); return }
         if (mode == "public" || mode == "publicAll") {
             // v6.26: 전체 기간 = 기간 거르기 없이 (게시판 최근 300개)
-            PublicBoard.load(if (mode == "publicAll") 0L else System.currentTimeMillis() - 92L * 86_400_000L) { list, _ ->
+            fun buildPub(list: List<PublicBoard.PTrip>?, final: Boolean) {
+                if (!final && finalDone) return
+                trips.clear(); trips.addAll(mineTrips); pubWithTrack.clear()
                 val others = list.orEmpty().filter { it.owner != myId && !Moderation.isBlocked(it.owner) }.flatMap { t ->
                     val mul = Tide.mulName(t.start).substringBefore(" (")
                     val key = "p:${t.id}"
@@ -968,19 +978,20 @@ object MapDialog {
                             c.time, t.nick, t.name(c.slot), false, 2, if (t.exact) 0.0 else cell.r, false, key)
                     }
                 }
-                finish(mine + others, mine.size, others.size)
+                finish(mine + others, mine.size, others.size, final = final)
             }
+            PublicBoard.load(if (mode == "publicAll") 0L else System.currentTimeMillis() - 92L * 86_400_000L,
+                quick = { buildPub(it, false) }) { list, _ -> buildPub(list, true) }
             return
         }
         val gs = if (mode == "allg") Cloud.groups else Cloud.groups.filter { "g:${it.id}" == mode }
         if (gs.isEmpty()) { finish(mine, mine.size, 0); return }
         val got = mutableListOf<Pair<String, Cloud.RemoteTrip>>()
+        val quickGot = HashMap<String, List<Cloud.RemoteTrip>>()
         var left = gs.size
-        gs.forEach { g ->
-            Cloud.recentTripsOf(g) { list, _ ->
-                list?.let { l -> got.addAll(l.map { g.id to it }) }
-                left--
-                if (left == 0) {
+        fun buildGroups(got: List<Pair<String, Cloud.RemoteTrip>>, final: Boolean) {
+                    if (!final && finalDone) return
+                    trips.clear(); trips.addAll(mineTrips)
                     val friendsTrips = got.filter { it.second.owner != myId }.distinctBy { it.second.id }
                     val friends = friendsTrips.flatMap { (_, t) ->
                         val mul = Tide.mulName(t.start).substringBefore(" (")
@@ -997,8 +1008,16 @@ object MapDialog {
                                 it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1, 0.0, false, key)
                         }
                     }
-                    finish(mine + friends, mine.size, friends.size, friendsTrips)
-                }
+                    finish(mine + friends, mine.size, friends.size, friendsTrips, final)
+        }
+        gs.forEach { g ->
+            Cloud.recentTripsOf(g, quick = { l ->
+                quickGot[g.id] = l
+                if (quickGot.size == gs.size) buildGroups(quickGot.flatMap { (gid, ts) -> ts.map { gid to it } }, false)
+            }) { list, _ ->
+                list?.let { l -> got.addAll(l.map { g.id to it }) }
+                left--
+                if (left == 0) buildGroups(got, true)
             }
         }
     }
