@@ -2849,6 +2849,19 @@ class MainActivity : Activity() {
         }
     }
 
+    /** v6.37 (297): 빨간 작은 'NEW' 칩 글자 */
+    private fun newChip(t: String): CharSequence = android.text.SpannableString(t).apply {
+        setSpan(android.text.style.BackgroundColorSpan(Color.parseColor("#E5484D")), 0, length, 0)
+        setSpan(android.text.style.ForegroundColorSpan(Color.WHITE), 0, length, 0)
+        setSpan(android.text.style.RelativeSizeSpan(0.78f), 0, length, 0)
+        setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, length, 0)
+    }
+    /** 버튼 글자 뒤에 'NEW N' (0이면 그대로) */
+    private fun withNew(v: TextView, n: Int) {
+        if (n <= 0) return
+        v.text = android.text.SpannableStringBuilder(v.text).append("  ").append(newChip(" NEW $n "))
+    }
+
     private fun renderGroupPanel() {
         paintHeadGroup()
         if (!::groupBtn.isInitialized) return
@@ -2941,8 +2954,12 @@ class MainActivity : Activity() {
             nh.addView(Ui.text(this, 14.5f, Color.parseColor("#F2C14E"), true, "📢 공지 · ${nl.size}개"), LinearLayout.LayoutParams(0, WRAP, 1f))
             nh.addView(Ui.text(this, 12f, Ui.SUB, false, "전체 보기 ›"))
             nb.addView(nh)
+            val unseenNo = GroupNews.items(activeId).filter { it.isNotice }.map { it.id }.toSet()
             nl.take(3).forEach { n ->
-                nb.addView(Ui.text(this, 13.5f, Color.parseColor("#FFD166"), true, (if (n.eid.isNotBlank()) "[일정] " else "") + n.title).apply { maxLines = 2 },
+                val nt = android.text.SpannableStringBuilder()
+                if (n.id in unseenNo) nt.append(newChip(" NEW ")).append(" ")   // v6.37 (297)
+                nt.append((if (n.eid.isNotBlank()) "[일정] " else "") + n.title)
+                nb.addView(Ui.text(this, 13.5f, Color.parseColor("#FFD166"), true, "").apply { text = nt; maxLines = 2 },
                     Ui.lp(this, MATCH, WRAP, top = 8))
                 if (n.body.isNotBlank()) nb.addView(Ui.text(this, 12.5f, Color.parseColor("#EAD9A8"), false, n.body).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END },
                     Ui.lp(this, MATCH, WRAP, top = 2))
@@ -2969,25 +2986,30 @@ class MainActivity : Activity() {
         val noCount = GroupNews.notices(activeId)
         groupBox.addView(View(this), Ui.lp(this, MATCH, dp(6)))
         // 공지: 새 공지가 있을 때만 노랑 강조 (확인하면 꺼짐)
-        val noticeBtn = gbtn(if (noCount > 0) "📢 공지 ($noCount)" else "📢 공지") { startActivity(Intent(this, NoticeActivity::class.java)) }
+        // v6.37 (297): 전체 개수 대신 안 본 새 글만 빨간 'NEW N' (내가 올린 건 안 셈 · 열어 보면 꺼짐)
+        val noticeBtn = gbtn("📢 공지") { startActivity(Intent(this, NoticeActivity::class.java)) }
+        withNew(noticeBtn, newNo)
         if (newNo > 0) { noticeBtn.setTextColor(Color.parseColor("#F2C14E")); noticeBtn.background = Ui.bg(this, Color.TRANSPARENT, 99, Color.parseColor("#F2C14E")) }
         // 일정: 내일 출조면 초록 꽉 채움, 안 본 새 일정이면 초록 테두리, 확인했으면 기본 색
-        val schedLabel = "⏰ " + when { tomN > 0 -> "일정 · 내일 출조!"; todayN > 0 -> "일정 · 오늘 출조"; up > 0 -> "일정 ($up)"; else -> "일정" }
+        val schedLabel = "⏰ " + when { tomN > 0 -> "일정 · 내일 출조!"; todayN > 0 -> "일정 · 오늘 출조"; else -> "일정" }
         val schedBtn = gbtn(schedLabel, newEv > 0) { startActivity(Intent(this, ScheduleActivity::class.java)) }
+        withNew(schedBtn, newEv)
         if (tomN > 0) { schedBtn.setTextColor(Ui.BG); schedBtn.background = Ui.bg(this, Ui.GREEN, 99) }
         pair(noticeBtn, schedBtn)
         // 그룹 출조 기록: 새로 올라온 출조가 있으면 초록 강조 + 개수 (열면 꺼짐)
         val newTr = GroupNews.newTrips(activeId)
-        val tripsBtn = gbtn(if (newTr > 0) "📒 그룹 출조 기록 · 새 글 $newTr" else "📒 그룹 출조 기록", newTr > 0) {
+        val tripsBtn = gbtn("📒 그룹 출조 기록", newTr > 0) {
             startActivity(Intent(this, GroupTripsActivity::class.java))
         }
+        withNew(tripsBtn, newTr)
         pair(tripsBtn,
             gbtn("🟢 같이 출조 중") { showMates() })
         // 그룹 채팅: 안 읽은 글이 있으면 노랑 강조 + 개수
         val chatN = activeId?.let { Chat.unread(it) } ?: 0
-        val chatG = gbtn(if (chatN > 0) "💬 그룹 채팅 · 새 글 $chatN" else "💬 그룹 채팅") {
+        val chatG = gbtn("💬 그룹 채팅") {
             startActivity(Intent(this, ChatActivity::class.java).putExtra("room", activeId))
         }
+        withNew(chatG, chatN)
         if (chatN > 0) { chatG.setTextColor(Color.parseColor("#F2C14E")); chatG.background = Ui.bg(this, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E")) }
         // v6.26: '달력 · 멤버 · 그룹 관리 · 초대'를 네 칸으로 나눔
         fun openPart(p: String) = startActivity(Intent(this, GroupActivity::class.java).putExtra("part", p))

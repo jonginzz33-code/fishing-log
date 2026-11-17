@@ -184,6 +184,24 @@ object Warn {
         return t
     }
 
+    /**
+     * v6.37 (298): 🌊 지진해일 특보 (내 구역 · 위치 모르면 전국) — 없으면 "" · 실패하면 null
+     *  기상특보 현황 글에서 '해일'이 들어간 줄
+     */
+    fun tsunami(lat: Double?, lon: Double?, done: (String?) -> Unit) {
+        val area = if (lat != null && lon != null) seaArea(lat, lon) else null
+        Thread {
+            val r = try {
+                val t = load() ?: ""
+                t.split("\n", "\r").map { it.trim().removePrefix("o").trim() }.filter { it.contains("해일") }
+                    .filter { l -> area == null || !l.contains(":") || l.substringAfter(":").replace(" ", "").let { z -> z.contains(area) || z.contains(area.take(2)) } }
+                    .map { if (it.contains(":")) it.substringBefore(":").trim() + " : " + it.substringAfter(":").trim().take(60) else it.take(80) }
+                    .distinct().joinToString(" · ")
+            } catch (e: Exception) { lastErr = e.message ?: ""; null }
+            Net.main.post { done(r) }
+        }.start()
+    }
+
     /** 내 구역 특보 한 줄 (없으면 "") · 실패하면 null */
     fun forPlace(lat: Double, lon: Double, done: (String?) -> Unit) {
         val area = seaArea(lat, lon)
@@ -192,7 +210,7 @@ object Warn {
                 val t = load() ?: ""
                 // "o 풍랑주의보 : 서해중부먼바다, …" 처럼 줄마다 특보 이름 : 구역들
                 t.split("\n", "\r").map { it.trim().removePrefix("o").trim() }.filter { it.contains(":") }
-                    .filter { l -> l.substringAfter(":").replace(" ", "").contains(area) }
+                    .filter { l -> l.substringAfter(":").replace(" ", "").let { z -> z.contains(area) || (l.contains("해일") && z.contains(area.take(2))) } }   // v6.37: 지진해일도
                     .map { it.substringBefore(":").trim() }.filter { it.isNotBlank() }.distinct()
                     .joinToString(" · ")
             } catch (e: Exception) { lastErr = e.message ?: ""; null }

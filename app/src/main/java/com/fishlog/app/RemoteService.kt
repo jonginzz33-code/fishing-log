@@ -107,9 +107,26 @@ class RemoteService : Service() {
         }
     }
 
+    // v6.37 (298): 출조 중 내 바다 구역에 지진해일 특보 → 알람 (15분마다 · 같은 특보는 한 번)
+    private var tsuAt = 0L
+    private var tsuLast = ""
+    private fun checkTsunami(now: Long) {
+        if (Store.current == null || Store.current?.isFresh() == true || now - tsuAt < 15 * 60_000L) return
+        tsuAt = now
+        val loc = Tracker.last?.let { it.latitude to it.longitude } ?: Store.current?.anyLocation()
+        Warn.tsunami(loc?.first, loc?.second) { t ->
+            if (t.isNullOrBlank()) { if (t != null) tsuLast = ""; return@tsunami }
+            if (t == tsuLast) return@tsunami
+            tsuLast = t
+            notifyTide("🌊 지진해일 특보", "$t\n바다 · 갯바위 · 갯벌에서 바로 나와 높은 곳으로 피하세요")
+            Haptics.undo(this)
+        }
+    }
+
     private fun checkTideAlarm() {
         val min = Store.tideAlarmMin
         val now0 = System.currentTimeMillis()
+        checkTsunami(now0)
         if (Store.current != null && (Store.floodAlert || Store.sunAlert)) {
             if (Store.floodAlert && Store.current?.isFresh() != true && ((tideExt.isEmpty() && now0 - tideLoadedAt > 5 * 60_000L) || now0 - tideLoadedAt > 3 * 3600_000L)) loadTide()
             checkExtraAlerts(now0)

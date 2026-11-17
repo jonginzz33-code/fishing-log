@@ -654,6 +654,36 @@ object MapDialog {
             map.invalidate()
         }
         addPill(pastBtn)
+        // v6.37 (298): 🌋 지진 최근 4일 핀 (기상청) · 누르면 자세히
+        val quakeOv = Quake.QuakeOverlay(a) { e ->
+            val me = Tracker.last
+            AlertDialog.Builder(a, R.style.FlAlert).setTitle("🌋 지진 정보")
+                .setMessage(Quake.detail(e, me?.latitude, me?.longitude))
+                .setPositiveButton("닫기", null).show()
+        }.apply { isEnabled = false }
+        map.overlays.add(quakeOv)
+        val quakeBtn = pill("🌋 지진 ${Quake.DAYS}일")
+        var quakeLoaded = false
+        quakeBtn.setOnClickListener {
+            quakeOv.isEnabled = !quakeOv.isEnabled
+            setOn(quakeBtn, quakeOv.isEnabled)
+            if (quakeOv.isEnabled && !quakeLoaded) {
+                quakeBtn.text = "🌋 지진 받는 중…"
+                Quake.load(a) { list, err ->
+                    if (list != null) { quakeLoaded = err == null; quakeOv.list = list }
+                    quakeBtn.text = when {
+                        list == null -> "🌋 지진 ${Quake.DAYS}일 · 못 받음"
+                        list.isEmpty() -> "🌋 지진 ${Quake.DAYS}일 · 없음"
+                        else -> "🌋 지진 ${Quake.DAYS}일 · ${list.size}건"
+                    }
+                    if (err != null) Ui.toast(a, "지진 정보를 못 받았어요\n$err")
+                    else if (list != null && list.isEmpty()) Ui.toast(a, "최근 ${Quake.DAYS}일 동안 우리나라 주변 지진이 없어요")
+                    map.invalidate()
+                }
+            }
+            map.invalidate()
+        }
+        addPill(quakeBtn)
         val zBar = Zones.bar(a, map) { updateLegend() }
         addPill(zBar.pill)
 
@@ -673,6 +703,20 @@ object MapDialog {
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(chipWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
+        // v6.37 (298): 🌊 지진해일 특보가 있으면 지도 맨 위 빨간 띠
+        val tsuBar = TextView(a).apply {
+            textSize = 13.5f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(a, 14), dp(a, 8), dp(a, 14), dp(a, 8))
+            background = GradientDrawable().apply { setColor(Color.parseColor("#C62828")); cornerRadius = dp(a, 10).toFloat() }
+            visibility = android.view.View.GONE
+        }
+        root.addView(tsuBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
+        run {
+            val p = Tracker.last?.let { it.latitude to it.longitude } ?: live?.anyLocation()
+            Warn.tsunami(p?.first, p?.second) { t ->
+                if (!t.isNullOrBlank()) { tsuBar.text = "🌊 $t — 바다에서 멀리, 높은 곳으로 피하세요"; tsuBar.visibility = android.view.View.VISIBLE }
+            }
+        }
 
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
