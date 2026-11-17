@@ -298,7 +298,17 @@ object TideDialog {
         val titleBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(18), dp(22), dp(4)) }
         val titleView = Ui.text(a, 19f, Ui.TEXT, true, "").apply { text = titleText(a, lat, lon) }
         val stationBtn = Ui.text(a, 12f, Ui.BLUE, true, stationSub(a, lat, lon))
-        titleBox.addView(titleView)
+        // v6.32 (287): 맨 위 제목 줄 오른쪽 📷 카메라 그림 = 이 날 물때 + 날씨 전부 한 장으로 찍기
+        val shotBtn = android.widget.ImageView(a).apply {
+            setImageResource(R.drawable.ic_shot); scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(7), dp(7), dp(7), dp(7)); background = Ui.bg(a, Ui.CARD, 12, Ui.LINE)
+            contentDescription = "물때 사진 찍기"
+        }
+        titleBox.addView(LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(titleView, LinearLayout.LayoutParams(0, WRAP, 1f))
+            addView(shotBtn, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
+        })
         titleBox.addView(stationBtn, Ui.lp(a, MATCH, WRAP, top = 3))
         // v6.21: 날짜 고르기 · 알람 · 지점/관측소 검색은 고정 (스크롤해도 안 사라짐)
         titleBox.addView(nav, Ui.lp(a, MATCH, WRAP, top = 10))
@@ -870,6 +880,11 @@ object TideDialog {
         }
         // v6.21: 제목 칸에 날짜 · 버튼이 들어가서, 관측소 바꾸기는 제목 글씨 · 관측소 줄을 눌렀을 때만
         titleView.setOnClickListener { pickStation() }
+        shotBtn.setOnClickListener {
+            val tag = SimpleDateFormat("MMdd", Locale.KOREA).format(Date(cur))
+            Snap.capture(a, listOf(titleView, stationBtn), col,
+                "조과일지 · " + titleText(a, lat, lon, cur).toString().removePrefix("물때 · 바람 · 수온 · "), "물때-$tag")
+        }
         stationBtn.setOnClickListener { pickStation() }
         changeBtn.setOnClickListener { pickStation() }
         alarmBtn.setOnClickListener { pickAlarm(a) { alarmBtn.text = alarmLabel(); onChanged?.invoke() } }
