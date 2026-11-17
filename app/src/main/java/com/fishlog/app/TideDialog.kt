@@ -332,23 +332,35 @@ object TideDialog {
         fun paintSides() {
             val dy = sideDay; val st = sideSt; val w = sideW
             if (!boatMode || dy == null || st == null || w == null || w.dayStart != dayStart(dy.dateMillis + 12 * 3_600_000L)) { flow.setSides(null); sideText = ""; return }
-            val out = IntArray(8)
+            // v6.34 (289): 물살이 약해도 바람이 불면 배는 바람에 밀려 흘러요 → 선수 (사용자 '물이 안 가더라도 바람은 불잖아')
+            val out = IntArray(8); var calm = 0; var known = 0
             for (b in 0 until 8) {
                 val winds = (0..2).mapNotNull { k -> w.at(b * 3 + k)?.wind }
                 val flows = (0..2).mapNotNull { k -> BiteMemo.flowAt(dy, st, dy.dateMillis + (b * 3 + k) * 3_600_000L + 30 * 60_000L) }
                 if (winds.isEmpty() || flows.isEmpty()) continue
-                val ws = winds.average() / 8.0      // 바람 8m/s ≈ 1
-                val fs = flows.average() / 60.0     // 물살 60% ≈ 1
+                known++
+                val wv = winds.average(); val fv = flows.average()
+                val ws = wv / 8.0      // 바람 8m/s ≈ 1
+                val fs = fv / 60.0     // 물살 60% ≈ 1
                 out[b] = when {
-                    ws < 0.45 && fs < 0.45 -> 0          // 둘 다 약함
-                    ws - fs > 0.25 -> 1                  // 바람이 이김 → 가벼운 앞(선수)이 밀려 앞장
-                    fs - ws > 0.25 -> 2                  // 물살이 이김 → 무거운 뒤(선미)가 끌려 앞장
-                    else -> 0
+                    wv < 2.5 && fv < 30 -> { calm++; 3 }             // 바람도 물살도 거의 없음 → 거의 안 흐름
+                    fs - ws > 0.25 -> 2                               // 물살이 확실히 셈 → 무거운 뒤(선미)가 끌려 앞장
+                    wv >= 2.5 && (fv < 30 || ws - fs > 0.15) -> 1     // 물살 약하거나 바람이 더 셈 → 가벼운 앞(선수)이 밀려 앞장
+                    else -> 3                                         // 둘이 겨룸 → 비슷
                 }
             }
+            val nB = out.count { it == 1 }; val nS = out.count { it == 2 }
+            sideText = "\n⛴ 막대 위 = 자리 예상(대충): 바람에 밀리면 선수 · 물살에 끌리면 선미 · 비슷 = 둘이 겨룸/거의 안 흐름 · 배와 선장님에 따라 달라요" +
+                when {
+                    known == 0 -> ""
+                    calm == known -> "\n⛴ 이날은 바람 · 물살 둘 다 약해서 배가 거의 안 흘러요 · 자리 차이 적어요"
+                    nB > 0 && nS == 0 -> "\n⛴ 이날은 물살보다 바람이 세서 대체로 선수 쪽이 앞장서요"
+                    nS > 0 && nB == 0 -> "\n⛴ 이날은 물살이 세서 대체로 선미 쪽이 앞장서요"
+                    else -> "\n⛴ 시간에 따라 바뀌어요 (선수 ${nB * 3}시간 · 선미 ${nS * 3}시간)"
+                }
             flow.setSides(out)
-            sideText = "\n⛴ 막대 위 = 자리 예상(대충): 바람 셈 → 선수 · 물살 셈 → 선미 · 없으면 비슷 · 배와 선장님에 따라 달라요"
-            if (!flowNote.text.contains("⛴")) flowNote.append(sideText)
+            val base = flowNote.text.toString().substringBefore("\n⛴")
+            flowNote.text = base + sideText
         }
 
         fun renderWeather(w: Weather.Day) {

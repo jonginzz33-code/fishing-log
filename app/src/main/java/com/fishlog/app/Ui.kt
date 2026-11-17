@@ -793,7 +793,7 @@ class FlowBarView(c: Context) : View(c) {
 
     fun set(dd: Tide.Day, s: Tide.Strength) { day = dd; st = s; invalidate() }
 
-    /** v6.31 (285): 3시간 칸마다 ⛴ 자리 예상 (1 = 선수 · 2 = 선미 · 0 = 비슷) — 막대 위에 작은 글자만 (막대 계산 · 모양은 그대로) */
+    /** v6.31 (285) · v6.34 (289): 3시간 칸마다 ⛴ 자리 예상 (1 = 선수 · 2 = 선미 · 3 = 비슷(흐리게) · 0 = 모름) — 막대 위에 작은 글자만 (막대 계산 · 모양은 그대로) */
     private var sides: IntArray? = null
     fun setSides(v: IntArray?) { sides = v; invalidate() }
     private val sideP = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -824,16 +824,16 @@ class FlowBarView(c: Context) : View(c) {
         for (hh in 0..24 step 3) canvas.drawText(hh.toString(), left + hh * slot, h - 2 * d, tp)
         // ⛴ 3시간 칸 중 가장 높은 막대 바로 위에 '선수'(주황) / '선미'(파랑)
         sides?.forEachIndexed { b, v ->
-            if (v != 1 && v != 2) return@forEachIndexed
+            if (v != 1 && v != 2 && v != 3) return@forEachIndexed
             val f = (0..2).mapNotNull { k -> s.hourly.getOrNull(b * 3 + k) }.maxOrNull()?.let { (it / max).toFloat() } ?: 0f
             val top = bottom - (bottom - 4 * d - extra) * f.coerceAtLeast(0.05f)
             val cx = left + (b * 3 + 1.5f) * slot
-            val label = if (v == 1) "선수" else "선미"
+            val label = when (v) { 1 -> "선수"; 2 -> "선미"; else -> "비슷" }
             val tw = sideT.measureText(label)
-            sideP.color = if (v == 1) Ui.ORANGE else Color.parseColor("#3A8FD8")
+            sideP.color = when (v) { 1 -> Ui.ORANGE; 2 -> Color.parseColor("#3A8FD8"); else -> Color.parseColor("#2B4253") }
             val y1 = top - 3 * d; val y0 = y1 - 13 * d
             canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
-            sideT.color = if (v == 1) Color.parseColor("#1B0E02") else Color.WHITE
+            sideT.color = when (v) { 1 -> Color.parseColor("#1B0E02"); 2 -> Color.WHITE; else -> Color.parseColor("#9FB4C2") }
             canvas.drawText(label, cx, y1 - 3.5f * d, sideT)
         }
     }
