@@ -258,7 +258,7 @@ object Weather {
             val q = "/1192136/dtRecent/GetDTRecentApiService?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&obsCode=${s.code}&reqDate=$ymd&min=10&type=json&pageNo=1&numOfRows=300"
             var body: String? = null
-            for (scheme in listOf("https", "http")) { try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {} }
+            for (scheme in schemes()) { try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {} }
             val b = body?.trim() ?: continue
             if (b.startsWith("<")) {
                 if (b.contains("SERVICE_KEY_IS_NOT_REGISTERED") || b.contains("ACCESS DENIED"))
@@ -297,8 +297,19 @@ object Weather {
 
     private fun get(url: String): String {
         val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = 10_000; c.readTimeout = 10_000
-        return try { c.inputStream.bufferedReader().use { it.readText() } } finally { c.disconnect() }
+        // v6.35 (288): 10초 → 6초 (느린 서버 하나 때문에 오래 기다리지 않게)
+        c.connectTimeout = 6_000; c.readTimeout = 6_000
+        return try { c.inputStream.bufferedReader().use { it.readText() } }
+        catch (e: Exception) { if (url.startsWith("https://apis.data.go.kr")) httpsBad = true; throw e }
+        finally { c.disconnect() }
+    }
+    /** v6.35 (288): 공공데이터포털이 https 로 한 번 실패하면 다음부턴 http 먼저 (매번 6초씩 기다리지 않게) */
+    @Volatile private var httpsBad = false
+    private fun schemes() = if (httpsBad) listOf("http", "https") else listOf("https", "http")
+    /** v6.35 (288): 서로 상관없는 일을 동시에 (가장 느린 것만큼만 걸림) */
+    private fun par(vararg jobs: () -> Unit) {
+        val ts = jobs.map { j -> Thread { try { j() } catch (_: Exception) {} }.apply { start() } }
+        ts.forEach { try { it.join(25_000L) } catch (_: Exception) {} }
     }
 
     private fun dayStartOf(time: Long): Long = dayFmt.parse(dayFmt.format(Date(time)))!!.time
@@ -307,7 +318,11 @@ object Weather {
     fun prefetch(ctx: Context, lat: Double, lon: Double) = fetch(ctx, lat, lon, dayStartOf(System.currentTimeMillis())) { }
 
     /** dayStart = 그날 0시 (한국 시각) */
-    fun fetch(ctx: Context, lat: Double, lon: Double, dayStart: Long, done: (Day) -> Unit) {
+    /**
+     * [progressive] = true 면 (v6.35 · 288) ① 새로고침 중엔 저장분 먼저 ② 바람 · 파도가 오면 먼저 (실측 수온은 '받는 중')
+     * ③ 실측 수온까지 오면 한 번 더 → done 이 여러 번 불릴 수 있음 (물때 창만)
+     */
+    fun fetch(ctx: Context, lat: Double, lon: Double, dayStart: Long, progressive: Boolean = false, done: (Day) -> Unit) {
         val key = String.format(Locale.US, "%.2f,%.2f,%d", lat, lon, dayStart) + if (Store.windSea) ",sea" else ""
         // 기억 시간: 오늘은 30분(낙뢰·지금 날씨), 다른 날은 3시간 30분 (기상청 예보는 3시간마다 바뀜)
         val ttl = if (dayStart == dayStartOf(System.currentTimeMillis())) 30 * 60_000L else KEEP_MS
@@ -317,8 +332,21 @@ object Weather {
             if (System.currentTimeMillis() - at < ttl) { cache[key] = at to d; done(d); return }
         }
         val app = ctx.applicationContext
+        // 새로고침 중이어도 마지막 저장분을 먼저 보여 주고 뒤에서 새로 받기
+        if (progressive) diskDay(key)?.let { (_, d) -> done(d) }
         Thread {
-            val d = try { load(app, lat, lon, dayStart) } catch (e: Exception) {
+            var mRes: Pair<Measured?, String>? = null
+            val mThread = if (progressive) Thread { mRes = try { measuredFor(app, lat, lon, dayStart) } catch (_: Exception) { null to "" } }.apply { start() } else null
+            val d = try {
+                if (mThread == null) load(app, lat, lon, dayStart)
+                else {
+                    val first = load(app, lat, lon, dayStart) { mRes ?: (null to "🌡 실측 수온 받는 중…") }
+                    if (mThread.isAlive && first.hours.isNotEmpty()) main.post { done(first) }   // 바람 · 파도 먼저
+                    try { mThread.join(25_000L) } catch (_: Exception) {}
+                    val m = mRes ?: (null to "실측 수온을 못 받았어요")
+                    Day(first.dayStart, first.hours, first.windNote, first.seaNote, m.first, m.second, first.kmaNote, first.fromKma, first.windBasis)
+                }
+            } catch (e: Exception) {
                 Day(dayStart, emptyList(), "바람 정보를 못 받았어요 (인터넷 확인)", "", null, "")
             }
             var out = d
@@ -336,122 +364,133 @@ object Weather {
         }.start()
     }
 
-    private fun load(ctx: Context, lat: Double, lon: Double, dayStart: Long): Day {
+    private fun load(ctx: Context, lat: Double, lon: Double, dayStart: Long, measuredOf: (() -> Pair<Measured?, String>)? = null): Day {
         val today = dayStartOf(System.currentTimeMillis())
         val diff = Math.round((dayStart - today) / 86_400_000.0).toInt()
         val date = dayFmt.format(Date(dayStart + 12 * 3_600_000L))
 
-        // ---- 바람 ----
+        // v6.35 (288): 아래 받기들을 동시에 (예전엔 하나씩 차례로)
         val wind = HashMap<Long, Triple<Double?, Double?, Double?>>()
+        val windSea = HashMap<Long, Triple<Double?, Double?, Double?>>()
         val wcodes = HashMap<Long, Int>()
         val omTemp = HashMap<Long, Double>(); val omPop = HashMap<Long, Int>()
         var windNote = ""
-        if (diff in -90..15) {
-            try {
-                val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
-                    "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m,precipitation_probability&wind_speed_unit=ms" +
-                    "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
-                val h = JSONObject(body).getJSONObject("hourly")
-                val t = h.getJSONArray("time")
-                val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
-                for (i in 0 until t.length()) {
-                    val ms = isoFmt.parse(t.getString(i))?.time ?: continue
-                    wind[ms] = Triple(num(ws, i), num(wd, i), num(wg, i))
-                    num(h.optJSONArray("weather_code"), i)?.let { wcodes[ms] = it.toInt() }
-                    num(h.optJSONArray("temperature_2m"), i)?.let { omTemp[ms] = it }
-                    num(h.optJSONArray("precipitation_probability"), i)?.let { omPop[ms] = it.toInt() }
-                }
-            } catch (_: Exception) { windNote = "바람 정보를 못 받았어요 (인터넷 확인)" }
-        } else windNote = "바람은 3달 전부터 15일 뒤까지만 볼 수 있어요"
-
-        // ---- v5.0 (230): 해상 바람 — 내 위치에서 가장 가까운 바다 칸 값으로 ----
         val seaMode = Store.windSea
         val sp = if (seaMode) seaPoint(lat, lon) else null
         val own = grid(lat, lon)
         val windBasis = basisLine(sp)
-        if (sp != null && diff in -90..15) {
-            try {
-                val body = get("https://api.open-meteo.com/v1/forecast?latitude=${sp.lat}&longitude=${sp.lon}" +
-                    "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=ms" +
-                    "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
-                val h = JSONObject(body).getJSONObject("hourly")
-                val t = h.getJSONArray("time")
-                val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
-                for (i in 0 until t.length()) {
-                    val ms = isoFmt.parse(t.getString(i))?.time ?: continue
-                    val v = num(ws, i) ?: continue
-                    wind[ms] = Triple(v, num(wd, i), num(wg, i))
-                }
-            } catch (_: Exception) {}
-        }
-
-        // ---- 파고 · 수온 예측 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로) ----
         val sea = HashMap<Long, Pair<Double?, Double?>>()
         val seaPd = HashMap<Long, Pair<Double?, Double?>>() // 주기(s), 파향(°)
         var seaNote = ""
-        if (diff in -90..7) {
-            // 가까운 칸부터, 그래도 파고가 없으면 서해 쪽 열린 바다까지 (최대 약 60km)
-            val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16, -0.08 to -0.08,
-                0.0 to -0.25, -0.1 to -0.3, 0.0 to -0.4, -0.15 to -0.45, -0.25 to -0.5, 0.0 to -0.6, -0.3 to -0.65)
-            var firstSst: HashMap<Long, Double?>? = null
-            for ((dla, dlo) in offsets) {
-                try {
-                    // v5.1: 해상이면 해상 기준점에서부터
-                    val body = get("https://marine-api.open-meteo.com/v1/marine?latitude=${(sp?.lat ?: lat) + dla}&longitude=${(sp?.lon ?: lon) + dlo}" +
-                        "&hourly=wave_height,sea_surface_temperature,wave_period,wave_direction&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
+        var kmaNote = ""
+        var kma: Map<Long, Kma> = emptyMap()
+        val ymd = keyFmt.format(Date(dayStart + 12 * 3_600_000L))
+        var seaK: Map<Long, Kma> = emptyMap()
+        var lightning: Set<Long> = emptySet()
+        var saved: Map<Long, Hour> = emptyMap()
+        par(
+            // ---- 바람 ----
+            {
+                if (diff in -90..15) {
+                    try {
+                        val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+                            "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m,precipitation_probability&wind_speed_unit=ms" +
+                            "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
+                        val h = JSONObject(body).getJSONObject("hourly")
+                        val t = h.getJSONArray("time")
+                        val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
+                        for (i in 0 until t.length()) {
+                            val ms = isoFmt.parse(t.getString(i))?.time ?: continue
+                            wind[ms] = Triple(num(ws, i), num(wd, i), num(wg, i))
+                            num(h.optJSONArray("weather_code"), i)?.let { wcodes[ms] = it.toInt() }
+                            num(h.optJSONArray("temperature_2m"), i)?.let { omTemp[ms] = it }
+                            num(h.optJSONArray("precipitation_probability"), i)?.let { omPop[ms] = it.toInt() }
+                        }
+                    } catch (_: Exception) { windNote = "바람 정보를 못 받았어요 (인터넷 확인)" }
+                } else windNote = "바람은 3달 전부터 15일 뒤까지만 볼 수 있어요"
+            },
+            // ---- v5.0 (230): 해상 바람 — 내 위치에서 가장 가까운 바다 칸 값으로 ----
+            {
+                if (sp != null && diff in -90..15) {
+                    val body = get("https://api.open-meteo.com/v1/forecast?latitude=${sp.lat}&longitude=${sp.lon}" +
+                        "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=ms" +
+                        "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
                     val h = JSONObject(body).getJSONObject("hourly")
                     val t = h.getJSONArray("time")
-                    val wv = h.optJSONArray("wave_height"); val st = h.optJSONArray("sea_surface_temperature")
-                    var okW = 0; var okS = 0
-                    val tmpSea = HashMap<Long, Pair<Double?, Double?>>(); val tmpPd = HashMap<Long, Pair<Double?, Double?>>()
+                    val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
                     for (i in 0 until t.length()) {
                         val ms = isoFmt.parse(t.getString(i))?.time ?: continue
-                        val w = num(wv, i); val s = num(st, i)
-                        if (w != null) okW++
-                        if (s != null) okS++
-                        tmpSea[ms] = w to s
-                        tmpPd[ms] = num(h.optJSONArray("wave_period"), i) to num(h.optJSONArray("wave_direction"), i)
+                        val v = num(ws, i) ?: continue
+                        windSea[ms] = Triple(v, num(wd, i), num(wg, i))
                     }
-                    // 수온은 가장 가까운 칸 값을 쓰고, 파고만 더 먼 바다에서
-                    if (okS >= 6 && firstSst == null) firstSst = HashMap(tmpSea.mapValues { it.value.second })
-                    if (okW >= 6) {
-                        tmpSea.forEach { (k, v) -> sea[k] = v.first to (firstSst?.get(k) ?: v.second) }
-                        seaPd.putAll(tmpPd)
-                        val km = Math.round(Math.hypot(dla * 111.0, dlo * 111.0 * Math.cos(Math.toRadians(lat))))
-                        if (km >= 10 && sp == null) seaNote = "파고: 가까운 바다 칸이 비어서 약 ${km}km 떨어진 앞바다 예보예요"
-                        break
+                }
+            },
+            // ---- 파고 · 수온 예측 (바닷가 격자가 비어 있으면 조금씩 바다 쪽으로) ----
+            {
+                if (diff in -90..7) {
+                    // 가까운 칸부터, 그래도 파고가 없으면 서해 쪽 열린 바다까지 (최대 약 60km)
+                    val offsets = listOf(0.0 to 0.0, 0.0 to -0.08, 0.0 to 0.08, -0.08 to 0.0, 0.08 to 0.0, 0.0 to -0.16, -0.08 to -0.08,
+                        0.0 to -0.25, -0.1 to -0.3, 0.0 to -0.4, -0.15 to -0.45, -0.25 to -0.5, 0.0 to -0.6, -0.3 to -0.65)
+                    var firstSst: HashMap<Long, Double?>? = null
+                    for ((dla, dlo) in offsets) {
+                        try {
+                            // v5.1: 해상이면 해상 기준점에서부터
+                            val body = get("https://marine-api.open-meteo.com/v1/marine?latitude=${(sp?.lat ?: lat) + dla}&longitude=${(sp?.lon ?: lon) + dlo}" +
+                                "&hourly=wave_height,sea_surface_temperature,wave_period,wave_direction&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
+                            val h = JSONObject(body).getJSONObject("hourly")
+                            val t = h.getJSONArray("time")
+                            val wv = h.optJSONArray("wave_height"); val st = h.optJSONArray("sea_surface_temperature")
+                            var okW = 0; var okS = 0
+                            val tmpSea = HashMap<Long, Pair<Double?, Double?>>(); val tmpPd = HashMap<Long, Pair<Double?, Double?>>()
+                            for (i in 0 until t.length()) {
+                                val ms = isoFmt.parse(t.getString(i))?.time ?: continue
+                                val w = num(wv, i); val s = num(st, i)
+                                if (w != null) okW++
+                                if (s != null) okS++
+                                tmpSea[ms] = w to s
+                                tmpPd[ms] = num(h.optJSONArray("wave_period"), i) to num(h.optJSONArray("wave_direction"), i)
+                            }
+                            // 수온은 가장 가까운 칸 값을 쓰고, 파고만 더 먼 바다에서
+                            if (okS >= 6 && firstSst == null) firstSst = HashMap(tmpSea.mapValues { it.value.second })
+                            if (okW >= 6) {
+                                tmpSea.forEach { (k, v) -> sea[k] = v.first to (firstSst?.get(k) ?: v.second) }
+                                seaPd.putAll(tmpPd)
+                                val km = Math.round(Math.hypot(dla * 111.0, dlo * 111.0 * Math.cos(Math.toRadians(lat))))
+                                if (km >= 10 && sp == null) seaNote = "파고: 가까운 바다 칸이 비어서 약 ${km}km 떨어진 앞바다 예보예요"
+                                break
+                            }
+                        } catch (_: Exception) {}
                     }
-                } catch (_: Exception) {}
-            }
-            if (sea.isEmpty()) firstSst?.forEach { (k, v) -> sea[k] = null to v }
-            if (sea.isEmpty()) seaNote = "이 위치는 파도·수온 예보가 없어요 (육지 안쪽이거나 인터넷 확인)"
-            else if (sea.values.none { it.first != null } && seaNote.isBlank()) seaNote = "근처 바다(약 60km 안)에 파고 예보가 없어요"
-        } else seaNote = "파도·수온 예보는 3달 전부터 7일 뒤까지만 볼 수 있어요"
-
-        // ---- 기상청 단기예보 (오늘 ~ 3일 뒤): 기온·하늘·비·바람 ----
-        var kmaNote = ""
-        val kma: Map<Long, Kma> = if (diff in 0..3) {
-            try { kmaForecastAt(own.first, own.second, keyFmt.format(Date(dayStart + 12 * 3_600_000L))) }
-            catch (e: KmaError) { kmaNote = e.message ?: ""; emptyMap() }
-            catch (_: Exception) { kmaNote = "기상청 예보를 못 받았어요 (인터넷 확인)"; emptyMap() }
-        } else emptyMap()
+                    if (sea.isEmpty()) firstSst?.forEach { (k, v) -> sea[k] = null to v }
+                    if (sea.isEmpty()) seaNote = "이 위치는 파도·수온 예보가 없어요 (육지 안쪽이거나 인터넷 확인)"
+                    else if (sea.values.none { it.first != null } && seaNote.isBlank()) seaNote = "근처 바다(약 60km 안)에 파고 예보가 없어요"
+                } else seaNote = "파도·수온 예보는 3달 전부터 7일 뒤까지만 볼 수 있어요"
+            },
+            // ---- 기상청 단기예보 (오늘 ~ 3일 뒤): 기온·하늘·비·바람 ----
+            {
+                kma = if (diff in 0..3) {
+                    try { kmaForecastAt(own.first, own.second, ymd) }
+                    catch (e: KmaError) { kmaNote = e.message ?: ""; emptyMap() }
+                    catch (_: Exception) { kmaNote = "기상청 예보를 못 받았어요 (인터넷 확인)"; emptyMap() }
+                } else emptyMap()
+            },
+            // v5.1 (231): 해상이면 바람(풍속·풍향)·파고는 해상 기준점 칸의 기상청 값
+            { seaK = if (sp != null && sp.cell != own && diff in 0..3) try { kmaForecastAt(sp.cell.first, sp.cell.second, ymd) } catch (_: Exception) { emptyMap() } else emptyMap() },
+            // 낙뢰: 기상청 초단기예보 (앞으로 6시간)
+            { lightning = if (diff == 0) try { kmaLightning(lat, lon) } catch (_: Exception) { emptySet() } else emptySet() },
+            // 서버에 저장해 둔 그날 값 (최신 값을 못 받은 칸은 이걸로 채움)
+            { saved = loadSaved(lat, lon, ymd) }
+        )
+        wind.putAll(windSea)
         if (diff > 3) kmaNote = "기상청 예보(기온·하늘)는 3일 뒤까지만 있어요"
         // 파고: 내 칸이 육지라 기상청 파고가 없으면 가장 가까운 바다 칸의 기상청 파고
-        val ymd = keyFmt.format(Date(dayStart + 12 * 3_600_000L))
-        // v5.1 (231): 해상이면 바람(풍속·풍향)·파고는 해상 기준점 칸의 기상청 값
-        val seaK: Map<Long, Kma> = if (sp != null && sp.cell != own && diff in 0..3)
-            try { kmaForecastAt(sp.cell.first, sp.cell.second, ymd) } catch (_: Exception) { emptyMap() } else emptyMap()
         var seaWave: Map<Long, Double> = emptyMap()
         if (diff in 0..3 && kma.isNotEmpty() && kma.values.none { (it.wav ?: 0.0) > 0.0 } && seaK.values.none { (it.wav ?: 0.0) > 0.0 }) {
             seaWave = try { kmaSeaWave(sp?.lat ?: lat, sp?.lon ?: lon, ymd) } catch (_: Exception) { emptyMap() }
             val km = seaKm(sp?.lat ?: lat, sp?.lon ?: lon)
             if (sp == null && seaWave.isNotEmpty() && km != null && km >= 10) seaNote = "파고: 내 자리 칸이 육지·갯벌이라 약 ${km}km 떨어진 앞바다 기상청 값이에요"
         }
-        // 낙뢰: 기상청 초단기예보 (앞으로 6시간)
-        val lightning: Set<Long> = if (diff == 0) try { kmaLightning(lat, lon) } catch (_: Exception) { emptySet() } else emptySet()
 
-        // 서버에 저장해 둔 그날 값 (최신 값을 못 받은 칸은 이걸로 채움)
-        val saved = loadSaved(lat, lon, ymd)
         val times = (wind.keys + sea.keys + kma.keys + saved.keys).toSortedSet()
         var fromSaved = 0
         val hours = times.map { t ->
@@ -471,7 +510,16 @@ object Weather {
         saveDay(lat, lon, ymd, hours)
         if (fromSaved > 0 && kmaNote.isBlank()) kmaNote = "일부 시간은 최신 값을 못 받아 저장해 둔 값으로 보여요"
 
-        // ---- 수온 실측 (오늘·어제) ----
+        // ---- 수온 실측 (오늘·어제) ---- v6.35 (288): 따로 받아 나중에 채울 수 있게 (measuredOf)
+        if (measuredOf != null) { val r = measuredOf(); return Day(dayStart, hours, windNote, seaNote, r.first, r.second, kmaNote, kma.isNotEmpty(), windBasis) }
+        val r0 = measuredFor(ctx, lat, lon, dayStart)
+        return Day(dayStart, hours, windNote, seaNote, r0.first, r0.second, kmaNote, kma.isNotEmpty(), windBasis)
+    }
+
+    /** 그날 실측 수온 (오늘·어제 = 받기 · 지난 날 = 저장분 · 앞날 = 없음) */
+    private fun measuredFor(ctx: Context, lat: Double, lon: Double, dayStart: Long): Pair<Measured?, String> {
+        val today = dayStartOf(System.currentTimeMillis())
+        val diff = Math.round((dayStart - today) / 86_400_000.0).toInt()
         var measured: Measured? = null
         var mNote = ""
         if (diff in -1..0) {
@@ -483,7 +531,7 @@ object Weather {
             val r = measuredPast(ctx, lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L)), dayStart)
             measured = r.first; mNote = r.second
         }
-        return Day(dayStart, hours, windNote, seaNote, measured, mNote, kmaNote, kma.isNotEmpty(), windBasis)
+        return measured to mNote
     }
 
     // ---------------- 기상청 단기예보 ----------------
@@ -657,7 +705,7 @@ object Weather {
         val q = "/1360000/VilageFcstInfoService_2.0/getUltraSrtFcst?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
             "&pageNo=1&numOfRows=100&dataType=JSON&base_date=$bd&base_time=$bt&nx=$nx&ny=$ny"
         var body: String? = null
-        for (scheme in listOf("https", "http")) { try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {} }
+        for (scheme in schemes()) { try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {} }
         val b = body?.trim()?.takeIf { it.startsWith("{") } ?: return emptySet()
         val arr = JSONObject(b).optJSONObject("response")?.optJSONObject("body")?.optJSONObject("items")?.optJSONArray("item") ?: return emptySet()
         val tf = SimpleDateFormat("yyyyMMddHHmm", Locale.US).apply { timeZone = KST }
@@ -675,7 +723,7 @@ object Weather {
             val q = "/1360000/VilageFcstInfoService_2.0/getVilageFcst?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&pageNo=1&numOfRows=1500&dataType=JSON&base_date=$bd&base_time=$bt&nx=$nx&ny=$ny"
             var body: String? = null
-            for (scheme in listOf("https", "http")) {
+            for (scheme in schemes()) {
                 try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {}
             }
             val b = body?.trim() ?: throw KmaError("기상청 예보를 못 받았어요 (인터넷 확인)")
@@ -703,7 +751,8 @@ object Weather {
         if (key.isBlank()) return null to "실측 수온: 인증키가 앱에 없어요"
         var note = ""
         // 반경 60km 안 관측소 6곳까지 (수온계가 있는 곳을 찾을 때까지)
-        val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 60f }.take(6)
+        // v6.35 (288): 6곳 → 가까운 4곳 (수온계 없는 곳을 오래 기다리지 않게)
+        val near = Tide.stationsNear(ctx, lat, lon).filter { (Tide.stationKm(it, lat, lon) ?: 999f) <= 60f }.take(4)
         var primary: Measured? = null
         var lastAt = ""
         var used = 0
@@ -712,7 +761,7 @@ object Weather {
             val q = "/1192136/dtRecent/GetDTRecentApiService?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
                 "&obsCode=${s.code}&reqDate=$ymd&min=60&type=json&pageNo=1&numOfRows=300"
             var body: String? = null
-            for (scheme in listOf("https", "http")) {
+            for (scheme in schemes()) {
                 try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {}
             }
             val b = body?.trim() ?: continue
@@ -1193,7 +1242,7 @@ object Weather {
         val q = "/1360000/MidFcstInfoService/$op?serviceKey=${URLEncoder.encode(key, "UTF-8")}" +
             "&pageNo=1&numOfRows=10&dataType=JSON&regId=$regId&tmFc=$tmFc"
         var body: String? = null
-        for (scheme in listOf("https", "http")) {
+        for (scheme in schemes()) {
             try { body = get("$scheme://apis.data.go.kr$q"); break } catch (_: Exception) {}
         }
         val b = body?.trim() ?: throw KmaError("기상청 중기예보를 못 받았어요 (인터넷 확인)")

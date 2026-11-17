@@ -988,7 +988,10 @@ class MainActivity : Activity() {
     private lateinit var quickInline: LinearLayout
     private lateinit var quickRow: LinearLayout
     private lateinit var quickRowWrap: View
-    private class QItem(val id: String, val icon: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null)
+    private class QItem(val id: String, private val icon0: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null,
+                        /** v6.35 (291): 그림이 상태에 따라 바뀌는 칸 */ val iconOf: (() -> String)? = null) {
+        val icon: String get() = iconOf?.invoke() ?: icon0
+    }
     private val QUICK by lazy { listOf(
         // v4.9 (221): 앱의 모든 메뉴
         QItem("map", "🗺", "지도", "#1C5F86", "#7FD3E8"),
@@ -1003,7 +1006,8 @@ class MainActivity : Activity() {
         QItem("hist", "📚", "지난출조", "#12301F", "#2F6A48"),
         QItem("board", "📋", "조황", "#2A1E10", "#6A4A22"),
         QItem("point", "📍", "포인트", "#2A1E10", "#6A4A22"),
-        QItem("now", "🟢", "출조중", "#10301E", "#2F6A48"),
+        // v6.35 (291): 내가 출조 중이면 🟢 · 아니면 ❌ (누르면 그대로 그룹원 '지금 출조 중' 목록)
+        QItem("now", "🟢", "출조중", "#10301E", "#2F6A48", iconOf = { if (Store.current != null) "🟢" else "❌" }),
         QItem("trash", "🗑", "휴지통", "#2A1418", "#6A2E38"),
         QItem("help", "❓", "설명서", "#1A2A30", "#2E4A52"),
         QItem("upd", "📄", "업데이트", "#1A2A30", "#2E4A52"),
@@ -3174,7 +3178,10 @@ class MainActivity : Activity() {
     }
     private var lastLearning = -1
 
+    private var quickTripOn: Boolean? = null
     private fun refresh() {
+        // v6.35 (291): 출조 시작 · 끝 → 퀵바 '출조중' 칸(🟢/❌) · 퀵바 위젯 다시 그리기
+        (Store.current != null).let { on -> if (quickTripOn != on) { quickTripOn = on; paintQuick() } }
         updateStatus()
         refreshRemote()
         renderCats()

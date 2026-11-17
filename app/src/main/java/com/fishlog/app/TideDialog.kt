@@ -659,7 +659,7 @@ object TideDialog {
                     paintSides()
                 }
             }
-            Weather.fetch(a, lat, lon, cur) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }
+            Weather.fetch(a, lat, lon, cur, progressive = true) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }   // v6.35 (288): 먼저 온 것부터
         }
 
         // ---- 주간 (7일): 날짜 · 하늘 · 기온(+수온) · 비 · 바람 · 파고 · 물때 · 물세기 ----

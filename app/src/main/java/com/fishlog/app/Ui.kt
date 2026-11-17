@@ -830,10 +830,17 @@ class FlowBarView(c: Context) : View(c) {
             val cx = left + (b * 3 + 1.5f) * slot
             val label = when (v) { 1 -> "선수"; 2 -> "선미"; else -> "비슷" }
             val tw = sideT.measureText(label)
-            sideP.color = when (v) { 1 -> Ui.ORANGE; 2 -> Color.parseColor("#3A8FD8"); else -> Color.parseColor("#2B4253") }
             val y1 = top - 3 * d; val y0 = y1 - 13 * d
-            canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
-            sideT.color = when (v) { 1 -> Color.parseColor("#1B0E02"); 2 -> Color.WHITE; else -> Color.parseColor("#9FB4C2") }
+            if (v == 3) {
+                // v6.35 (290): '비슷' = 속 비운 칸 + 흰 테두리 + 흰 글자 (어두운 칸은 잘 안 보였음)
+                sideP.style = Paint.Style.STROKE; sideP.strokeWidth = 1.5f * d; sideP.color = Color.parseColor("#C9D3DE")
+                canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
+                sideP.style = Paint.Style.FILL
+            } else {
+                sideP.color = if (v == 1) Ui.ORANGE else Color.parseColor("#3A8FD8")
+                canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
+            }
+            sideT.color = when (v) { 1 -> Color.parseColor("#1B0E02"); 2 -> Color.WHITE; else -> Color.parseColor("#EAF2F6") }
             canvas.drawText(label, cx, y1 - 3.5f * d, sideT)
         }
     }
