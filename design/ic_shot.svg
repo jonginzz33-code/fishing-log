@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- 물때 창 스샷 버튼: 색 채운 평면 카메라 (기존 gear_* 그림 느낌) -->
+  <rect x="14" y="34" width="92" height="64" rx="14" fill="#5BC8DF"/>
+  <path d="M40 34 L48 22 H72 L80 34 Z" fill="#3A8FB0"/>
+  <rect x="84" y="42" width="12" height="8" rx="3" fill="#FFD166"/>
+  <circle cx="60" cy="66" r="22" fill="#12293A"/>
+  <circle cx="60" cy="66" r="15" fill="#2C8FC8"/>
+  <path d="M48 70 Q54 62 60 70 T72 70" stroke="#EAF2F6" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <circle cx="54" cy="60" r="3.5" fill="#EAF2F6" opacity=".8"/>
+</svg>
