@@ -217,7 +217,12 @@ object Cloud {
                 val gid = inv.getString("gid")
                 if (!inv.exists() || gid == null) { done("없는 초대 코드예요"); return@addOnSuccessListener }
                 if (groups.any { it.id == gid }) { setActive(gid); done(null); return@addOnSuccessListener }
-                db.collection("groups").document(gid).update("members", FieldValue.arrayUnion(id))
+                // v6.42 (305): 서버가 초대 코드를 직접 확인 — 가입 기록(joins/내 uid · 코드)과 멤버 추가를 한 번에
+                val gref = db.collection("groups").document(gid)
+                db.batch()
+                    .set(gref.collection("joins").document(id), mapOf("code" to code, "t" to System.currentTimeMillis()))
+                    .update(gref, "members", FieldValue.arrayUnion(id))
+                    .commit()
                     .addOnSuccessListener {
                         db.collection("groups").document(gid).collection("members").document(id)
                             .set(mapOf("name" to displayName, "joined" to System.currentTimeMillis()), SetOptions.merge())
@@ -781,6 +786,8 @@ object Cloud {
         gref.update("members", FieldValue.arrayRemove(memberUid))
             .addOnSuccessListener {
                 gref.collection("members").document(memberUid).delete()
+                // v6.42 (305): 가입 기록도 지움 (다시 들어오려면 초대 코드를 다시 내야 함)
+                gref.collection("joins").document(memberUid).delete()
                 if (!removeTrips) { done(null); return@addOnSuccessListener }
                 gref.collection("trips").whereEqualTo("owner", memberUid).get()
                     .addOnSuccessListener { q ->

@@ -8,6 +8,9 @@ await env.clearFirestore();
 await env.withSecurityRulesDisabled(async c => {
   const d = c.firestore();
   await setDoc(doc(d, 'groups/g1'), { owner: 'A', members: ['A', 'B'], code: 'ABCDEF', name: 'g' });
+  await setDoc(doc(d, 'invites/ABCDEF'), { gid: 'g1', owner: 'A' });
+  await setDoc(doc(d, 'invites/ZZZZZZ'), { gid: 'g2', owner: 'Z' });
+  await setDoc(doc(d, 'groups/g2'), { owner: 'Z', members: ['Z'], code: 'ZZZZZZ', name: 'g2' });
   await setDoc(doc(d, 'groups/g1/trips/B_5'), { owner: 'B', start: now });
   await setDoc(doc(d, 'tide/old'), { ext: '[]', at: now - 3 * 3600e3, by: 'X' });
   await setDoc(doc(d, 'tide/fresh'), { ext: '[]', at: now - 60e3, by: 'X' });
@@ -19,6 +22,7 @@ await env.withSecurityRulesDisabled(async c => {
 });
 const A = env.authenticatedContext('A', { email: 'a@x.com' }).firestore();
 const B = env.authenticatedContext('B', { email: 'b@x.com' }).firestore();
+const C = env.authenticatedContext('C', { email: 'c@x.com' }).firestore();
 const ADM = env.authenticatedContext('ADM', { email: 'jonginzz33@gmail.com' }).firestore();
 let pass = 0, fail = 0;
 async function ok(name, p) { try { await assertSucceeds(p); pass++; console.log('  ✓ 허용', name); } catch (e) { fail++; console.log('  ✗ 막힘(문제!)', name, e.message.split('\n')[0]); } }
@@ -116,6 +120,18 @@ await no('남 이름으로 큰 사진', setDoc(doc(B, 'chatImg/i3'), { uid: 'A',
 await no('너무 큰 사진 (400KB 넘음)', setDoc(doc(B, 'chatImg/i4'), { uid: 'B', d: 'x'.repeat(420000), t: now }));
 await no('그룹 아닌 사람이 그룹 사진', setDoc(doc(ADM, 'groups/g1/chatImg/i5'), { uid: 'ADM', d: 'x', t: now }));
 await no('남의 큰 사진 지우기', deleteDoc(doc(A, 'chatImg/i9')));
+console.log('[v6.42 그룹 가입 = 초대 코드]');
+{
+  const { writeBatch, arrayUnion } = await import('firebase/firestore');
+  await no('코드 없이 그룹 번호만으로 가입', updateDoc(doc(C, 'groups/g1'), { members: arrayUnion('C') }));
+  const bad = writeBatch(C); bad.set(doc(C, 'groups/g1/joins/C'), { code: 'ZZZZZZ', t: now }); bad.update(doc(C, 'groups/g1'), { members: arrayUnion('C') });
+  await no('다른 그룹 코드로 가입', bad.commit());
+  await no('남의 이름으로 가입 기록', setDoc(doc(C, 'groups/g1/joins/B'), { code: 'ABCDEF', t: now }));
+  const good = writeBatch(C); good.set(doc(C, 'groups/g1/joins/C'), { code: 'ABCDEF', t: now }); good.update(doc(C, 'groups/g1'), { members: arrayUnion('C') });
+  await ok('맞는 초대 코드로 가입', good.commit());
+  await ok('가입한 뒤 그룹 보기', getDoc(doc(C, 'groups/g1')));
+  await ok('그룹 탈퇴', updateDoc(doc(C, 'groups/g1'), { members: ['A', 'B'] }));
+}
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);
