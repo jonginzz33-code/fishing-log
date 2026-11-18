@@ -9,6 +9,11 @@ await env.withSecurityRulesDisabled(async c => {
   const d = c.firestore();
   await setDoc(doc(d, 'groups/g1'), { owner: 'A', members: ['A', 'B'], code: 'ABCDEF', name: 'g' });
   await setDoc(doc(d, 'invites/ABCDEF'), { gid: 'g1', owner: 'A' });
+  await setDoc(doc(d, 'groups/g1/events/ev9'), { owner: 'B', date: '20261122' });
+  await setDoc(doc(d, 'groups/g1/notices/ev_ev9'), { owner: 'A', eid: 'ev9', title: 't', body: 'b', created: now, edited: now });
+  await setDoc(doc(d, 'groups/g1/events/ev8'), { owner: 'A', date: '20261122' });
+  await setDoc(doc(d, 'groups/g1/notices/ev_ev8'), { owner: 'A', eid: 'ev8', title: 't', body: 'b', created: now, edited: now });
+  await setDoc(doc(d, 'groups/g1/notices/n1'), { owner: 'A', title: 't', body: 'b', created: now, edited: now });
   await setDoc(doc(d, 'invites/ZZZZZZ'), { gid: 'g2', owner: 'Z' });
   await setDoc(doc(d, 'groups/g2'), { owner: 'Z', members: ['Z'], code: 'ZZZZZZ', name: 'g2' });
   await setDoc(doc(d, 'groups/g1/trips/B_5'), { owner: 'B', start: now });
@@ -144,6 +149,12 @@ await no('멤버 이름 운영자', setDoc(doc(B, 'groups/g1/members/B'), { name
 await ok('멤버 보통 이름', setDoc(doc(B, 'groups/g1/members/B'), { name: '쭈꾸미왕' }));
 await no('내 정보 닉네임 Admin', setDoc(doc(B, 'users/B'), { nick: 'Admin', name: 'x' }, { merge: true }));
 await ok('내 정보 보통 닉네임', setDoc(doc(B, 'users/B'), { nick: '쭈꾸미왕', name: 'x' }, { merge: true }));
+console.log('[v6.44 일정 고치면 공지도]');
+await ok('일정 올린 사람이 그 일정 공지 고치기', updateDoc(doc(B, 'groups/g1/notices/ev_ev9'), { title: '새 제목', body: '새 내용', edited: now }));
+await no('일정 올린 사람이 공지 주인 바꾸기', updateDoc(doc(B, 'groups/g1/notices/ev_ev9'), { owner: 'B' }));
+await no('남의 일정 공지 고치기', updateDoc(doc(B, 'groups/g1/notices/ev_ev8'), { title: 'x', body: 'y', edited: now }));
+await no('그룹원이 그룹장 공지 고치기', updateDoc(doc(B, 'groups/g1/notices/n1'), { title: 'x', body: 'y', edited: now }));
+await ok('일정 올린 사람이 그 일정 공지 내리기', deleteDoc(doc(B, 'groups/g1/notices/ev_ev9')));
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

@@ -67,7 +67,7 @@ object Boats {
         var list = load(a)
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
-        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         top.addView(Ui.text(a, 20f, Ui.TEXT, true, "🌐 자주 가는 사이트"), LinearLayout.LayoutParams(0, WRAP, 1f))
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(16), dp(8), dp(16), dp(8))
@@ -125,7 +125,7 @@ object Boats {
                 card.addView(Ui.text(a, 11.5f, if (s.url.isBlank()) Ui.SUB else Ui.BLUE, false, s.url.ifBlank { "예약 사이트 주소 없음 (✎ 수정에서 넣기)" }).apply {
                     maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
                 }, Ui.lp(a, MATCH, WRAP, top = 2))
-                val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 if (s.url.isNotBlank()) row.addView(Ui.text(a, 14f, Color.parseColor("#04222A"), true, "🌐 열기").apply {
                     gravity = Gravity.CENTER; background = Ui.bg(a, Ui.BLUE, 99); setOnClickListener { openUrl(a, s.url) }
                 }, LinearLayout.LayoutParams(0, dp(40), 1f))

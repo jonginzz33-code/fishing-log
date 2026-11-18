@@ -39,7 +39,7 @@ object GroupBand {
         val ink = catInk(cat)
         fun dp(v: Int) = Ui.dp(c, v)
         val box = LinearLayout(c).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(if (big) 14 else 10), dp(14), dp(if (big) 14 else 10))
             background = Ui.bg(c, col, 16)
             if (onClick != null) { isClickable = true; setOnClickListener { onClick() } }
@@ -50,7 +50,7 @@ object GroupBand {
         val txt = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         if (filled) txt.addView(Ui.text(c, 12f, ink, true, "지금 여기에서 설정 중이에요").apply { alpha = 0.8f })
         // 이름 (번호는 작고 흐리게) + 내가 그룹장이면 👑 그룹장 (그룹원은 표시 없음)
-        val nameRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val nameRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         nameRow.addView(Ui.text(c, if (big) 24f else 18f, ink, true).apply {
             text = g.styled(); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP))

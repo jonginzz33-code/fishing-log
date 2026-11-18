@@ -246,10 +246,29 @@ object Tide {
         return try {
             val d = com.google.android.gms.tasks.Tasks.await(
                 com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("tide").document(id).get(), 6, java.util.concurrent.TimeUnit.SECONDS)
-            val list = d.getString("ext")?.let { fromJson(it) }?.takeIf { complete(it, ymd) } ?: return null
+            val list = d.getString("ext")?.let { fromJson(it) }?.takeIf { complete(it, ymd) && sharedOk(it, ymd) } ?: return null
             (d.getLong("at") ?: 0L) to list
         } catch (_: Exception) { null }
     }
+    /**
+     * v6.44 (311): 함께 쓰는 서버 저장분이 말이 되는지 (누가 일부러 틀린 값을 넣었을 때 대비 · 검사만 · 계산은 안 바꿈)
+     *  시각이 그날 앞뒤 안 · 하루 7개 이하 · 높이 값이 정상 범위 · 만조가 이웃 간조보다 높음 · 시각 순서대로
+     */
+    private fun sharedOk(list: List<Extreme>, ymd: String): Boolean {
+        val start = try { keyFmt.parse(ymd)?.time } catch (_: Exception) { null } ?: return false
+        if (list.size > 7) return false
+        if (list.any { it.time < start - 6 * 3600_000L || it.time > start + 30 * 3600_000L || it.value.isNaN() || Math.abs(it.value) > 2000 }) return false
+        val tiny = list.maxOf { it.value } - list.minOf { it.value } < 0.6   // 조차가 아주 작은 곳(동해)은 높낮이 검사 안 함
+        for (i in 1 until list.size) {
+            val a = list[i - 1]; val b = list[i]
+            if (b.time <= a.time) return false
+            if (tiny) continue
+            if (a.high && !b.high && a.value < b.value) return false
+            if (!a.high && b.high && a.value > b.value) return false
+        }
+        return true
+    }
+
     private fun serverPut(id: String, list: List<Extreme>) {
         if (Cloud.uid == null) return
         try {

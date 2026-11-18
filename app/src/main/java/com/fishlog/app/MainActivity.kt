@@ -516,7 +516,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(MATCH, 0, 1f))
         header.addView(titleCol, LinearLayout.LayoutParams(0, dp(52), 1f).apply { rightMargin = dp(6) })
         // v4.8 (219): ⚙ 바로 왼쪽 네모 퀵바 (3개까지 · 4개부터는 제목 아래 한 줄)
-        quickInline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        quickInline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         header.addView(quickInline, LinearLayout.LayoutParams(WRAP, WRAP))
         // v6.4 (249): 🔄 업데이트 확인 (⚙ 바로 왼쪽 · 새 버전 있으면 빨간 점)
         val updBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
@@ -539,11 +539,11 @@ class MainActivity : Activity() {
             setOnClickListener { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) }
         }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(4) })
         col.addView(header)
-        quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false; setPadding(0, dp(6), 0, 0) }
+        quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; clipChildren = false; clipToPadding = false; setPadding(0, dp(6), 0, 0) }
         quickRowWrap = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; addView(quickRow) }
         col.addView(quickRowWrap, Ui.lp(this, MATCH, WRAP, top = 4))
         paintQuick()
-        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
+        val btnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; clipChildren = false; clipToPadding = false }
         // v4.2 (191): 칸 크기는 그대로 · 글씨만 크게 (이름 16.5 · 4글자 15 · 작은 글씨 11) · 칸보다 길면 알아서 줄임
         fun two(big: String, small: String, smallColor: Int?) = headTwo(big, small, smallColor)
         fun cell(v: View, last: Boolean = false): android.widget.FrameLayout = android.widget.FrameLayout(this).apply {
@@ -601,7 +601,7 @@ class MainActivity : Activity() {
 
         // 물때 한 줄 + "물때 보기 ›" (누르면 날짜를 바꿀 수 있는 상세 창)
         val tideCard = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             gravity = Gravity.CENTER_VERTICAL
             background = WxArt.CardBg(this@MainActivity, Ui.CARD, 14, WxArt.NONE).also { tideBg = it }
             setPadding(dp(14), dp(10), dp(10), dp(10))
@@ -674,7 +674,7 @@ class MainActivity : Activity() {
         Zones.listener = { msg -> runOnUiThread { if (!isFinishing) showMessage(msg) } }
 
         // 카운터
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         row.addView(counterCard(1, Ui.ORANGE, Color.parseColor("#1B0E02")), Ui.lp(this, 0, dp(285), 1f))
         row.addView(View(this), Ui.lp(this, dp(12), 1))
         row.addView(counterCard(2, Ui.BLUE, Color.parseColor("#04222A")), Ui.lp(this, 0, dp(285), 1f))
@@ -739,7 +739,7 @@ class MainActivity : Activity() {
         nowBtn.addView(nowTitle); nowBtn.addView(nowSub)
         bottomRow.addView(nowBtn, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
         boardBtn = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10))
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(10), dp(14), dp(10))
             background = Ui.bg(this@MainActivity, Color.parseColor("#2A1A0C"), 16, Ui.ORANGE)
             isClickable = true
             setOnClickListener {
@@ -991,7 +991,7 @@ class MainActivity : Activity() {
             ordered.forEach { q ->
                 val on = q.id in ids
                 val r = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46)
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46)
                     isClickable = true
                     setOnClickListener { if (on) ids.remove(q.id) else ids.add(q.id); saveQuick(ids); draw() }
                 }
@@ -1052,7 +1052,7 @@ class MainActivity : Activity() {
 
     private fun buildTabBar(): View {
         val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             setBackgroundColor(Color.parseColor("#0B161E"))
             setPadding(0, dp(6), 0, dp(6))
         }
@@ -1092,7 +1092,7 @@ class MainActivity : Activity() {
             f.addView(box, android.widget.FrameLayout.LayoutParams(MATCH, WRAP))
             return f
         }
-        val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val r1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         r1.addView(cell("🎣", "출조추천", "좋은 날 달력", "#2A2410", "#6A5A22", "#E5CF8F") {
             val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second)
         }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(8) })
@@ -1100,7 +1100,7 @@ class MainActivity : Activity() {
             startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
         menuBox.addView(r1, Ui.lp(this, MATCH, WRAP))
-        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val r2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         val inq = cell("✉", "관리자 문의", "1:1 · 답장 오면 빨간 숫자", "#16263A", "#2E4A6A", "#A9BFE0") {
             if (Cloud.user == null) showMessage("구글 로그인을 하면 운영자에게 1:1 문의를 할 수 있어요")
             else startActivity(Intent(this@MainActivity, InquiryActivity::class.java))
@@ -1164,7 +1164,7 @@ class MainActivity : Activity() {
             topMargin = dp(104); leftMargin = dp(2); rightMargin = dp(2)
         })
         // 위: "버튼 1" + 작은 연필 (연필을 눌러야 어종 바꾸기)
-        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         top.addView(Ui.text(this, 12f, ink, true, "버튼 $slot").apply {
             background = Ui.bg(this@MainActivity, Color.argb(36, 0, 0, 0), 99)
             setPadding(dp(10), dp(3), dp(10), dp(3))
@@ -1266,7 +1266,7 @@ class MainActivity : Activity() {
             val code = Store.key(n)
             val waiting = ButtonRouter.learningStep == n
             val r = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(8), dp(6), dp(6), dp(6))
                 background = Ui.bg(this@MainActivity, Color.argb(60, 0, 0, 0), 10, if (waiting) Ui.BLUE else 0)
             }
@@ -1341,12 +1341,12 @@ class MainActivity : Activity() {
         if (!open) {
             // 한 줄: 기록 방식 칩 + 바꾸기 ▼
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 isClickable = true; setOnClickListener { methodsOpen = true; renderMethods() }
             }
             val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             left.addView(Ui.text(this, 12f, Ui.SUB, false, "기록 방식 · ${Store.catLabel(Store.current?.cat?.ifBlank { null } ?: Store.category)}"))
-            val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             val on = mutableListOf<String>()
             if (remoteOn()) on.add("리모컨")
             if (Store.touchMode) on.add("터치")
@@ -1374,7 +1374,7 @@ class MainActivity : Activity() {
             return
         }
         // 펼친 상태
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         head.addView(Ui.text(this, 14f, Ui.TEXT, true,
             if (methodsChosen()) "기록 방식 바꾸기" else "기록 방식을 골라 주세요 (여러 개 가능)"), LinearLayout.LayoutParams(0, WRAP, 1f))
         if (methodsChosen() && !learning) head.addView(Ui.text(this, 13f, Color.parseColor("#04222A"), true, "접기 ▲").apply {
@@ -1386,7 +1386,7 @@ class MainActivity : Activity() {
 
         fun option(title: String, sub: String, on: Boolean, action: (() -> Unit)?, help: Pair<String, String>? = null, note: String? = null, onToggle: () -> Unit) {
             val r = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 12, if (on) Ui.BLUE else Ui.LINE)
                 isClickable = true
@@ -1458,7 +1458,7 @@ class MainActivity : Activity() {
             box.addView(Ui.text(this, 15f, Ui.TEXT, false, t.line(unit = "마리")))
             // 📸 대표 조과 사진 (찍기 · 앨범 · 나중에)
             val mp = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(10), dp(10), dp(10))
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.GREEN)
             }
             val prev = android.widget.ImageView(this).apply {
@@ -1480,7 +1480,7 @@ class MainActivity : Activity() {
             val mcol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             mcol.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "📸 대표 조과 사진"))
             mcol.addView(Ui.text(this, 11f, Ui.SUB, false, "오늘 조과를 한 장으로 · 목록·게시판 오른쪽에 크게 보여요"), Ui.lp(this, MATCH, WRAP, top = 2))
-            val mbtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val mbtns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             fun mbtn(label: String, click: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
                 gravity = Gravity.CENTER; setPadding(dp(10), dp(5), dp(10), dp(5))
                 background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { click() }
@@ -1532,7 +1532,7 @@ class MainActivity : Activity() {
                 }
             }
             if (canShare && groups.isNotEmpty()) {
-                val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 head.addView(Ui.text(this, 14f, Ui.TEXT, true, "올릴 그룹 고르기"), LinearLayout.LayoutParams(0, WRAP, 1f))
                 val allBtn = Ui.text(this, 12f, Ui.GREEN, true, "☐ 전체 선택").apply {
                     setPadding(dp(10), dp(4), dp(10), dp(4)); background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Color.parseColor("#2F6B52"))
@@ -1545,7 +1545,7 @@ class MainActivity : Activity() {
                 }
                 fun syncAll() { allBtn.text = if (picks.values.all { it.isChecked }) "☑ 전체 선택" else "☐ 전체 선택" }
                 groups.forEach { g ->
-                    val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
+                    val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
                     val cb = Ui.checkFit(CheckBox(this)).apply {
                         buttonTintList = ColorStateList.valueOf(Ui.BLUE); isChecked = g.id == Cloud.active?.id
                         setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0(); paintOk(); drawOptsRef?.invoke() }
@@ -1588,7 +1588,7 @@ class MainActivity : Activity() {
                 }
                 // 높이는 글자에 맞춰 (최소 40) — 고정 높이면 글자를 크게 쓴 폰에서 테두리가 잘림
                 fun two(a: View, b: View) = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
                     (a as? TextView)?.apply { minHeight = dp(40); setPadding(paddingLeft, dp(7), paddingRight, dp(7)) }
                     (b as? TextView)?.apply { minHeight = dp(40); setPadding(paddingLeft, dp(7), paddingRight, dp(7)) }
                     addView(a, LinearLayout.LayoutParams(0, WRAP, 1f)); addView(b, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(6) })
@@ -1619,7 +1619,7 @@ class MainActivity : Activity() {
                 // 미리보기
                 opts.addView(Ui.text(this, 11f, Ui.SUB, false, "게시판에서 이렇게 보여요"), Ui.lp(this, MATCH, WRAP, top = 10))
                 val pv = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8))
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8))
                     background = Ui.bg(this@MainActivity, Ui.BG, 10)
                 }
                 if (pg != null) pv.addView(GroupIcon.view(this, pg, 28, GroupBand.catIcon(GroupBand.currentCat(pg))), LinearLayout.LayoutParams(dp(28), dp(28)).apply { rightMargin = dp(8) })
@@ -1798,7 +1798,7 @@ class MainActivity : Activity() {
 
         if (tripId == null) {
             // ① 버튼 맨 위
-            val br = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val br = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             br.addView(Ui.button(this, "취소") { dlg?.dismiss() }.apply { minHeight = dp(46); textSize = 14f },
                 LinearLayout.LayoutParams(0, WRAP, 0.85f))
             br.addView(Ui.button(this, "건너뛰기") { dlg?.dismiss(); remember(null, null); startTrip("", "") }.apply { minHeight = dp(46); textSize = 14f },
@@ -1810,7 +1810,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(0, WRAP, 1.4f).apply { leftMargin = dp(6) })
             box.addView(br)
             // ② 배 · 항구 나란히
-            val pr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val pr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             fun fieldCol(label: String, f: View) = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 addView(Ui.text(this@MainActivity, 12f, Ui.SUB, false, label))
@@ -1821,7 +1821,7 @@ class MainActivity : Activity() {
             box.addView(pr, Ui.lp(this, MATCH, WRAP, top = 14))
             box.addView(Ui.text(this, 11f, Ui.SUB, false, "한 번 적은 이름은 목록에 저장돼서 다음부터 눌러서 골라요"), Ui.lp(this, MATCH, WRAP, top = 2))
             // ③ 출조 종류
-            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             val g = if (Cloud.user == null) null else Cloud.active
             if (g != null) head.addView(GroupIcon.view(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(8) })
             head.addView(Ui.text(this, 14f, Ui.TEXT, true, "출조 종류"))
@@ -1833,7 +1833,7 @@ class MainActivity : Activity() {
                 chipBox.removeAllViews()
                 var line: LinearLayout? = null
                 cats.forEachIndexed { i, c ->
-                    if (i % 3 == 0) { line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; chipBox.addView(line, Ui.lp(this, MATCH, WRAP, top = 6)) }
+                    if (i % 3 == 0) { line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; chipBox.addView(line, Ui.lp(this, MATCH, WRAP, top = 6)) }
                     val on = Store.category == c
                     line!!.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, (if (on) "✓ " else "") + Store.catLabel(c)).apply {
                         gravity = Gravity.CENTER; maxLines = 1
@@ -1985,7 +1985,7 @@ class MainActivity : Activity() {
         var line: LinearLayout? = null
         shown.forEachIndexed { i, c ->
             if (i % 3 == 0) {
-                line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 catRow.addView(line, Ui.lp(this, MATCH, dp(44), top = if (i == 0) 0 else 8))
             }
             val on = c == sel
@@ -2266,7 +2266,7 @@ class MainActivity : Activity() {
         list.forEachIndexed { i, c ->
             val nth = t.catches.subList(0, t.catches.size - i).count { it.slot == c.slot }
             val r = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 background = Ui.bg(this@MainActivity, Ui.CARD, 10)
             }
@@ -2313,7 +2313,7 @@ class MainActivity : Activity() {
         gs.forEach { gr ->
             val on = gr.id == activeId
             val r = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(56)
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(56)
                 background = Ui.bg(this@MainActivity, Ui.CARD, 14, if (on) Ui.GREEN else Color.TRANSPARENT)
             }
             r.addView(GroupIcon.view(this, gr, 38, GroupBand.catIcon(GroupBand.currentCat(gr))), LinearLayout.LayoutParams(dp(38), dp(38)))
@@ -2420,7 +2420,7 @@ class MainActivity : Activity() {
                 val mins = ((System.currentTimeMillis() - m.start) / 60_000L).coerceAtLeast(0)
                 val hasLoc = m.lat != null && m.lon != null
                 val r = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
                     background = Ui.bg(this@MainActivity, Ui.CARD, 12, Ui.LINE); isClickable = true
                     setOnClickListener {
                         if (hasLoc) {
@@ -2675,7 +2675,7 @@ class MainActivity : Activity() {
         (catRow.parent as? LinearLayout)?.removeView(catRow)
         val g = Cloud.active
         val head = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(dp(14), dp(11), dp(14), dp(11))
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER; setPadding(dp(14), dp(11), dp(14), dp(11))
             background = Ui.bg(this@MainActivity, Ui.CARD, 14, if (catOpen) Ui.TEXT else Ui.LINE)
             isClickable = true
             setOnClickListener { catOpen = !catOpen; renderGroupPanel() }
@@ -2787,7 +2787,7 @@ class MainActivity : Activity() {
         // 새 소식 (지금 그룹)
         val news = GroupNews.items(activeId)
         if (news.isNotEmpty() && g != null) {
-            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             head.addView(Ui.text(this, 15f, Ui.TEXT, true, "${groupLabel(g)} 새 소식 ${news.size}"), LinearLayout.LayoutParams(0, WRAP, 1f))
             head.addView(Ui.text(this, 12f, Ui.TEXT, true, "모두 확인").apply {
                 gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
@@ -2808,7 +2808,7 @@ class MainActivity : Activity() {
                 background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 16, Color.parseColor("#F2C14E"))
                 isClickable = true; setOnClickListener { startActivity(Intent(this@MainActivity, NoticeActivity::class.java)) }
             }
-            val nh = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val nh = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             nh.addView(Ui.text(this, 14.5f, Color.parseColor("#F2C14E"), true, "📢 공지 · ${nl.size}개"), LinearLayout.LayoutParams(0, WRAP, 1f))
             nh.addView(Ui.text(this, 12f, Ui.SUB, false, "전체 보기 ›"))
             nb.addView(nh)
@@ -2833,7 +2833,7 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
         }
         fun pair(a: TextView, b: TextView?) {
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             r.addView(a, LinearLayout.LayoutParams(0, WRAP, 1f))
             if (b != null) r.addView(b, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
             groupBox.addView(r, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -2898,7 +2898,7 @@ class MainActivity : Activity() {
         val col = if (it.isNotice) Color.parseColor("#F2C14E") else if (isTrip) Ui.GREEN else Ui.BLUE
         val ink = if (it.isNotice) Color.parseColor("#3A2A02") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
         val card = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(10), dp(10))
             background = Ui.bg(this@MainActivity, Ui.CARD, 14, col)
             isClickable = true
@@ -2907,7 +2907,7 @@ class MainActivity : Activity() {
             }
         }
         val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else if (isTrip) "조과" else "일정").apply {
             setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@MainActivity, col, 6)
         })
@@ -3020,7 +3020,7 @@ class MainActivity : Activity() {
             val old = (System.currentTimeMillis() - m.time) > 15 * 60_000L
             val best = maxOf(Milestone.tier(m.c1), Milestone.tier(m.c2))
             val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, dp(4), 0, dp(4))
                 setOnClickListener {
                     showMessage(String.format(Locale.KOREA, "%s · %s · %s 기준",

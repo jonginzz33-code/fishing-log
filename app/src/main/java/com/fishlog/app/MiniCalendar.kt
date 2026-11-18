@@ -78,7 +78,7 @@ class MiniCalendar(private val a: Activity, private val box: LinearLayout) {
         val todayKey = keyFmt.format(java.util.Date())
         var day = 1 - lead
         while (day <= days) {
-            val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             for (k in 0 until 7) {
                 val cell = LinearLayout(a).apply {
                     orientation = LinearLayout.VERTICAL
@@ -100,7 +100,7 @@ class MiniCalendar(private val a: Activity, private val box: LinearLayout) {
                             else -> setTextColor(Color.parseColor("#5F7A8C"))
                         }
                     }, LinearLayout.LayoutParams(dp(34), dp(34)))
-                    val dotRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+                    val dotRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER }
                     dots.distinct().take(4).forEach { col ->
                         dotRow.addView(View(a).apply { background = Ui.bg(a, col, 99) },
                             LinearLayout.LayoutParams(dp(6), dp(6)).apply { setMargins(dp(1), dp(2), dp(1), 0) })

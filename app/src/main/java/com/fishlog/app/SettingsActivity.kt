@@ -129,7 +129,7 @@ class SettingsActivity : Activity() {
         }
         fun mb(b: Long) = if (b < 0) "…" else if (b < 1024 * 1024) "${(b + 1023) / 1024}KB" else String.format(java.util.Locale.KOREA, "%.1fMB", b / 1048576.0)
         fun line(label: String, sub: String, check: android.widget.CheckBox?): android.widget.TextView {
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = android.view.Gravity.CENTER_VERTICAL }
             if (check != null) r.addView(check, LinearLayout.LayoutParams(WRAP, WRAP))
             else r.addView(Ui.text(this, 15f, Ui.GREEN, true, "✅").apply { setPadding(dp(4), 0, dp(8), 0) })
             val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -174,7 +174,7 @@ class SettingsActivity : Activity() {
                 }, REQ_SAVE)
             } catch (_: Exception) { toast("파일 저장 창을 열 수 없어요") }
         }.apply { minHeight = dp(48); textSize = 15f }, Ui.lp(this, MATCH, WRAP, top = 10))
-        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         r.addView(Ui.button(this, "📂 백업 파일에서 불러오기") { pickBackup() }.apply { minHeight = dp(44); textSize = 13f },
             LinearLayout.LayoutParams(0, WRAP, 1f))
         if (Cloud.user != null) r.addView(Ui.button(this, "☁ 서버에서 설정 불러오기") {
@@ -262,7 +262,7 @@ class SettingsActivity : Activity() {
     /** 켜기/끄기 스위치 줄 */
     private fun switchRow(title: String, sub: String, on: Boolean, toggle: (Boolean) -> Unit) {
         val r = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             background = Ui.bg(this@SettingsActivity, Ui.CARD, 14)
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }
@@ -301,6 +301,7 @@ class SettingsActivity : Activity() {
                 "chat" -> "그룹 채팅에 새 글이 오면 (누르면 그 채팅방)"
                 "notice" -> "그룹에 새 공지가 올라오면"
                 "event" -> "그룹에 새 일정이 올라오면"
+                "remind" -> "내가 참석을 누른 일정 전날 낮 12시에 한 번"
                 else -> "내가 올린 일정에 누가 참석 · 미정 · 불참을 누르면"
             }
             switchRow(label, sub, GroupAlert.on(this, k)) { v ->
@@ -323,7 +324,7 @@ class SettingsActivity : Activity() {
             .apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
 
         section("같이 출조 중 거리")
-        val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         listOf(50 to "50m", 200 to "200m", 1000 to "1km", 0 to "거리 상관없이").forEachIndexed { i, (v, l) ->
             val on = Store.mateRange == v
             rr.addView(Ui.text(this, 13f, if (on) Ui.BG else Ui.TEXT, true, l).apply {
@@ -357,7 +358,7 @@ class SettingsActivity : Activity() {
             orientation = LinearLayout.VERTICAL; background = Ui.bg(this@SettingsActivity, Ui.CARD, 14); setPadding(dp(14), dp(12), dp(14), dp(12))
         }
         fun line(k: String, v: String) {
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             r.addView(Ui.text(this, 13.5f, Ui.TEXT, false, k), LinearLayout.LayoutParams(0, WRAP, 1f))
             r.addView(Ui.text(this, 13.5f, Color.parseColor("#FFB27A"), true, v))
             card.addView(r, Ui.lp(this, MATCH, WRAP, top = 4))
@@ -379,7 +380,7 @@ class SettingsActivity : Activity() {
         val orange = Color.parseColor("#FFB27A")
         val cur = Ui.userScale(this)
         fun label(v: Int) = if (v == 100) "자동 (100%)" else "$v%"
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         head.addView(Ui.text(this, 15f, Ui.TEXT, true, "📐 화면 크기"), LinearLayout.LayoutParams(0, WRAP, 1f))
         val valTv = Ui.text(this, 15f, orange, true, label(cur))
         head.addView(valTv)
@@ -453,7 +454,7 @@ class SettingsActivity : Activity() {
             row.addView(Ui.text(this, 15f, Ui.TEXT, true, "📍 ${r.name}"))
             val info = Ui.text(this, 12f, Ui.SUB, false, "${df.format(java.util.Date(r.at))} 받음 · ${Khoa.sizeText(Khoa.sizeOf(this, r))}")
             row.addView(info, Ui.lp(this, MATCH, WRAP, top = 2))
-            val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             btns.addView(Ui.button(this, "🔄 다시 받기") {
                 info.text = "📥 받는 중…"
                 Khoa.redownload(this, r, { d, t -> info.text = "📥 받는 중… $d / $t" }) { _, fail ->

@@ -102,9 +102,10 @@ object MapDialog {
         col.addView(pair, LinearLayout.LayoutParams(dp(a, 46), ViewGroup.LayoutParams.WRAP_CONTENT))
         if (onMe != null) col.addView(TextView(a).apply {
             // v6.43 (302): ◎ 글자 대신 조준(GPS) 그림
+            // v6.44 (307): 그림을 동그라미 정가운데 (예전엔 글자칸 왼쪽 그림이라 왼쪽으로 치우침)
             text = ""; gravity = Gravity.CENTER; includeFontPadding = false
-            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_target, 0, 0, 0)
-            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#6FC3FF"))
+            foreground = a.getDrawable(R.drawable.ic_target)?.mutate()?.apply { setTint(Color.parseColor("#6FC3FF")) }
+            foregroundGravity = Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.argb(225, 11, 26, 38)); setStroke(dp(a, 1), Color.parseColor("#2C4656")) }
             elevation = dp(a, 3).toFloat()
             contentDescription = "내 위치로"
@@ -165,7 +166,7 @@ object MapDialog {
             }
             box.addView(Ui.text(a, 13f, Ui.SUB, true, "이 자리 · ${sp.size}종 ${items.size}마리"))
             sp.forEach { e ->
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 r.addView(Ui.text(a, 14f, Ui.TEXT, false, e.key), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 r.addView(Ui.text(a, 14f, Ui.ORANGE, true, "${e.value}마리"))
                 box.addView(r, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 3) })
@@ -181,7 +182,7 @@ object MapDialog {
                 isClickable = true
                 setOnClickListener { showDay(a, g, pastTrips[g[0].trip]?.fresh == true) }
             }
-            val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             top.addView(android.view.View(a).apply { background = Ui.bg(a, first.color, 99) },
                 LinearLayout.LayoutParams(dp(a, 10), dp(a, 10)).apply { rightMargin = dp(a, 8) })
             val freshTrip = pastTrips[first.trip]?.fresh == true
@@ -200,7 +201,7 @@ object MapDialog {
             val pt = pastTrips[first.trip]
             if (pt != null) {
                 card.background = Ui.bg(a, Ui.CARD, 12, pt.color)
-                val btns = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                val btns = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 if (onFocus != null) btns.addView(Ui.text(a, 13f, Color.parseColor("#06301C"), true, "🗺 이 출조만 보기").apply {
                     gravity = Gravity.CENTER; setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
                     background = Ui.bg(a, Color.parseColor("#5FD49A"), 10)
@@ -492,7 +493,7 @@ object MapDialog {
             (v.background as GradientDrawable).setColor(if (on) Color.parseColor("#2B4A5E") else Color.TRANSPARENT)
         }
         val bar = LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8))
         }
         fun addPill(v: TextView) = bar.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
@@ -521,7 +522,7 @@ object MapDialog {
         var followView: TextView? = null
         fun paintFollow() {
             val v = followView ?: return
-            v.compoundDrawableTintList = android.content.res.ColorStateList.valueOf(if (follow) Color.WHITE else Color.parseColor("#6FC3FF"))
+            v.foreground?.setTint(if (follow) Color.WHITE else Color.parseColor("#6FC3FF"))
             v.background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(if (follow) Color.parseColor("#2F80ED") else Color.argb(225, 11, 26, 38))
@@ -586,7 +587,7 @@ object MapDialog {
         }
         past.icons = true
         // v6.9 (256): 출조 색 범례 줄 (누르면 그 출조만 보기)
-        val chipRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         val chipWrap = Ui.hscroll(a, chipRow).apply { visibility = android.view.View.GONE }
         var pastList: List<PastTrip> = emptyList()
         fun paintChips() {
@@ -1093,7 +1094,7 @@ object MapDialog {
             text = title; textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(a, 16), dp(a, 10), dp(a, 16), dp(a, 4))
         })
-        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
         fun pill(label: String, onClick: (TextView) -> Unit) = TextView(a).apply {
             text = label; textSize = 14f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
             minHeight = dp(a, 40); setPadding(dp(a, 14), 0, dp(a, 14), 0)
@@ -1175,7 +1176,7 @@ object MapDialog {
             text = "🟢 $name · 지금 출조 중"; textSize = 17f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(a, 16), dp(a, 10), dp(a, 16), dp(a, 4))
         })
-        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(a, 12), dp(a, 4), dp(a, 12), dp(a, 8)) }
         fun pill(label: String, strong: Boolean = false, onClick: (TextView) -> Unit) = TextView(a).apply {
             text = label; textSize = 14f; setTextColor(if (strong) Color.parseColor("#0B1A26") else Color.WHITE); gravity = Gravity.CENTER
             if (strong) typeface = Typeface.DEFAULT_BOLD

@@ -261,7 +261,7 @@ class TripActivity : Activity() {
         }
         col.addView(timeBtn, Ui.lp(this, MATCH, WRAP))
         col.addView(Ui.text(this, 13f, Ui.SUB, true, "어종"), Ui.lp(this, MATCH, WRAP, top = 12))
-        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         val slots = ((1..maxOf(2, t.names.size)).toList() + t.catches.map { it.slot }).distinct().sorted()
         fun paintChips() {
             chips.removeAllViews()
@@ -391,12 +391,12 @@ class TripActivity : Activity() {
             return
         }
         val hf = java.text.SimpleDateFormat("HH시", java.util.Locale.KOREA)
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         fun hc(txt: String, w: Float) = Ui.text(this, 11f, Ui.SUB, true, txt).apply { gravity = Gravity.CENTER }.also { head.addView(it, LinearLayout.LayoutParams(0, WRAP, w)) }
         hc("시각", 1f); hc("하늘", 0.8f); hc("기온", 0.9f); hc("바람", 1.5f); hc("파고", 1.3f); hc("수온", 1f)
         card.addView(head)
         snap.hours.forEach { h ->
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5)) }
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5)) }
             fun c(txt: String, w: Float, col: Int = Ui.TEXT) = Ui.text(this, 12.5f, col, false, txt).apply { gravity = Gravity.CENTER; maxLines = 1 }
                 .also { r.addView(it, LinearLayout.LayoutParams(0, WRAP, w)) }
             val inTrip = h.time >= t.start - 1_800_000L && h.time <= (if (t.end > 0) t.end else h.time) + 1_800_000L
@@ -463,7 +463,7 @@ class TripActivity : Activity() {
                 if (fresh) SunPhase.riseSet(t.start, t.anyLocation()?.first, t.anyLocation()?.second) else Tide.mulName(t.start)), Ui.lp(this, MATCH, WRAP, top = 4))
 
         // 합계
-        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         stats.addView(Ui.stat(this, "총 조과", t.catches.size.toString()), LinearLayout.LayoutParams(0, WRAP, 1f))
         stats.addView(Ui.stat(this, t.name(1), t.count(1).toString(), Ui.ORANGE), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
         stats.addView(Ui.stat(this, t.name(2), t.count(2).toString(), Ui.BLUE), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
@@ -471,7 +471,7 @@ class TripActivity : Activity() {
         // 퀵 버튼(3번 이상)으로 잡은 어종
         val extra = t.slots().filter { it >= 3 && t.count(it) > 0 }
         extra.chunked(3).forEach { ch ->
-            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             ch.forEachIndexed { i, sl -> r.addView(Ui.stat(this, t.name(sl), t.count(sl).toString(), Store.slotColor(sl)),
                 LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(8) }) }
             repeat(3 - ch.size) { r.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(8) }) }
@@ -621,7 +621,7 @@ class TripActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(140), dp(140)).apply { topMargin = dp(8) })
             if (r.photoCount > 0 && r.pubId.isNotBlank()) {
                 // 게시판 사진: 옆으로 밀어서 보기
-                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 root.addView(Ui.hscroll(this, row), Ui.lp(this, MATCH, WRAP, top = 10))
                 PublicBoard.loadPhotos(r.pubId) { ps ->
                     if (isFinishing) return@loadPhotos
@@ -638,7 +638,7 @@ class TripActivity : Activity() {
         if (!viewOnly) {
         // 대표 조과 사진: 바꾸기(찍기·앨범) · 이 출조 사진 중 고르기 · 빼기
         section("📸 대표 조과 사진")
-        val mr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val mr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         val mainP = t.main()
         val mb = mainP?.let { Photos.thumbBitmap(this, it) }
         mr.addView(ImageView(this).apply {
@@ -872,7 +872,7 @@ class TripActivity : Activity() {
                 val gold = SunPhase.golden(k)
                 val r = Ui.row(this)
                 r.addView(Ui.text(this, 13f, if (v > 0) Ui.TEXT else Ui.SUB, gold && v > 0, k), LinearLayout.LayoutParams(dp(118), WRAP))
-                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 track.addView(View(this).apply { background = Ui.bg(this@TripActivity, if (gold) android.graphics.Color.parseColor("#F2C14E") else Ui.BLUE, 3) },
                     LinearLayout.LayoutParams(0, dp(10), v.toFloat() / max + 0.0001f))
                 track.addView(View(this), LinearLayout.LayoutParams(0, dp(10), 1f - v.toFloat() / max + 0.0001f))

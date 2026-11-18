@@ -58,7 +58,7 @@ object PointMap {
             background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { dlg.dismiss() }
         })
         root.addView(head)
-        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(12), dp(4), dp(12), dp(8)) }
         root.addView(Ui.hscroll(a, bar))
         // v3.9.2 (161) 해루질 참고용 커튼 · map 은 아래에서 만들기 때문에 자리만 잡아 둠
         val zSlot = FrameLayout(a)
@@ -346,8 +346,8 @@ object PointMap {
             if (res.species.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, "원 안에 조과가 없어요")); return@run }
             // 조건별 자세히 (탭 + 어종 고르기)
             box.addView(Ui.text(a, 15f, Ui.TEXT, true, "📊 조건별 자세히"), Ui.lp(a, MATCH, WRAP, top = 16))
-            val spRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
-            val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val spRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+            val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             box.addView(Ui.hscroll(a, spRow), Ui.lp(a, MATCH, WRAP, top = 6))
             box.addView(Ui.hscroll(a, tabRow), Ui.lp(a, MATCH, WRAP, top = 6))
             val detail = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
@@ -374,7 +374,7 @@ object PointMap {
                     val r = Ui.row(a).apply { setPadding(dp(4), dp(4), dp(4), dp(4)); if (b === best) background = Ui.bg(a, Color.parseColor("#2A2310"), 8) }
                     r.alpha = if (b.weak) 0.55f else 1f
                     r.addView(Ui.text(a, 12f, Ui.TEXT, b === best, b.label).apply { maxLines = 1 }, LinearLayout.LayoutParams(dp(118), WRAP))
-                    val track = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                    val track = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                     track.addView(View(a).apply { background = Ui.bg(a, Ui.ORANGE, 4) }, LinearLayout.LayoutParams(0, dp(10), (v / max).toFloat()))
                     track.addView(View(a), LinearLayout.LayoutParams(0, dp(10), (1 - v / max).toFloat() + 0.0001f))
                     r.addView(track, LinearLayout.LayoutParams(0, WRAP, 1f))

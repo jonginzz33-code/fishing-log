@@ -140,7 +140,7 @@ class ConfettiView(c: Context) : View(c) {
 fun stampRow(c: android.content.Context, names: List<String>, counts: List<Int>): android.view.View? {
     val list = names.indices.mapNotNull { i -> Milestone.stamp(names[i], counts[i])?.let { it to Milestone.tier(counts[i]) } }
     if (list.isEmpty()) return null
-    val row = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+    val row = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; isBaselineAligned = false }
     list.forEach { (txt, tier) ->
         row.addView(Ui.chip(c, "🏅 $txt", if (tier >= 7) android.graphics.Color.parseColor("#F07AA0") else Milestone.tierColor(tier)),
             android.widget.LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { rightMargin = Ui.dp(c, 6) })

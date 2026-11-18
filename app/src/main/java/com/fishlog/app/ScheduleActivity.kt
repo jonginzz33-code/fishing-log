@@ -222,8 +222,7 @@ class ScheduleActivity : Activity() {
                 else Ui.bg(this@ScheduleActivity, android.graphics.Color.parseColor("#3A2814"), 99, android.graphics.Color.parseColor("#FFB27A"))
             setOnClickListener {
                 if (on) { startActivity(android.content.Intent(this@ScheduleActivity, NoticeActivity::class.java)); return@setOnClickListener }
-                val title = dateText(e) + (if (e.time.isNotBlank()) " ${e.time}" else "") +
-                    listOf(Store.catShort(e.cat), e.place, e.boat).filter { it.isNotBlank() }.joinToString(" · ").let { if (it.isBlank()) "" else " · $it" }
+                val title = Cloud.eventTitle(e.date, e.time, e.cat, e.place, e.boat)
                 Cloud.pinEvent(e, title, e.memo) { err -> toast(err ?: "공지에 올렸어요 · 그룹원 모두에게 보여요"); load() }
             }
         })
@@ -292,7 +291,7 @@ class ScheduleActivity : Activity() {
             val (h, mi) = time.split(":").map { it.toIntOrNull() ?: 0 }.let { (it.getOrElse(0) { 5 }) to (it.getOrElse(1) { 0 }) }
             TimePickerDialog(this, { _, hh, mm -> time = String.format(Locale.KOREA, "%02d:%02d", hh, mm); refreshBtns() }, h, mi, true).show()
         }
-        val catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         fun renderCat() {
             catRow.removeAllViews()
             types.forEachIndexed { i, c ->

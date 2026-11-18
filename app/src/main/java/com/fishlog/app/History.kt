@@ -25,6 +25,8 @@ object History {
     )
 
     val ITEMS = listOf(
+        Item("6.44", "2026.11.18", "👥 그룹 · 그룹 출조 기록", "📅 내일 출조 알림: 내가 🙋 참석(대기 포함)을 누른 일정 전날 낮 12시에 한 번 (일정 · 참석 현황 · [일정 보기] [그룹 채팅]) · ⚙ 설정 🔔 그룹 알림에서 끄기 · 📢 일정을 고치면 공지에 올라간 글도 같이 바뀌고, 일정을 지우면 공지도 내려가요 · 👥 멤버 줄 오른쪽 ⋯ 로 내보내기 (그룹장)"),
+        Item("6.44", "2026.11.18", "⚙ 설정 · 설명서 · 앱", "🧩 버튼 아래쪽이 잘려 보이던 것 고침 (그룹 관리 '✎ 이름' 등 앱 전체) · 🗺 지도 조준 버튼 그림 가운데로 · 🛡 함께 쓰는 물때 · 날씨 · 수온 저장분이 말이 안 되면 안 쓰고 직접 받아요"),
         Item("6.43", "2026.11.18", "🗺 지도 · 이동 경로", "🌋 지진 핀을 누르면 느끼는 범위(흐린 원) · 조심 범위(진한 원) + 내 위치 기준 한 줄(낙석 주의 / 흔들림 느낄 거리 / 영향 거의 없음 · 대략 계산) · 빈 곳 누르면 원 지움 · 출조 중 지도: 위 '내 위치 따라가기' 버튼 대신 ＋ − 아래 조준(GPS) 버튼 (파랑 = 따라가는 중 · 지도를 끌면 꺼짐 · 누르면 다시 내 배로)"),
         Item("6.43", "2026.11.18", "⚙ 설정 · 설명서 · 앱", "🚫 사칭 막기: 닉네임 · 채팅 이름 · 그룹 멤버 이름에 '관리자 · 운영자 · 운영진 · 관리팀 · admin' 같은 말은 못 써요 (띄어쓰기 · 대소문자 섞어도) · 이미 그런 닉네임이면 바꾸기 안내"),
         Item("6.42", "2026.11.18", "👥 그룹 · 그룹 출조 기록", "🔒 그룹 가입 보안: 초대 코드가 맞는지 서버에서도 확인해요 (그룹 번호만 알아서는 못 들어와요) · 내보낸 멤버는 가입 기록도 지워요"),
@@ -213,7 +215,7 @@ object History {
                 background = Ui.bg(a, Ui.CARD, 14, Ui.LINE)
             }
             val head = LinearLayout(a).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(12), dp(12), dp(12)); isClickable = true
             }
             head.addView(Ui.text(a, 15f, Ui.TEXT, true, cat), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -223,7 +225,7 @@ object History {
             card.addView(head)
             val inner = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, dp(10), dp(8)) }
             list.forEach { it0 ->
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(4), dp(7), dp(4), dp(7)) }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(4), dp(7), dp(4), dp(7)) }
                 val newest = it0.ver == now
                 val tag = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
                 tag.addView(Ui.text(a, 11f, if (newest) Color.parseColor("#04342C") else Color.parseColor("#BFE0FF"), true, "v${it0.ver}").apply {

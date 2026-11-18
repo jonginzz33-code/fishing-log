@@ -160,7 +160,7 @@ object TideDialog {
         // 관리자(나)에게만: 물때 새로고침 (폰·서버에 저장된 물때 무시하고 국립해양조사원에서 바로 다시 받아 서버도 덮어씀)
         var reloadTide: () -> Unit = {}
         if (Cloud.isAdmin) {
-            val hr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val hr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             hr.addView(head, LinearLayout.LayoutParams(0, WRAP, 1f))
             hr.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 물때 새로고침").apply {
                 gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
@@ -183,9 +183,9 @@ object TideDialog {
         // v6.22 (271): ↗ 사는 물때 / ↘ 죽는 물때 + 앞뒤 7일 물세기 작은 막대 (표시만 · 물때 계산 · 물세기 %는 그대로)
         val lifeChip = Ui.text(a, 12.5f, Ui.TEXT, true, "").apply { setPadding(dp(10), dp(3), dp(10), dp(3)) }
         val lifeSub = Ui.text(a, 11.5f, Ui.SUB, false, "")
-        val lifeBars = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.BOTTOM }
+        val lifeBars = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.BOTTOM }
         val lifeLeg = Ui.text(a, 10f, Ui.SUB, false, "초록 = 사는 물때(세지는 중) · 보라 = 죽는 물때(약해지는 중) · 노란 테두리 = 고른 날")
-        col.addView(LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; addView(lifeChip, LinearLayout.LayoutParams(WRAP, WRAP)) },
+        col.addView(LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; addView(lifeChip, LinearLayout.LayoutParams(WRAP, WRAP)) },
             Ui.lp(a, MATCH, WRAP, top = 6))
         col.addView(lifeSub, Ui.lp(a, MATCH, WRAP, top = 4))
         col.addView(lifeBars, Ui.lp(a, MATCH, dp(78), top = 8))
@@ -222,7 +222,7 @@ object TideDialog {
         // ---- 바람 · 파도 · 수온 ----
         // 제목 + (관리자·권한 받은 사람만) 새로고침: 기억해 둔 값 무시하고 지금 바로 다시 받기
         var reloadWx: () -> Unit = {}
-        val wxHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val wxHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         val wxTitle = Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온")
         wxHead.addView(wxTitle, LinearLayout.LayoutParams(0, WRAP, 1f))
         if (Cloud.can("wx")) wxHead.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 새로고침").apply {
@@ -241,11 +241,11 @@ object TideDialog {
         val extraBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         col.addView(extraBox, Ui.lp(a, MATCH, WRAP, top = 2))
         // [오늘 시간별] [주간 (7일)] 탭
-        val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
         // v5.0 (230): 바람 기준 [육상 | 해상] (기본 해상 = 가까운 바다 칸)
         var onBasis: () -> Unit = {}
-        val basisRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val basisRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         col.addView(basisRow, Ui.lp(a, MATCH, WRAP, top = 8))
         fun paintBasis() {
             basisRow.removeAllViews()
@@ -305,7 +305,7 @@ object TideDialog {
             contentDescription = "물때 사진 찍기"
         }
         titleBox.addView(LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             addView(titleView, LinearLayout.LayoutParams(0, WRAP, 1f))
             addView(shotBtn, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = dp(8) })
         })
@@ -400,7 +400,7 @@ object TideDialog {
                 val weights = floatArrayOf(0.8f, 0.75f, 0.8f, 1.9f, 1.15f, 1.1f, 0.7f)
                 fun cellRow(views: List<View>, bg: android.graphics.drawable.Drawable?, padV: Int): LinearLayout =
                     LinearLayout(a).apply {
-                        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                        orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                         setPadding(dp(8), dp(padV), dp(6), dp(padV))
                         background = bg
                         views.forEachIndexed { i, v -> addView(v, LinearLayout.LayoutParams(0, WRAP, weights[i])) }
@@ -437,7 +437,7 @@ object TideDialog {
                     // v5.0: 초록 괜찮음(5 아래) · 노랑 주의(5~9) · 빨강 셈(9 이상)
                     val lvColor = Weather.windColor(ws)
                     val wind = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-                    val wTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val wTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                     wTop.addView(Ui.text(a, 15f, lvColor, true, if (x?.dir != null) "↑" else "·").apply {
                         gravity = Gravity.CENTER
                         x?.dir?.let { rotation = (it.toFloat() + 180f) % 360f }
@@ -461,7 +461,7 @@ object TideDialog {
                     }, LinearLayout.LayoutParams(MATCH, Ui.dp(a, 14)))
                     // 파도: 파향 화살표 + 파고 m / 주기 s
                     val wave = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-                    val wvTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val wvTop = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                     if (x?.waveDir != null) wvTop.addView(Ui.text(a, 13f, Ui.BLUE, true, "↑").apply {
                         gravity = Gravity.CENTER; rotation = (x.waveDir.toFloat() + 180f) % 360f
                     }, LinearLayout.LayoutParams(dp(13), WRAP))
@@ -670,7 +670,7 @@ object TideDialog {
         var weekList: List<Weather.WeekDay>? = null
         lateinit var renderWeekRef: (List<Weather.WeekDay>?) -> Unit
         fun sectionLine(t: String) = LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             addView(View(a).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, dp(1), 1f))
             addView(Ui.text(a, 11f, Ui.SUB, true, t).apply { setPadding(dp(8), 0, dp(8), 0) })
             addView(View(a).apply { setBackgroundColor(Ui.LINE) }, LinearLayout.LayoutParams(0, dp(1), 1f))
@@ -689,7 +689,7 @@ object TideDialog {
                 val noon = ds + 12 * 3_600_000L
                 val sun = Calendar.getInstance().apply { timeInMillis = ds }.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY
                 val row = LinearLayout(a).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                     setPadding(dp(10), dp(8), dp(10), dp(8)); background = Ui.bg(a, Ui.CARD, 12)
                     isClickable = true
                     setOnClickListener { cur = ds; weekMode = false; paintTabs(); load() }
@@ -745,7 +745,7 @@ object TideDialog {
             if (list.isNullOrEmpty()) { weekBox.addView(Ui.text(a, 13f, Ui.SUB, false, "주간 날씨를 못 받았어요 (인터넷 확인)"), Ui.lp(a, MATCH, WRAP, top = 8)); return }
             val weights = floatArrayOf(1.05f, 0.75f, 1.35f, 0.75f, 0.65f, 0.7f, 0.9f, 0.85f)
             fun cellRow(views: List<View>, bg: android.graphics.drawable.Drawable?, padV: Int) = LinearLayout(a).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(6), dp(padV), dp(6), dp(padV)); background = bg
                 views.forEachIndexed { i, v -> addView(v, LinearLayout.LayoutParams(0, WRAP, weights[i])) }
             }
@@ -794,7 +794,7 @@ object TideDialog {
                 val wcorr = if (meas == null && wd.sst != null && todaySstOff != null) wd.sst + todaySstOff!! else null
                 val seaV = meas ?: wcorr ?: wd.sst
                 if (seaV != null) {
-                    val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                     sr.addView(Ui.text(a, 10.5f, Color.parseColor("#7FE0D0"), true, String.format(Locale.KOREA, "수온 %.0f°", seaV)))
                     sr.addView(Ui.text(a, 8.5f, if (meas != null) Color.parseColor("#04342C") else if (wcorr != null) Color.parseColor("#7FE0D0") else Ui.SUB, true,
                         if (meas != null) "실측" else "예상").apply {

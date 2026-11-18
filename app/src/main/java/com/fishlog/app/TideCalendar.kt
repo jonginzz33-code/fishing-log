@@ -187,7 +187,7 @@ object TideCalendar {
         fun haeruOk(day: Long): Boolean { val v = infoOf(day)?.minLow ?: return false; return v * 100.0 <= haeruCm(a).toDouble() }
 
         // 맨 위: ‹ 2026년 11월 · 인천송도 › · 닫기
-        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         fun nav(t: String) = Ui.text(a, 20f, Color.parseColor("#FFB27A"), true, t).apply { gravity = Gravity.CENTER; setPadding(dp(10), dp(4), dp(10), dp(4)) }
         val prev = nav("‹"); val next = nav("›")
         val title = Ui.text(a, 16f, Ui.TEXT, true, "").apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
@@ -198,7 +198,7 @@ object TideCalendar {
         })
         root.addView(top)
 
-        val chipRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         root.addView(Ui.hscroll(a, chipRow), Ui.lp(a, MATCH, WRAP, top = 8))
         val warnView = Ui.text(a, 12.5f, Color.WHITE, true, "").apply {
             visibility = View.GONE; setPadding(dp(10), dp(5), dp(10), dp(5)); background = Ui.bg(a, Color.parseColor("#8A1F28"), 10)
@@ -235,7 +235,7 @@ object TideCalendar {
             list.forEach { n ->
                 val on = n !in off
                 val chip = LinearLayout(a).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(12), dp(4))
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(8), dp(4), dp(12), dp(4))
                     background = if (on) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
                     alpha = if (on) 1f else 0.6f
                     addView(iconView(n, 20), LinearLayout.LayoutParams(dp(20), dp(20)))
@@ -290,7 +290,7 @@ object TideCalendar {
                 if (n == HAERU) {
                     val i = infoOf(day); val ml = i?.minLow; val cm = haeruCm(a)
                     val ok = haeruOk(day)
-                    val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                    val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                     row.addView(iconView(n, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
                     row.addView(Ui.text(a, 12.5f, if (ok) Ui.TEXT else Ui.SUB, false,
                         if (ml == null) "해루질 — 물때 받는 중…"
@@ -301,7 +301,7 @@ object TideCalendar {
                     return@forEach
                 }
                 val r = ruleOf(n)
-                val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 row.addView(iconView(n, 22), LinearLayout.LayoutParams(dp(22), dp(22)))
                 val txt = when {
                     r == null -> "$n — 아직 기록이 없어 알 수 없어요 (출조 5번 쌓이면 계산)"
@@ -368,7 +368,7 @@ object TideCalendar {
         fun paintGrid() {
             grid.removeAllViews()
             title.text = "🎣 출조 추천 · ${month.get(Calendar.YEAR)}.${month.get(Calendar.MONTH) + 1}" + if (station.isNotBlank()) " · $station" else ""
-            val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, w ->
                 head.addView(Ui.text(a, 11f, when (i) { 0 -> Color.parseColor("#FF8A92"); 6 -> Color.parseColor("#7FB8FF"); else -> Ui.SUB }, false, w).apply { gravity = Gravity.CENTER },
                     LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -382,7 +382,7 @@ object TideCalendar {
             val rules = active().associateWith { ruleOf(it) }
             var row: LinearLayout? = null
             for (cell in 0 until ((offset + days + 6) / 7) * 7) {
-                if (cell % 7 == 0) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }; grid.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)) }
+                if (cell % 7 == 0) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; grid.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)) }
                 val d = cell - offset + 1
                 val lp = LinearLayout.LayoutParams(0, dp(62), 1f).apply { if (cell % 7 > 0) leftMargin = dp(4) }
                 if (d < 1 || d > days) { row!!.addView(View(a), lp); continue }
@@ -404,7 +404,7 @@ object TideCalendar {
                     f.addView(Ui.text(a, 8.5f, if (hOk) Ui.GREEN else Ui.SUB, hOk, "↓${(ml * 100).toInt()}").apply { setPadding(0, dp(3), dp(3), 0) },
                         FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.END))
                 }
-                val icons = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+                val icons = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER }
                 good.take(3).forEach { n -> icons.addView(iconView(n, 17), LinearLayout.LayoutParams(dp(17), dp(17))) }
                 f.addView(icons, FrameLayout.LayoutParams(MATCH, dp(18), Gravity.CENTER).apply { topMargin = dp(2) })
                 val mul = when (mi) { 0 -> "무시"; 14 -> "조금"; else -> "${mi}물" }

@@ -57,14 +57,20 @@ object Weather {
             val o = JSONObject(d.getString("h") ?: return emptyMap())
             fun dd(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optDouble(k) else null
             fun ii(j: JSONObject, k: String) = if (j.has(k) && !j.isNull(k)) j.optInt(k) else null
-            o.keys().asSequence().mapNotNull { k ->
+            val m = o.keys().asSequence().mapNotNull { k ->
                 val t = k.toLongOrNull() ?: return@mapNotNull null
                 val j = o.getJSONObject(k)
                 t to Hour(t, dd(j, "w"), dd(j, "d"), dd(j, "g"), dd(j, "wv"), dd(j, "s"), dd(j, "t"), ii(j, "sk"), ii(j, "pt"), ii(j, "p"),
                     dd(j, "pd"), dd(j, "wd"), j.optBoolean("th", false), ii(j, "c"))
             }.toMap()
+            // v6.44 (311): 함께 쓰는 저장분 검사 — 말이 안 되는 값이 하나라도 있으면 통째로 안 씀 (직접 받은 값 · 예보로)
+            if (m.values.any { !wxOk(it) }) emptyMap() else m
         } catch (_: Exception) { emptyMap() }
     }
+
+    private fun rng(v: Double?, lo: Double, hi: Double) = v == null || (!v.isNaN() && v >= lo && v <= hi)
+    private fun wxOk(h: Hour) = rng(h.wind, 0.0, 60.0) && rng(h.gust, 0.0, 80.0) && rng(h.wave, 0.0, 20.0) && rng(h.sst, -3.0, 35.0) &&
+        rng(h.temp, -30.0, 45.0) && rng(h.dir, 0.0, 360.0) && rng(h.period, 0.0, 30.0) && (h.pop == null || h.pop in 0..100)
 
     /** 받은 날씨를 기억해 두는 시간 (3시간 30분) */
     const val KEEP_MS = 210 * 60_000L
@@ -874,7 +880,10 @@ object Weather {
             val d = com.google.android.gms.tasks.Tasks.await(com.google.firebase.firestore.FirebaseFirestore.getInstance()
                 .collection("wtemp").document("${code}_$ymd").get(), 3, java.util.concurrent.TimeUnit.SECONDS)
             val sStr = d.getString("s") ?: return null
-            val o = JSONObject().put("n", d.getString("n") ?: "").put("s", JSONObject(sStr))
+            val sj = JSONObject(sStr)
+            // v6.44 (311): 함께 쓰는 수온 저장분 검사 (−3~35℃ · 0~23시) — 이상하면 안 씀
+            if (sj.keys().asSequence().any { k -> (k.toIntOrNull() ?: -1) !in 0..23 || sj.optDouble(k).let { it.isNaN() || it < -3 || it > 35 } }) return null
+            val o = JSONObject().put("n", d.getString("n") ?: "").put("s", sj)
             // 지난 날짜는 안 바뀌니 폰에 저장
             f.writeText(o.toString())
             parse(o, o.optJSONObject("s"))

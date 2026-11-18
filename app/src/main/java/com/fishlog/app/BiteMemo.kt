@@ -135,7 +135,7 @@ object BiteMemo {
             background = Ui.bg(c, Color.argb(50, Color.red(col), Color.green(col), Color.blue(col)), 8)
         }, LinearLayout.LayoutParams(Ui.WRAP, Ui.WRAP).apply { topMargin = Ui.dp(c, 6) })
         // 물때 한마디 + v6.14 (258): 그 시간대 물살 세기 (같은 줄)
-        val tideRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        val tideRow = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         p.tideNote?.let { n ->
             tideRow.addView(Ui.text(c, 12f, Ui.BLUE, true, "≋ $n").apply {
                 setPadding(Ui.dp(c, 8), Ui.dp(c, 3), Ui.dp(c, 8), Ui.dp(c, 3))
@@ -172,7 +172,7 @@ object BiteMemo {
                 LinearLayout.LayoutParams(0, Ui.WRAP, 1.6f))
             card.addView(head, Ui.lp(c, Ui.MATCH, Ui.WRAP, top = 10))
             val bar = LinearLayout(c).apply {
-                orientation = LinearLayout.HORIZONTAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
                 background = Ui.bg(c, Color.parseColor("#22344A"), 99)
                 clipToOutline = true
             }

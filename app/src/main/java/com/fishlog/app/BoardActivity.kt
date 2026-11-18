@@ -140,13 +140,13 @@ class BoardActivity : Activity() {
         nickRow.addView(blockBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
         col.addView(nickRow, Ui.lp(this, MATCH, WRAP, top = 8))
 
-        tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(tabRow, Ui.lp(this, MATCH, WRAP, top = 10))
         // 종류 칩: 글자가 줄바꿈되지 않게 가로로 밀어서 보기
-        catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(Ui.hscroll(this, catRow),
             Ui.lp(this, MATCH, WRAP, top = 10))
-        periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 8))
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(listBox, Ui.lp(this, MATCH, WRAP, top = 6))
@@ -300,7 +300,7 @@ class BoardActivity : Activity() {
             sel.text = when { a == null -> "시작일을 눌러요"; b == null -> rangeText(a!!, a!!).substring(5) + " ~ 끝일?"; else -> rangeText(a!!, b!!).substring(5) }
             ok.background = Ui.bg(this, if (a != null) Ui.BLUE else Ui.LINE, 14)
             // 빠른 선택
-            val qs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val qs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             val wk = java.util.Calendar.getInstance().apply { timeInMillis = today; set(java.util.Calendar.DAY_OF_WEEK, java.util.Calendar.SUNDAY) }.timeInMillis
             val m1 = java.util.Calendar.getInstance().apply { timeInMillis = today; set(java.util.Calendar.DAY_OF_MONTH, 1) }.timeInMillis
             val pm1 = java.util.Calendar.getInstance().apply { timeInMillis = m1; add(java.util.Calendar.MONTH, -1) }.timeInMillis
@@ -315,7 +315,7 @@ class BoardActivity : Activity() {
             nav.addView(Ui.text(this, 16f, Ui.TEXT, true, SimpleDateFormat("yyyy년 M월", Locale.KOREA).format(Date(month))).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, WRAP, 1f))
             nav.addView(Ui.text(this, 20f, Ui.TEXT, true, "›").apply { gravity = Gravity.CENTER; setOnClickListener { mv(1) } }, LinearLayout.LayoutParams(dp(44), dp(40)))
             sh.body.addView(nav, Ui.lp(this, MATCH, WRAP, top = 8))
-            val wd = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val wd = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             listOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, w ->
                 wd.addView(Ui.text(this, 11.5f, if (i == 0) android.graphics.Color.parseColor("#FF8A92") else Ui.SUB, false, w).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(0, WRAP, 1f))
             }
@@ -326,7 +326,7 @@ class BoardActivity : Activity() {
             val lo = a; val hi = b ?: a
             var row: LinearLayout? = null
             for (cell in 0 until ((first + days + 6) / 7) * 7) {
-                if (cell % 7 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }; sh.body.addView(row, Ui.lp(this, MATCH, WRAP, top = 3)) }
+                if (cell % 7 == 0) { row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; sh.body.addView(row, Ui.lp(this, MATCH, WRAP, top = 3)) }
                 val dn = cell - first + 1
                 if (dn < 1 || dn > days) { row!!.addView(View(this), LinearLayout.LayoutParams(0, dp(42), 1f)); continue }
                 val d = addDays(month, dn - 1)
@@ -527,7 +527,7 @@ class BoardActivity : Activity() {
         listBox.addView(Ui.text(this, 14f, Ui.TEXT, true, "어종을 누르면 잡힌 자리를 지도로 봐요"), Ui.lp(this, MATCH, WRAP, top = 14))
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         counts.chunked(2).forEach { rowItems ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             rowItems.forEachIndexed { i, e ->
                 row.addView(LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -627,7 +627,7 @@ class BoardActivity : Activity() {
         val cs = t.catches.sortedBy { it.time }
         // 📸 사진 (맨 위): 대표 사진 크게 + 나머지는 옆으로 밀어서
         if (t.mthumb.isNotBlank() || t.photoCount > 0) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             box.addView(Ui.hscroll(this, row), Ui.lp(this, MATCH, WRAP, top = 4))
             val caption = "${t.nick} · ${dayFmt.format(Date(t.start))}"
             MainPhoto.decode(t.mthumb)?.let { th ->
@@ -819,7 +819,7 @@ class BoardActivity : Activity() {
         // 어종 칩: 전체 + 많이 잡힌 순 (고르면 그 어종 1시간 평균으로 순위)
         val counts = list.flatMap { t -> t.catches.map { t.key(it.slot) } }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
         if (species != null && counts.none { it.key == species }) species = null
-        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         chips.addView(pill("전체 어종", species == null, 13f) { species = null; render() }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         counts.forEach { e ->
             chips.addView(pill("${PublicBoard.keyLabel(e.key)} ${e.value}", e.key == species, 13f) { species = e.key; render() },
@@ -828,7 +828,7 @@ class BoardActivity : Activity() {
         listBox.addView(Ui.hscroll(this, chips), Ui.lp(this, MATCH, WRAP, top = 12))
 
         val me = myLocation()
-        val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         sortRow.addView(pill("잘 나온 순", !nearFirst, 13f) { nearFirst = false; render() }, LinearLayout.LayoutParams(0, WRAP, 1f))
         sortRow.addView(pill("가까운 순", nearFirst, 13f) {
             if (me == null) toast("내 위치를 몰라서 가까운 순으로 볼 수 없어요") else { nearFirst = true; render() }
@@ -894,7 +894,7 @@ class BoardActivity : Activity() {
             rows.forEach { (k, v) ->
                 val r = Ui.row(this)
                 r.addView(Ui.text(this, 13f, Ui.SUB, false, k), LinearLayout.LayoutParams(dp(64), WRAP))
-                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val track = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 track.addView(View(this).apply { background = Ui.bg(this@BoardActivity, Ui.ORANGE, 3) },
                     LinearLayout.LayoutParams(0, dp(10), v.toFloat() / max))
                 track.addView(View(this), LinearLayout.LayoutParams(0, dp(10), 1f - v.toFloat() / max + 0.0001f))

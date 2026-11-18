@@ -26,6 +26,12 @@ service cloud.firestore {
     // v6.43 (306): 사칭 이름 ('관리자 · 운영자 · 운영진 · 관리팀 · admin · 운영' · 띄어쓰기 · 대소문자 · 특수문자 섞어도) — 관리자 계정은 예외
     function fakeAdmin(n) { return n is string && n.lower().replace('[^0-9a-z가-힣]', '').matches('.*(관리자|관리팀|운영|admin).*'); }
     function okName(n) { return isAdmin() || !fakeAdmin(n); }
+    // v6.44 (310): 일정 공지(eid 있음)의 그 일정을 올린 사람인지
+    function evOwner(gid, nd) {
+      return nd.get('eid', '') is string && nd.get('eid', '') != ''
+        && exists(/databases/$(database)/documents/groups/$(gid)/events/$(nd.eid))
+        && get(/databases/$(database)/documents/groups/$(gid)/events/$(nd.eid)).data.owner == request.auth.uid;
+    }
     function reportBy(target) { return /databases/$(database)/documents/reports/$(target)/by/$(request.auth.uid); }
 
     match /config/{doc} {
@@ -348,9 +354,13 @@ service cloud.firestore {
           && request.resource.data.eid is string && request.resource.data.eid.size() > 0
           && request.resource.data.title is string && request.resource.data.title.size() <= 100
           && request.resource.data.body is string && request.resource.data.body.size() <= 1000);
-        allow update: if isGroupOwner(gid);
-        // 내리기: 올린 사람 · 그룹장
-        allow delete: if isGroupOwner(gid) || (isMember(gid) && resource.data.owner == request.auth.uid);
+        // v6.44 (310): 일정 공지는 그 일정을 올린 사람도 제목 · 내용만 고치기 (일정 고칠 때 같이)
+        allow update: if isGroupOwner(gid) || (isMember(gid) && evOwner(gid, resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'body', 'edited'])
+          && request.resource.data.title is string && request.resource.data.title.size() <= 100
+          && request.resource.data.body is string && request.resource.data.body.size() <= 1000);
+        // 내리기: 올린 사람 · 그룹장 · (v6.44) 그 일정을 올린 사람
+        allow delete: if isGroupOwner(gid) || (isMember(gid) && (resource.data.owner == request.auth.uid || evOwner(gid, resource.data)));
       }
       // v6.36 (294): 🔖 그룹 사이트 메모 — 그룹원 누구나 추가 · 올린 사람 · 그룹장 고치기/지우기
       match /sites/{sid} {

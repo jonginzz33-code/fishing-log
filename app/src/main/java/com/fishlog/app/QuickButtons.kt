@@ -56,7 +56,7 @@ class QuickButtons(
         var row: LinearLayout? = null
         var used = 0
         fun newRow() {
-            row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             box.addView(row, Ui.lp(a, MATCH, WRAP, top = 8)); used = 0
         }
         fun fill() { row?.let { r -> if (used in 1..5) r.addView(View(a), LinearLayout.LayoutParams(0, 1, (6 - used).toFloat())) } }
@@ -121,7 +121,7 @@ class QuickButtons(
         names[q.slot] = name; counts[q.slot] = count
         if (q.size == 0) {
             // 작게: 한 줄 (이름 · 숫자)
-            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), 0, dp(10), 0) }
+            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(10), 0, dp(10), 0) }
             r.addView(name, LinearLayout.LayoutParams(0, WRAP, 1f))
             count.textSize = 20f
             r.addView(count)
@@ -167,7 +167,7 @@ class QuickButtons(
                     orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8))
                     background = Ui.bg(a, Ui.CARD, 12)
                 }
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 fun mv(lbl: String, d: Int) = Ui.text(a, 14f, Ui.TEXT, true, lbl).apply {
                     gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 8, Ui.LINE)
                     setOnClickListener {
@@ -194,7 +194,7 @@ class QuickButtons(
                 }, LinearLayout.LayoutParams(dp(34), dp(34)))
                 card.addView(r)
                 // 크기
-                val sz = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val sz = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 sz.addView(Ui.text(a, 12f, Ui.SUB, false, "크기"), LinearLayout.LayoutParams(dp(36), WRAP))
                 listOf(0 to "작게", 1 to "보통", 2 to "크게").forEach { (v, lb) ->
                     val on = q.size == v
@@ -206,7 +206,7 @@ class QuickButtons(
                 }
                 card.addView(sz, Ui.lp(a, MATCH, WRAP, top = 6))
                 // 색
-                val cr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val cr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 cr.addView(Ui.text(a, 12f, Ui.SUB, false, "색"), LinearLayout.LayoutParams(dp(36), WRAP))
                 Store.QUICK_COLORS.forEachIndexed { ci, hex ->
                     cr.addView(View(a).apply {

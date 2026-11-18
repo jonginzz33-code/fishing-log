@@ -73,7 +73,7 @@ class AdminActivity : Activity() {
         val open = key in openSecs
         val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = if (open) View.VISIBLE else View.GONE }
         val head = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = Ui.bg(this@AdminActivity, Ui.CARD, 12, if (open) Ui.GREEN else 0)
         }

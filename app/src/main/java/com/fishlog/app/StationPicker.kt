@@ -94,7 +94,7 @@ object StationPicker {
             val on = Spot.current?.let { Spot.same(it, p) } == true
             val near = Tide.stationsNear(a, p.lat, p.lon).firstOrNull()
             val line = LinearLayout(a).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(10), dp(8), dp(10)); minimumHeight = dp(52)
                 background = Ui.bg(a, Ui.CARD, 12, if (on) Ui.GREEN else Ui.LINE)
             }

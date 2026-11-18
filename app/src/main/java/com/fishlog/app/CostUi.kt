@@ -53,7 +53,7 @@ object CostUi {
             grid.removeAllViews()
             val items = (Store.gearOptions(cat) + gear).distinct()
             (items + "+ 직접 추가").chunked(3).forEach { rowItems ->
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 rowItems.forEachIndexed { i, g ->
                     val add = g == "+ 직접 추가"
                     val chip = pill(a, g, 13f)

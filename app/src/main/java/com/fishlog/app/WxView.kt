@@ -51,12 +51,12 @@ object WxView {
         fun dp(v: Int) = Ui.dp(c, v)
         val box = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         val hf = SimpleDateFormat("HH시", Locale.KOREA)
-        val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
+        val head = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         fun hc(txt: String, w: Float) = Ui.text(c, 11f, Ui.SUB, true, txt).apply { gravity = Gravity.CENTER }.also { head.addView(it, LinearLayout.LayoutParams(0, WRAP, w)) }
         hc("시각", 1f); hc("하늘", 0.8f); hc("기온", 0.9f); hc("바람", 1.5f); hc("파고", 1.3f); hc("수온", 1f)
         box.addView(head)
         snap.hours.forEach { h ->
-            val r = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5)) }
+            val r = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(5), 0, dp(5)) }
             fun cell(txt: String, w: Float, col: Int = Ui.TEXT) = Ui.text(c, 12.5f, col, false, txt).apply {
                 gravity = Gravity.CENTER; maxLines = 1
                 setAutoSizeTextTypeUniformWithConfiguration(8, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)

@@ -28,7 +28,7 @@ class Sheet(private val a: Activity, private val frac: Float = 0.66f) {
     val dlg = Dialog(a, R.style.FlSheet)
     private val root = FrameLayout(a)
     private val panel = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-    val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), 0, dp(16), dp(8)) }
+    val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), 0, dp(16), dp(8)) }
     val body = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), 0, dp(14), dp(16)) }
     val foot = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(6), dp(14), dp(10)); visibility = View.GONE }
     val scroll = ScrollView(a)

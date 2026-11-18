@@ -32,7 +32,7 @@ object GroupAlert {
     private const val ACT = "com.fishlog.app.GROUP_ALERT"
 
     val KINDS = listOf("live" to "🟢 그룹원 출조 중", "chat" to "💬 그룹 채팅 새 글", "notice" to "📢 새 공지",
-        "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답")
+        "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답", "remind" to "📅 내일 출조 (전날 낮 12시)")
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun on(c: Context, kind: String) = prefs(c).getBoolean("ga_$kind", true)
@@ -144,6 +144,32 @@ object GroupAlert {
                 val dur = if (mins >= 60) "${mins / 60}시간 ${mins % 60}분째" else "${mins}분째"
                 liveLines.add("${d.getString("name") ?: "?"} · ${d.getString("line") ?: ""} ($dur)".replace(" ·  (", " ("))
                 if (liveGid.isEmpty()) liveGid = gid
+            }
+            // v6.44 (312): 📅 내일 출조 — 내가 참석(대기 포함)을 누른 일정 전날 낮 12시부터 한 번 (앱을 보고 있어도)
+            if (on(c, "remind") && Calendar.getInstance().get(Calendar.HOUR_OF_DAY) >= 12) {
+                val tmr = SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date(now + 86_400_000L))
+                wait(gref.collection("events").whereEqualTo("date", tmr).get())?.documents?.forEach { e ->
+                    val key = "ga_rem_${gid}_${e.id}"
+                    if (p.getBoolean(key, false)) return@forEach
+                    val rs = wait(e.reference.collection("rsvp").get())?.documents ?: return@forEach
+                    if (rs.firstOrNull { it.id == me }?.getString("s") != "yes") return@forEach
+                    p.edit().putBoolean(key, true).apply()
+                    val yes = rs.count { it.getString("s") == "yes" }; val maybe = rs.count { it.getString("s") == "maybe" }
+                    val cap = (e.getLong("cap") ?: 0L).toInt()
+                    val waitN = if (cap > 0) (yes - cap).coerceAtLeast(0) else 0
+                    val lines = listOf(Cloud.eventTitle(e.getString("date") ?: "", e.getString("time") ?: "", e.getString("cat") ?: "",
+                        e.getString("place") ?: "", e.getString("boat") ?: ""), (e.getString("memo") ?: "").take(60),
+                        "🙋 참석 ${if (cap > 0) minOf(yes, cap) else yes} · 🤔 미정 $maybe" + (if (cap > 0) " · 대기 $waitN" else "")).filter { it.isNotBlank() }
+                    val id = ("rem$gid${e.id}").hashCode()
+                    val b = Notification.Builder(c, CH_GROUP).setSmallIcon(R.drawable.ic_stat_octo)
+                        .setContentTitle("⏰ 내일 출조예요! · $gname").setContentText(lines.first())
+                        .setStyle(Notification.BigTextStyle().bigText(lines.joinToString("\n")))
+                        .setContentIntent(openPi(c, gid, "event", id)).setAutoCancel(true)
+                        .setExtras(android.os.Bundle().apply { putString("ga_kind", "remind") })
+                        .addAction(Notification.Action.Builder(null, "📅 일정 보기", openPi(c, gid, "event", id + 1)).build())
+                        .addAction(Notification.Action.Builder(null, "💬 그룹 채팅", openPi(c, gid, "chat", id + 2)).build())
+                    try { c.getSystemService(NotificationManager::class.java).notify(id, b.build()) } catch (_: SecurityException) {}
+                }
             }
             if (last == 0L || quiet) return@forEach   // 처음이면 지난 글로 알림 폭탄 안 보내기
             // 💬 채팅

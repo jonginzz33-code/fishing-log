@@ -299,7 +299,7 @@ object Ui {
         if (bmp == null) return
         val kids = (0 until card.childCount).map { card.getChildAt(it) to (card.getChildAt(it).layoutParams) }
         card.removeAllViews()
-        val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val row = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = android.view.Gravity.CENTER_VERTICAL }
         val left = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         kids.forEach { (v, lp) -> left.addView(v, lp ?: LinearLayout.LayoutParams(MATCH, WRAP)) }
         row.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -319,6 +319,8 @@ object Ui {
 
     fun row(c: Context): LinearLayout = LinearLayout(c).apply {
         orientation = LinearLayout.HORIZONTAL
+        // v6.44 (309): 옆 큰 글자 밑선에 맞추느라 버튼이 아래로 밀려 잘리던 것 막기
+        isBaselineAligned = false
         gravity = Gravity.CENTER_VERTICAL
     }
 
@@ -749,9 +751,9 @@ object TideLayers {
 
     fun view(c: Context, onChange: () -> Unit): View {
         val box = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }
-        val head = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val head = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = android.view.Gravity.CENTER_VERTICAL }
         head.addView(Ui.text(c, 13f, Ui.TEXT, true, "그래프에 보기"), android.widget.LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        val chips = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        val chips = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; isBaselineAligned = false }
         fun small(label: String, click: () -> Unit) = Ui.text(c, 12f, Ui.TEXT, true, label).apply {
             gravity = android.view.Gravity.CENTER; setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 10), 0)
             background = Ui.bg(c, Color.TRANSPARENT, 99, Ui.LINE)

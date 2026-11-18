@@ -66,9 +66,9 @@ class GroupTripsActivity : Activity() {
         top.addView(Ui.text(this, 19f, Ui.TEXT, true, "$gl 출조 기록"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
         col.addView(top)
         GroupBand.view(this, false)?.let { col.addView(it, Ui.lp(this, MATCH, WRAP, top = 12)) }
-        periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 14))
-        peopleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        peopleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(Ui.hscroll(this, peopleRow), Ui.lp(this, MATCH, WRAP, top = 8))
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(body, Ui.lp(this, MATCH, WRAP, top = 6))
@@ -162,7 +162,7 @@ class GroupTripsActivity : Activity() {
         val totals = LinkedHashMap<String, Int>()
         list.forEach { t -> for (s in t.slots()) { val n = t.count(s); if (n > 0) totals[t.name(s)] = (totals[t.name(s)] ?: 0) + n } }
         val sorted = totals.entries.sortedByDescending { it.value }
-        val stat = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val stat = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         fun statBox(label: String, value: String) = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = Ui.bg(this@GroupTripsActivity, Ui.CARD, 12)
@@ -191,7 +191,7 @@ class GroupTripsActivity : Activity() {
             val pname = if (period == -1) "새 글" else listOf("이번 달", "3개월", "올해", "전체")[period]
             card.addView(Ui.text(this, 12f, Ui.SUB, false, "$pname $sp 많이 잡은 사람"))
             if (sorted.size > 1) {
-                val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 sorted.forEach { e ->
                     chips.addView(pill(e.key, e.key == sp, Ui.BLUE) { rankSpecies = e.key; render() },
                         LinearLayout.LayoutParams(WRAP, dp(30)).apply { rightMargin = dp(6) })

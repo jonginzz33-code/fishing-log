@@ -80,6 +80,7 @@ class HelpActivity : Activity() {
             "• 출조 전날엔 그룹 버튼과 일정 버튼이 초록으로 '내일 출조!'를 알려줘요.\n" +
             "• 일정은 그룹원 누구나 올리고 고치고 지울 수 있어요 (내가 쓴 것). 공지는 그룹장이 써요.\n" +
             "• (v6.39) 일정마다 [🙋 참석] [🤔 미정] [🙅 불참]을 눌러요 (다시 누르면 취소). 현황 줄을 누르면 누가 무슨 답을 했는지 · 한마디 · 아직 답 안 한 사람이 보여요. 일정을 올릴 때 인원 제한을 적으면 다 찬 뒤엔 누른 순서대로 대기예요.\n" +
+            "• (v6.44) 참석을 누른 일정은 전날 낮 12시에 '⏰ 내일 출조예요!' 알림이 와요. 일정을 고치면 공지에 올라간 글도 같이 바뀌어요. 그룹장은 👥 멤버 줄 오른쪽 ⋯ 로 멤버를 내보낼 수 있어요.\n" +
             "• (v6.40) 🔔 그룹 알림: 그룹원 출조 중 · 채팅 새 글 · 새 공지 · 새 일정 · 내 일정 참석 답을 상단 알림으로 알려 줘요. 1시간마다 정각쯤 확인해서 조금 늦을 수 있어요. 앱을 보고 있을 땐 안 울리고, ⚙ 설정 '🔔 그룹 알림'에서 하나씩 켜고 끌 수 있어요.\n" +
             "• 그룹 출조 기록: 기간·사람별로 모아 보고, 어종별 합계와 많이 잡은 사람 순위. 새로 올라온 기록은 강조돼요.\n" +
             "• 그룹장(왕관): 이름·공지 수정, 우리 그룹 출조 종류 추가·빼기, 초대 코드 새로 만들기, 멤버 내보내기, 멤버 출조 내리기, 그룹장 넘겨주기, 그룹 삭제.", R.drawable.guide_g3_group)
@@ -401,7 +402,7 @@ class HelpActivity : Activity() {
 
     private fun tip(col: LinearLayout, s: String) {
         val c = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
             background = Ui.bg(this@HelpActivity, Color.parseColor("#2A2310"), 14, Ui.ORANGE)
             setPadding(dp(14), dp(12), dp(14), dp(12))
         }

@@ -29,7 +29,7 @@ object GroupSites {
         fun dp(v: Int) = Ui.dp(a, v)
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
-        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         top.addView(Ui.text(a, 19f, Ui.TEXT, true, "🔖 그룹 사이트 메모"), LinearLayout.LayoutParams(0, WRAP, 1f))
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(14), dp(6), dp(14), dp(6)); background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
@@ -74,7 +74,7 @@ object GroupSites {
                 c.addView(Ui.text(a, 12f, Ui.BLUE, false, s.url).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setOnClickListener { Boats.openUrl(a, s.url) } }, Ui.lp(a, MATCH, WRAP, top = 2))
                 if (s.memo.isNotBlank()) c.addView(Ui.text(a, 12.5f, Ui.SUB, false, s.memo), Ui.lp(a, MATCH, WRAP, top = 2))
                 c.addView(Ui.text(a, 11f, Ui.SUB, false, "올린 사람 ${s.ownerName}"), Ui.lp(a, MATCH, WRAP, top = 4))
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 fun b(t: String, col: Int, w: Int, on: () -> Unit) = r.addView(Ui.text(a, 12.5f, col, true, t).apply {
                     gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { on() }
                 }, LinearLayout.LayoutParams(if (w == 0) 0 else dp(w), dp(34), if (w == 0) 1f else 0f).apply { rightMargin = dp(6) })

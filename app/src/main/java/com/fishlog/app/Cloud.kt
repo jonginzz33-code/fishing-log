@@ -1088,8 +1088,25 @@ object Cloud {
             "owner" to (ownerOf?.owner ?: me), "ownerName" to (ownerOf?.ownerName ?: displayName),
             "date" to date, "time" to time, "place" to place, "boat" to boat, "cat" to cat, "memo" to memo,
             "created" to (ownerOf?.created ?: System.currentTimeMillis()), "cap" to cap.coerceIn(0, 99)))
-            .addOnSuccessListener { done(null) }
+            .addOnSuccessListener {
+                // v6.44 (310): 공지에 올라간 일정이면 공지 글도 같이 고치기
+                if (id != null) {
+                    val nref = db.collection("groups").document(g.id).collection("notices").document("ev_$id")
+                    nref.get().addOnSuccessListener { nd ->
+                        if (nd.exists()) nref.update(mapOf("title" to eventTitle(date, time, cat, place, boat).take(100),
+                            "body" to memo.take(1000), "edited" to System.currentTimeMillis()))
+                    }
+                }
+                done(null)
+            }
             .addOnFailureListener { done(it.message ?: "일정 저장 실패") }
+    }
+
+    /** v6.44 (310): 일정 → 공지 제목 ('11월 22일 (일) 05:00 · 선상 · 거북섬 · 헌터호') — 공지에 올리기 · 일정 고칠 때 같이 씀 */
+    fun eventTitle(date: String, time: String, cat: String, place: String, boat: String): String {
+        val nice = try { java.text.SimpleDateFormat("M월 d일 (E)", java.util.Locale.KOREA).format(java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.KOREA).parse(date)!!) } catch (_: Exception) { date }
+        return nice + (if (time.isNotBlank()) " $time" else "") +
+            listOf(Store.catShort(cat), place, boat).filter { it.isNotBlank() }.joinToString(" · ").let { if (it.isBlank()) "" else " · $it" }
     }
 
     // ---------------- v6.39 (301): 일정 참석 확인 (groups/{gid}/events/{eid}/rsvp/{uid}) ----------------
@@ -1120,9 +1137,15 @@ object Cloud {
 
     fun deleteEvent(id: String, done: (String?) -> Unit) {
         val g = active ?: return done("그룹이 없어요")
-        db.collection("groups").document(g.id).collection("events").document(id).delete()
+        val gref = db.collection("groups").document(g.id)
+        val nref = gref.collection("notices").document("ev_$id")
+        // v6.44 (310): 공지에 올라간 일정이면 공지도 같이 내리기 (공지 먼저 · 그다음 일정)
+        fun delEvent() { gref.collection("events").document(id).delete()
             .addOnSuccessListener { done(null) }
-            .addOnFailureListener { done(it.message ?: "삭제 실패") }
+            .addOnFailureListener { done(it.message ?: "삭제 실패") } }
+        nref.get().addOnSuccessListener { nd ->
+            if (nd.exists()) nref.delete().addOnCompleteListener { delEvent() } else delEvent()
+        }.addOnFailureListener { delEvent() }
     }
 
     // ---------------- 그룹 공지 (그룹장만 쓰기) ----------------

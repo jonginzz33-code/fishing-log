@@ -78,7 +78,7 @@ object Inventory {
         val all = (if (allowNone) listOf("-") else emptyList()) + GEAR.map { "g:" + it.first } + ICONS
         var row: LinearLayout? = null
         all.forEachIndexed { i, ic ->
-            if (i % 6 == 0) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }; box.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)) }
+            if (i % 6 == 0) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; box.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)) }
             val on = ic == cur || (ic == "-" && cur.isBlank())
             val v: View = if (ic == "-") Ui.text(a, 11f, Ui.SUB, true, "없음").apply { gravity = Gravity.CENTER } else iconView(a, ic, 40)
             v.background = if (on) Ui.bg(a, Color.parseColor("#3A2814"), 10, Color.parseColor("#FFB27A")) else Ui.bg(a, Color.parseColor("#0F2233"), 10)
@@ -187,7 +187,7 @@ object Inventory {
         var cats = load(a)
         val dlg = Dialog(a, R.style.FlFullUp)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(14), dp(12), dp(14), dp(10)) }
-        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         root.addView(top)
         val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         root.addView(ScrollView(a).apply { addView(box) }, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(8) })
@@ -224,7 +224,7 @@ object Inventory {
             f.addView(grid, Ui.lp(a, MATCH, WRAP, top = 4))
             if (c != null) {
                 // 순서 바꾸기 (누르면 바로 옮겨짐)
-                val mv = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val mv = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 mv.addView(Ui.text(a, 12.5f, Ui.SUB, false, "순서"), LinearLayout.LayoutParams(0, WRAP, 1f))
                 fun mvBtn(t: String, d: Int) = Ui.text(a, 13f, Ui.TEXT, true, t).apply {
                     gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
@@ -275,7 +275,7 @@ object Inventory {
             val subBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
             f.addView(subBox)
             fun addSub(name: String, qty: Int) {
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 val sn = et("세부 (예: 10호)", name); val sq = et("수량", qty.toString(), true)
                 r.addView(sn, LinearLayout.LayoutParams(0, WRAP, 1.4f)); r.addView(sq, LinearLayout.LayoutParams(0, WRAP, 1f))
                 val row = SubRow(sn, sq)
@@ -305,7 +305,7 @@ object Inventory {
             gravity = Gravity.CENTER; background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { onClick() }
         }
         fun qtyRow(qty: Int, low: Boolean, size: Float, onDelta: (Int) -> Unit) = LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             addView(pm("−") { onDelta(-1) }, LinearLayout.LayoutParams(dp(32), dp(32)))
             addView(Ui.text(a, size, if (low || qty == 0) Color.parseColor("#FF8A92") else Ui.TEXT, true, "$qty").apply { gravity = Gravity.CENTER },
                 LinearLayout.LayoutParams(dp(44), WRAP))
@@ -327,7 +327,7 @@ object Inventory {
             if (cats.isEmpty()) box.addView(Ui.text(a, 14f, Ui.SUB, false, "아직 카테고리가 없어요 · 아래 '＋ 카테고리 추가'로 만들어 보세요\n(예: 🎣 선상 채비 · 🥅 해루질 장비 · 🦺 안전 · 옷)"), Ui.lp(a, MATCH, WRAP, top = 10))
             cats.forEachIndexed { i, c ->
                 val r = LinearLayout(a).apply {
-                    orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12))
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(12), dp(12), dp(12))
                     background = Ui.bg(a, Ui.CARD, 14)
                     setOnClickListener { openCatRef(c) }
                 }
@@ -387,7 +387,7 @@ object Inventory {
                         orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(8), dp(8))
                         background = Ui.bg(a, Ui.CARD, 12, if (low) Color.parseColor("#E8505B") else Color.TRANSPARENT)
                     }
-                    val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(40) }
+                    val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(40) }
                     val iic = if (it.icon == "-") "" else it.icon.ifBlank { autoIcon(it.name) }
                     if (iic.isNotEmpty()) r.addView(iconView(a, iic, 34).apply { background = Ui.bg(a, Color.parseColor("#0F2233"), 10) },
                         LinearLayout.LayoutParams(dp(34), dp(34)).apply { rightMargin = dp(8) })
@@ -408,7 +408,7 @@ object Inventory {
                     }
                     card.addView(r)
                     if (it.subs.isNotEmpty() && it in opened) it.subs.forEach { s ->
-                        val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(42), dp(4), 0, 0) }
+                        val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(42), dp(4), 0, 0) }
                         sr.addView(Ui.text(a, 13.5f, Ui.SUB, false, "· ${s.name}"), LinearLayout.LayoutParams(0, WRAP, 1f))
                         sr.addView(qtyRow(s.qty, false, 15f) { d -> s.qty = maxOf(0, s.qty + d); save(a, cats); render() })
                         card.addView(sr)

@@ -74,7 +74,7 @@ class GroupActivity : Activity() {
         root.addView(bandBox, Ui.lp(this, MATCH, WRAP, top = 12))
 
         // (그룹 바꾸기는 메인 맨 아래 '그룹' 칸에서) 지금 고른 그룹만 보여줌
-        groupsBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        groupsBox = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
 
         head = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(head, Ui.lp(this, MATCH, WRAP, top = 12))
@@ -347,11 +347,17 @@ class GroupActivity : Activity() {
             if (Cloud.isOwner && m.uid != Cloud.uid) {
                 r.isLongClickable = true
                 r.setOnLongClickListener { askKick(m); true }
+                // v6.44 (308): 그룹장에게만 보이는 [⋯] 버튼 (길게 누르기도 그대로)
+                r.addView(Ui.text(this, 20f, Ui.SUB, true, "⋯").apply {
+                    gravity = Gravity.CENTER; contentDescription = "${m.name} 내보내기"
+                    background = Ui.bg(this@GroupActivity, Color.TRANSPARENT, 99, Ui.LINE)
+                    setOnClickListener { askKick(m) }
+                }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(8) })
             }
             card.addView(r)
         }
         if (Cloud.isOwner && members.size > 1) {
-            card.addView(Ui.text(this, 12f, Ui.SUB, false, "멤버 이름을 길게 누르면 내보낼 수 있어요"), Ui.lp(this, MATCH, WRAP, top = 6))
+            card.addView(Ui.text(this, 12f, Ui.SUB, false, "멤버를 내보내려면 오른쪽 ⋯ 을 누르세요 (길게 눌러도 돼요)"), Ui.lp(this, MATCH, WRAP, top = 6))
         }
         membersBox.addView(card)
     }
@@ -500,7 +506,7 @@ class GroupActivity : Activity() {
         val todayKey = keyFmt.format(Date())
         var day = 1 - lead
         while (day <= days) {
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             for (k in 0 until 7) {
                 val cell = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -522,7 +528,7 @@ class GroupActivity : Activity() {
                         }
                     }
                     cell.addView(num, LinearLayout.LayoutParams(dp(36), dp(36)))
-                    val dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+                    val dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER }
                     list.map { it.owner }.distinct().take(4).forEach { o ->
                         dots.addView(View(this).apply { background = Ui.bg(this@GroupActivity, colorOf[o] ?: Ui.SUB, 99) },
                             LinearLayout.LayoutParams(dp(6), dp(6)).apply { setMargins(dp(1), dp(3), dp(1), 0) })

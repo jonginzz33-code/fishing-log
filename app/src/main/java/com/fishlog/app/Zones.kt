@@ -518,7 +518,7 @@ object Zones {
         }
         fun paintCurtain() {
             cur.removeAllViews()
-            val r1 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val r1 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             Khoa.GROUPS.keys.forEach { g ->
                 val on = Khoa.groupOn(a, g)
                 r1.addView(chip((if (on) "☑ " else "☐ ") + (Khoa.SHORT[g] ?: g), on, Color.parseColor("#FFB27A")) {
@@ -527,7 +527,7 @@ object Zones {
             }
             cur.addView(Ui.hscroll(a, r1, Color.parseColor("#1F1A14")))
             val prog = Ui.text(a, 11.5f, Color.parseColor("#FFB27A"), false, busy).apply { visibility = if (busy.isBlank()) View.GONE else View.VISIBLE }
-            val r2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            val r2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             fun setBusy(t: String) { busy = t; prog.text = t; prog.visibility = if (t.isBlank()) View.GONE else View.VISIBLE }
             // 📥 이 화면 지역 (164 · 1인당 제한 170)
             r2.addView(chip("📥 이 지역 받기", false, Ui.TEXT) {
@@ -679,7 +679,7 @@ object Zones {
             if (Cloud.isAdmin && z.id.startsWith("k")) {
                 card.addView(Ui.text(a, 11f, Ui.SUB, false, "(개방海 자료라 여기서 수정 · 삭제는 안 돼요)"), Ui.lp(a, MATCH, WRAP, top = 6))
             } else if (Cloud.isAdmin) {
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 r.addView(Ui.button(a, "✎ 수정") {
                     dlg?.dismiss()
                     askMeta(a, "구역 수정", z.type, z.name, z.note) { t, n, no ->
@@ -1029,7 +1029,7 @@ object Zones {
     private fun apiCurtain(a: Activity, close: () -> Unit): View {
         fun dp(v: Int) = Ui.dp(a, v)
         val card = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; background = Ui.bg(a, Color.TRANSPARENT, 14, Ui.BLUE) }
-        val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }
+        val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12)) }
         val title = Ui.text(a, 14.5f, Ui.TEXT, true, "")
         val arrow = Ui.text(a, 14f, Ui.SUB, true, "▾")
         head.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f)); head.addView(arrow)
@@ -1040,7 +1040,7 @@ object Zones {
             title.text = "🌐 API로 받기 (${l.size}개)"
             inner.removeAllViews()
             l.forEachIndexed { idx, it0 ->
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(6), 0, dp(6)) }
                 val tb = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                 tb.addView(Ui.text(a, 14f, Ui.TEXT, true, it0.name).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                 tb.addView(Ui.text(a, 11f, Ui.SUB, false, typeLabel(it0.type) + " · " + it0.path.take(28) + if (it0.path.length > 28) "…" else "").apply { maxLines = 1 })
@@ -1118,7 +1118,7 @@ object Zones {
             (if (has) "✅ 인증키 들어 있음 · " else "⚠ 인증키가 아직 없어요 · ") +
             "어장정보(23년, 면허기간) · 양식장 · 갯골 · 웅덩이 · 인명사고 · 낚시금지/제한 · 수중레저금지를 지도에 보이는 곳만 그때그때 받아요 (파일 올리기 필요 없음)").apply { setLineSpacing(0f, 1.2f) },
             Ui.lp(a, MATCH, WRAP, top = 4))
-        val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         r.addView(Ui.button(a, "🔑 인증키 넣기") {
             val et = EditText(a).apply { hint = "개방海 '해양공간정보' 인증키"; setSingleLine(); setText(Khoa.key(a)) }
             AlertDialog.Builder(a, R.style.FlAlert)
@@ -1163,7 +1163,7 @@ object Zones {
         }
         card.addView(lim, Ui.lp(a, MATCH, WRAP, top = 8))
         // v3.9.4 (174 · 175): 갯벌체험지수 · 바다낚시지수 연결 확인 · 주소 바꾸기
-        val ir = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val ir = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         ir.addView(Ui.button(a, "📈 지수 연결 확인") {
             Ui.toast(a, "갯벌체험지수 · 바다낚시지수 물어보는 중…")
             Idx.test(a) { msg ->
@@ -1667,7 +1667,7 @@ object Zones {
         root.addView(Ui.text(a, 17f, Color.WHITE, true, "🦀 해루질 참고 구역 · 직접 그리기").apply { setPadding(dp(16), dp(10), dp(16), dp(2)) })
         val info = Ui.text(a, 12f, Ui.SUB, false, "").apply { setPadding(dp(16), dp(2), dp(16), dp(6)) }
         root.addView(info)
-        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(12), 0, dp(12), dp(8)) }
+        val bar = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(12), 0, dp(12), dp(8)) }
         val hs = Ui.hscroll(a, bar)
         root.addView(hs)
         val frame = FrameLayout(a)

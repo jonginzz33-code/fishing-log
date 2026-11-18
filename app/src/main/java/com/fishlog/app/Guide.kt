@@ -40,7 +40,7 @@ object Guide {
         fun dp(v: Int) = Ui.dp(a, v)
         val dlg = Dialog(a, R.style.FlFullZoom)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG); setPadding(dp(16), dp(16), dp(16), dp(14)) }
-        val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         val step = Ui.text(a, 13f, Ui.SUB, true, "")
         head.addView(step, LinearLayout.LayoutParams(0, WRAP, 1f))
         head.addView(Ui.text(a, 14f, Ui.SUB, true, "건너뛰기").apply {
@@ -57,9 +57,9 @@ object Guide {
         content.addView(body, Ui.lp(a, MATCH, WRAP, top = 6))
         val scroll = ScrollView(a).apply { addView(content) }
         root.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(8) })
-        val dots = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val dots = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER }
         root.addView(dots, Ui.lp(a, MATCH, WRAP, top = 10))
-        val nav = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+        val nav = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         val prev = Ui.button(a, "이전")
         val next = Ui.button(a, "다음", true)
         nav.addView(prev, LinearLayout.LayoutParams(0, WRAP, 1f))

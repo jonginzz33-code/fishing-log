@@ -32,7 +32,7 @@ object Windy {
         val dlg = Dialog(a, R.style.FlFull)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
         val bar = LinearLayout(a).apply {
-            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(8), dp(10), dp(8))
         }
         bar.addView(Ui.text(a, 15f, Ui.TEXT, true, "🌬 윈디 바람" + if (place.isBlank()) "" else " · $place").apply {

@@ -112,7 +112,7 @@ object MapSearch {
         var dlg: AlertDialog? = null
 
         fun row(label: String, sub: String, onClick: () -> Unit, onDel: (() -> Unit)? = null) {
-            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
+            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
             val tb = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; isClickable = true; setOnClickListener { onClick() } }
             tb.addView(Ui.text(a, 15f, Ui.TEXT, true, label))
             if (sub.isNotBlank()) tb.addView(Ui.text(a, 11.5f, Ui.SUB, false, sub))

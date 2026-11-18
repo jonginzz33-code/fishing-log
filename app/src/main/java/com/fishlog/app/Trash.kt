@@ -207,7 +207,7 @@ object Trash {
                 c.addView(Ui.text(a, 14f, Ui.TEXT, true, m.label))
                 c.addView(Ui.text(a, 12f, Ui.SUB, false, "${df.format(Date(m.time))}에 지움 · ${m.daysLeft}일 남음" +
                     (if (m.gids.isNotEmpty()) " · 그룹 ${m.gids.size}곳" else "") + (if (m.pub) " · 전체 게시판" else "")), Ui.lp(a, MATCH, WRAP, top = 2))
-                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                 r.addView(Ui.button(a, "복구", true) {
                     restoreMine(a, m) { msg -> Toast.makeText(a, msg, Toast.LENGTH_LONG).show(); drawMine() }
                 }.apply { minHeight = dp(40) }, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -235,7 +235,7 @@ object Trash {
                     c.addView(Ui.text(a, 14f, Ui.TEXT, true, it.label))
                     c.addView(Ui.text(a, 12f, Ui.SUB, false,
                         "${it.byName}(${it.byRole})이 ${df.format(Date(it.time))}에 삭제 · ${it.daysLeft}일 남음"), Ui.lp(a, MATCH, WRAP, top = 2))
-                    val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                    val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
                     r.addView(Ui.button(a, "복구", true) {
                         restore(it) { e -> Toast.makeText(a, e ?: "복구했어요", Toast.LENGTH_LONG).show(); load() }
                     }.apply { minHeight = dp(40) }, LinearLayout.LayoutParams(0, WRAP, 1f))

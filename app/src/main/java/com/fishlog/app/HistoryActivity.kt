@@ -105,13 +105,13 @@ class HistoryActivity : Activity() {
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "지난 출조"),
             LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = Ui.dp(this@HistoryActivity, 14) })
         col.addView(top)
-        summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(summary, Ui.lp(this, MATCH, WRAP, top = 16))
         sunBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(sunBox, Ui.lp(this, MATCH, WRAP, top = 10))
 
         // 전체 보기 / 날짜별 보기
-        modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        modeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(modeRow, Ui.lp(this, MATCH, WRAP, top = 16))
         calCard = Ui.card(this)
         col.addView(calCard, Ui.lp(this, MATCH, WRAP, top = 10))
@@ -122,7 +122,7 @@ class HistoryActivity : Activity() {
         }
         Store.history.firstOrNull()?.let { cal.month.timeInMillis = it.start }
 
-        chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(Ui.hscroll(this, chips),
             Ui.lp(this, MATCH, WRAP, top = 14))
         // 선택 모드 줄: 목록 바로 위 (체크하는 곳 가까이)
