@@ -114,6 +114,11 @@ class MainActivity : Activity() {
             nickAsked = true
             startActivity(Intent(this, SettingsActivity::class.java).putExtra("askNick", true))
         }
+        // v6.43 (306): 이미 '관리자 · 운영자' 같은 닉네임이면 한 번 바꾸게 안내 (서버에서 채팅 · 이름 쓰기가 막혀요)
+        if (Cloud.user != null && Cloud.nickLoaded && !Cloud.isAdmin && Cloud.fakeAdmin(Cloud.nick) && !nickAsked && !isFinishing) {
+            nickAsked = true
+            startActivity(Intent(this, SettingsActivity::class.java).putExtra("fakeNick", true))
+        }
     }
     private var crashShown = false
     /** 로그인 전: 로그인 화면만 */

@@ -127,7 +127,7 @@ object Chat {
         val name = n.trim()
         if (name.length < 2 || name.length > 12) return done("채팅 이름은 2~12자로 적어 주세요")
         if (Profanity.has(name)) return done("쓸 수 없는 말이 들어 있어요")
-        if (name.contains("운영자") || name.contains("관리자")) return done("'운영자·관리자'는 이름에 쓸 수 없어요")
+        if (!Cloud.isAdmin && Cloud.fakeAdmin(name)) return done(Cloud.FAKE_MSG)
         val key = name.lowercase().replace(" ", "")
         db.collection("nicknames").document(key).get()
             .addOnSuccessListener { d ->

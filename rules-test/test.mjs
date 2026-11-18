@@ -132,6 +132,18 @@ console.log('[v6.42 그룹 가입 = 초대 코드]');
   await ok('가입한 뒤 그룹 보기', getDoc(doc(C, 'groups/g1')));
   await ok('그룹 탈퇴', updateDoc(doc(C, 'groups/g1'), { members: ['A', 'B'] }));
 }
+console.log('[v6.43 사칭 이름 막기]');
+await no('닉네임 관리자', setDoc(doc(B, 'nicknames/관리자'), { uid: 'B' }));
+await no('닉네임 운 영 진 (띄어쓰기)', setDoc(doc(B, 'nicknames/서버운영진'), { uid: 'B' }));
+await no('닉네임 ADMIN (대문자)', setDoc(doc(B, 'nicknames/ADMIN_kim'), { uid: 'B' }));
+await ok('보통 닉네임', setDoc(doc(B, 'nicknames/쭈꾸미왕'), { uid: 'B' }));
+await no('채팅 이름 관리자', setDoc(doc(B, 'chat/fk1'), { uid: 'B', name: '관-리-자', text: 'hi', t: now }));
+await ok('채팅 보통 이름', setDoc(doc(B, 'chat/fk2'), { uid: 'B', name: '쭈꾸미왕', text: 'hi', t: now }));
+await ok('진짜 관리자는 관리자 이름 채팅', setDoc(doc(ADM, 'chat/fk3'), { uid: 'ADM', name: '관리자', text: 'hi', t: now }));
+await no('멤버 이름 운영자', setDoc(doc(B, 'groups/g1/members/B'), { name: '운영자B' }));
+await ok('멤버 보통 이름', setDoc(doc(B, 'groups/g1/members/B'), { name: '쭈꾸미왕' }));
+await no('내 정보 닉네임 Admin', setDoc(doc(B, 'users/B'), { nick: 'Admin', name: 'x' }, { merge: true }));
+await ok('내 정보 보통 닉네임', setDoc(doc(B, 'users/B'), { nick: '쭈꾸미왕', name: 'x' }, { merge: true }));
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

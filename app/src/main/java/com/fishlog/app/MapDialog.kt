@@ -85,7 +85,7 @@ object MapDialog {
      * v5.2 (237): 지도 ＋/－ 버튼 — 오른쪽 아래 반투명 어두운 둥근 묶음 (＋ 위 · － 아래) + 그 아래 ◎ 내 위치
      *  onMe = null 이면 ◎ 없음
      */
-    fun zoomButtons(a: Activity, frame: FrameLayout, map: MapView, onMe: ((TextView?) -> Unit)? = null) {
+    fun zoomButtons(a: Activity, frame: FrameLayout, map: MapView, onMe: ((TextView?) -> Unit)? = null, meView: ((TextView) -> Unit)? = null) {
         map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
         fun box() = GradientDrawable().apply { setColor(Color.argb(225, 11, 26, 38)); cornerRadius = dp(a, 14).toFloat(); setStroke(dp(a, 1), Color.parseColor("#2C4656")) }
@@ -101,11 +101,15 @@ object MapDialog {
         pair.addView(key("－") { map.controller.zoomOut() }, LinearLayout.LayoutParams(dp(a, 46), dp(a, 46)))
         col.addView(pair, LinearLayout.LayoutParams(dp(a, 46), ViewGroup.LayoutParams.WRAP_CONTENT))
         if (onMe != null) col.addView(TextView(a).apply {
-            text = "◎"; textSize = 22f; setTextColor(Color.parseColor("#6FC3FF")); typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER; includeFontPadding = false
-            background = box(); elevation = dp(a, 3).toFloat()
+            // v6.43 (302): ◎ 글자 대신 조준(GPS) 그림
+            text = ""; gravity = Gravity.CENTER; includeFontPadding = false
+            setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_target, 0, 0, 0)
+            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#6FC3FF"))
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.argb(225, 11, 26, 38)); setStroke(dp(a, 1), Color.parseColor("#2C4656")) }
+            elevation = dp(a, 3).toFloat()
             contentDescription = "내 위치로"
             setOnClickListener { onMe(null) }
+            meView?.invoke(this)
         }, LinearLayout.LayoutParams(dp(a, 46), dp(a, 46)).apply { topMargin = dp(a, 10) })
         frame.addView(col, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM or Gravity.END).apply { rightMargin = dp(a, 12); bottomMargin = dp(a, 64) })
@@ -513,15 +517,17 @@ object MapDialog {
         updateLegend()
 
         var follow = live != null
-        val followBtn = pill("내 위치 따라가기")
-        if (live != null) {
-            setOn(followBtn, true)
-            followBtn.setOnClickListener {
-                follow = !follow
-                setOn(followBtn, follow)
-                if (follow) boat.position?.let { map.controller.animateTo(it) }
+        // v6.43 (302): '내 위치 따라가기' 위 버튼 없앰 → 지도 ＋ − 아래 동그란 조준 버튼 (켜짐 = 파랑 채움 · 지도를 끌면 꺼짐)
+        var followView: TextView? = null
+        fun paintFollow() {
+            val v = followView ?: return
+            v.compoundDrawableTintList = android.content.res.ColorStateList.valueOf(if (follow) Color.WHITE else Color.parseColor("#6FC3FF"))
+            v.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(if (follow) Color.parseColor("#2F80ED") else Color.argb(225, 11, 26, 38))
+                setStroke(dp(a, 1), if (follow) Color.parseColor("#9CC8FF") else Color.parseColor("#2C4656"))
             }
-            addPill(followBtn)
+            v.contentDescription = if (follow) "내 위치 따라가기 켜짐" else "내 위치 따라가기"
         }
 
         if (liveMe != null) {
@@ -736,7 +742,13 @@ object MapDialog {
             })
         }
         if (liveMe != null) addStatus(a, frame, liveMe)
-        zoomButtons(a, frame, map, liveMe?.let { lm -> { v: TextView? -> lm.goToMe(v) } })
+        if (live != null) zoomButtons(a, frame, map, { _ ->
+                follow = !follow
+                paintFollow()
+                if (follow) boat.position?.let { map.controller.animateTo(it) }
+                Ui.toast(a, if (follow) "📍 내 위치 따라가기 켬" else "따라가기 끔")
+            }, { v -> followView = v; paintFollow() })
+        else zoomButtons(a, frame, map, liveMe?.let { lm -> { v: TextView? -> lm.goToMe(v) } })
         // v6.9 (256): '이 출조만 보기' 안내 줄 (지도 맨 위 · 누르면 다 보기)
         val focusBar = TextView(a).apply {
             textSize = 12.5f; setTextColor(Color.WHITE); setLineSpacing(0f, 1.2f)
@@ -778,7 +790,7 @@ object MapDialog {
         map.setOnTouchListener { _, e ->
             if (live != null && follow && e.action == MotionEvent.ACTION_MOVE) {
                 follow = false
-                setOn(followBtn, false)
+                paintFollow()
             }
             false
         }

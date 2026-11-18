@@ -39,6 +39,10 @@ class SettingsActivity : Activity() {
         col.addView(box, Ui.lp(this, MATCH, WRAP, top = 6))
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
         if (intent.getBooleanExtra("askNick", false)) toast("다른 사람에게 보일 닉네임을 먼저 정해 주세요")
+        if (intent.getBooleanExtra("fakeNick", false)) AlertDialog.Builder(this, R.style.FlAlert)
+            .setTitle("닉네임을 바꿔 주세요")
+            .setMessage("'관리자 · 운영자' 같은 말이 들어간 닉네임은 이제 쓸 수 없어요 (다른 사람이 운영자로 오해할 수 있어서).\n새 닉네임으로 바꿔 주세요.")
+            .setPositiveButton("바꾸기") { _, _ -> askNew() }.setCancelable(false).show()
         // v6.7 (252): 스토어판 첫 실행 → '백업 파일에서 불러오기' 바로
         if (intent.getBooleanExtra("pickBackup", false) && savedInstanceState == null) pickBackup()
     }

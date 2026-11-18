@@ -23,6 +23,9 @@ service cloud.firestore {
     function nearNow(ms) { return ms is int && ms > request.time.toMillis() - 21600000 && ms < request.time.toMillis() + 21600000; }
     function trashDoc(tid) { return get(/databases/$(database)/documents/trash/$(tid)).data; }
     function reportDoc(target) { return /databases/$(database)/documents/reports/$(target); }
+    // v6.43 (306): 사칭 이름 ('관리자 · 운영자 · 운영진 · 관리팀 · admin · 운영' · 띄어쓰기 · 대소문자 · 특수문자 섞어도) — 관리자 계정은 예외
+    function fakeAdmin(n) { return n is string && n.lower().replace('[^0-9a-z가-힣]', '').matches('.*(관리자|관리팀|운영|admin).*'); }
+    function okName(n) { return isAdmin() || !fakeAdmin(n); }
     function reportBy(target) { return /databases/$(database)/documents/reports/$(target)/by/$(request.auth.uid); }
 
     match /config/{doc} {
@@ -46,9 +49,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
       // 권한(perms)은 관리자만 바꿈
-      allow create: if signedIn() && request.auth.uid == uid && !('perms' in request.resource.data);
+      allow create: if signedIn() && request.auth.uid == uid && !('perms' in request.resource.data)
+        && (!('nick' in request.resource.data) || okName(request.resource.data.nick));
       allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perms']));
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perms'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['nick']) || okName(request.resource.data.nick)));
       allow delete: if signedIn() && request.auth.uid == uid;
       match /trips/{tid} {
         allow read, write: if signedIn() && request.auth.uid == uid;
@@ -58,7 +63,7 @@ service cloud.firestore {
     // ---- 닉네임 (중복 금지, 언제든 바꾸기) ----
     match /nicknames/{k} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && okName(k);
       allow update, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
     }
 
@@ -108,7 +113,7 @@ service cloud.firestore {
     function chatMsg() {
       return request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() <= 500
-        && request.resource.data.name is string && request.resource.data.name.size() <= 20
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20 && okName(request.resource.data.name)
         && request.resource.data.t is int;
     }
     match /chat/{mid} {
@@ -305,7 +310,8 @@ service cloud.firestore {
       }
       match /members/{mid} {
         allow read: if isMember(gid);
-        allow create, update: if isMember(gid) && request.auth.uid == mid;
+        allow create, update: if isMember(gid) && request.auth.uid == mid
+          && (!('name' in request.resource.data) || okName(request.resource.data.name));
         allow delete: if isGroupOwner(gid) || request.auth.uid == mid;
       }
       // 실시간 조과 지도 (그룹) — 그룹원 중 관리자가 권한(liveMap) 준 사람만 보기

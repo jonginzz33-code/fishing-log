@@ -114,6 +114,19 @@ object Quake {
                 if (o.isNull("d")) null else o.optDouble("d"), o.optString("i"), o.optString("r")) } }
     } catch (_: Exception) { null }
 
+    /** v6.43 (300): 대략 범위 (km) — 느끼는 범위 · 조심 범위 (얕은 지진 기준 · 깊으면 줄임) */
+    fun feelKm(e: Eq): Double {
+        val m = e.mag ?: 2.5
+        val r = when { m < 3 -> 10.0; m < 4 -> 10 + (m - 3) * 40; m < 5 -> 50 + (m - 4) * 100; m < 6 -> 150 + (m - 5) * 150; else -> 300 + (m - 6) * 200 }
+        return r * depthFactor(e)
+    }
+    fun cautionKm(e: Eq): Double {
+        val m = e.mag ?: 2.5
+        val r = when { m < 3.5 -> 0.0; m < 4 -> (m - 3.5) * 10; m < 5 -> 5 + (m - 4) * 15; m < 6 -> 20 + (m - 5) * 30; else -> 50 + (m - 6) * 50 }
+        return r * depthFactor(e)
+    }
+    private fun depthFactor(e: Eq): Double = when { (e.dep ?: 0.0) > 70 -> 0.6; (e.dep ?: 0.0) > 30 -> 0.8; else -> 1.0 }
+
     fun color(m: Double?): Int = when { m == null || m < 3 -> Color.parseColor("#F28C38"); m < 4 -> Color.parseColor("#F25C3B"); else -> Color.parseColor("#D7263D") }
 
     /** 핀을 누르면 나오는 글 */
@@ -127,15 +140,29 @@ object Quake {
             e.dep?.let { append(" · 깊이 ").append(String.format(Locale.KOREA, "%.0f", it)).append("km") }
             append("\n")
             km?.let { append("📍 내 위치에서 ").append(String.format(Locale.KOREA, "%.0f", it)).append("km\n") }
+            // v6.43 (300): 내 위치 기준 한 줄 · 범위 (대략)
+            val feel = feelKm(e); val caution = cautionKm(e)
+            append("⭕ 느끼는 범위 약 ").append(String.format(Locale.KOREA, "%.0f", feel)).append("km")
+            if (caution > 0) append(" · 조심 범위 약 ").append(String.format(Locale.KOREA, "%.0f", caution)).append("km")
+            append("\n")
+            if (km != null) append(when {
+                caution > 0 && km <= caution -> "⚠ 갯바위 · 방파제 · 절벽 아래 낙석 주의\n"
+                km <= feel -> "흔들림을 느낄 수 있는 거리예요\n"
+                else -> "낚시에 거의 영향 없어요\n"
+            })
+            if ((e.mag ?: 0.0) >= 6.5 && (e.loc.contains("해역") || e.loc.contains("바다"))) append("🌊 지진해일 특보를 확인하세요 (동해 큰 지진은 1~2시간 뒤 동해안)\n")
             if (e.intensity.isNotBlank()) append("진도: ").append(e.intensity).append("\n")
             if (e.rem.isNotBlank()) append(e.rem).append("\n")
-            append("기상청 발표")
+            append("범위는 대략 계산 · 기상청 발표가 우선이에요")
         }
     }
 
     /** 지도 핀 (규모 숫자 · 클수록 크고 진한 빨강 · 지난 날은 흐리게) */
     class QuakeOverlay(private val c: Context, private val onTap: (Eq) -> Unit) : Overlay() {
         var list: List<Eq> = emptyList()
+        /** v6.43 (300): 누른 지진의 범위 원 (한 번에 하나 · 빈 곳 누르면 지움) */
+        var selected: Eq? = null
+        private val ring = Paint(Paint.ANTI_ALIAS_FLAG)
         private val d = c.resources.displayMetrics.density
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.WHITE; strokeWidth = 2 * d }
@@ -146,6 +173,17 @@ object Quake {
             if (shadow || !isEnabled) return
             val now = System.currentTimeMillis()
             val pt = Point()
+            selected?.let { e ->
+                map.projection.toPixels(GeoPoint(e.lat, e.lon), pt)
+                fun circle(km: Double, fillA: Int, strokeA: Int, col: Int) {
+                    if (km <= 0) return
+                    val r = map.projection.metersToPixels((km * 1000).toFloat(), e.lat, map.zoomLevelDouble)
+                    ring.style = Paint.Style.FILL; ring.color = col; ring.alpha = fillA; cv.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, ring)
+                    ring.style = Paint.Style.STROKE; ring.strokeWidth = 2 * d; ring.alpha = strokeA; cv.drawCircle(pt.x.toFloat(), pt.y.toFloat(), r, ring)
+                }
+                circle(feelKm(e), 28, 140, Color.parseColor("#F28C38"))
+                circle(cautionKm(e), 70, 220, Color.parseColor("#D7263D"))
+            }
             list.sortedBy { it.mag ?: 0.0 }.forEach { e ->
                 map.projection.toPixels(GeoPoint(e.lat, e.lon), pt)
                 val r = radius(e)
@@ -172,10 +210,11 @@ object Quake {
                 map.projection.toPixels(GeoPoint(e.lat, e.lon), pt)
                 val r = radius(e); val dx = ev.x - pt.x; val dy = ev.y - (pt.y - r * 1.5f)
                 dx * dx + dy * dy
-            } ?: return false
+            } ?: run { if (selected != null) { selected = null; map.invalidate() }; return false }
             map.projection.toPixels(GeoPoint(hit.lat, hit.lon), pt)
             val r = radius(hit); val dx = ev.x - pt.x; val dy = ev.y - (pt.y - r * 1.5f)
-            if (dx * dx + dy * dy > (r * 1.8f) * (r * 1.8f)) return false
+            if (dx * dx + dy * dy > (r * 1.8f) * (r * 1.8f)) { if (selected != null) { selected = null; map.invalidate() }; return false }
+            selected = hit; map.invalidate()
             onTap(hit); return true
         }
     }

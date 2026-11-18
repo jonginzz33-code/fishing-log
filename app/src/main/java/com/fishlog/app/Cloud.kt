@@ -805,9 +805,15 @@ object Cloud {
     // ---------------- 닉네임 (한 번 정하면 변경은 관리자 승인) ----------------
     private fun nickKey(n: String) = n.trim().lowercase().replace(" ", "")
 
+    /** v6.43 (306): '관리자 · 운영자 · 운영진 · 관리팀 · admin · 운영' 이 들어간 이름 (띄어쓰기 · 대소문자 · 특수문자 섞어도) — 서버 규칙 fakeAdmin 과 같은 기준 */
+    private val FAKE_ADMIN = Regex("관리자|관리팀|운영|admin")
+    fun fakeAdmin(n: String?): Boolean = n != null && FAKE_ADMIN.containsMatchIn(n.lowercase().replace(Regex("[^0-9a-z가-힣]"), ""))
+    const val FAKE_MSG = "관리자 · 운영자 같은 이름은 쓸 수 없어요"
+
     fun validNick(n: String): String? {
         val t = n.trim()
         return when {
+            !isAdmin && fakeAdmin(t) -> FAKE_MSG
             t.length < 2 || t.length > 10 -> "닉네임은 2~10자로 정해 주세요"
             t.startsWith("회원") -> "'회원'으로 시작하는 이름은 쓸 수 없어요"
             t.contains("/") || t.contains(".") -> "'/'나 '.'은 쓸 수 없어요"
