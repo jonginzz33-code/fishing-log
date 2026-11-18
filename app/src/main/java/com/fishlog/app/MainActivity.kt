@@ -462,7 +462,23 @@ class MainActivity : Activity() {
             "tide" -> openTodayTide()
             "bag" -> Inventory.show(this)
             // v6.30 (282): ⚡ 퀵바 위젯 칸
-            else -> if (what.startsWith("q:")) what.removePrefix("q:").let { id -> if (id == "qset") openQuickSettings() else quickAction(id) }
+            else -> when {
+                what.startsWith("q:") -> what.removePrefix("q:").let { id -> if (id == "qset") openQuickSettings() else quickAction(id) }
+                // v6.40 (303): 🔔 그룹 알림을 누르면 그 그룹 · 그 화면
+                what.startsWith("ga:") -> openGroupAlert(what.split(":").getOrElse(1) { "" }, what.split(":").getOrElse(2) { "" })
+            }
+        }
+    }
+
+    private fun openGroupAlert(gid: String, kind: String, retry: Boolean = true) {
+        if (Cloud.user == null) return
+        if (Cloud.groups.none { it.id == gid } && retry) { Cloud.refresh { if (!isFinishing) openGroupAlert(gid, kind, false) }; return }
+        if (gid.isNotBlank() && Cloud.groups.any { it.id == gid } && Cloud.activeId != gid) { Cloud.setActive(gid); refreshAccount() }
+        when (kind) {
+            "chat" -> startActivity(Intent(this, ChatActivity::class.java).putExtra("room", gid))
+            "notice" -> startActivity(Intent(this, NoticeActivity::class.java))
+            "event", "rsvp" -> startActivity(Intent(this, ScheduleActivity::class.java))
+            "live" -> openNowDialog()
         }
     }
 

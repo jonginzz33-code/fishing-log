@@ -289,6 +289,24 @@ class SettingsActivity : Activity() {
         switchRow("같이 출조 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
             Store.friendAlerts) { Store.friendAlerts = it }
 
+        // v6.40 (303): 🔔 그룹 알림 (1시간마다 정각쯤 확인 · 앱을 보고 있을 땐 안 울림)
+        section("🔔 그룹 알림 · 1시간마다 정각쯤 확인 (앱을 보고 있을 땐 안 울려요 · 내가 쓴 건 안 와요)")
+        GroupAlert.KINDS.forEach { (k, label) ->
+            val sub = when (k) {
+                "live" -> "누가 출조 중이면 상단에 조용히 · 모두 끝나면 사라져요"
+                "chat" -> "그룹 채팅에 새 글이 오면 (누르면 그 채팅방)"
+                "notice" -> "그룹에 새 공지가 올라오면"
+                "event" -> "그룹에 새 일정이 올라오면"
+                else -> "내가 올린 일정에 누가 참석 · 미정 · 불참을 누르면"
+            }
+            switchRow(label, sub, GroupAlert.on(this, k)) { v ->
+                GroupAlert.set(this, k, v); GroupAlert.schedule(applicationContext)
+                if (v && android.os.Build.VERSION.SDK_INT >= 33 &&
+                    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 3031)
+            }
+        }
+
         section("개인정보 · 위치")
         // 누구에게 알릴지·위치 공유는 출조 시작 창에서 (여기엔 앱 전체 위치 스위치 하나만)
         switchRow("📍 이 앱에서 내 위치 사용", "끄면 경로·조과 위치·지도 내 위치·위치 공유 모두 안 써요",

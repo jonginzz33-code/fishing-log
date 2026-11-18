@@ -15,6 +15,8 @@ class App : Application() {
         Ui.install(this)
         // 지도 '내 위치 기록 확인': 앱이 화면에서 사라지면 자동으로 끄기
         TestTrack.install(this)
+        // v6.40 (303): 🔔 그룹 알림 (앱을 보고 있는지 · 1시간마다 정각 확인 예약)
+        GroupAlert.install(this)
         // 지난번에 받아 둔 내 닉네임 (인터넷 없을 때도 실명 대신)
         Cloud.nick = getSharedPreferences("fishlog", MODE_PRIVATE).getString("myNick", null)
         val prev = Thread.getDefaultUncaughtExceptionHandler()
