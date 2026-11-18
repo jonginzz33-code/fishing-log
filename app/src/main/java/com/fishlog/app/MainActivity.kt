@@ -203,187 +203,24 @@ class MainActivity : Activity() {
     private var guideOpen = false
     private lateinit var versionText: TextView
 
-    // ---------------- v6.7 (252): 스토어판 ← GitHub판 자동 가져오기 ----------------
+    // ---------------- 처음 켤 때: 백업 파일이 있으면 불러오기 (v6.41: GitHub판 자동 가져오기는 없앰) ----------------
     private var importChecked = false
     private fun checkGithubImport() {
-        if (BuildConfig.SELF_UPDATE || importChecked || isFinishing || Store.current != null) return
+        if (importChecked || isFinishing || Store.current != null) return
         importChecked = true
         val p = getSharedPreferences("fishlog", MODE_PRIVATE)
         if (p.getBoolean("imported_from_github", false)) return
-        val hasOld = try { packageManager.getPackageInfo(Backup.GITHUB_PKG, 0); true } catch (_: Exception) { false }
-        if (!hasOld) {
-            // 예전 앱이 없으면 (폰을 바꾼 경우) 처음 한 번만 백업 파일 물어보기
-            if (!p.getBoolean("import_asked", false) && Store.history.isEmpty()) {
-                p.edit().putBoolean("import_asked", true).apply()
-                AlertDialog.Builder(this, R.style.FlAlert)
-                    .setTitle("💾 백업 파일이 있나요?")
-                    .setMessage("예전 조과일지의 백업 파일(${Backup.AUTO_PLACE} 또는 '폰에 백업하기'로 만든 파일)이 있으면 가방 · 설정 · 지도 · 출조 기록 · 사진을 그대로 가져올 수 있어요.\n(나중에 ⚙ 개인 설정 → 💾 백업에서도 할 수 있어요)")
-                    .setPositiveButton("백업 파일 고르기") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("pickBackup", true)) }
-                    .setNegativeButton("없어요", null).show()
-            }
-            return
+        if (!p.getBoolean("import_asked", false) && Store.history.isEmpty()) {
+            p.edit().putBoolean("import_asked", true).apply()
+            AlertDialog.Builder(this, R.style.FlAlert)
+                .setTitle("💾 백업 파일이 있나요?")
+                .setMessage("예전 조과일지의 백업 파일(${Backup.AUTO_PLACE} 또는 '폰에 백업하기'로 만든 파일)이 있으면 가방 · 설정 · 지도 · 출조 기록 · 사진을 그대로 가져올 수 있어요.\n(나중에 ⚙ 개인 설정 → 💾 백업에서도 할 수 있어요)")
+                .setPositiveButton("백업 파일 고르기") { _, _ -> startActivity(Intent(this, SettingsActivity::class.java).putExtra("pickBackup", true)) }
+                .setNegativeButton("없어요", null).show()
         }
-        val tv = Ui.text(this, 14f, Ui.TEXT, false, "예전 앱(GitHub판)에서 가방 · 설정 · 지도 · 출조 기록 · 사진을 가져오고 있어요…")
-            .apply { setPadding(dp(22), dp(10), dp(22), dp(10)) }
-        val dlg = AlertDialog.Builder(this, R.style.FlAlert).setTitle("📦 예전 앱에서 가져오는 중").setView(tv).setCancelable(false).show()
-        Thread {
-            val res = try {
-                contentResolver.openInputStream(android.net.Uri.parse(Backup.PROVIDER_URI))?.use {
-                    Backup.import(this, it) { n -> runOnUiThread { tv.text = "파일 ${n}개 가져오는 중…" } }
-                }
-            } catch (_: Exception) { null }
-            runOnUiThread {
-                dlg.dismiss()
-                if (res != null) {
-                    p.edit().putBoolean("imported_from_github", true).commit()
-                    AlertDialog.Builder(this, R.style.FlAlert)
-                        .setTitle("✓ 예전 앱에서 가져왔어요")
-                        .setMessage("설정 ${res.prefs}개 · 파일 ${res.files}개를 가져왔어요. 앱을 다시 켜서 적용할게요.\n잘 보이면 예전 앱(GitHub판)은 지워도 돼요.")
-                        .setCancelable(false)
-                        .setPositiveButton("다시 켜기") { _, _ -> Backup.restart(this) }.show()
-                } else {
-                    AlertDialog.Builder(this, R.style.FlAlert)
-                        .setTitle("예전 앱을 먼저 업데이트해 주세요")
-                        .setMessage("예전 앱(GitHub판)을 6.7 이상으로 업데이트하면 가방 · 설정 · 지도 · 기록을 자동으로 가져와요.\n예전 앱을 한 번 켜서 업데이트한 뒤 이 앱을 다시 켜 주세요. (예전 앱은 아직 지우지 마세요)")
-                        .setPositiveButton("알겠어요", null).show()
-                }
-            }
-        }.start()
-    }
-
-    // ---------------- v6.6 (248): GitHub판 → 플레이 스토어로 옮기기 ----------------
-    private var storeMoveDlg: android.app.Dialog? = null
-    private var storeMoveSkipped = false
-    private val STORE_URL = "https://play.google.com/store/apps/details?id=kr.jogwailji.app"
-
-    /** 관리자가 '스토어로 옮기기'를 켰으면 GitHub판은 이 창만 (출조 중에는 끝난 뒤에) */
-    private fun checkStoreMove() {
-        if (!BuildConfig.SELF_UPDATE || !Cloud.storeMove || isFinishing) return
-        if (Store.current != null || guideOpen || storeMoveSkipped) return
-        if (storeMoveDlg?.isShowing == true) return
-        showStoreMove()
-    }
-
-    private fun showStoreMove() {
-        val d = android.app.Dialog(this, R.style.FlFullZoom)
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(24), dp(22), dp(24)); setBackgroundColor(Ui.BG) }
-        col.addView(Ui.text(this, 22f, Ui.TEXT, true, "📦 조과일지가 플레이 스토어로 옮겼어요"))
-        col.addView(Ui.text(this, 15f, Ui.ORANGE, true, "이 버전(GitHub판)은 더 이상 쓸 수 없어요.").apply { setLineSpacing(0f, 1.2f) }, Ui.lp(this, MATCH, WRAP, top = 10))
-        col.addView(Ui.text(this, 13.5f, Ui.SUB, false, "아래 순서대로 플레이 스토어판으로 옮겨 주세요. 그룹 · 게시판 · 채팅은 같은 구글 계정이면 그대로예요."),
-            Ui.lp(this, MATCH, WRAP, top = 6))
-
-        // ① 서버 백업
-        val c1 = Ui.card(this)
-        c1.addView(Ui.text(this, 15f, Ui.TEXT, true, "① 내 기록 · 설정 자동 백업"))
-        // v6.8: 폰에 백업 파일 자동 저장 (가방 · 설정 · 리모컨 · 지도 · 기록 · 사진)
-        val phone = Ui.text(this, 13.5f, Ui.SUB, false, "📱 폰에 백업 파일 저장 중…")
-        c1.addView(phone, Ui.lp(this, MATCH, WRAP, top = 6))
-        fun runPhoneBackup() {
-            phone.text = "📱 폰에 백업 파일 저장 중…"; phone.setTextColor(Ui.SUB); phone.setOnClickListener(null)
-            Thread {
-                val r = Backup.autoToDownloads(this) { n -> runOnUiThread { if (d.isShowing) phone.text = "📱 폰에 백업 파일 저장 중… (파일 ${n}개)" } }
-                runOnUiThread {
-                    if (!d.isShowing) return@runOnUiThread
-                    if (r == null) {
-                        phone.text = "📱 폰 백업 실패 (저장 공간 확인) · 눌러서 다시"; phone.setTextColor(Ui.ORANGE)
-                        phone.setOnClickListener { runPhoneBackup() }
-                    } else {
-                        phone.text = "📱 폰에 백업 끝 ✓ 가방 · 설정 · 지도 · 기록 · 사진 (파일 ${r.files}개)\n   ${Backup.AUTO_PLACE}"
-                        phone.setTextColor(Ui.GREEN)
-                    }
-                }
-            }.start()
-        }
-        val status = Ui.text(this, 13.5f, Ui.SUB, false, "")
-        c1.addView(status, Ui.lp(this, MATCH, WRAP, top = 6))
-        val loginBtn = Ui.button(this, "구글 로그인") {}.apply { visibility = View.GONE }
-        c1.addView(loginBtn, Ui.lp(this, MATCH, WRAP, top = 8))
-        col.addView(c1, Ui.lp(this, MATCH, WRAP, top = 16))
-        fun runBackup() {
-            if (Cloud.user == null) {
-                status.text = "☁ 구글 로그인이 안 돼 있어서 서버 백업은 못 했어요. 로그인하면 바로 백업해요."
-                status.setTextColor(Ui.ORANGE)
-                loginBtn.visibility = View.VISIBLE
-                return
-            }
-            loginBtn.visibility = View.GONE
-            status.text = "☁ 서버에 출조 기록 백업 중…"; status.setTextColor(Ui.SUB)
-            Cloud.backupPending { ok, fail ->
-                if (!d.isShowing) return@backupPending
-                val all = Store.history.count { it.backedUp }
-                if (fail > 0) {
-                    status.text = "백업 실패 ${fail}개 (인터넷을 확인하고 다시 눌러 주세요) · 백업된 출조 ${all}개"
-                    status.setTextColor(Ui.ORANGE)
-                    status.setOnClickListener { runBackup() }
-                } else {
-                    status.text = "☁ 서버에 출조 기록 백업 끝 ✓ (${all}개" + (if (ok > 0) " · 방금 $ok 개 올림" else "") + ")"
-                    status.setTextColor(Ui.GREEN)
-                }
-            }
-        }
-        loginBtn.setOnClickListener { account.signIn { refreshAccount(); runBackup() } }
-
-        // ② 플레이 스토어에서 받기
-        val c2 = Ui.card(this)
-        c2.addView(Ui.text(this, 15f, Ui.TEXT, true, "② 플레이 스토어에서 받기"))
-        c2.addView(Ui.text(this, 13f, Color.parseColor("#08311F"), true, "▶ 플레이 스토어에서 받기").apply {
-            gravity = Gravity.CENTER; setPadding(0, dp(14), 0, dp(14))
-            background = Ui.bg(this@MainActivity, Ui.GREEN, 14)
-            textSize = 16f
-            setOnClickListener {
-                try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=kr.jogwailji.app"))) }
-                catch (_: Exception) { try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(STORE_URL))) } catch (_: Exception) {} }
-            }
-        }, Ui.lp(this, MATCH, WRAP, top = 8))
-        col.addView(c2, Ui.lp(this, MATCH, WRAP, top = 10))
-
-        // ③ 복원
-        val c3 = Ui.card(this)
-        c3.addView(Ui.text(this, 15f, Ui.TEXT, true, "③ 스토어판 켜기 → 자동으로 가져와요"))
-        c3.addView(Ui.text(this, 13.5f, Ui.SUB, false,
-            "같은 폰에서 스토어판을 처음 켜면 이 앱의 🎒 가방 · ⚙ 설정 · 📥 받아 둔 지도 · 📚 출조 기록 · 📷 사진을 자동으로 가져와요. " +
-            "그다음 같은 구글 계정으로 로그인하세요. ⚠ 이 앱은 스토어판에서 잘 보인 걸 확인한 뒤에 지우세요.\n" +
-            "(폰을 바꾸는 경우: ${Backup.AUTO_PLACE} 파일을 새 폰으로 옮겨서 스토어판 ⚙ 개인 설정 → 💾 백업 파일에서 불러오기)").apply { setLineSpacing(0f, 1.2f) },
-            Ui.lp(this, MATCH, WRAP, top = 6))
-        col.addView(c3, Ui.lp(this, MATCH, WRAP, top = 10))
-
-        // 테스터 등록 안내 + 관리자 문의
-        val c4 = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = Ui.bg(this@MainActivity, Color.parseColor("#2A1E10"), 12, Ui.ORANGE)
-        }
-        c4.addView(Ui.text(this, 13.5f, Ui.TEXT, false,
-            "플레이 스토어에서 '항목을 찾을 수 없습니다'가 나오면 아직 테스터 등록 전이에요. 관리자에게 구글 이메일(플레이 스토어 계정)을 알려 주세요.").apply { setLineSpacing(0f, 1.2f) })
-        c4.addView(Ui.button(this, "✉ 관리자에게 문의") {
-            if (Cloud.user == null) account.signIn { refreshAccount(); runBackup(); startActivity(Intent(this, InquiryActivity::class.java)) }
-            else startActivity(Intent(this, InquiryActivity::class.java))
-        }, Ui.lp(this, MATCH, WRAP, top = 10))
-        col.addView(c4, Ui.lp(this, MATCH, WRAP, top = 12))
-
-        col.addView(Ui.text(this, 12f, Ui.SUB, false,
-            "• 진행 중인 출조는 넘어가지 않아요 (끝낸 뒤에 옮기세요).\n" +
-            "• 스토어판에서 잘 보이면 이 앱(GitHub판)은 지워도 돼요.").apply { setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 14))
-
-        if (Cloud.isAdmin) col.addView(Ui.button(this, "🛠 관리자: 닫고 이 앱 계속 쓰기") {
-            storeMoveSkipped = true; d.dismiss()
-        }, Ui.lp(this, MATCH, WRAP, top = 16))
-
-        d.setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); addView(col) })
-        Ui.edge(d.window)
-        d.setCancelable(false)
-        d.setOnKeyListener { _, keyCode, e ->
-            // 뒤로 가기 = 앱 닫기 (관리자는 위 버튼으로 닫기)
-            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && e.action == android.view.KeyEvent.ACTION_UP) { moveTaskToBack(true); true } else false
-        }
-        d.setOnDismissListener { storeMoveDlg = null }
-        storeMoveDlg = d
-        d.show()
-        runBackup()
-        runPhoneBackup()
     }
 
     private fun checkForced() {
-        checkStoreMove()
         if (!forceUpdate || isFinishing || Store.current != null || guideOpen) return
         if (Updater.latestCode == null) Updater.check(this) { if (!isFinishing) Updater.showDialog(this, true) }
         else Updater.showDialog(this, true)
@@ -404,7 +241,7 @@ class MainActivity : Activity() {
                 else -> AlertDialog.Builder(this, R.style.FlAlert)
                     .setTitle("✓ 최신 버전이에요")
                     .setMessage("지금 버전 ${BuildConfigInfo.VERSION} 이 가장 새 버전이에요." +
-                        if (!BuildConfig.SELF_UPDATE) "\n(새 버전을 올린 직후 몇 분은 스토어에 늦게 보일 수 있어요)" else "")
+                        "\n(새 버전을 올린 직후 몇 분은 스토어에 늦게 보일 수 있어요)")
                     .setPositiveButton("알겠어요", null).show()
             }
         }
@@ -548,7 +385,7 @@ class MainActivity : Activity() {
         GroupNews.load(false) { if (!isFinishing) renderGroupPanel() }
         // 새 버전: 큰 창으로 알림 (한 번 켤 때마다 한 번) · 최소 버전보다 낮으면 업데이트해야 쓸 수 있음
         // v6.4 (249): 스토어판은 켤 때 한 번 몰래 확인 → 🔄 빨간 점
-        if (!BuildConfig.SELF_UPDATE && !storeChecked) {
+        if (!storeChecked) {
             storeChecked = true
             StoreUpdate.check(this) { _, _ -> if (!isFinishing) paintUpdDot() }
         }

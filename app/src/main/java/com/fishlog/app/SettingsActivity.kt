@@ -149,7 +149,7 @@ class SettingsActivity : Activity() {
             "⚠ 받아 둔 지도 · 사진 원본은 서버에 안 올라가고 폰 백업 파일에만 들어가요.\n" +
             "• 저장할 곳을 고르는 창이 떠요 (기본: 다운로드 폴더) · 폰을 바꾸면 이 파일을 옮겨서 '불러오기'\n" +
             "• 진행 중인 출조는 빠져요 (끝낸 뒤에 백업하세요)" +
-            if (!BuildConfig.SELF_UPDATE) "\n• 같은 폰에 예전 앱(GitHub판 6.7 이상)이 있으면 처음 켤 때 자동으로 가져와요" else "").apply { setLineSpacing(0f, 1.15f) },
+"").apply { setLineSpacing(0f, 1.15f) },
             Ui.lp(this, MATCH, WRAP, top = 6))
         var sz: Backup.Sizes? = null
         fun paintTotal() {

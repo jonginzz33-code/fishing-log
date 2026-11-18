@@ -13,43 +13,26 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 121
-        versionName = "6.40"
+        versionCode = 122
+        versionName = "6.41"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KAKAO_KEY", "\"" + (System.getenv("KAKAO_REST_KEY") ?: "") + "\"")
     }
 
-    // v6.0 (242-2): 같은 코드로 두 가지 판
-    //  - github: 지금처럼 GitHub에서 받아 앱 안에서 업데이트 (지금 쓰는 사람용 · 기본 빌드)
-    //  - play: 플레이 스토어용 (앱 안 업데이트 · 설치 권한 없음, 스토어가 업데이트)
+    // v6.41 (304): GitHub판은 없앰 · 플레이 스토어판 하나만 (빌드 이름은 그대로 assemblePlayDebug · bundlePlayRelease)
     flavorDimensions += "store"
     productFlavors {
-        create("github") {
-            dimension = "store"
-            buildConfigField("boolean", "SELF_UPDATE", "true")
-        }
         create("play") {
             dimension = "store"
-            // com.fishlog.app 은 플레이 스토어에서 이미 다른 사람이 써서 스토어판은 새 이름 (GitHub판과 폰에 같이 깔 수 있음)
+            // com.fishlog.app 은 플레이 스토어에서 이미 다른 사람이 써서 스토어판은 새 이름
             applicationId = "kr.jogwailji.app"
-            buildConfigField("boolean", "SELF_UPDATE", "false")
         }
     }
 
     buildFeatures {
         buildConfig = true
-    }
-
-    // 고정 서명키: 빌드할 때마다 같은 키로 서명해야 업데이트 설치 시 기록이 지워지지 않음
-    signingConfigs {
-        getByName("debug") {
-            storeFile = rootProject.file("keystore/fishlog.keystore")
-            storePassword = "fishlog123"
-            keyAlias = "fishlog"
-            keyPassword = "fishlog123"
-        }
     }
 
     // v6.2 (242-4): 플레이 스토어 업로드 키 — GitHub 빌드가 keystore/play-upload.p12.enc 를
@@ -66,9 +49,6 @@ android {
     }
 
     buildTypes {
-        getByName("debug") {
-            signingConfig = signingConfigs.getByName("debug")
-        }
         getByName("release") {
             isMinifyEnabled = false
             if (playKs != null) signingConfig = signingConfigs.getByName("play")
