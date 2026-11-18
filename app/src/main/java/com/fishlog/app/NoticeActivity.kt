@@ -90,6 +90,18 @@ class NoticeActivity : Activity() {
                 (if (n.edited > n.created + 60_000L) " · 고침 " + df.format(Date(n.edited)) else "")), Ui.lp(this, MATCH, WRAP, top = 4))
             if (n.body.isNotBlank()) c.addView(Ui.text(this, 14f, Ui.TEXT, false, n.body).apply { setLineSpacing(0f, 1.3f); setTextIsSelectable(true) },
                 Ui.lp(this, MATCH, WRAP, top = 8))
+            // v6.39 (301): 일정 공지 → 참석 현황 (누르면 일정 화면에서 참석 · 미정 · 불참)
+            if (n.eid.isNotBlank()) {
+                val rv = Ui.text(this, 13f, Color.parseColor("#9FE7C1"), true, "🙋 참석 확인 ›").apply {
+                    setPadding(0, dp(8), 0, 0)
+                    setOnClickListener { startActivity(android.content.Intent(this@NoticeActivity, ScheduleActivity::class.java)) }
+                }
+                c.addView(rv)
+                Cloud.loadRsvp(n.eid) { l -> if (l != null && !isFinishing) {
+                    val y = l.count { it.s == "yes" }; val m = l.count { it.s == "maybe" }; val no = l.count { it.s == "no" }
+                    rv.text = "🙋 참석 $y · 🤔 미정 $m · 🙅 불참 $no  ›  (눌러서 답하기)"
+                } }
+            }
             // v6.36 (296): 일정에서 올린 공지 = 올린 사람 · 그룹장이 [내리기]
             if (n.eid.isNotBlank() && (n.owner == Cloud.uid || Cloud.isOwner)) {
                 c.addView(Ui.button(this, "내리기 (공지에서 빼기 · 일정은 그대로)") {

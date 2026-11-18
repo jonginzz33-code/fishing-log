@@ -82,6 +82,13 @@ await no('그룹원이 그룹장 공지 지우기', deleteDoc(doc(B, 'groups/g1/
 await no('그룹 밖 사람이 사이트 추가', setDoc(doc(ADM, 'groups/g1/sites/s9'), { name: 'x', url: 'y', memo: '', owner: 'ADM', ownerName: 'a', t: now, order: 1 }));
 await no('남이 올린 사이트 고치기', updateDoc(doc(B, 'groups/g1/sites/s7'), { name: 'z' }));
 await no('사이트에 다른 값 끼워 넣기', setDoc(doc(B, 'groups/g1/sites/s8'), { name: 'x', url: 'y', memo: '', owner: 'B', ownerName: 'b', t: now, order: 1, evil: 1 }));
+await ok('그룹원이 참석 답하기', setDoc(doc(B, 'groups/g1/events/e1/rsvp/B'), { name: 'b', s: 'yes', note: '6시 도착', t: now }));
+await ok('그룹원이 참석 현황 보기', getDoc(doc(A, 'groups/g1/events/e1/rsvp/B')));
+await ok('내 답 바꾸기', setDoc(doc(B, 'groups/g1/events/e1/rsvp/B'), { name: 'b', s: 'no', note: '', t: now }));
+await no('남의 답 대신 쓰기', setDoc(doc(B, 'groups/g1/events/e1/rsvp/A'), { name: 'a', s: 'yes', note: '', t: now }));
+await no('이상한 답', setDoc(doc(B, 'groups/g1/events/e1/rsvp/B'), { name: 'b', s: 'hack', note: '', t: now }));
+await no('그룹 밖 사람이 참석', setDoc(doc(ADM, 'groups/g1/events/e1/rsvp/ADM'), { name: 'x', s: 'yes', note: '', t: now }));
+await ok('그룹장이 답 지우기', deleteDoc(doc(A, 'groups/g1/events/e1/rsvp/B')));
 await no('방금 저장된 수온 덮어쓰기', setDoc(doc(B, 'wtemp/fresh'), { n: '인천', s: '{}', at: now, by: 'B' }));
 await no('수온에 다른 값 끼워 넣기', setDoc(doc(B, 'wtemp/x1'), { n: '인천', s: '{}', at: now, by: 'B', evil: 1 }));
 await no('남 이름으로 수온 저장', setDoc(doc(B, 'wtemp/x2'), { n: '인천', s: '{}', at: now, by: 'A' }));

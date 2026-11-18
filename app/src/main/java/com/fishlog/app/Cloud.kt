@@ -1018,7 +1018,8 @@ object Cloud {
     class Event(
         val id: String, val owner: String, val ownerName: String,
         val date: String, val time: String, val place: String, val boat: String,
-        val cat: String, val memo: String, val created: Long
+        val cat: String, val memo: String, val created: Long,
+        /** v6.39 (301): 참석 인원 제한 (0 = 제한 없음) */ val cap: Int = 0
     )
 
     fun loadEvents(done: (List<Event>?, String?) -> Unit) {
@@ -1031,7 +1032,7 @@ object Cloud {
         Event(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "?"),
             d.getString("date") ?: "", d.getString("time") ?: "", d.getString("place") ?: "",
             d.getString("boat") ?: "", d.getString("cat") ?: "", d.getString("memo") ?: "",
-            d.getLong("created") ?: 0L)
+            d.getLong("created") ?: 0L, (d.getLong("cap") ?: 0L).toInt())
 
     fun noticeOf(d: com.google.firebase.firestore.DocumentSnapshot) =
         Notice(d.id, d.getString("owner") ?: "", shownName(d.getString("owner") ?: "", d.getString("ownerName") ?: "그룹장"),
@@ -1065,7 +1066,7 @@ object Cloud {
     }
 
     fun saveEvent(id: String?, date: String, time: String, place: String, boat: String, cat: String, memo: String,
-                  ownerOf: Event? = null, done: (String?) -> Unit) {
+                  ownerOf: Event? = null, cap: Int = ownerOf?.cap ?: 0, done: (String?) -> Unit) {
         val me = uid ?: return done("로그인이 필요해요")
         val g = active ?: return done("그룹이 없어요")
         val col = db.collection("groups").document(g.id).collection("events")
@@ -1073,9 +1074,35 @@ object Cloud {
         ref.set(mapOf(
             "owner" to (ownerOf?.owner ?: me), "ownerName" to (ownerOf?.ownerName ?: displayName),
             "date" to date, "time" to time, "place" to place, "boat" to boat, "cat" to cat, "memo" to memo,
-            "created" to (ownerOf?.created ?: System.currentTimeMillis())))
+            "created" to (ownerOf?.created ?: System.currentTimeMillis()), "cap" to cap.coerceIn(0, 99)))
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(it.message ?: "일정 저장 실패") }
+    }
+
+    // ---------------- v6.39 (301): 일정 참석 확인 (groups/{gid}/events/{eid}/rsvp/{uid}) ----------------
+    /** s = yes(참석) · maybe(미정) · no(불참) · t = 참석을 누른 시각 (정원 넘으면 이 순서로 대기) */
+    class Rsvp(val uid: String, val name: String, val s: String, val note: String, val t: Long)
+
+    fun loadRsvp(eid: String, done: (List<Rsvp>?) -> Unit) {
+        val g = active ?: return done(null)
+        db.collection("groups").document(g.id).collection("events").document(eid).collection("rsvp").get()
+            .addOnSuccessListener { q ->
+                done(q.documents.map { d -> Rsvp(d.id, shownName(d.id, d.getString("name") ?: "?"), d.getString("s") ?: "",
+                    d.getString("note") ?: "", d.getLong("t") ?: 0L) }.sortedBy { it.t })
+            }
+            .addOnFailureListener { done(null) }
+    }
+
+    /** 내 답 저장 (s 가 빈 칸이면 답 지우기) · 참석을 계속 누르고 있으면 순서(t)는 그대로 */
+    fun setRsvp(eid: String, s: String, note: String, old: Rsvp?, done: (String?) -> Unit) {
+        val me = uid ?: return done("로그인이 필요해요")
+        val g = active ?: return done("그룹이 없어요")
+        val ref = db.collection("groups").document(g.id).collection("events").document(eid).collection("rsvp").document(me)
+        if (s.isBlank()) { ref.delete().addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "실패") }; return }
+        val t = if (old != null && old.s == s) old.t else System.currentTimeMillis()
+        ref.set(mapOf("name" to displayName.take(30), "s" to s, "note" to note.trim().take(60), "t" to t))
+            .addOnSuccessListener { done(null) }
+            .addOnFailureListener { done((it.message ?: "실패") + " · 보안 규칙 게시가 필요할 수 있어요") }
     }
 
     fun deleteEvent(id: String, done: (String?) -> Unit) {

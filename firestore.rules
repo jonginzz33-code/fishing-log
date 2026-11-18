@@ -352,6 +352,17 @@ service cloud.firestore {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
         allow update, delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+        // v6.39 (301): 참석 확인 — 그룹원이 자기 답만 (참석 · 미정 · 불참 · 한마디 60자) · 그룹장은 지우기 가능
+        match /rsvp/{uid} {
+          allow read: if isMember(gid);
+          allow create, update: if isMember(gid) && notBanned() && uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['name', 's', 'note', 't'])
+            && request.resource.data.s in ['yes', 'maybe', 'no']
+            && request.resource.data.name is string && request.resource.data.name.size() <= 30
+            && request.resource.data.note is string && request.resource.data.note.size() <= 60
+            && request.resource.data.t is int;
+          allow delete: if isMember(gid) && (uid == request.auth.uid || isGroupOwner(gid));
+        }
       }
       match /trips/{tripId} {
         allow read: if isMember(gid) || isAdmin();

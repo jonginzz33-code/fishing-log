@@ -32,6 +32,9 @@ class ScheduleActivity : Activity() {
     /** v6.36 (296): 이미 공지에 올라간 일정 번호 */
     private var pinned: Set<String> = emptySet()
     private var showPast = false
+    /** v6.39 (301): 일정별 참석 답 · 그룹 멤버 (아직 답 안 한 사람 보기) */
+    private val rsvps = HashMap<String, List<Cloud.Rsvp>>()
+    private var members: List<Cloud.Member> = emptyList()
     private val keyFmt = SimpleDateFormat("yyyyMMdd", Locale.KOREA)
     private val niceFmt = SimpleDateFormat("M월 d일 (E)", Locale.KOREA)
 
@@ -70,9 +73,103 @@ class ScheduleActivity : Activity() {
             Cloud.active?.id?.let { gid -> GroupNews.putEvents(gid, list); GroupNews.markKindSeen(gid, "event") }
             pinned = GroupNews.noticeList(Cloud.active?.id).map { it.eid }.filter { it.isNotBlank() }.toSet()
             render()
+            loadRsvps()
             Cloud.active?.let { g -> Cloud.loadNoticesOf(g) { ns, _ -> if (ns != null && !isFinishing) {
                 GroupNews.putNotices(g.id, ns); pinned = ns.map { it.eid }.filter { it.isNotBlank() }.toSet(); render() } } }
         }
+    }
+
+    /** 다가오는 일정 + 최근 지난 일정 3개만 참석 답 받기 (서버 읽기 줄이기) */
+    private fun loadRsvps() {
+        val today = keyFmt.format(Date())
+        val need = events.filter { it.date >= today } + events.filter { it.date < today }.takeLast(3)
+        need.forEach { e -> Cloud.loadRsvp(e.id) { l -> if (l != null && !isFinishing) { rsvps[e.id] = l; render() } } }
+        if (members.isEmpty()) Cloud.loadMembers { l, _ -> if (l != null && !isFinishing) { members = l; render() } }
+    }
+
+    private class Att(val yes: List<Cloud.Rsvp>, val wait: List<Cloud.Rsvp>, val maybe: List<Cloud.Rsvp>, val no: List<Cloud.Rsvp>)
+    private fun att(e: Cloud.Event): Att? {
+        val l = rsvps[e.id] ?: return null
+        val y = l.filter { it.s == "yes" }.sortedBy { it.t }
+        val (inn, wait) = if (e.cap > 0) y.take(e.cap) to y.drop(e.cap) else y to emptyList()
+        return Att(inn, wait, l.filter { it.s == "maybe" }, l.filter { it.s == "no" })
+    }
+    private fun noAnswer(e: Cloud.Event): List<Cloud.Member> {
+        val answered = rsvps[e.id]?.map { it.uid }?.toSet() ?: return emptyList()
+        return members.filter { it.uid !in answered }
+    }
+
+    /** 참석 현황 한 줄 + [🙋 참석] [🤔 미정] [🙅 불참] */
+    private fun rsvpBox(e: Cloud.Event, past: Boolean): LinearLayout {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val a = att(e)
+        val sum = if (a == null) "참석 확인 불러오는 중…" else buildString {
+            append("🙋 참석 ").append(a.yes.size); if (e.cap > 0) append("/").append(e.cap)
+            if (e.cap > 0 && a.yes.size >= e.cap) append(" 마감")
+            if (a.wait.isNotEmpty()) append(" · ⏳ 대기 ").append(a.wait.size)
+            append(" · 🤔 미정 ").append(a.maybe.size).append(" · 🙅 불참 ").append(a.no.size)
+            val na = noAnswer(e).size; if (na > 0) append(" · 아직 ").append(na)
+            append("  ›")
+        }
+        box.addView(Ui.text(this, 13f, android.graphics.Color.parseColor("#9FE7C1"), true, sum).apply {
+            setPadding(0, dp(4), 0, dp(4))
+            setOnClickListener { showRsvp(e) }
+        })
+        if (past || a == null) return box
+        val mine = rsvps[e.id]?.firstOrNull { it.uid == Cloud.uid }
+        val myWait = mine?.s == "yes" && a.wait.any { it.uid == Cloud.uid }
+        val r = Ui.row(this)
+        listOf(Triple("yes", "🙋 참석", "#5FD39A"), Triple("maybe", "🤔 미정", "#F2C14E"), Triple("no", "🙅 불참", "#FF8A92")).forEachIndexed { i, (k, label, colS) ->
+            val col = android.graphics.Color.parseColor(colS)
+            val on = mine?.s == k
+            val txt = if (k == "yes" && myWait) "⏳ 대기 ${a.wait.indexOfFirst { it.uid == Cloud.uid } + 1}번" else label
+            r.addView(Ui.text(this, 13.5f, if (on) Ui.BG else col, true, txt).apply {
+                gravity = Gravity.CENTER; minHeight = dp(40)
+                background = if (on) Ui.bg(this@ScheduleActivity, col, 99) else Ui.bg(this@ScheduleActivity, android.graphics.Color.TRANSPARENT, 99, col)
+                setOnClickListener {
+                    if (k == "yes" && !on && e.cap > 0 && a.yes.size >= e.cap) toast("정원 ${e.cap}명이 다 찼어요 · 대기 ${a.wait.size + 1}번으로 넣어 둘게요 (누가 빠지면 순서대로 참석)")
+                    answer(e, if (on) "" else k, mine?.note ?: "", mine)
+                }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(6) })
+        }
+        box.addView(r, Ui.lp(this, MATCH, WRAP, top = 2))
+        if (mine != null) box.addView(Ui.text(this, 12f, Ui.SUB, false,
+            if (mine.note.isBlank()) "✎ 한마디 남기기 (예: 6시 도착 · 차 2명 태울 수 있어요)" else "✎ 내 한마디: ${mine.note}").apply {
+            setPadding(0, dp(6), 0, 0)
+            setOnClickListener {
+                val et = EditText(this@ScheduleActivity).apply { setText(mine.note); hint = "한마디 (60자)"; setSingleLine() }
+                AlertDialog.Builder(this@ScheduleActivity, R.style.FlAlert).setTitle("✎ 한마디")
+                    .setView(LinearLayout(this@ScheduleActivity).apply { setPadding(dp(20), dp(4), dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
+                    .setPositiveButton("저장") { _, _ -> answer(e, mine.s, et.text.toString(), mine) }
+                    .setNegativeButton("취소", null).show()
+            }
+        })
+        return box
+    }
+
+    private fun answer(e: Cloud.Event, s: String, note: String, old: Cloud.Rsvp?) {
+        Cloud.setRsvp(e.id, s, note, old) { err ->
+            if (err != null) { toast(err); return@setRsvp }
+            Cloud.loadRsvp(e.id) { l -> if (l != null && !isFinishing) { rsvps[e.id] = l; render() } }
+        }
+    }
+
+    /** 누가 어떤 답을 했는지 (이름 · 한마디) */
+    private fun showRsvp(e: Cloud.Event) {
+        val a = att(e) ?: return
+        fun lines(l: List<Cloud.Rsvp>) = l.joinToString("\n") { "  · " + it.name + (if (it.note.isNotBlank()) " — ${it.note}" else "") }
+        val msg = buildString {
+            append("🙋 참석 ").append(a.yes.size).append(if (e.cap > 0) "/${e.cap}" else "").append("\n")
+            if (a.yes.isNotEmpty()) append(lines(a.yes)).append("\n")
+            if (a.wait.isNotEmpty()) append("\n⏳ 대기 ").append(a.wait.size).append(" (누른 순서)\n")
+                .append(a.wait.mapIndexed { i, r -> "  ${i + 1}. ${r.name}" + (if (r.note.isNotBlank()) " — ${r.note}" else "") }.joinToString("\n")).append("\n")
+            append("\n🤔 미정 ").append(a.maybe.size).append("\n"); if (a.maybe.isNotEmpty()) append(lines(a.maybe)).append("\n")
+            append("\n🙅 불참 ").append(a.no.size).append("\n"); if (a.no.isNotEmpty()) append(lines(a.no)).append("\n")
+            val na = noAnswer(e)
+            if (na.isNotEmpty()) append("\n❔ 아직 답 안 함 ").append(na.size).append("\n").append(na.joinToString("\n") { "  · " + it.name })
+        }
+        AlertDialog.Builder(this, R.style.FlAlert).setTitle("참석 확인 · " + dateText(e)).setMessage(msg.trimEnd())
+            .setPositiveButton("닫기", null).show()
     }
 
     private fun render() {
@@ -112,6 +209,8 @@ class ScheduleActivity : Activity() {
         val where = listOf(Store.catShort(e.cat), e.place, e.boat).filter { it.isNotBlank() }.joinToString(" · ")
         if (where.isNotBlank()) c.addView(Ui.text(this, 14f, Ui.TEXT, false, where), Ui.lp(this, MATCH, WRAP, top = 4))
         if (e.memo.isNotBlank()) c.addView(Ui.text(this, 13f, Ui.SUB, false, e.memo).apply { maxLines = 2 }, Ui.lp(this, MATCH, WRAP, top = 2))
+        // v6.39 (301): 참석 확인
+        if (e.date >= today || rsvps.containsKey(e.id)) c.addView(rsvpBox(e, e.date < today), Ui.lp(this, MATCH, WRAP, top = 6))
         // v6.36 (296): 올린 사람 + [📢 공지에 올리기] (그룹원 누구나 · 이미 올렸으면 '✓ 공지에 올라감')
         val br = Ui.row(this)
         br.addView(Ui.text(this, 11f, Ui.SUB, false, "올린 사람 ${e.ownerName}"), LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -209,15 +308,18 @@ class ScheduleActivity : Activity() {
         val place = suggest("장소 (예: ○○항)", Store.ports(), e?.place ?: "")
         val boat = suggest("배 이름 (선상일 때)", Store.boats(), e?.boat ?: "")
         val memo = EditText(this).apply { hint = "메모 (모이는 곳, 준비물 등)"; setText(e?.memo ?: ""); minLines = 2 }
+        // v6.39 (301): 참석 인원 제한 (넘으면 대기 순서)
+        val cap = EditText(this).apply { hint = "참석 인원 제한 (예: 8 · 비우면 제한 없음)"; inputType = InputType.TYPE_CLASS_NUMBER
+            if ((e?.cap ?: 0) > 0) setText(e!!.cap.toString()) }
         box.addView(dateBtn); box.addView(timeBtn, Ui.lp(this, MATCH, WRAP, top = 8))
         box.addView(catRow, Ui.lp(this, MATCH, WRAP, top = 10))
-        box.addView(place); box.addView(boat); box.addView(memo)
+        box.addView(place); box.addView(boat); box.addView(memo); box.addView(cap)
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle(if (e == null) "일정 올리기" else "일정 수정")
             .setView(ScrollView(this).apply { addView(box) })
             .setPositiveButton("저장") { _, _ ->
                 Cloud.saveEvent(e?.id, date, time, place.text.toString().trim(), boat.text.toString().trim(), cat,
-                    memo.text.toString().trim(), e) { err -> toast(err ?: "일정을 올렸어요"); load() }
+                    memo.text.toString().trim(), e, cap.text.toString().trim().toIntOrNull() ?: 0) { err -> toast(err ?: "일정을 올렸어요"); load() }
             }
             .setNegativeButton("취소", null)
             .show()
