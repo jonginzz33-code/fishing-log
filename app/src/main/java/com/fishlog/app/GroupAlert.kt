@@ -100,7 +100,10 @@ object GroupAlert {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("open", "ga:$gid:$kind"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+    /** v6.47: 이번 확인에서 새로 띄운 소식 수 (출조 중 알림은 빼고) */
+    @Volatile private var posted = 0
     private fun post(c: Context, id: Int, ch: String, kind: String, title: String, lines: List<String>, pi: PendingIntent, count: Int = 0) {
+        if (kind != "live") posted += maxOf(1, count)
         val text = lines.joinToString("\n")
         val b = Notification.Builder(c, ch)
             .setSmallIcon(R.drawable.ic_stat_octo)
@@ -116,16 +119,20 @@ object GroupAlert {
     private fun <T> wait(t: com.google.android.gms.tasks.Task<T>): T? = try { Tasks.await(t, 12, TimeUnit.SECONDS) } catch (_: Exception) { null }
 
     /** 1시간마다 (스레드에서) */
-    fun check(c: Context) {
-        if (!anyOn(c)) return
-        val me = FirebaseAuth.getInstance().currentUser?.uid ?: return
+    /** v6.47: [force] = 퀵바 위젯 🔄 새로고침 (알림을 다 꺼 놨어도 위젯 '출조 중' 은 새로) · 돌려주는 값 = 새 소식 개수 */
+    fun check(c: Context, force: Boolean = false): Int {
+        if (!anyOn(c) && !force) return 0
+        val me = FirebaseAuth.getInstance().currentUser?.uid ?: return 0
+        var newN = 0
+        val liveIds = HashSet<String>()
         val p = prefs(c)
         val db = FirebaseFirestore.getInstance()
         val now = System.currentTimeMillis()
         // 앱을 보고 있으면: 알림은 안 울리고 '여기까지 봤음'만
         val quiet = visible
+        posted = 0
         channels(c)
-        val user = wait(db.collection("users").document(me).get(Source.SERVER)) ?: return
+        val user = wait(db.collection("users").document(me).get(Source.SERVER)) ?: return 0
         @Suppress("UNCHECKED_CAST")
         val gids = (user.get("groups") as? List<String>).orEmpty()
         val liveLines = mutableListOf<String>()
@@ -137,9 +144,10 @@ object GroupAlert {
             val last = p.getLong("ga_last_$gid", 0L)
             p.edit().putLong("ga_last_$gid", now).apply()
             // 🟢 출조 중 (지금 상태라 처음이어도 보여 줌)
-            if (on(c, "live")) wait(gref.collection("live").get())?.documents?.filter { d ->
+            // v6.47: 위젯 '출조중' 칸 숫자도 같이 (알림을 꺼 놨어도)
+            wait(gref.collection("live").get())?.documents?.filter { d ->
                 d.id != me && d.getBoolean("ended") != true && now - (d.getLong("t") ?: 0L) < 2 * 3600_000L
-            }?.forEach { d ->
+            }?.also { l -> l.forEach { liveIds.add(it.id) } }?.takeIf { on(c, "live") }?.forEach { d ->
                 val mins = ((now - (d.getLong("start") ?: now)) / 60_000L).coerceAtLeast(0)
                 val dur = if (mins >= 60) "${mins / 60}시간 ${mins % 60}분째" else "${mins}분째"
                 liveLines.add("${d.getString("name") ?: "?"} · ${d.getString("line") ?: ""} ($dur)".replace(" ·  (", " ("))
@@ -219,6 +227,11 @@ object GroupAlert {
         if (liveLines.isEmpty()) nm.cancel(ID_LIVE)
         else post(c, ID_LIVE, CH_LIVE, "live", "🟢 지금 출조 중 ${liveLines.size}명 (${hm.format(Date(now))} 확인)", liveLines,
             openPi(c, liveGid, "live", ID_LIVE), liveLines.size)
+        // v6.47: 퀵바 위젯 '출조중 N명' · 마지막 확인 시각
+        p.edit().putLong("w_check_at", now).apply()
+        QuickWidget.saveLive(c, liveIds.size)
+        newN = posted
+        return newN
     }
 }
 
@@ -230,6 +243,7 @@ class GroupAlertReceiver : BroadcastReceiver() {
         val pr = goAsync()
         Thread {
             try { GroupAlert.check(app) } catch (_: Exception) {}
+            try { QuickWidget.updateAll(app) } catch (_: Exception) {}
             GroupAlert.schedule(app)
             pr.finish()
         }.start()

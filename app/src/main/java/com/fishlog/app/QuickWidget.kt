@@ -119,6 +119,12 @@ class QuickWidget : AppWidgetProvider() {
                 rv.setTextViewText(R.id.wq_title, sb)
                 rv.setOnClickPendingIntent(R.id.wq_title, WidgetData.openIntent(c, "tide", 7290))
                 rv.setOnClickPendingIntent(R.id.wq_gear, WidgetData.openIntent(c, "q:qset", 7291))
+                // v6.47: 🔄 새로고침 = 그룹 소식(출조 중 · 채팅 · 공지 · 일정 · 참석) 바로 확인 (1시간마다 자동 확인은 그대로)
+                val busy = prefs(c).getLong("w_refreshing", 0L).let { System.currentTimeMillis() - it < 60_000L }
+                val at = prefs(c).getLong("w_check_at", 0L)
+                rv.setTextViewText(R.id.wq_refresh, if (busy) "⏳ 확인 중" else "🔄 " + (if (at > 0) java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(at)) else "새로고침"))
+                rv.setOnClickPendingIntent(R.id.wq_refresh, PendingIntent.getBroadcast(c, 7292, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "refresh"),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             }
             ROWS.forEachIndexed { r, id -> rv.setViewVisibility(id, if (r < needRows) View.VISIBLE else View.GONE) }
             val liveN = prefs(c).getInt("w_live_n", -1)
@@ -185,6 +191,29 @@ class QuickWidget : AppWidgetProvider() {
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) { draw(c, m, id) }
 
     override fun onReceive(c: Context, intent: Intent) {
+        if (intent.action == ACT && intent.getStringExtra("cmd") == "refresh") {
+            val app = c.applicationContext
+            if (System.currentTimeMillis() - prefs(app).getLong("w_refreshing", 0L) < 60_000L) return   // 이미 확인 중
+            prefs(app).edit().putLong("w_refreshing", System.currentTimeMillis()).apply()
+            updateAll(app)
+            val pr = goAsync()
+            Thread {
+                val n = try { GroupAlert.check(app, force = true) } catch (_: Exception) { -1 }
+                prefs(app).edit().putLong("w_refreshing", 0L).apply()
+                updateAll(app)
+                try { TideWidget.updateAll(app) } catch (_: Exception) {}
+                val live = prefs(app).getInt("w_live_n", -1)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    android.widget.Toast.makeText(app, when {
+                        n < 0 -> "확인을 못 했어요 (인터넷 · 로그인 확인)"
+                        n == 0 -> "새 소식 없어요" + if (live > 0) " · 출조 중 ${live}명" else ""
+                        else -> "새 소식 ${n}개 · 위쪽 알림을 확인하세요" + if (live > 0) " · 출조 중 ${live}명" else ""
+                    }, android.widget.Toast.LENGTH_SHORT).show()
+                    try { pr.finish() } catch (_: Exception) {}
+                }
+            }.start()
+            return
+        }
         if (intent.action == ACT && intent.getStringExtra("cmd") == "saver") {
             try {
                 Store.init(c)
