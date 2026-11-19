@@ -110,6 +110,7 @@ object Chat {
     fun markSeen(room: String) {
         val t = maxOf(System.currentTimeMillis(), latest[room]?.maxOfOrNull { it.time } ?: 0L)
         prefs().edit().putLong("chatSeen_$room", t).apply()
+        GroupAlert.chatRead(Cloud.appContext, room)   // v6.48 (321): 위젯 숫자 · 그 방 알림
     }
 
     // ---------------- 채팅 이름 (전체방만 바꿀 수 있음) ----------------

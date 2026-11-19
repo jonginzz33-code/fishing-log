@@ -204,6 +204,10 @@ class MainActivity : Activity() {
         val n = if (Cloud.user == null) 0 else Chat.totalUnread()
         chatBadge.text = if (n > 99) "99+" else "$n"
         chatBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
+        // v6.48 (321): 위젯 채팅 칸도 같은 숫자
+        if (Cloud.user != null && getSharedPreferences("fishlog", MODE_PRIVATE).getInt("w_chat_n", -1) != n) {
+            getSharedPreferences("fishlog", MODE_PRIVATE).edit().putInt("w_chat_n", n).apply(); QuickWidget.updateAll(this)
+        }
     }
     private var guideOpen = false
     private lateinit var versionText: TextView
@@ -314,6 +318,7 @@ class MainActivity : Activity() {
 
     private fun openGroupAlert(gid: String, kind: String, retry: Boolean = true) {
         if (Cloud.user == null) return
+        if (gid == Chat.ALL && kind == "chat") { startActivity(Intent(this, ChatActivity::class.java).putExtra("room", gid)); return }
         if (Cloud.groups.none { it.id == gid } && retry) { Cloud.refresh { if (!isFinishing) openGroupAlert(gid, kind, false) }; return }
         if (gid.isNotBlank() && Cloud.groups.any { it.id == gid } && Cloud.activeId != gid) { Cloud.setActive(gid); refreshAccount() }
         when (kind) {

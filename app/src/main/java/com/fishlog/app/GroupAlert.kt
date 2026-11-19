@@ -32,10 +32,11 @@ object GroupAlert {
     private const val ACT = "com.fishlog.app.GROUP_ALERT"
 
     val KINDS = listOf("live" to "🟢 그룹원 출조 중", "chat" to "💬 그룹 채팅 새 글", "notice" to "📢 새 공지",
-        "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답", "remind" to "📅 내일 출조 (전날 낮 12시)")
+        "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답", "remind" to "📅 내일 출조 (전날 낮 12시)",
+        "allchat" to "🌐 전체 채팅 새 글")
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
-    fun on(c: Context, kind: String) = prefs(c).getBoolean("ga_$kind", true)
+    fun on(c: Context, kind: String) = prefs(c).getBoolean("ga_$kind", kind != "allchat")   // v6.48: 전체 채팅은 기본 꺼짐
     fun set(c: Context, kind: String, v: Boolean) { prefs(c).edit().putBoolean("ga_$kind", v).apply(); if (!v) clear(c, kind) }
     private fun anyOn(c: Context) = KINDS.any { on(c, it.first) }
 
@@ -118,12 +119,44 @@ object GroupAlert {
 
     private fun <T> wait(t: com.google.android.gms.tasks.Task<T>): T? = try { Tasks.await(t, 12, TimeUnit.SECONDS) } catch (_: Exception) { null }
 
+    /**
+     * v6.48 (321): 그 방의 안 읽은 글 (chatSeen_방 보다 늦은 남의 글) → 개수 돌려줌
+     *  알림: kind 스위치가 켜져 있고 · 앱을 안 보고 있고 · 이미 알린 글보다 새 글이 있을 때만 (같은 글로 계속 안 울림)
+     *  안 읽은 글이 없으면 그 방 알림 지움
+     */
+    private fun chatUnread(c: Context, col: com.google.firebase.firestore.CollectionReference, room: String, title: String, kind: String,
+                           me: String, quiet: Boolean): Int {
+        val p = prefs(c)
+        val seen = p.getLong("chatSeen_$room", 0L).takeIf { it > 0 } ?: return 0   // 한 번도 안 열어 본 방 = 앱도 0
+        val l = wait(col.whereGreaterThan("t", seen).orderBy("t").limitToLast(100).get())?.documents
+            ?.filter { it.getString("uid") != me && !Moderation.isBlocked(it.getString("uid") ?: "") }?.sortedBy { it.getLong("t") ?: 0L }
+            ?: return 0
+        val id = ("chat$room").hashCode()
+        if (l.isEmpty()) { try { c.getSystemService(NotificationManager::class.java).cancel(id) } catch (_: Exception) {}; return 0 }
+        val newest = l.last().getLong("t") ?: 0L
+        val noted = p.getLong("ga_chat_noti_$room", 0L)
+        if (on(c, kind) && !quiet && newest > noted) {
+            post(c, id, CH_GROUP, kind, "$title · 안 읽은 글 ${l.size}개",
+                l.takeLast(5).map { "${it.getString("name") ?: "?"}: ${(it.getString("text") ?: "").ifBlank { "📷 사진" }.take(60)}" },
+                openPi(c, room, "chat", id), l.size)
+            p.edit().putLong("ga_chat_noti_$room", newest).apply()
+        }
+        return l.size
+    }
+
+    /** v6.48 (321): 채팅방을 읽으면 → 그 방 알림 지우기 + 위젯 숫자 (폰에 있는 글 기준) */
+    fun chatRead(c: Context, room: String) {
+        try { c.getSystemService(NotificationManager::class.java).cancel(("chat$room").hashCode()) } catch (_: Exception) {}
+        try { prefs(c).edit().putInt("w_chat_n", Chat.totalUnread()).apply(); QuickWidget.updateAll(c) } catch (_: Exception) {}
+    }
+
     /** 1시간마다 (스레드에서) */
     /** v6.47: [force] = 퀵바 위젯 🔄 새로고침 (알림을 다 꺼 놨어도 위젯 '출조 중' 은 새로) · 돌려주는 값 = 새 소식 개수 */
     fun check(c: Context, force: Boolean = false): Int {
         if (!anyOn(c) && !force) return 0
         val me = FirebaseAuth.getInstance().currentUser?.uid ?: return 0
         var newN = 0
+        var unreadN = 0
         val liveIds = HashSet<String>()
         val p = prefs(c)
         val db = FirebaseFirestore.getInstance()
@@ -179,14 +212,9 @@ object GroupAlert {
                     try { c.getSystemService(NotificationManager::class.java).notify(id, b.build()) } catch (_: SecurityException) {}
                 }
             }
+            // v6.48 (321): 💬 그룹 채팅 = '아직 안 읽은 글'(앱 숫자와 같은 기준) · 위젯 숫자 + 알림
+            unreadN += chatUnread(c, gref.collection("chat"), gid, "💬 $gname", "chat", me, quiet)
             if (last == 0L || quiet) return@forEach   // 처음이면 지난 글로 알림 폭탄 안 보내기
-            // 💬 채팅
-            if (on(c, "chat")) wait(gref.collection("chat").whereGreaterThan("t", last).get())?.documents
-                ?.filter { it.getString("uid") != me }?.sortedBy { it.getLong("t") ?: 0L }?.let { l ->
-                    if (l.isNotEmpty()) post(c, ("chat$gid").hashCode(), CH_GROUP, "chat", "💬 $gname · 새 글 ${l.size}개",
-                        l.takeLast(5).map { "${it.getString("name") ?: "?"}: ${(it.getString("text") ?: "").ifBlank { "📷 사진" }.take(60)}" },
-                        openPi(c, gid, "chat", ("chat$gid").hashCode()), l.size)
-                }
             // 📢 공지
             if (on(c, "notice")) wait(gref.collection("notices").whereGreaterThan("created", last).get())?.documents
                 ?.filter { it.getString("owner") != me }?.let { l ->
@@ -222,6 +250,9 @@ object GroupAlert {
                     lines, openPi(c, gid, "rsvp", ("rsvp$gid").hashCode()), lines.size)
             }
         }
+        // v6.48 (321): 🌐 전체 채팅 (숫자는 늘 · 알림은 스위치 켰을 때만)
+        unreadN += chatUnread(c, db.collection("chat"), Chat.ALL, "🌐 전체 채팅", "allchat", me, quiet)
+        p.edit().putInt("w_chat_n", unreadN).apply()
         // 🟢 출조 중: 있으면 조용히 (같은 알림을 고쳐 씀) · 없으면 지움
         val nm = c.getSystemService(NotificationManager::class.java)
         if (liveLines.isEmpty()) nm.cancel(ID_LIVE)
@@ -230,6 +261,7 @@ object GroupAlert {
         // v6.47: 퀵바 위젯 '출조중 N명' · 마지막 확인 시각
         p.edit().putLong("w_check_at", now).apply()
         QuickWidget.saveLive(c, liveIds.size)
+        QuickWidget.updateAll(c)
         newN = posted
         return newN
     }

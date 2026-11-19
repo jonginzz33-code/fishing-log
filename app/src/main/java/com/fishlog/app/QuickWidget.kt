@@ -135,9 +135,13 @@ class QuickWidget : AppWidgetProvider() {
                 rv.setImageViewBitmap(ICO[i], circle(c, t.icon, t.color, t.on == 0))
                 rv.setTextViewText(LBL[i], t.label + if (t.on == 1) " 켬" else if (t.on == 0) " 끔" else "")
                 // 작은 글자: 출조중 칸 = 그룹원 몇 명
-                val sub = if (t.id == "now" && liveN >= 0) (if (liveN == 0) "아무도 없음" else "${liveN}명 출조 중") else null
-                rv.setViewVisibility(SUBV[i], if (sub != null && rows >= 2) View.VISIBLE else View.GONE)
+                // v6.48 (321): 채팅 칸 = 안 읽은 글 (앱 아래 '채팅' 숫자와 같음)
+                val chatN = if (t.id == "chat") prefs(c).getInt("w_chat_n", 0) else 0
+                val sub = if (t.id == "now" && liveN >= 0) (if (liveN == 0) "아무도 없음" else "${liveN}명 출조 중")
+                    else if (chatN > 0) "● 새 글 " + (if (chatN > 99) "99+" else "$chatN") else null
+                rv.setViewVisibility(SUBV[i], if (sub != null && (rows >= 2 || chatN > 0)) View.VISIBLE else View.GONE)
                 if (sub != null) rv.setTextViewText(SUBV[i], sub)
+                rv.setTextColor(SUBV[i], if (chatN > 0) android.graphics.Color.parseColor("#FF6B6B") else android.graphics.Color.parseColor("#9FC3DA"))
                 rv.setInt(tid, "setBackgroundResource", when {
                     t.on == 1 -> R.drawable.widget_qtile_on
                     t.id == "now" && Store.current == null -> R.drawable.widget_qtile_red

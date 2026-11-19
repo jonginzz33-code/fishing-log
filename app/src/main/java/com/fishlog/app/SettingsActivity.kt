@@ -298,10 +298,11 @@ class SettingsActivity : Activity() {
         GroupAlert.KINDS.forEach { (k, label) ->
             val sub = when (k) {
                 "live" -> "누가 출조 중이면 상단에 조용히 · 모두 끝나면 사라져요"
-                "chat" -> "그룹 채팅에 새 글이 오면 (누르면 그 채팅방)"
+                "chat" -> "그룹 채팅에 안 읽은 새 글이 오면 (누르면 그 채팅방 · 읽으면 사라져요)"
                 "notice" -> "그룹에 새 공지가 올라오면"
                 "event" -> "그룹에 새 일정이 올라오면"
                 "remind" -> "내가 참석을 누른 일정 전날 낮 12시에 한 번"
+                "allchat" -> "전체 채팅에 안 읽은 새 글이 오면 (글이 많을 수 있어 처음엔 꺼짐)"
                 else -> "내가 올린 일정에 누가 참석 · 미정 · 불참을 누르면"
             }
             switchRow(label, sub, GroupAlert.on(this, k)) { v ->
