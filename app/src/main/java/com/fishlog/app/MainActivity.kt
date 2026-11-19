@@ -780,6 +780,7 @@ class MainActivity : Activity() {
         menuBox.addView(Ui.button(this, "❓ 사용 설명서 · 처음 안내 다시 보기") {
             startActivity(Intent(this, HelpActivity::class.java))
         }, Ui.lp(this, MATCH, WRAP))
+        menuBox.addView(Ui.button(this, "🗺 권역 낚시환경 (출조환경 · 예상조과)") { Region.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "🌐 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         // v6.30 (282): 앱에서 바로 홈 화면에 위젯 놓기
@@ -855,6 +856,7 @@ class MainActivity : Activity() {
         QItem("map", "🗺", "지도", "#1C5F86", "#7FD3E8"),
         QItem("chat", "💬", "채팅", "#2A2310", "#F2C14E"),
         QItem("bag", "🎒", "가방", "#12301F", "#5FD39A"),
+        QItem("region", "🗾", "권역", "#10283A", "#2FBF8F"),   // v6.46 (317) 권역 낚시환경
         QItem("boats", "🌐", "사이트", "#10283A", "#5BC8DF"),   // v6.23 (270) · v6.24 (272) 자주 가는 사이트
         QItem("groupwin", "👥", "그룹", "#12301F", "#2F6A48"),
         QItem("settings", "⚙", "설정", "#1A2A30", "#5FC4E0"),
@@ -892,6 +894,7 @@ class MainActivity : Activity() {
             "chat" -> startActivity(Intent(this, ChatActivity::class.java))
             "bag" -> Inventory.show(this)
             "boats" -> Boats.show(this)
+            "region" -> Region.show(this)
             "groupwin" -> openGroupDialog()
             "settings" -> startActivity(Intent(this, SettingsActivity::class.java))
             "cal" -> { val l = bestLocation(); TideCalendar.show(this, l?.first, l?.second) }
@@ -960,7 +963,8 @@ class MainActivity : Activity() {
         val items = ids.mapNotNull { id -> QUICK.firstOrNull { it.id == id } }
         // v6.30 (282): 홈 화면 퀵바 위젯도 같은 칸으로
         QuickWidget.save(this, items.map { Triple(it.id, it.icon, it.label) },
-            items.mapNotNull { q -> q.state?.let { st -> q.id to (try { st() } catch (_: Exception) { false }) } }.toMap())
+            items.mapNotNull { q -> q.state?.let { st -> q.id to (try { st() } catch (_: Exception) { false }) } }.toMap(),
+            items.associate { it.id to it.stroke })
         quickInline.removeAllViews(); quickRow.removeAllViews()
         // v4.9 (221): '⚡ 퀵바 설정' 칸은 고정 (뺄 수 없음 · 늘 맨 끝)
         val fixed = QItem("qset", "⚡", "퀵바설정", "#1E2A12", "#C9E26A")
@@ -2372,6 +2376,7 @@ class MainActivity : Activity() {
             nowBtn.visibility = View.VISIBLE
             // 아무도 없으면 작은 한 줄로 (자리 덜 차지)
             val none = l.isEmpty()
+            QuickWidget.saveLive(this, l.size)   // v6.46 (316): 퀵바 위젯 출조중 칸 '아무도 없음 / N명'
             nowTitle.textSize = if (none) 12f else 16f
             // v6.36 (292): 아무도 없으면 ❌ + 회색 칸 · 있으면 🟢 초록 칸
             nowTitle.text = if (none) "❌ 지금 출조 중인 사람 없음" else "🟢 지금 출조 중 ${l.size}명"

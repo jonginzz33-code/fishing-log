@@ -1,45 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v6.30 (282): ⚡ 퀵바 위젯 · 칸 10개(5 × 2줄) · 남는 칸은 숨김 -->
+<!-- v6.46 (316): ⚡ 퀵바 위젯 새 디자인 · 위 줄(이름 · 날짜 · 물때 + ⚡) · 한 줄 4칸 × 최대 3줄 · 칸 = 색 동그라미 그림 + 이름 (+ 작은 글자) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="5dp"
-    android:background="@drawable/widget_bg">
+    android:padding="7dp"
+    android:background="@drawable/widget_qbg">
+    <LinearLayout android:id="@+id/wq_head" android:layout_width="match_parent" android:layout_height="30dp"
+        android:orientation="horizontal" android:gravity="center_vertical" android:paddingLeft="6dp" android:paddingRight="2dp" android:visibility="gone">
+        <TextView android:id="@+id/wq_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="🎣 조과일지" android:textColor="#EAF2F6" android:textSize="12.5sp" android:maxLines="1" />
+        <TextView android:id="@+id/wq_gear" android:layout_width="28dp" android:layout_height="28dp" android:gravity="center"
+            android:text="⚡" android:textSize="13sp" android:background="@drawable/widget_qgear" />
+    </LinearLayout>
     <LinearLayout android:id="@+id/wq_row0" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
         android:orientation="horizontal">
-        <TextView android:id="@+id/wq_0" android:text="🎣&#10;추천" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_1" android:text="🗺&#10;지도" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_2" android:text="🌊&#10;물때" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_3" android:text="🎒&#10;가방" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_4" android:text="⚡&#10;설정" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
+        <LinearLayout android:id="@+id/wq_0" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_0" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_0" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_1" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_1" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_2" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_2" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_3" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_3" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
     </LinearLayout>
-    <LinearLayout android:id="@+id/wq_row1" android:visibility="gone" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
-        android:orientation="horizontal">
-        <TextView android:id="@+id/wq_5" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_6" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_7" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_8" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
-        <TextView android:id="@+id/wq_9" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
-            android:layout_margin="3dp" android:gravity="center" android:textColor="#EAF2F6" android:textSize="11sp" android:maxLines="2"
-            android:background="@drawable/widget_tile" />
+    <LinearLayout android:id="@+id/wq_row1" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:orientation="horizontal" android:visibility="gone">
+        <LinearLayout android:id="@+id/wq_4" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_4" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_5" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_5" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_6" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_6" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_7" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_7" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:id="@+id/wq_row2" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+        android:orientation="horizontal" android:visibility="gone">
+        <LinearLayout android:id="@+id/wq_8" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_8" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_9" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_9" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_9" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_9" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_10" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_10" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_10" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_10" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/wq_11" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1"
+            android:layout_margin="3dp" android:orientation="vertical" android:gravity="center" android:background="@drawable/widget_qtile">
+            <ImageView android:id="@+id/wqi_11" android:layout_width="36dp" android:layout_height="36dp" android:scaleType="fitCenter" />
+            <TextView android:id="@+id/wql_11" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                android:textColor="#EAF2F6" android:textSize="11.5sp" android:textStyle="bold" android:maxLines="1" />
+            <TextView android:id="@+id/wqs_11" android:layout_width="wrap_content" android:layout_height="wrap_content" android:visibility="gone"
+                android:textColor="#9FC3DA" android:textSize="9sp" android:maxLines="1" />
+        </LinearLayout>
     </LinearLayout>
 </LinearLayout>

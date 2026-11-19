@@ -436,9 +436,11 @@ object Weather {
             {
                 if (diff in -90..15) {
                     try {
-                        val body = get("https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
+                        val url = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon" +
                             "&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m,precipitation_probability&wind_speed_unit=ms" +
-                            "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date")
+                            "&timezone=Asia%2FSeoul&start_date=$date&end_date=$date"
+                        // v6.46 (314): 한 번 실패하면 1.5초 뒤 한 번 더 (요청 몰림 · 일시 장애)
+                        val body = try { get(url) } catch (_: Exception) { Thread.sleep(1500L); get(url) }
                         val h = JSONObject(body).getJSONObject("hourly")
                         val t = h.getJSONArray("time")
                         val ws = h.optJSONArray("wind_speed_10m"); val wd = h.optJSONArray("wind_direction_10m"); val wg = h.optJSONArray("wind_gusts_10m")
@@ -553,8 +555,33 @@ object Weather {
             // 서버에 저장해 둔 그날 값 (최신 값을 못 받은 칸은 이걸로 채움)
             { saved = loadSaved(lat, lon, ymd) }
         )
+        val omFailed = wind.isEmpty() && diff in -90..15
         wind.putAll(windSea)
         if (diff > 3) kmaNote = "기상청 예보(기온·하늘)는 3일 뒤까지만 있어요"
+        // v6.46 (314): 날씨 서버(Open-Meteo)를 못 받은 4~10일 뒤 = 기상청 중기예보로 오전 · 오후 칸 채우기
+        val midCode = HashMap<Long, Int>(); val midTemp = HashMap<Long, Double>(); val midPop = HashMap<Long, Int>(); val midWave = HashMap<Long, Double>()
+        if (omFailed && diff in 3..10 && kma.isEmpty()) {
+            try {
+                val (m, _) = kmaMidWeek(lat, lon)
+                m[ymd]?.let { w ->
+                    for (hh in 0..23) {
+                        val t = dayStart + hh * 3_600_000L
+                        w.code?.let { midCode[t] = it }
+                        w.pop?.let { midPop[t] = it }
+                        (if (hh < 12) w.tmin ?: w.tmax else w.tmax ?: w.tmin)?.let { midTemp[t] = it }
+                        w.wave?.let { midWave[t] = it }
+                    }
+                }
+            } catch (_: Exception) {}
+            windNote = if (midCode.isNotEmpty() || midTemp.isNotEmpty()) "날씨 서버 응답 없음 · 기상청 중기예보로 보여 줘요 (오전 최저 · 오후 최고 기온 · 바람은 못 받음)"
+                else "날씨 서버 응답 없음 · 잠시 뒤 ↻ 새로고침 해 주세요"
+        }
+        // v6.46 (314): 돌풍(최대)은 Open-Meteo 에서만 옴 → 못 받으면 같은 날 폰 저장분의 돌풍
+        val oldGust = HashMap<Long, Double>(); var oldGustAt = 0L
+        if (omFailed) {
+            val dk = String.format(Locale.US, "%.2f,%.2f,%d", lat, lon, dayStart) + if (seaMode) ",sea" else ""
+            diskDay(dk)?.let { (at, od) -> od.hours.forEach { h -> h.gust?.let { oldGust[h.time] = it } }; oldGustAt = at }
+        }
         // 파고: 내 칸이 육지라 기상청 파고가 없으면 가장 가까운 바다 칸의 기상청 파고
         var seaWave: Map<Long, Double> = emptyMap()
         if (diff in 0..3 && kma.isNotEmpty() && kma.values.none { (it.wav ?: 0.0) > 0.0 } && seaK.values.none { (it.wav ?: 0.0) > 0.0 }) {
@@ -563,23 +590,34 @@ object Weather {
             if (sp == null && seaWave.isNotEmpty() && km != null && km >= 10) seaNote = "파고: 내 자리 칸이 육지·갯벌이라 약 ${km}km 떨어진 앞바다 기상청 값이에요"
         }
 
-        val times = (wind.keys + sea.keys + kma.keys + saved.keys).toSortedSet()
+        val times = (wind.keys + sea.keys + kma.keys + saved.keys + midCode.keys + midTemp.keys).toSortedSet()
         var fromSaved = 0
+        var oldGustUsed = 0
         val hours = times.map { t ->
             val w = wind[t]; val s = sea[t]; val k = kma[t]; val pd = seaPd[t]; val sv = saved[t]
             val kw = seaK[t]?.wav?.takeIf { it > 0.0 } ?: k?.wav?.takeIf { it > 0.0 } ?: seaWave[t]
             // 바람은 기상청 값이 있으면 기상청 우선 (돌풍은 Open-Meteo), 파고는 기상청 → 바다 칸 기상청 → Open-Meteo
             // 기온·비: 기상청 → Open-Meteo(지난 날 포함) → 서버에 저장해 둔 값
             val wk = if (seaK.isNotEmpty()) seaK[t] else k
-            val h = Hour(t, wk?.wsd ?: w?.first ?: sv?.wind, wk?.vec ?: w?.second ?: sv?.dir, w?.third ?: sv?.gust,
-                kw ?: s?.first ?: sv?.wave, s?.second ?: sv?.sst,
-                k?.tmp ?: omTemp[t] ?: sv?.temp, k?.sky ?: sv?.sky, k?.pty ?: sv?.pty, k?.pop ?: omPop[t] ?: sv?.pop,
+            val g = w?.third ?: sv?.gust ?: oldGust[t]?.also { oldGustUsed++ }
+            val h = Hour(t, wk?.wsd ?: w?.first ?: sv?.wind, wk?.vec ?: w?.second ?: sv?.dir, g,
+                kw ?: s?.first ?: sv?.wave ?: midWave[t], s?.second ?: sv?.sst,
+                k?.tmp ?: omTemp[t] ?: sv?.temp ?: midTemp[t], k?.sky ?: sv?.sky, k?.pty ?: sv?.pty, k?.pop ?: omPop[t] ?: sv?.pop ?: midPop[t],
                 pd?.first ?: sv?.period, pd?.second ?: sv?.waveDir,
-                lightning.any { it in t until t + 3 * 3_600_000L } || sv?.thunder == true, wcodes[t] ?: sv?.wcode)
+                lightning.any { it in t until t + 3 * 3_600_000L } || sv?.thunder == true, wcodes[t] ?: sv?.wcode ?: midCode[t])
             if (sv != null && (w == null || (k == null && omTemp[t] == null))) fromSaved++
             h
         }
-        saveDay(lat, lon, ymd, hours)
+        if (omFailed && diff >= -1) {
+            val gNote = when {
+                oldGustUsed > 0 -> "📦 최대(돌풍)는 ${ago(oldGustAt)} 받은 값이에요"
+                hours.none { it.gust != null } -> "최대(돌풍): 날씨 서버 응답이 없어 못 받았어요"
+                else -> ""
+            }
+            if (gNote.isNotBlank()) windNote = if (windNote.isBlank() || windNote.startsWith("바람 정보를")) gNote else "$windNote · $gNote"
+        }
+        // 중기예보로 채운 날은 서버 저장 안 함 (대충 값이라 다른 사람 자세한 값을 덮지 않게)
+        if (midCode.isEmpty() && midTemp.isEmpty()) saveDay(lat, lon, ymd, hours)
         if (fromSaved > 0 && kmaNote.isBlank()) kmaNote = "일부 시간은 최신 값을 못 받아 저장해 둔 값으로 보여요"
 
         // ---- 수온 실측 (오늘·어제) ---- v6.35 (288): 따로 받아 나중에 채울 수 있게 (measuredOf)
@@ -600,7 +638,23 @@ object Weather {
         } else if (diff > 0) mNote = "실측 수온은 아직 측정 전이에요 (예측만 보여요)"
         else {
             // v6.31 (284): 지난 날짜 = 오늘·어제 받아 둔 실측 (폰 · 서버 공유 저장분)
-            val r = measuredPast(ctx, lat, lon, keyFmt.format(Date(dayStart + 12 * 3_600_000L)), dayStart)
+            val ymdP = keyFmt.format(Date(dayStart + 12 * 3_600_000L))
+            var r = measuredPast(ctx, lat, lon, ymdP, dayStart)
+            // v6.46 (315): 저장분이 없거나 모자라면 (7일 안) 국립해양조사원에 그 날짜를 직접 한 번 물어봄
+            // → 오면 measuredTemp 가 폰 · 서버에 저장 → 다시 저장분으로 읽기 · 같은 자리 · 날짜는 하루 한 번만
+            if (diff >= -7 && (r.first?.series?.size ?: 0) < 20) {
+                val p = ctx.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+                val k = "wtq_" + Math.round(lat * 10) + "_" + Math.round(lon * 10) + "_" + ymdP
+                val now = System.currentTimeMillis()
+                if (now - p.getLong(k, 0L) > 86_400_000L) {
+                    val cut = keyFmt.format(Date(now - 10 * 86_400_000L))
+                    val ed = p.edit().putLong(k, now)
+                    p.all.keys.filter { it.startsWith("wtq_") && it.takeLast(8) < cut }.forEach { ed.remove(it) }
+                    ed.apply()
+                    try { measuredTemp(ctx, lat, lon, ymdP) } catch (_: Exception) {}
+                    r = measuredPast(ctx, lat, lon, ymdP, dayStart)
+                }
+            }
             measured = r.first; mNote = r.second
         }
         return measured to mNote
@@ -978,7 +1032,7 @@ object Weather {
             if (++used >= 3 || primary.series.size >= 24) break
         }
         primary?.let { return it to "지난 날짜 실측은 그날 앱 사용자들이 받아 둔 값이에요" }
-        return null to "이 날은 저장된 실측 수온이 없어요 (2026.11.17부터 오늘·어제 받은 실측이 쌓여요)"
+        return null to "이 날은 실측 수온이 없어요 (국립해양조사원에도 없음 · 예상 수온으로 보여요)"
     }
 
     // ---------------- 주간 (7일) · Open-Meteo ----------------

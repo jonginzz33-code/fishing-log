@@ -125,6 +125,9 @@ object TideDialog {
         return "${st.name} 관측소 기준" + (if (Store.tideStation != null) " (직접 고름)" else "") + km + " · 바꾸기 ▾"
     }
 
+    /** v6.46 (317): 다음에 여는 물때 창이 닫힐 때 한 번 (표시용 · 계산과 상관없음) */
+    var onNextClose: (() -> Unit)? = null
+
     fun show(a: Activity, gpsLat: Double, gpsLon: Double, time: Long, trip: Store.Trip?, onChanged: (() -> Unit)? = null) {
         fun dp(v: Int) = Ui.dp(a, v)
         // v5.1 (231 · 232): 기준 위치 = 고른 지점 → 직접 고른 관측소 자리 → 내 위치 (날씨·바람도 여기 기준)
@@ -319,6 +322,8 @@ object TideDialog {
             .setView(ScrollView(a).apply { addView(col) })
             .setPositiveButton("닫기", null)
             .show()
+        // v6.46 (317): 권역 낚시환경에서 연 물때 창 → 닫으면 원래 고른 지점으로
+        onNextClose?.let { cb -> onNextClose = null; dlg.setOnDismissListener { try { cb() } catch (_: Exception) {} } }
         // 상세 페이지처럼 화면을 거의 꽉 채우게
         dlg.window?.setLayout(Ui.dialogW(a),
             (a.resources.displayMetrics.heightPixels * 0.92).toInt())

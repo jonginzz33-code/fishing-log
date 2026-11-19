@@ -26,16 +26,23 @@ import org.json.JSONObject
 class QuickWidget : AppWidgetProvider() {
     companion object {
         private const val ACT = "com.fishlog.app.QUICK_WIDGET"
-        private val TILES = intArrayOf(R.id.wq_0, R.id.wq_1, R.id.wq_2, R.id.wq_3, R.id.wq_4, R.id.wq_5, R.id.wq_6, R.id.wq_7, R.id.wq_8, R.id.wq_9)
         private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
-        /** 앱 퀵바가 바뀔 때마다 (id · 그림 · 이름 · 켜짐(-1 = 켜고 끄는 칸 아님)) */
-        fun save(c: Context, items: List<Triple<String, String, String>>, states: Map<String, Boolean>) {
+        /** 앱 퀵바가 바뀔 때마다 (id · 그림 · 이름 · 켜짐(-1 = 켜고 끄는 칸 아님)) · v6.46 (316): 칸 색 */
+        fun save(c: Context, items: List<Triple<String, String, String>>, states: Map<String, Boolean>, colors: Map<String, String> = emptyMap()) {
             try {
                 val a = JSONArray()
-                items.forEach { (id, icon, label) -> a.put(JSONObject().put("id", id).put("i", icon).put("l", label).put("on", states[id]?.let { if (it) 1 else 0 } ?: -1)) }
+                items.forEach { (id, icon, label) -> a.put(JSONObject().put("id", id).put("i", icon).put("l", label).put("on", states[id]?.let { if (it) 1 else 0 } ?: -1)
+                    .put("c", colors[id] ?: "")) }
                 prefs(c).edit().putString("w_quick", a.toString()).apply()
             } catch (_: Exception) {}
+            updateAll(c)
+        }
+
+        /** v6.46 (316): 그룹원 출조 중 몇 명 (메인 '지금 출조 중' 줄이 알려 줌 · −1 = 모름) */
+        fun saveLive(c: Context, n: Int) {
+            if (prefs(c).getInt("w_live_n", -2) == n) return
+            prefs(c).edit().putInt("w_live_n", n).apply()
             updateAll(c)
         }
 
@@ -46,12 +53,12 @@ class QuickWidget : AppWidgetProvider() {
             } catch (_: Exception) {}
         }
 
-        private class T(val id: String, val icon: String, val label: String, val on: Int)
+        private class T(val id: String, val icon: String, val label: String, val on: Int, val color: String = "")
 
         private fun items(c: Context): List<T> {
             val list = try {
                 val a = JSONArray(prefs(c).getString("w_quick", null) ?: "[]")
-                (0 until a.length()).map { val o = a.getJSONObject(it); T(o.optString("id"), o.optString("i"), o.optString("l"), o.optInt("on", -1)) }
+                (0 until a.length()).map { val o = a.getJSONObject(it); T(o.optString("id"), o.optString("i"), o.optString("l"), o.optInt("on", -1), o.optString("c")) }
             } catch (_: Exception) { emptyList() }
             // 앱을 아직 안 열었으면 기본(추천 · 그룹변경)
             return list.ifEmpty { listOf(T("cal", "🎣", "추천", -1), T("group", "🔄", "그룹변경", -1)) }
@@ -62,22 +69,73 @@ class QuickWidget : AppWidgetProvider() {
             m.updateAppWidget(wid, build(c, hDp))
         }
 
-        /** v6.31 (283): 위젯 모양 (홈 화면 추가 창 미리보기에도 씀) */
+        private val TILE = intArrayOf(R.id.wq_0, R.id.wq_1, R.id.wq_2, R.id.wq_3, R.id.wq_4, R.id.wq_5, R.id.wq_6, R.id.wq_7, R.id.wq_8, R.id.wq_9, R.id.wq_10, R.id.wq_11)
+        private val ICO = intArrayOf(R.id.wqi_0, R.id.wqi_1, R.id.wqi_2, R.id.wqi_3, R.id.wqi_4, R.id.wqi_5, R.id.wqi_6, R.id.wqi_7, R.id.wqi_8, R.id.wqi_9, R.id.wqi_10, R.id.wqi_11)
+        private val LBL = intArrayOf(R.id.wql_0, R.id.wql_1, R.id.wql_2, R.id.wql_3, R.id.wql_4, R.id.wql_5, R.id.wql_6, R.id.wql_7, R.id.wql_8, R.id.wql_9, R.id.wql_10, R.id.wql_11)
+        private val SUBV = intArrayOf(R.id.wqs_0, R.id.wqs_1, R.id.wqs_2, R.id.wqs_3, R.id.wqs_4, R.id.wqs_5, R.id.wqs_6, R.id.wqs_7, R.id.wqs_8, R.id.wqs_9, R.id.wqs_10, R.id.wqs_11)
+        private val ROWS = intArrayOf(R.id.wq_row0, R.id.wq_row1, R.id.wq_row2)
+
+        /** 칸 그림: 색 동그라미 안에 그림 (칸마다 색이 달라 RemoteViews 대신 작은 그림으로) */
+        private fun circle(c: Context, icon: String, color: String, dim: Boolean): android.graphics.Bitmap {
+            val px = (36 * minOf(c.resources.displayMetrics.density, 3f)).toInt()
+            val bmp = android.graphics.Bitmap.createBitmap(px, px, android.graphics.Bitmap.Config.ARGB_8888)
+            val cv = android.graphics.Canvas(bmp)
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            val base = try { android.graphics.Color.parseColor(color.ifBlank { "#2E5A7A" }) } catch (_: Exception) { android.graphics.Color.parseColor("#2E5A7A") }
+            // 테두리 색을 어둡게 섞어 동그라미 바탕으로
+            val r = android.graphics.Color.red(base); val g = android.graphics.Color.green(base); val b = android.graphics.Color.blue(base)
+            p.color = android.graphics.Color.rgb((r * .55f + 20).toInt().coerceAtMost(255), (g * .55f + 30).toInt().coerceAtMost(255), (b * .55f + 40).toInt().coerceAtMost(255))
+            if (dim) p.alpha = 120
+            cv.drawCircle(px / 2f, px / 2f, px / 2f, p)
+            p.alpha = 255; p.color = android.graphics.Color.WHITE
+            p.textSize = px * .52f; p.textAlign = android.graphics.Paint.Align.CENTER
+            val fm = p.fontMetrics
+            cv.drawText(icon, px / 2f, px / 2f - (fm.ascent + fm.descent) / 2f, p)
+            return bmp
+        }
+
+        /** v6.31 (283) · v6.46 (316) 새 디자인: 위 줄(조과일지 · 날짜 · 물때 + ⚡) · 한 줄 4칸 · 높이에 따라 1~3줄 */
         fun build(c: Context, hDp: Int): RemoteViews {
+            try { Store.init(c) } catch (_: Exception) {}
             val all = items(c)
-            val two = hDp >= 110 && all.size + 1 > 5
-            val slots = if (two) 10 else 5
-            val shown = all.take(slots - 1) + T("qset", "⚡", "설정", -1)
+            val rows = when { hDp >= 200 -> 3; hDp >= 110 -> 2; else -> 1 }
+            val head = rows >= 2
+            // 위 줄이 있으면 ⚡ 는 위 줄 동그라미 · 한 줄짜리는 마지막 칸
+            val needRows = if (head) ((all.size + 3) / 4).coerceIn(1, rows) else 1
+            val slots = needRows * 4
+            val shown = if (head) all.take(slots) else all.take(slots - 1) + T("qset", "⚡", "설정", -1, "#C9E26A")
             val rv = RemoteViews(c.packageName, R.layout.widget_quick)
-            rv.setViewVisibility(R.id.wq_row1, if (two) View.VISIBLE else View.GONE)
-            TILES.forEachIndexed { i, tid ->
+            rv.setViewVisibility(R.id.wq_head, if (head) View.VISIBLE else View.GONE)
+            if (head) {
+                val now = System.currentTimeMillis()
+                val day = java.text.SimpleDateFormat("M월 d일(E)", java.util.Locale.KOREA).format(java.util.Date(now))
+                val mul = Tide.mulName(now).substringBefore(" (").substringBefore(" · ")
+                val sb = SpannableStringBuilder("🎣 조과일지")
+                sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, sb.length, 0)
+                val st = sb.length
+                sb.append("  ·  $day · $mul")
+                sb.setSpan(android.text.style.ForegroundColorSpan(android.graphics.Color.parseColor("#9FC3DA")), st, sb.length, 0)
+                sb.setSpan(RelativeSizeSpan(0.9f), st, sb.length, 0)
+                rv.setTextViewText(R.id.wq_title, sb)
+                rv.setOnClickPendingIntent(R.id.wq_title, WidgetData.openIntent(c, "tide", 7290))
+                rv.setOnClickPendingIntent(R.id.wq_gear, WidgetData.openIntent(c, "q:qset", 7291))
+            }
+            ROWS.forEachIndexed { r, id -> rv.setViewVisibility(id, if (r < needRows) View.VISIBLE else View.GONE) }
+            val liveN = prefs(c).getInt("w_live_n", -1)
+            TILE.forEachIndexed { i, tid ->
                 val t = shown.getOrNull(i)
-                if (t == null) { rv.setViewVisibility(tid, View.INVISIBLE); return@forEachIndexed }
+                if (t == null || i >= slots) { rv.setViewVisibility(tid, View.INVISIBLE); return@forEachIndexed }
                 rv.setViewVisibility(tid, View.VISIBLE)
-                val sb = SpannableStringBuilder(t.icon).apply { setSpan(RelativeSizeSpan(1.6f), 0, length, 0) }
-                sb.append("\n").append(t.label + if (t.on == 1) " ●" else "")
-                rv.setTextViewText(tid, sb)
-                rv.setInt(tid, "setBackgroundResource", if (t.on == 1) R.drawable.widget_tile_on else R.drawable.widget_tile)
+                rv.setImageViewBitmap(ICO[i], circle(c, t.icon, t.color, t.on == 0))
+                rv.setTextViewText(LBL[i], t.label + if (t.on == 1) " 켬" else if (t.on == 0) " 끔" else "")
+                // 작은 글자: 출조중 칸 = 그룹원 몇 명
+                val sub = if (t.id == "now" && liveN >= 0) (if (liveN == 0) "아무도 없음" else "${liveN}명 출조 중") else null
+                rv.setViewVisibility(SUBV[i], if (sub != null && rows >= 2) View.VISIBLE else View.GONE)
+                if (sub != null) rv.setTextViewText(SUBV[i], sub)
+                rv.setInt(tid, "setBackgroundResource", when {
+                    t.on == 1 -> R.drawable.widget_qtile_on
+                    t.id == "now" && Store.current == null -> R.drawable.widget_qtile_red
+                    else -> R.drawable.widget_qtile })
                 val pi = if (t.id == "saver")
                     PendingIntent.getBroadcast(c, 7400 + i, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "saver"),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -97,7 +155,7 @@ class QuickWidget : AppWidgetProvider() {
             // v6.31 (283): '홈 화면에 추가' 창에 진짜 위젯 모양 미리보기 (빈 기본 모양 → '위젯을 추가할 수 없습니다' 대신) · 가리던 안내는 없앰
             val preview: RemoteViews? = try {
                 when (cls) {
-                    QuickWidget::class.java -> build(a, 70)
+                    QuickWidget::class.java -> build(a, 130)
                     TideWidget::class.java -> TideWidget.build(a, 250, 70)
                     BagWidget::class.java -> BagWidget.build(a)
                     else -> null

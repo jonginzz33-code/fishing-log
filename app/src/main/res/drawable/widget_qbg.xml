@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v6.46 (316): 퀵바 위젯 바탕 (짙은 남색 그라데이션) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="315" android:startColor="#F214324A" android:centerColor="#F20F2233" android:endColor="#F20B1A28" />
+    <corners android:radius="22dp" />
+</shape>

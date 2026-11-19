@@ -28,7 +28,8 @@ object Backup {
     private val PREF_FILES = listOf("fishlog", "moderation", "my_trash", "gtrip_seen", "area_names")
     /** "fishlog" 안에서 빼는 값 */
     private fun skipKey(k: String) = k == "current" || k == "history" || k == "minVersion" || k == "storeMove" ||
-        k.startsWith("dl_") || k == "imported_from_github" || k == "import_asked"
+        k.startsWith("dl_") || k == "imported_from_github" || k == "import_asked" ||
+        k.startsWith("wtq_") || k.startsWith("marine_")
     /** v6.24 (273): 담을 폴더 — 출조 기록은 늘, 사진 · 받아 둔 지도는 고를 수 있음
      *  🦀 해루질 정보(haeru) · 물때/날씨 저장분(khoa · weather)은 서버에서 다시 받으면 돼서 뺌 */
     class Opts(val photos: Boolean = true, val maps: Boolean = true)

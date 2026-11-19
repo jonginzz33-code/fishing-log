@@ -52,7 +52,7 @@ object WidgetData {
         if (h == null) return
         try {
             val o = JSONObject().put("at", System.currentTimeMillis()).put("icon", h.skyIcon())
-                .put("temp", h.temp ?: JSONObject.NULL).put("wind", h.wind ?: JSONObject.NULL).put("wave", h.wave ?: JSONObject.NULL)
+                .put("temp", h.temp ?: JSONObject.NULL).put("wind", h.wind ?: JSONObject.NULL).put("dir", h.dir ?: JSONObject.NULL).put("wave", h.wave ?: JSONObject.NULL)
             prefs(c).edit().putString("w_wx", o.toString()).apply()
         } catch (_: Exception) {}
         TideWidget.updateAll(c)
@@ -98,124 +98,179 @@ class TideWidget : AppWidgetProvider() {
             val scale = minOf(dens, 2.5f)
             val w = (wDp * scale).toInt(); val h = (hDp * scale).toInt()
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            render(c, Canvas(bmp), w.toFloat(), h.toFloat(), scale, hDp >= 110)
+            render(c, Canvas(bmp), w.toFloat(), h.toFloat(), scale, hDp >= 150)
             val rv = RemoteViews(c.packageName, R.layout.widget_image)
             rv.setImageViewBitmap(R.id.w_img, bmp)
             rv.setOnClickPendingIntent(R.id.w_img, WidgetData.openIntent(c, "tide", 7101))
             return rv
         }
 
+        /** v6.46 (316): 새 디자인 — 왼쪽 날짜 칸 · 물세기 막대 · 다음 만조/간조 남은 시간 · 날씨 · (크게) 하루 물때 그래프 */
         private fun render(c: Context, cv: Canvas, w: Float, h: Float, s: Float, big: Boolean) {
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            p.color = Color.argb(235, 15, 28, 38)
-            cv.drawRoundRect(RectF(0f, 0f, w, h), 16 * s, 16 * s, p)
+            // 바탕: 짙은 남색 그라데이션
+            p.shader = android.graphics.LinearGradient(0f, 0f, w, h, intArrayOf(Color.parseColor("#14324A"), Color.parseColor("#0F2233"), Color.parseColor("#0B1A28")),
+                floatArrayOf(0f, .6f, 1f), android.graphics.Shader.TileMode.CLAMP)
+            cv.drawRoundRect(RectF(0f, 0f, w, h), 22 * s, 22 * s, p)
+            p.shader = null
             val now = System.currentTimeMillis()
             val t = WidgetData.tide(c)
             val today = t != null && dayStart(t.optLong("day")) == dayStart(now)
-            val mul = Tide.mulName(now).substringBefore(" (")
+            val mulFull = Tide.mulName(now).substringBefore(" (")
+            val mul = mulFull.substringBefore(" · "); val kind = mulFull.substringAfter(" · ", "")
             val pct = if (today) t!!.optInt("pct", -1) else Tide.estimatePct(now)
             val hm = SimpleDateFormat("HH:mm", Locale.KOREA)
-            // 다음 만조/간조 · 지금 들물/날물
-            var next: JSONObject? = null; var prev: JSONObject? = null
+            var next: JSONObject? = null
             if (today) {
                 val ex = t!!.optJSONArray("ex") ?: JSONArray()
-                for (i in 0 until ex.length()) { val e = ex.getJSONObject(i); if (e.optLong("t") > now) { next = e; break } else prev = e }
+                for (i in 0 until ex.length()) { val e = ex.getJSONObject(i); if (e.optLong("t") > now) { next = e; break } }
             }
             val rising = next?.optBoolean("h")
-            val pad = 12 * s
-            fun txt(str: String, x: Float, y: Float, size: Float, col: Int, bold: Boolean = false, align: Paint.Align = Paint.Align.LEFT) {
+            val pad = 14 * s
+            val SUB = Color.parseColor("#9FC3DA"); val TXT = Color.parseColor("#C9D9E5")
+            fun txt(str: String, x: Float, y: Float, size: Float, col: Int, bold: Boolean = false, align: Paint.Align = Paint.Align.LEFT): Float {
                 p.color = col; p.textSize = size * s; p.isFakeBoldText = bold; p.textAlign = align
                 cv.drawText(str, x, y, p)
+                return p.measureText(str)
+            }
+            fun chip(str: String, x: Float, base: Float, col: Int, bg: Int): Float {
+                p.textSize = 10.5f * s; p.isFakeBoldText = true; val tw = p.measureText(str)
+                p.color = bg; p.textAlign = Paint.Align.LEFT
+                cv.drawRoundRect(RectF(x, base - 12 * s, x + tw + 10 * s, base + 3.5f * s), 6 * s, 6 * s, p)
+                txt(str, x + 5 * s, base, 10.5f, col, true)
+                return tw + 10 * s
             }
             val place = t?.optString("place").orEmpty()
             val wx = WidgetData.wx(c)?.takeIf { now - it.optLong("at") < 6 * 3_600_000L }
-            if (!big) {
-                // 작게: 🌊 | 5물 · 사리 [날물] / 간조 22:33 · 물세기 83% · 안양 | 🌧 9°
-                txt("🌊", pad, h / 2 + 8 * s, 22f, Color.WHITE)
-                val x0 = pad + 34 * s
-                txt(mul, x0, h / 2 - 3 * s, 15f, Color.parseColor("#FFD166"), true)
-                p.textSize = 15 * s; val mw = p.measureText(mul)
-                if (rising != null) {
-                    val tag = if (rising) "들물" else "날물"
-                    p.textSize = 11 * s; val tw = p.measureText(tag)
-                    val col = if (rising) Color.parseColor("#5FC4E0") else Color.parseColor("#F2A65A")
-                    p.color = Color.argb(70, Color.red(col), Color.green(col), Color.blue(col))
-                    cv.drawRoundRect(RectF(x0 + mw + 6 * s, h / 2 - 16 * s, x0 + mw + 14 * s + tw, h / 2 - 1 * s), 5 * s, 5 * s, p)
-                    txt(tag, x0 + mw + 10 * s, h / 2 - 4.5f * s, 11f, col, true)
-                }
-                val line2 = listOfNotNull(
-                    next?.let { (if (it.optBoolean("h")) "만조 " else "간조 ") + hm.format(Date(it.optLong("t"))) },
-                    if (pct >= 0) "물세기 $pct%" else null, place.ifBlank { null }).joinToString(" · ")
-                txt(line2.ifBlank { "앱을 열면 오늘 만조 · 간조가 보여요" }, x0, h / 2 + 15 * s, 11.5f, Color.parseColor("#C9D6DD"))
-                if (wx != null) {
-                    txt(wx.optString("icon"), w - pad, h / 2 - 2 * s, 18f, Color.WHITE, align = Paint.Align.RIGHT)
-                    val tmp = wx.optDouble("temp", Double.NaN)
-                    if (!tmp.isNaN()) txt(String.format(Locale.KOREA, "%.0f°", tmp), w - pad, h / 2 + 16 * s, 11.5f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
-                }
-                return
-            }
-            // 크게: 위 두 줄 + 물때 그래프 + 아래 한 줄
-            txt("📍 " + place.ifBlank { "내 위치" } + " · 오늘 " + SimpleDateFormat("M/d(E)", Locale.KOREA).format(Date(now)), pad, pad + 10 * s, 11f, Color.parseColor("#9FB4BF"))
-            txt(mul, pad, pad + 30 * s, 17f, Color.parseColor("#FFD166"), true)
-            p.textSize = 17 * s; val mw = p.measureText(mul)
-            if (rising != null) txt(if (rising) "지금 들물" else "지금 날물", pad + mw + 8 * s, pad + 29 * s, 12f,
-                if (rising) Color.parseColor("#5FC4E0") else Color.parseColor("#F2A65A"), true)
+            // 윗부분 높이 (작게 = 전체 · 크게 = 위 줄만)
+            val topH = if (big) minOf(h, 92 * s) else h
+            val cy = topH / 2
+            // ① 왼쪽 날짜 칸
+            val dw = 56 * s
+            val cal = java.util.Calendar.getInstance()
+            txt("${cal.get(java.util.Calendar.MONTH) + 1}월", pad + dw / 2, cy - 17 * s, 10.5f, SUB, align = Paint.Align.CENTER)
+            txt("${cal.get(java.util.Calendar.DAY_OF_MONTH)}", pad + dw / 2, cy + 8 * s, 26f, Color.WHITE, true, Paint.Align.CENTER)
+            val wd = SimpleDateFormat("E", Locale.KOREA).format(Date(now))
+            txt("$wd · 오늘", pad + dw / 2, cy + 22 * s, 10.5f,
+                if (cal.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY) Color.parseColor("#FF8A8A") else Color.parseColor("#7FD6FF"), true, Paint.Align.CENTER)
+            p.color = Color.parseColor("#2C4B63"); p.strokeWidth = 1 * s
+            cv.drawLine(pad + dw + 4 * s, cy - 26 * s, pad + dw + 4 * s, cy + 26 * s, p)
+            // ③ 오른쪽 날씨
+            val rw = if (wx != null) 70 * s else 0f
             if (wx != null) {
-                val parts = listOfNotNull(wx.optString("icon"),
-                    wx.optDouble("temp", Double.NaN).takeIf { !it.isNaN() }?.let { String.format(Locale.KOREA, "%.0f°", it) })
-                // v5.0: 바람은 색으로 (초록 5 아래 · 노랑 5~9 · 빨강 9 이상)
+                val rx = w - pad - rw / 2
+                txt(wx.optString("icon").ifBlank { "🌤" }, rx, cy - 6 * s, 20f, Color.WHITE, align = Paint.Align.CENTER)
+                wx.optDouble("temp", Double.NaN).takeIf { !it.isNaN() }?.let { txt(String.format(Locale.KOREA, "%.0f°", it), rx, cy + 13 * s, 16f, Color.WHITE, true, Paint.Align.CENTER) }
                 val wv = wx.optDouble("wind", Double.NaN).takeIf { !it.isNaN() }
-                var rx = w - pad
                 if (wv != null) {
-                    val ws = String.format(Locale.KOREA, " 바람 %.1f", wv)
-                    txt(ws, rx, pad + 12 * s, 12f, Weather.windColor(wv), true, Paint.Align.RIGHT)
-                    p.textSize = 12 * s; p.isFakeBoldText = true; rx -= p.measureText(ws)
-                }
-                txt(parts.joinToString(" "), rx, pad + 12 * s, 12f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
-                wx.optDouble("wave", Double.NaN).takeIf { !it.isNaN() }?.let {
-                    txt(String.format(Locale.KOREA, "파고 %.1fm", it), w - pad, pad + 28 * s, 12f, Color.parseColor("#C9D6DD"), align = Paint.Align.RIGHT)
+                    val dir = wx.optDouble("dir", Double.NaN).takeIf { !it.isNaN() }?.let { Weather.dir16(it) + " " }.orEmpty()
+                    txt("💨 $dir" + String.format(Locale.KOREA, "%.0fm/s", wv), rx, cy + 27 * s, 9.5f, Weather.windColor(wv), true, Paint.Align.CENTER)
                 }
             }
-            val gTop = pad + 40 * s; val gBot = h - pad - 20 * s
+            // ② 가운데: 물때 · 막대 · 다음 만조/간조
+            val x0 = pad + dw + 14 * s
+            val x1 = w - pad - rw - 6 * s
+            var x = x0
+            x += txt(mul, x, cy - 9 * s, 18f, Color.parseColor("#FFD27A"), true) + 5 * s
+            if (kind.isNotBlank() && x1 - x > 120 * s) x += txt("· $kind", x, cy - 9 * s, 12f, TXT) + 6 * s
+            if (rising != null && x1 - x > 40 * s) x += chip(if (rising) "↗ 들물" else "↘ 날물", x, cy - 10 * s,
+                if (rising) Color.parseColor("#7FD6FF") else Color.parseColor("#FFC163"), if (rising) Color.parseColor("#123F5C") else Color.parseColor("#5A3D14")) + 5 * s
+            if (big) {
+                val idx = Tide.mulIndex(now)
+                val life = when { idx in 0..6 -> Triple("↗ 사는 물때", "#5BE3A0", "#163D2A"); idx in 8..13 -> Triple("↘ 죽는 물때", "#C9A7FF", "#2C2236"); else -> null }
+                if (life != null && x1 - x > 70 * s) chip(life.first, x, cy - 10 * s, Color.parseColor(life.second), Color.parseColor(life.third))
+            }
+            // 물세기 막대
+            val by = cy + 1 * s
+            p.color = Color.parseColor("#24394B")
+            cv.drawRoundRect(RectF(x0, by, x1, by + 5 * s), 3 * s, 3 * s, p)
+            if (pct >= 0) {
+                p.shader = android.graphics.LinearGradient(x0, 0f, x1, 0f, Color.parseColor("#4FB3E8"), Color.parseColor("#7FD6FF"), android.graphics.Shader.TileMode.CLAMP)
+                cv.drawRoundRect(RectF(x0, by, x0 + (x1 - x0) * pct.coerceIn(3, 100) / 100f, by + 5 * s), 3 * s, 3 * s, p)
+                p.shader = null
+            }
+            // 셋째 줄: 물세기 · 다음 만조 (남은 시간)
+            var x2 = x0
+            val ly = cy + 20 * s
+            if (pct >= 0) x2 += txt("물세기 ", x2, ly, 11f, TXT) .let { it } + txt("$pct%", x2 + p.measureText("물세기 "), ly, 11f, Color.WHITE, true)
+            val n = next
+            if (n != null) {
+                val nt = n.optLong("t")
+                val left = ((nt - now) / 60_000L).toInt()
+                val leftS = if (left >= 60) "${left / 60}시간 ${left % 60}분 뒤" else "${left}분 뒤"
+                val sep = if (pct >= 0) " · " else ""
+                x2 += txt(sep, x2, ly, 11f, TXT)
+                x2 += txt((if (n.optBoolean("h")) "▲만조 " else "▼간조 ") + hm.format(Date(nt)), x2, ly, 11f, Color.parseColor("#7CE39A"), true)
+                if (x1 - x2 > 60 * s) txt(" ($leftS)", x2, ly, 10.5f, SUB)
+            } else if (!today) txt("  앱을 열면 오늘 만조 · 간조가 보여요", x2, ly, 10.5f, SUB)
+            // 아래 작은 줄 (장소 · 갱신)
+            if (!big && h >= 96 * s) {
+                txt("📍 " + place.ifBlank { "내 위치" }, x0, h - 9 * s, 9.5f, Color.parseColor("#7F9BB0"))
+                t?.optLong("at")?.takeIf { it > 0 }?.let { txt(hm.format(Date(it)) + " 갱신", w - pad, h - 9 * s, 9.5f, Color.parseColor("#7F9BB0"), align = Paint.Align.RIGHT) }
+            }
+            if (!big) return
+            // ---- 크게: 하루 물때 그래프 ----
+            val gTop = topH + 14 * s; val gBot = h - 34 * s
             val vals = t?.optJSONArray("vals")
-            if (today && vals != null && vals.length() > 2 && gBot - gTop > 20 * s) {
+            val gl = pad; val gr = w - pad
+            fun xf(f: Float) = gl + (gr - gl) * f
+            val sun = Sun.times(now, t?.optDouble("lat"), t?.optDouble("lon"))
+            val d0 = dayStart(now)
+            if (today && vals != null && vals.length() > 2 && gBot - gTop > 24 * s) {
+                // 밤은 어둡게
+                if (sun != null) {
+                    p.color = Color.argb(46, 0, 0, 0)
+                    cv.drawRect(xf(0f), gTop, xf(((sun.rise - d0) / 86_400_000f).coerceIn(0f, 1f)), gBot, p)
+                    cv.drawRect(xf(((sun.set - d0) / 86_400_000f).coerceIn(0f, 1f)), gTop, xf(1f), gBot, p)
+                }
                 val nums: List<Double?> = (0 until vals.length()).map { i -> if (vals.isNull(i)) null else vals.optDouble(i) }
                 val known = nums.filterNotNull()
                 val lo = known.minOrNull() ?: 0.0; val hi = known.maxOrNull() ?: 1.0
                 val rng = (hi - lo).takeIf { it > 0.01 } ?: 1.0
-                fun xAt(i: Int) = pad + (w - 2 * pad) * i / (nums.size - 1).toFloat()
-                fun yAt(v: Double) = (gBot - (gBot - gTop) * ((v - lo) / rng)).toFloat()
-                val line = Path(); val fill = Path(); var started = false
-                nums.forEachIndexed { i, v -> if (v != null) { if (!started) { line.moveTo(xAt(i), yAt(v)); fill.moveTo(xAt(i), gBot); fill.lineTo(xAt(i), yAt(v)); started = true } else { line.lineTo(xAt(i), yAt(v)); fill.lineTo(xAt(i), yAt(v)) } } }
-                fill.lineTo(w - pad, gBot); fill.close()
-                p.style = Paint.Style.FILL; p.color = Color.argb(80, 44, 143, 200); cv.drawPath(fill, p)
-                p.style = Paint.Style.STROKE; p.strokeWidth = 2 * s; p.color = Color.parseColor("#5FC4E0"); cv.drawPath(line, p)
+                val yT = gTop + 12 * s
+                fun xAt(i: Int) = xf(i / (nums.size - 1).toFloat())
+                fun yAt(v: Double) = (gBot - (gBot - yT) * ((v - lo) / rng)).toFloat()
+                val line = Path(); val fill = Path(); var started = false; var lastX = gl
+                nums.forEachIndexed { i, v -> if (v != null) { lastX = xAt(i); if (!started) { line.moveTo(xAt(i), yAt(v)); fill.moveTo(xAt(i), gBot); fill.lineTo(xAt(i), yAt(v)); started = true } else { line.lineTo(xAt(i), yAt(v)); fill.lineTo(xAt(i), yAt(v)) } } }
+                fill.lineTo(lastX, gBot); fill.close()
+                p.shader = android.graphics.LinearGradient(0f, yT, 0f, gBot, Color.argb(140, 44, 143, 200), Color.argb(12, 44, 143, 200), android.graphics.Shader.TileMode.CLAMP)
+                p.style = Paint.Style.FILL; cv.drawPath(fill, p); p.shader = null
+                p.style = Paint.Style.STROKE; p.strokeWidth = 2.5f * s; p.color = Color.parseColor("#5FC4E0"); cv.drawPath(line, p)
                 p.style = Paint.Style.FILL
-                // 지금 선
-                val frac = ((now - dayStart(now)) / 86_400_000.0).toFloat()
-                val nx = pad + (w - 2 * pad) * frac
-                p.color = Color.parseColor("#F2A65A"); p.strokeWidth = 1.5f * s
-                cv.drawLine(nx, gTop, nx, gBot, p)
-                txt("지금", nx, gTop - 2 * s, 9f, Color.parseColor("#F2A65A"), true, Paint.Align.CENTER)
-                // 만조 · 간조 시각
+                // 지금 = 노란 점선 + 점
+                val nf = ((now - d0) / 86_400_000.0).toFloat()
+                val nx = xf(nf)
+                p.color = Color.parseColor("#FFD27A"); p.strokeWidth = 1.6f * s
+                p.pathEffect = android.graphics.DashPathEffect(floatArrayOf(3 * s, 3 * s), 0f)
+                cv.drawLine(nx, gTop, nx, gBot, p); p.pathEffect = null
+                val ni = (nf * (nums.size - 1)).toInt().coerceIn(0, nums.size - 1)
+                nums[ni]?.let { cv.drawCircle(nx, yAt(it), 4.5f * s, p) }
+                txt("지금 " + hm.format(Date(now)), (nx + 4 * s).coerceAtMost(gr - 52 * s), gTop + 4 * s, 9.5f, Color.parseColor("#FFD27A"), true)
+                // 만조 ▲ 위 · 간조 ▼ 아래
                 val ex = t!!.optJSONArray("ex") ?: JSONArray()
                 for (i in 0 until ex.length()) {
                     val e = ex.getJSONObject(i)
-                    val ef = ((e.optLong("t") - dayStart(now)) / 86_400_000.0).toFloat()
+                    val ef = ((e.optLong("t") - d0) / 86_400_000.0).toFloat()
                     if (ef < 0f || ef > 1f) continue
-                    val ex0 = pad + (w - 2 * pad) * ef
-                    val hiE = e.optBoolean("h")
-                    txt((if (hiE) "만조 " else "간조 ") + hm.format(Date(e.optLong("t"))), ex0.coerceIn(pad + 26 * s, w - pad - 26 * s),
-                        if (hiE) gTop + 10 * s else gBot - 3 * s, 9f, if (e.optLong("t") == next?.optLong("t")) Color.WHITE else Color.parseColor("#9FB4BF"), e.optLong("t") == next?.optLong("t"), Paint.Align.CENTER)
+                    val hiE = e.optBoolean("h"); val isNext = e.optLong("t") == next?.optLong("t")
+                    val ex0 = xf(ef).coerceIn(gl + 24 * s, gr - 24 * s)
+                    txt((if (hiE) "▲ " else "▼ ") + hm.format(Date(e.optLong("t"))), ex0, if (hiE) yT - 2 * s else gBot + 11 * s, 9.5f,
+                        if (isNext) Color.WHITE else SUB, isNext, Paint.Align.CENTER)
                 }
             } else {
-                txt(if (today) "물때 그래프를 그릴 자료가 없어요" else "앱을 한 번 열면 오늘 물때 그래프가 보여요", w / 2, (gTop + gBot) / 2, 12f, Color.parseColor("#9FB4BF"), align = Paint.Align.CENTER)
+                txt(if (today) "물때 그래프를 그릴 자료가 없어요" else "앱을 한 번 열면 오늘 물때 그래프가 보여요", w / 2, (gTop + gBot) / 2, 11.5f, SUB, align = Paint.Align.CENTER)
             }
-            val sun = Sun.times(now, t?.optDouble("lat"), t?.optDouble("lon"))
-            val bottom = listOfNotNull(if (pct >= 0) "물세기 $pct%" else null,
-                next?.let { (if (it.optBoolean("h")) "다음 만조 " else "다음 간조 ") + hm.format(Date(it.optLong("t"))) },
-                sun?.let { "☀ " + hm.format(Date(it.rise)) + " · ☾ " + hm.format(Date(it.set)) }).joinToString("   ")
-            txt(bottom, pad, h - pad, 11.5f, Color.parseColor("#C9D6DD"))
+            // 시간 눈금 · 해 뜨고 지는 시각
+            val ty = h - 18 * s
+            txt("0시", gl, ty, 9f, Color.parseColor("#7F9BB0"))
+            txt("12시", xf(.5f), ty, 9f, Color.parseColor("#7F9BB0"), align = Paint.Align.CENTER)
+            txt("24시", gr, ty, 9f, Color.parseColor("#7F9BB0"), align = Paint.Align.RIGHT)
+            if (sun != null) {
+                txt("🌅" + hm.format(Date(sun.rise)), xf(((sun.rise - d0) / 86_400_000f).coerceIn(.12f, .4f)), ty, 9f, Color.parseColor("#FFC163"), align = Paint.Align.CENTER)
+                txt("🌇" + hm.format(Date(sun.set)), xf(((sun.set - d0) / 86_400_000f).coerceIn(.6f, .88f)), ty, 9f, Color.parseColor("#FFC163"), align = Paint.Align.CENTER)
+            }
+            txt("📍 " + place.ifBlank { "내 위치" }, gl, h - 5 * s, 9.5f, Color.parseColor("#7F9BB0"))
+            txt((t?.optLong("at")?.takeIf { it > 0 }?.let { hm.format(Date(it)) + " 갱신 · " } ?: "") + "누르면 물때 창", gr, h - 5 * s, 9.5f, Color.parseColor("#7F9BB0"), align = Paint.Align.RIGHT)
         }
     }
 
