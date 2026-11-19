@@ -12,7 +12,9 @@ import android.net.Uri
 import android.util.Base64
 import android.util.LruCache
 import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ImageView
 import java.io.ByteArrayOutputStream
 
@@ -97,6 +99,82 @@ object ChatPhoto {
             clipToOutline = true; background = Ui.bg(a, Color.parseColor("#0E1C28"), 12)
             setOnClickListener { onClick() }
         }
+    }
+
+    /** v6.49: 넘겨 보기용 사진 하나 (미리보기 · 설명 · 큰 사진 받기) */
+    class Pic(val th: String, val label: String, val loadBig: ((String?) -> Unit) -> Unit)
+
+    /**
+     * v6.49: 크게 보기 + 옆으로 밀어 넘기기
+     *  왼쪽으로 밀기 = 다음(아래 · 나중) 사진 · 오른쪽으로 밀기 = 이전(위 · 먼저) 사진 · 살짝 누르면 닫힘
+     *  위에 'N / 전체' · 보낸 사람 · 시각 · 큰 사진은 볼 때 받아서 기억
+     */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    fun showGallery(a: Activity, pics: List<Pic>, start: Int) {
+        if (pics.isEmpty()) return
+        val dlg = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
+        val big = HashMap<Int, Bitmap>()
+        var idx = start.coerceIn(0, pics.size - 1)
+        val img = ImageView(a).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
+        val root = FrameLayout(a).apply { setBackgroundColor(Color.BLACK) }
+        root.addView(img, FrameLayout.LayoutParams(-1, -1))
+        val top = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
+            setPadding(Ui.dp(a, 16), Ui.dp(a, 10), Ui.dp(a, 6), Ui.dp(a, 10)); setBackgroundColor(Color.argb(110, 0, 0, 0)) }
+        val info = Ui.text(a, 13f, Color.WHITE, true, "")
+        top.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(Ui.text(a, 13f, Color.WHITE, true, "✕ 닫기").apply { setPadding(Ui.dp(a, 12), Ui.dp(a, 4), Ui.dp(a, 12), Ui.dp(a, 4)); setOnClickListener { dlg.dismiss() } })
+        root.addView(top, FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        val hint = Ui.text(a, 12f, Color.parseColor("#B0C4D0"), false, "← 다음 사진 · 이전 사진 →").apply {
+            gravity = Gravity.CENTER; setPadding(0, Ui.dp(a, 8), 0, Ui.dp(a, 14)) }
+        root.addView(hint, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+        fun show(i: Int) {
+            idx = i
+            val p = pics[i]
+            info.text = "${i + 1} / ${pics.size}  ·  ${p.label}"
+            img.setImageBitmap(big[i] ?: bmp(p.th))
+            if (big[i] == null) p.loadBig { s -> bmp(s)?.let { b -> big[i] = b; if (dlg.isShowing && idx == i) img.setImageBitmap(b) } }
+            // 옆 사진 미리 받아 두기
+            listOf(i - 1, i + 1).filter { it in pics.indices && big[it] == null }.forEach { j -> pics[j].loadBig { s -> bmp(s)?.let { big[j] = it } } }
+        }
+        fun slide(dir: Int) {
+            val n = idx + dir
+            if (n !in pics.indices) {
+                Ui.toast(a, if (dir > 0) "마지막 사진이에요" else "첫 사진이에요")
+                img.animate().translationX(0f).setDuration(150).start(); return
+            }
+            val w = root.width.toFloat().coerceAtLeast(1f)
+            img.animate().translationX(-dir * w).setDuration(150).withEndAction {
+                show(n); img.translationX = dir * w
+                img.animate().translationX(0f).setDuration(170).start()
+            }.start()
+        }
+        var downX = 0f; var downY = 0f; var moved = false
+        root.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; moved = false; true }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.x - downX
+                    if (Math.abs(dx) > Ui.dp(a, 8)) { moved = true; img.translationX = dx }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = e.x - downX
+                    when {
+                        dx < -Ui.dp(a, 60) -> slide(1)
+                        dx > Ui.dp(a, 60) -> slide(-1)
+                        !moved && Math.abs(e.y - downY) < Ui.dp(a, 10) -> dlg.dismiss()
+                        else -> img.animate().translationX(0f).setDuration(150).start()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> { img.animate().translationX(0f).setDuration(150).start(); true }
+                else -> true
+            }
+        }
+        dlg.setContentView(root)
+        Ui.edge(dlg.window)
+        dlg.show()
+        show(idx)
     }
 
     /** 크게 보기 (화면 꽉 · 누르면 닫힘). big 이 늦게 오면 그때 바꿔 끼움 */

@@ -294,7 +294,11 @@ class ChatActivity : Activity() {
         val masked = m.text.count { it == '*' }
         // v6.25 (274): 사진 (누르면 크게 · 큰 사진은 그때 받음)
         if (m.th.isNotBlank()) ChatPhoto.thumbView(this, m.th, (Ui.contentW(this) * 0.62).toInt()) {
-            ChatPhoto.showFull(this, m.th) { show -> Chat.loadBig(m.room, m.imgId, show) }
+            // v6.49: 크게 보기에서 옆으로 밀어 이 방 사진 넘기기 (왼쪽 = 아래(나중) 사진 · 오른쪽 = 위(먼저) 사진)
+            val pics = Chat.messages(m.room).filter { it.th.isNotBlank() }.sortedBy { it.time }
+            val at = pics.indexOfFirst { it.id == m.id }.coerceAtLeast(0)
+            if (pics.size <= 1) ChatPhoto.showFull(this, m.th) { show -> Chat.loadBig(m.room, m.imgId, show) }
+            else ChatPhoto.showGallery(this, pics.map { p -> ChatPhoto.Pic(p.th, "${p.name.ifBlank { "?" }} · ${java.text.SimpleDateFormat("M/d HH:mm", java.util.Locale.KOREA).format(java.util.Date(p.time))}") { show -> Chat.loadBig(p.room, p.imgId, show) } }, at)
         }?.let { iv ->
             iv.setOnLongClickListener { menu(m); true }
             col.addView(iv, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
