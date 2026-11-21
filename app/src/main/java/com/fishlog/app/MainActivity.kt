@@ -151,6 +151,9 @@ class MainActivity : Activity() {
             inqBadge.text = "$n"; inqBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
             // 맨 아래 '더보기' 탭에도 같은 숫자
             tabMoreN = n
+            // v6.50 (325): 위젯 '✉ 답장 N' (관리자면 새 문의 수)
+            WidgetData.setInt(this, "w_inq_admin", if (Cloud.isAdmin) 1 else 0)
+            WidgetData.setInt(this, "w_inq_n", n)
             if (::tabMoreBadge.isInitialized) { tabMoreBadge.text = "$n"; tabMoreBadge.visibility = if (n > 0) View.VISIBLE else View.GONE }
             paintQuick()
         } }
@@ -238,7 +241,11 @@ class MainActivity : Activity() {
     // ---------------- v6.4 (249): 🔄 업데이트 확인 ----------------
     private var updDot: View? = null
     private var storeChecked = false
-    private fun paintUpdDot() { updDot?.visibility = if (StoreUpdate.available) View.VISIBLE else View.GONE }
+    private fun paintUpdDot() {
+        updDot?.visibility = if (StoreUpdate.available) View.VISIBLE else View.GONE
+        // v6.50 (325): 위젯 위 줄 '⬆ 업데이트' (지금 버전 번호로 저장 → 업데이트하면 저절로 꺼짐)
+        WidgetData.setInt(this, "w_upd", if (StoreUpdate.available) BuildConfig.VERSION_CODE else 0)
+    }
     private fun checkUpdateNow() {
         showMessage("업데이트 확인 중…")
         StoreUpdate.check(this) { has, err ->
@@ -872,7 +879,7 @@ class MainActivity : Activity() {
         QItem("board", "📋", "조황", "#2A1E10", "#6A4A22"),
         QItem("point", "📍", "포인트", "#2A1E10", "#6A4A22"),
         // v6.35 (291): 내가 출조 중이면 🟢 · 아니면 ❌ (누르면 그대로 그룹원 '지금 출조 중' 목록)
-        QItem("now", "🟢", "출조중", "#10301E", "#2F6A48", iconOf = { if (Store.current != null) "🟢" else "❌" }),
+        QItem("now", "🟢", "출조중", "#10301E", "#2F6A48", iconOf = { if (Store.current != null || getSharedPreferences("fishlog", MODE_PRIVATE).getInt("w_live_n", 0) > 0) "🟢" else "❌" }),   // v6.50 (323): 나 또는 그룹원
         QItem("trash", "🗑", "휴지통", "#2A1418", "#6A2E38"),
         QItem("help", "❓", "설명서", "#1A2A30", "#2E4A52"),
         QItem("upd", "📄", "업데이트", "#1A2A30", "#2E4A52"),
@@ -2088,6 +2095,8 @@ class MainActivity : Activity() {
                 if (isFinishing) return@forPlace
                 if (w.isNullOrBlank()) tideWarn.visibility = View.GONE
                 else { tideWarn.text = "⚠ ${Warn.seaArea(loc.first, loc.second)} $w (기상청)"; tideWarn.visibility = View.VISIBLE }
+                // v6.50 (325): 위젯에도 (못 받았으면(null) 그대로 둠)
+                if (w != null) WidgetData.setWarn(this, if (w.isBlank()) "" else "${Warn.seaArea(loc.first, loc.second)} $w")
             }
         }
         if (loc == null) { tideSub.text = "위치를 알면 만조·간조가 보여요 · 눌러서 보기"; return }
@@ -2381,7 +2390,9 @@ class MainActivity : Activity() {
             nowBtn.visibility = View.VISIBLE
             // 아무도 없으면 작은 한 줄로 (자리 덜 차지)
             val none = l.isEmpty()
-            QuickWidget.saveLive(this, l.size)   // v6.46 (316): 퀵바 위젯 출조중 칸 '아무도 없음 / N명'
+            val liveBefore = getSharedPreferences("fishlog", MODE_PRIVATE).getInt("w_live_n", 0) > 0
+            QuickWidget.saveLive(this, l.count { it.uid != Cloud.uid })   // v6.46 (316) · v6.50: 나는 빼고 셈 (나는 Store.current)
+            if (liveBefore != (getSharedPreferences("fishlog", MODE_PRIVATE).getInt("w_live_n", 0) > 0)) paintQuick()
             nowTitle.textSize = if (none) 12f else 16f
             // v6.36 (292): 아무도 없으면 ❌ + 회색 칸 · 있으면 🟢 초록 칸
             nowTitle.text = if (none) "❌ 지금 출조 중인 사람 없음" else "🟢 지금 출조 중 ${l.size}명"
@@ -2756,6 +2767,7 @@ class MainActivity : Activity() {
         // 🟢 지금 출조 중은 그룹 줄·그룹 창이 아니라 맨 아래 따로 (paintNowBtn)
         groupBtn.maxLines = 1
         paintNowBtn()
+        WidgetData.groupNews(this, total, todayN, tomN)   // v6.50 (325): 위젯 그룹 칸
         groupDot.text = total.toString()
         groupDot.visibility = if (total > 0) View.VISIBLE else View.GONE
         // 맨 아래 '그룹' 탭: 새 소식 빨간 숫자 · 내일 일정만 있으면 초록 점

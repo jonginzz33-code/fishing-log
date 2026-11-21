@@ -10,6 +10,12 @@
         android:orientation="horizontal" android:gravity="center_vertical" android:paddingLeft="6dp" android:paddingRight="2dp" android:visibility="gone">
         <TextView android:id="@+id/wq_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
             android:text="🎣 조과일지" android:textColor="#EAF2F6" android:textSize="12.5sp" android:maxLines="1" />
+        <TextView android:id="@+id/wq_upd" android:layout_width="wrap_content" android:layout_height="28dp" android:gravity="center" android:visibility="gone"
+            android:layout_marginRight="5dp" android:paddingLeft="8dp" android:paddingRight="8dp"
+            android:text="⬆ 업데이트" android:textColor="#0B1A26" android:textSize="10.5sp" android:textStyle="bold" android:background="@drawable/widget_qpill_green" />
+        <TextView android:id="@+id/wq_inq" android:layout_width="wrap_content" android:layout_height="28dp" android:gravity="center" android:visibility="gone"
+            android:layout_marginRight="5dp" android:paddingLeft="8dp" android:paddingRight="8dp"
+            android:text="✉ 답장" android:textColor="#FFFFFF" android:textSize="10.5sp" android:textStyle="bold" android:background="@drawable/widget_qpill_red" />
         <TextView android:id="@+id/wq_refresh" android:layout_width="wrap_content" android:layout_height="28dp" android:gravity="center"
             android:layout_marginRight="6dp" android:paddingLeft="9dp" android:paddingRight="9dp"
             android:text="🔄" android:textColor="#C9D9E5" android:textSize="11sp" android:background="@drawable/widget_qpill" />

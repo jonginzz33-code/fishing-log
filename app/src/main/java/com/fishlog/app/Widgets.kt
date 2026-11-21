@@ -58,6 +58,38 @@ object WidgetData {
         TideWidget.updateAll(c)
     }
 
+    // ---------------- v6.50 (325): 앱에 뜨는 '새 소식 · 확인할 것' 을 위젯에도 ----------------
+    /** 값이 바뀌었을 때만 저장하고 위젯 다시 그림 */
+    fun setInt(c: Context, k: String, v: Int) {
+        try {
+            if (prefs(c).getInt(k, Int.MIN_VALUE) == v) return
+            prefs(c).edit().putInt(k, v).apply()
+            QuickWidget.updateAll(c)
+        } catch (_: Exception) {}
+    }
+    /** 그룹 새 소식 수 · 오늘 / 내일 출조 일정 */
+    fun groupNews(c: Context, total: Int, todayN: Int, tomN: Int) {
+        try {
+            val p = prefs(c)
+            if (p.getInt("w_group_n", -1) == total && p.getInt("w_group_today", -1) == todayN && p.getInt("w_group_tom", -1) == tomN) return
+            p.edit().putInt("w_group_n", total).putInt("w_group_today", todayN).putInt("w_group_tom", tomN).apply()
+            QuickWidget.updateAll(c)
+        } catch (_: Exception) {}
+    }
+    /** ⚠ 기상 특보 (없으면 "") → 물때 위젯 · 퀵바 위젯 물때 칸 */
+    fun setWarn(c: Context, w: String) {
+        try {
+            val p = prefs(c)
+            val same = p.getString("w_warn", "") == w
+            p.edit().putString("w_warn", w).putLong("w_warn_at", System.currentTimeMillis()).apply()
+            if (!same) { TideWidget.updateAll(c); QuickWidget.updateAll(c) }
+        } catch (_: Exception) {}
+    }
+    /** 6시간 안에 받은 특보 글 (없으면 null) */
+    fun warn(c: Context): String? = prefs(c).let { p ->
+        p.getString("w_warn", "")?.takeIf { it.isNotBlank() && System.currentTimeMillis() - p.getLong("w_warn_at", 0L) < 6 * 3_600_000L }
+    }
+
     fun tide(c: Context): JSONObject? = try { prefs(c).getString("w_tide", null)?.let { JSONObject(it) } } catch (_: Exception) { null }
     fun wx(c: Context): JSONObject? = try { prefs(c).getString("w_wx", null)?.let { JSONObject(it) } } catch (_: Exception) { null }
     fun lastSelfFetch(c: Context) = prefs(c).getLong("w_tide_self", 0L)
@@ -203,8 +235,18 @@ class TideWidget : AppWidgetProvider() {
                 x2 += txt((if (n.optBoolean("h")) "▲만조 " else "▼간조 ") + hm.format(Date(nt)), x2, ly, 11f, Color.parseColor("#7CE39A"), true)
                 if (x1 - x2 > 60 * s) txt(" ($leftS)", x2, ly, 10.5f, SUB)
             } else if (!today) txt("  앱을 열면 오늘 만조 · 간조가 보여요", x2, ly, 10.5f, SUB)
+            if (!big && h < 96 * s) WidgetData.warn(c)?.let { txt("⚠ $it", x0, cy - 26 * s, 9.5f, Color.parseColor("#FF6B6B"), true) }
             // 아래 작은 줄 (장소 · 갱신)
+            val warnS = WidgetData.warn(c)
             if (!big && h >= 96 * s) {
+                if (warnS != null) {
+                    // v6.50 (325): ⚠ 기상 특보 = 장소 자리에 빨간 띠
+                    p.textSize = 10f * s; p.isFakeBoldText = true
+                    val tw = p.measureText("⚠ $warnS").coerceAtMost(x1 - x0)
+                    p.color = Color.parseColor("#8E1B24")
+                    cv.drawRoundRect(RectF(x0 - 4 * s, h - 21 * s, x0 + tw + 6 * s, h - 5 * s), 7 * s, 7 * s, p)
+                    txt("⚠ $warnS", x0, h - 9.5f * s, 10f, Color.WHITE, true)
+                } else
                 txt("📍 " + place.ifBlank { "내 위치" }, x0, h - 9 * s, 9.5f, Color.parseColor("#7F9BB0"))
                 t?.optLong("at")?.takeIf { it > 0 }?.let { txt(hm.format(Date(it)) + " 갱신", w - pad, h - 9 * s, 9.5f, Color.parseColor("#7F9BB0"), align = Paint.Align.RIGHT) }
             }
@@ -269,6 +311,13 @@ class TideWidget : AppWidgetProvider() {
                 txt("🌅" + hm.format(Date(sun.rise)), xf(((sun.rise - d0) / 86_400_000f).coerceIn(.12f, .4f)), ty, 9f, Color.parseColor("#FFC163"), align = Paint.Align.CENTER)
                 txt("🌇" + hm.format(Date(sun.set)), xf(((sun.set - d0) / 86_400_000f).coerceIn(.6f, .88f)), ty, 9f, Color.parseColor("#FFC163"), align = Paint.Align.CENTER)
             }
+            if (warnS != null) {
+                p.textSize = 10f * s; p.isFakeBoldText = true
+                val tw = p.measureText("⚠ $warnS")
+                p.color = Color.parseColor("#8E1B24")
+                cv.drawRoundRect(RectF(gl - 4 * s, h - 17 * s, gl + tw + 6 * s, h - 1 * s), 7 * s, 7 * s, p)
+                txt("⚠ $warnS", gl, h - 5 * s, 10f, Color.WHITE, true)
+            } else
             txt("📍 " + place.ifBlank { "내 위치" }, gl, h - 5 * s, 9.5f, Color.parseColor("#7F9BB0"))
             txt((t?.optLong("at")?.takeIf { it > 0 }?.let { hm.format(Date(it)) + " 갱신 · " } ?: "") + "누르면 물때 창", gr, h - 5 * s, 9.5f, Color.parseColor("#7F9BB0"), align = Paint.Align.RIGHT)
         }

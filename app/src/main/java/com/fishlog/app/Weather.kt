@@ -1061,6 +1061,40 @@ object Weather {
     private var weekCache: Pair<String, Pair<Long, List<WeekDay>>>? = null
 
     /**
+     * v6.50 (318): 예상 수온 보정 이어 쓰기 — 그날 실측이 있으면 그 보정값을 자리별로 기억(0.1° 칸)하고,
+     * 실측이 없는 날(앞날 · 지난 날)은 7일 안에 기억해 둔 보정값을 씀 (±8℃ 넘으면 안 씀)
+     * 돌려주는 값 = (보정값, 설명) · 설명이 비어 있으면 그날 실측으로 구한 것
+     */
+    fun sstOffsetAt(d: Day, lat: Double, lon: Double): Pair<Double, String>? {
+        val p = try { Cloud.appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE) } catch (_: Exception) { null }
+        val k = "sstoff_" + Math.round(lat * 10) + "_" + Math.round(lon * 10)
+        val own = sstOffset(d)?.takeIf { !it.isNaN() && kotlin.math.abs(it) <= 8.0 }
+        if (own != null) {
+            p?.edit()?.putString(k, String.format(Locale.US, "%.2f|%d|%s", own, System.currentTimeMillis(), d.measured?.home ?: ""))?.apply()
+            return own to ""
+        }
+        return rememberedSst(lat, lon, 0)
+    }
+
+    /** 기억해 둔 보정값 (반경 [cells] 칸 안 · 가장 가까운 것 · 7일 안) → (보정값, '11/19 보령 실측 기준') */
+    fun rememberedSst(lat: Double, lon: Double, cells: Int): Pair<Double, String>? {
+        val p = try { Cloud.appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE) } catch (_: Exception) { return null }
+        val la = Math.round(lat * 10); val lo = Math.round(lon * 10)
+        val now = System.currentTimeMillis()
+        var best: Triple<Long, Double, String>? = null
+        for (dy in -cells..cells) for (dx in -cells..cells) {
+            val v = p.getString("sstoff_${la + dy}_${lo + dx}", null) ?: continue
+            val parts = v.split("|")
+            val off = parts.getOrNull(0)?.toDoubleOrNull() ?: continue
+            val at = parts.getOrNull(1)?.toLongOrNull() ?: continue
+            if (now - at > 7 * 86_400_000L || kotlin.math.abs(off) > 8.0) continue
+            val dist = (dy * dy + dx * dx).toLong()
+            if (best == null || dist < best.first) best = Triple(dist, off, SimpleDateFormat("M/d", Locale.KOREA).format(Date(at)) + " " + (parts.getOrNull(2) ?: "").removeSuffix(" 관측소").ifBlank { "관측소" } + " 실측")
+        }
+        return best?.let { it.second to it.third }
+    }
+
+    /**
      * 예상 수온 보정값: 그날 실측 − 예상 (같은 시각끼리 평균).
      * 예상(Open-Meteo)은 먼 바다 값이라 얕은 연안 실측과 3~5° 차이 날 수 있음
      */

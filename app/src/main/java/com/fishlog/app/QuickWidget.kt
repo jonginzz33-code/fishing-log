@@ -125,6 +125,18 @@ class QuickWidget : AppWidgetProvider() {
                 rv.setTextViewText(R.id.wq_refresh, if (busy) "⏳ 확인 중" else "🔄 " + (if (at > 0) java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(at)) else "새로고침"))
                 rv.setOnClickPendingIntent(R.id.wq_refresh, PendingIntent.getBroadcast(c, 7292, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "refresh"),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                // v6.50 (325): ⬆ 앱 업데이트 있음 (지금 버전에서 확인한 것만) · ✉ 1:1 문의 답장
+                val upd = prefs(c).getInt("w_upd", 0) == BuildConfig.VERSION_CODE
+                rv.setViewVisibility(R.id.wq_upd, if (upd) View.VISIBLE else View.GONE)
+                if (upd) rv.setOnClickPendingIntent(R.id.wq_upd, PendingIntent.getActivity(c, 7293,
+                    Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=" + c.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+                val inqTop = prefs(c).getInt("w_inq_n", 0)
+                rv.setViewVisibility(R.id.wq_inq, if (inqTop > 0) View.VISIBLE else View.GONE)
+                if (inqTop > 0) {
+                    rv.setTextViewText(R.id.wq_inq, (if (prefs(c).getInt("w_inq_admin", 0) == 1) "✉ 새 문의 " else "✉ 답장 ") + inqTop)
+                    rv.setOnClickPendingIntent(R.id.wq_inq, WidgetData.openIntent(c, "q:inq", 7294))
+                }
             }
             ROWS.forEachIndexed { r, id -> rv.setViewVisibility(id, if (r < needRows) View.VISIBLE else View.GONE) }
             val liveN = prefs(c).getInt("w_live_n", -1)
@@ -132,19 +144,45 @@ class QuickWidget : AppWidgetProvider() {
                 val t = shown.getOrNull(i)
                 if (t == null || i >= slots) { rv.setViewVisibility(tid, View.INVISIBLE); return@forEachIndexed }
                 rv.setViewVisibility(tid, View.VISIBLE)
-                rv.setImageViewBitmap(ICO[i], circle(c, t.icon, t.color, t.on == 0))
+                // v6.50 (323): 출조중 칸 = 나 또는 그룹원 누구라도 출조 중이면 🟢 (위젯 그릴 때 바로 계산)
+                val meOn = Store.current != null
+                val others = liveN.coerceAtLeast(0)
+                val anyOn = meOn || others > 0
+                val icon = if (t.id == "now") (if (anyOn) "🟢" else "❌") else t.icon
+                rv.setImageViewBitmap(ICO[i], circle(c, icon, t.color, t.on == 0))
                 rv.setTextViewText(LBL[i], t.label + if (t.on == 1) " 켬" else if (t.on == 0) " 끔" else "")
-                // 작은 글자: 출조중 칸 = 그룹원 몇 명
-                // v6.48 (321): 채팅 칸 = 안 읽은 글 (앱 아래 '채팅' 숫자와 같음)
-                val chatN = if (t.id == "chat") prefs(c).getInt("w_chat_n", 0) else 0
-                val sub = if (t.id == "now" && liveN >= 0) (if (liveN == 0) "아무도 없음" else "${liveN}명 출조 중")
-                    else if (chatN > 0) "● 새 글 " + (if (chatN > 99) "99+" else "$chatN") else null
-                rv.setViewVisibility(SUBV[i], if (sub != null && (rows >= 2 || chatN > 0)) View.VISIBLE else View.GONE)
-                if (sub != null) rv.setTextViewText(SUBV[i], sub)
-                rv.setTextColor(SUBV[i], if (chatN > 0) android.graphics.Color.parseColor("#FF6B6B") else android.graphics.Color.parseColor("#9FC3DA"))
+                // 칸 아래 작은 글자 (빨강 = 확인할 것 · 초록 = 알림 · 회색 = 안내) — v6.48 채팅 · v6.50 (324 · 325) 그룹 · 문의 · 관리 · 물때 특보
+                val RED = android.graphics.Color.parseColor("#FF6B6B"); val GRN = android.graphics.Color.parseColor("#5FD39A"); val GRY = android.graphics.Color.parseColor("#9FC3DA")
+                fun n99(n: Int) = if (n > 99) "99+" else "$n"
+                val gN = prefs(c).getInt("w_group_n", 0); val gTom = prefs(c).getInt("w_group_tom", 0); val gToday = prefs(c).getInt("w_group_today", 0)
+                val inqN = prefs(c).getInt("w_inq_n", 0); val inqAdmin = prefs(c).getInt("w_inq_admin", 0) == 1
+                val sub: Pair<String, Int>? = when (t.id) {
+                    "now" -> when {
+                        liveN < 0 && !meOn -> null
+                        meOn && others > 0 -> "나 + ${others}명" to GRN
+                        meOn -> "나 출조 중" to GRN
+                        others > 0 -> "${others}명 출조 중" to GRN
+                        else -> "아무도 없음" to GRY
+                    }
+                    "chat" -> prefs(c).getInt("w_chat_n", 0).takeIf { it > 0 }?.let { "● 새 글 " + n99(it) to RED }
+                    "group", "groupwin" -> when {
+                        gN > 0 -> "● 새 소식 " + n99(gN) to RED
+                        gToday > 0 -> "📅 오늘 출조" to GRN
+                        gTom > 0 -> "📅 내일 출조!" to GRN
+                        else -> null
+                    }
+                    "inq" -> inqN.takeIf { it > 0 && !inqAdmin }?.let { "● 답장 " + n99(it) to RED }
+                    "admin" -> inqN.takeIf { it > 0 && inqAdmin }?.let { "● 새 문의 " + n99(it) to RED }
+                    "tide" -> WidgetData.warn(c)?.let { w -> "⚠ " + (Regex("\\S*(주의보|경보)").find(w)?.value ?: "특보") to RED }
+                    else -> null
+                }
+                val alert = sub != null && sub.second != GRY
+                rv.setViewVisibility(SUBV[i], if (sub != null && (rows >= 2 || alert)) View.VISIBLE else View.GONE)
+                if (sub != null) { rv.setTextViewText(SUBV[i], sub.first); rv.setTextColor(SUBV[i], sub.second) }
                 rv.setInt(tid, "setBackgroundResource", when {
                     t.on == 1 -> R.drawable.widget_qtile_on
-                    t.id == "now" && Store.current == null -> R.drawable.widget_qtile_red
+                    t.id == "now" -> if (anyOn) R.drawable.widget_qtile_green else R.drawable.widget_qtile_red
+                    sub?.second == RED -> R.drawable.widget_qtile_red
                     else -> R.drawable.widget_qtile })
                 val pi = if (t.id == "saver")
                     PendingIntent.getBroadcast(c, 7400 + i, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "saver"),

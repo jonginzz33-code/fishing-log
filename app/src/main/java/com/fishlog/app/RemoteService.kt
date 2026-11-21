@@ -161,6 +161,7 @@ class RemoteService : Service() {
     override fun onCreate() {
         super.onCreate()
         Store.init(this)
+        try { QuickWidget.updateAll(applicationContext) } catch (_: Exception) {}   // v6.50 (323): 위젯 출조중 칸 바로 🟢
         createChannels()
         setupSession()
         goForeground()
@@ -207,6 +208,9 @@ class RemoteService : Service() {
     }
 
     override fun onDestroy() {
+        // v6.50 (323): 출조 끝 → 위젯 출조중 칸 바로 (출조 정리가 끝난 뒤)
+        val app = applicationContext
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ try { QuickWidget.updateAll(app) } catch (_: Exception) {} }, 1500L)
         VolumeWatch.trip(false)
         handler.removeCallbacksAndMessages(null)
         if (Store.current == null) try { Live.clear(Store.history.firstOrNull()) } catch (_: Exception) {}

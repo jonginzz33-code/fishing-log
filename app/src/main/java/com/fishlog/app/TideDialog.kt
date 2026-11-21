@@ -370,7 +370,9 @@ object TideDialog {
 
         fun renderWeather(w: Weather.Day) {
             sideW = w; paintSides()
-            val sstOff = Weather.sstOffset(w)
+            // v6.50 (318): 실측이 없는 날(앞날 · 지난 날)도 기억해 둔 보정을 이어 씀 (표시만 · 물때 계산과 상관없음)
+            val sstOffP = Weather.sstOffsetAt(w, lat, lon)
+            val sstOff = sstOffP?.first
             if (w.dayStart == today && sstOff != null) todaySstOff = sstOff
             if (w.dayStart == today && w.measured != null) todayMeasured = w.measured
             wxGrid.removeAllViews()
@@ -505,13 +507,16 @@ object TideDialog {
             val notes = mutableListOf<String>()
             // 파고가 비었거나 먼 바다 값이면 그 이유를 맨 위에
             if (w.seaNote.startsWith("파고") || w.seaNote.startsWith("근처") || w.seaNote.startsWith("이 위치")) notes.add("ⓘ " + w.seaNote)
-            if (w.measuredNote.isNotBlank()) notes.add(w.measuredNote)
+            // v6.50 (318): 앞날은 실측을 받을 수 없으니 '못 받았어요' 오류 글은 안 보임
+            if (w.measuredNote.isNotBlank() && !(w.dayStart > today && w.measured == null && w.measuredNote.contains("못 받"))) notes.add(w.measuredNote)
             if (w.kmaNote.isNotBlank()) notes.add(w.kmaNote)
             if (hrs.isNotEmpty()) {
                 if (w.windBasis.isNotBlank()) notes.add("ⓘ " + w.windBasis)
                 notes.add("한 줄 = 3시간 · 화살표 = 바람·파도가 가는 쪽 · 풍속 m/s (초록 괜찮음 5 아래 · 노랑 주의 5~9 · 빨강 셈 9 이상) · 최대 = 돌풍 · 초록 테두리 = 지금\n" +
                     "하늘: ☀ 맑음 · ⛅ 구름 조금 · ☁ 흐림 · 🌧 비 · ⚡ 뇌우(낙뢰) · 💨 강풍 10노트↑ · 🌀 돌풍 20노트↑ · 수온: 실측 = 관측소에서 잰 값(아래 작은 글씨 = 관측소, 노란색 = 가장 가까운 곳이 끊겨 다음 관측소 값), 예상 = 그날 실측에 맞춘 예측")
-                if (sstOff != null) notes.add(String.format(Locale.KOREA, "수온 예상: 오늘 실측이 먼 바다 예측보다 %+.1f° 라서 실측이 없는 시간은 그만큼 맞춰서 보여요", sstOff))
+                if (sstOff != null) notes.add(if (sstOffP?.second.isNullOrBlank())
+                    String.format(Locale.KOREA, "수온 예상: 오늘 실측이 먼 바다 예측보다 %+.1f° 라서 실측이 없는 시간은 그만큼 맞춰서 보여요", sstOff)
+                    else String.format(Locale.KOREA, "수온 예상: 먼 바다 예측에 %s 기준 보정 %+.1f° 를 더해 보여요 (해안 앞은 먼 바다보다 따뜻하거나 차가울 수 있어요)", sstOffP?.second, sstOff))
                 if (w.windNote.isNotBlank()) notes.add(w.windNote)
                 if (w.seaNote.isNotBlank() && notes.none { it.endsWith(w.seaNote) }) notes.add(w.seaNote)
                 notes.add(if (w.fromKma) "기온·하늘·비·바람·파고: 기상청 단기예보 (내 칸이 육지면 가까운 바다 칸) · 낙뢰: 기상청 초단기예보 · 돌풍·파도 주기·파향·수온 예측: Open-Meteo" else "바람·파도·수온 예측: Open-Meteo")
@@ -796,7 +801,8 @@ object TideDialog {
                     }
                 })
                 val meas = if (off == 0) todayMeasured?.temp else null
-                val wcorr = if (meas == null && wd.sst != null && todaySstOff != null) wd.sst + todaySstOff!! else null
+                val wOff = todaySstOff ?: Weather.rememberedSst(lat, lon, 0)?.first   // v6.50 (318)
+                val wcorr = if (meas == null && wd.sst != null && wOff != null) wd.sst + wOff else null
                 val seaV = meas ?: wcorr ?: wd.sst
                 if (seaV != null) {
                     val sr = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }

@@ -144,6 +144,33 @@ object GroupAlert {
         return l.size
     }
 
+    /** v6.50 (325): 앱이 그리는 '새 소식' 표시와 같은 값을 받아 위젯용으로 저장 (스레드에서 · 최대 20초) */
+    private fun widgetExtras(c: Context) {
+        val latch = java.util.concurrent.CountDownLatch(3)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val go = {
+                    GroupNews.load(true) {
+                        try {
+                            val gid = Cloud.active?.id
+                            WidgetData.groupNews(c, GroupNews.total(), GroupNews.today(gid), GroupNews.tomorrow(gid))
+                        } catch (_: Exception) {}
+                        latch.countDown()
+                    }
+                }
+                if (Cloud.groups.isEmpty()) Cloud.refresh { go() } else go()
+            } catch (_: Exception) { latch.countDown() }
+            try { Inquiry.unread { n -> WidgetData.setInt(c, "w_inq_n", n); latch.countDown() } } catch (_: Exception) { latch.countDown() }
+            try {
+                val t = WidgetData.tide(c)
+                val la = t?.optDouble("lat") ?: Double.NaN; val lo = t?.optDouble("lon") ?: Double.NaN
+                if (la.isNaN() || lo.isNaN()) latch.countDown()
+                else Warn.forPlace(la, lo) { w -> if (w != null) WidgetData.setWarn(c, if (w.isBlank()) "" else "${Warn.seaArea(la, lo)} $w"); latch.countDown() }
+            } catch (_: Exception) { latch.countDown() }
+        }
+        try { latch.await(20, TimeUnit.SECONDS) } catch (_: Exception) {}
+    }
+
     /** v6.48 (321): 채팅방을 읽으면 → 그 방 알림 지우기 + 위젯 숫자 (폰에 있는 글 기준) */
     fun chatRead(c: Context, room: String) {
         try { c.getSystemService(NotificationManager::class.java).cancel(("chat$room").hashCode()) } catch (_: Exception) {}
@@ -258,6 +285,8 @@ object GroupAlert {
         if (liveLines.isEmpty()) nm.cancel(ID_LIVE)
         else post(c, ID_LIVE, CH_LIVE, "live", "🟢 지금 출조 중 ${liveLines.size}명 (${hm.format(Date(now))} 확인)", liveLines,
             openPi(c, liveGid, "live", ID_LIVE), liveLines.size)
+        // v6.50 (325): 위젯에 그룹 새 소식 · 오늘/내일 일정 · 1:1 문의 답장 · 기상 특보도 같이 새로
+        try { widgetExtras(c) } catch (_: Exception) {}
         // v6.47: 퀵바 위젯 '출조중 N명' · 마지막 확인 시각
         p.edit().putLong("w_check_at", now).apply()
         QuickWidget.saveLive(c, liveIds.size)

@@ -196,7 +196,9 @@ object Region {
                     val code = mx(ws.map { it[4] })?.toInt()
                     val wave = mx(hrs.mapNotNull { sm[it]?.get(0) })
                     fun avgSst(day: Long) = (0..23).mapNotNull { sm[day + it * 3_600_000L]?.get(1)?.takeIf { v -> !v.isNaN() } }.takeIf { it.isNotEmpty() }?.average()
-                    m[r.id] = Cell(wv, gv, dir, wave, pop, avgSst(ds), avgSst(ds - 2 * 86_400_000L), code)
+                    // v6.50 (318): 먼 바다 예측 수온을 근처에서 기억해 둔 실측 보정(±3칸 ≈ 30km · 7일 안)만큼 맞춤
+                    val off = Weather.rememberedSst(r.lat, r.lon, 3)?.first ?: 0.0
+                    m[r.id] = Cell(wv, gv, dir, wave, pop, avgSst(ds)?.plus(off), avgSst(ds - 2 * 86_400_000L)?.plus(off), code)
                 }
                 out[ds] = m
             }
@@ -340,6 +342,13 @@ object Region {
         val viewBtn = Ui.text(a, 13f, Ui.TEXT, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
         }
+        // v6.50 (319): 📷 지금 보이는 지도(또는 목록) + 열린 카드를 사진 한 장으로 (물때 창과 같은 카메라 그림)
+        val shotBtn = android.widget.ImageView(a).apply {
+            setImageResource(R.drawable.ic_shot); scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(7), dp(7), dp(7), dp(7)); background = Ui.bg(a, Ui.CARD, 12, Ui.LINE)
+            contentDescription = "권역 낚시환경 사진 찍기"
+        }
+        top.addView(shotBtn, LinearLayout.LayoutParams(dp(42), dp(38)).apply { rightMargin = dp(6) })
         top.addView(viewBtn)
         top.addView(Ui.text(a, 13f, Ui.TEXT, true, "닫기").apply {
             gravity = Gravity.CENTER; setPadding(dp(14), dp(7), dp(14), dp(7))
@@ -516,6 +525,22 @@ object Region {
             }
         }
         viewBtn.setOnClickListener { listView = !listView; prefs.edit().putBoolean(P_VIEW, listView).apply(); render() }
+        shotBtn.setOnClickListener {
+            // 사진에는 버튼(날짜 줄 · 탭 · 어종 · 닫기) 대신 글로: 제목 + 날짜 · 종류 · 어종
+            val t = today + dayIdx * 86_400_000L + 12 * 3_600_000L
+            val dayS = SimpleDateFormat("M월 d일(E)", Locale.KOREA).format(Date(t))
+            val kind = if (listView) "☰ 좋은 순 목록" else if (mode == 0) "🌤 출조환경" else "🎣 예상조과"
+            val w = body.width.takeIf { it > 0 } ?: return@setOnClickListener
+            val inner = w - 2 * dp(16)
+            val head = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            head.addView(Ui.text(a, 19f, Ui.TEXT, true, "🗺 권역 낚시환경 · $dayS"))
+            head.addView(Ui.text(a, 12f, Ui.SUB, false, "$kind · 어종 $species · 대충 계산 · 배와 포인트에 따라 달라요"), Ui.lp(a, MATCH, WRAP, top = 4))
+            head.measure(View.MeasureSpec.makeMeasureSpec(inner, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            head.layout(0, 0, inner, head.measuredHeight)
+            Snap.capture(a, listOf(head), body,
+                "조과일지 · 권역 낚시환경 · $dayS · " + SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date()) + " 찍음",
+                "권역-" + SimpleDateFormat("MMdd", Locale.KOREA).format(Date(t)))
+        }
         tabEnv.setOnClickListener { mode = 0; render() }
         tabCatch.setOnClickListener { mode = 1; render() }
 
