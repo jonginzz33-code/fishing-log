@@ -100,6 +100,8 @@ class GroupTripsActivity : Activity() {
             if (isFinishing) return@recentTripsOf
             if (list == null) { body.removeAllViews(); body.addView(Ui.text(this, 13f, Ui.ORANGE, false, err ?: "불러오기 실패")); return@recentTripsOf }
             trips = list.sortedByDescending { it.start }
+            // v6.51 (327): 댓글 수 (받으면 다시 그림)
+            Comments.loadMeta(g.id) { if (!isFinishing) { GroupNews.refresh(); render() } }
             // 새 글 = 지난번에 이 화면을 본 뒤에 올라온 남의 출조 (처음 보는 그룹은 사흘 안)
             val last = seenPrefs().getLong(g.id, System.currentTimeMillis() - 3 * 24 * 3600_000L)
             newIds = trips.filter { it.owner != Cloud.uid && maxOf(it.end, it.start) > last }.map { it.id }.toSet()
@@ -238,7 +240,8 @@ class GroupTripsActivity : Activity() {
             val where = listOf(t.place().ifBlank { null }, if (t.cat.isNotBlank()) Store.catShort(t.cat) else null).filterNotNull().joinToString(" · ")
             r.addView(Ui.text(this, 15f, Ui.TEXT, true, dayFmt.format(Date(t.start)) + if (where.isNotBlank()) " $where" else ""),
                 LinearLayout.LayoutParams(0, WRAP, 1f))
-            r.addView(Ui.text(this, 12f, if (t.owner == Cloud.uid) Ui.GREEN else Ui.SUB, true, if (t.owner == Cloud.uid) "나" else t.ownerName))
+            // v6.51 (327): 닉네임 크게 · 사람마다 색 알약
+            r.addView(ownerChip(t), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
             c.addView(r)
             c.addView(Ui.agoChip(this, t.start), LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = Ui.dp(this@GroupTripsActivity, 2) })
             val endText = if (t.end > 0) hm.format(Date(t.end)) else "출조 중"
@@ -247,6 +250,7 @@ class GroupTripsActivity : Activity() {
                 "$counts · ${if (t.isFresh()) "🏞 민물" else Tide.mulName(t.start).substringBefore(" (")} · ${hm.format(Date(t.start))}~$endText" +
                     (if (t.photoCount > 0) " · 사진 ${t.photoCount}" else "")), Ui.lp(this, MATCH, WRAP, top = 3))
             stampRow(this, t.shownSlots().map { t.name(it) }, t.shownSlots().map { t.count(it) })?.let { c.addView(it, Ui.lp(this, MATCH, WRAP, top = 6)) }
+            c.addView(cmtRow(t), Ui.lp(this, MATCH, WRAP, top = 8))
             if (t.mthumb.isNotBlank()) Ui.withRightPhoto(this, c, MainPhoto.decode(t.mthumb), maxOf(0, t.photoCount - 1)) {
                 Cloud.active?.let { g -> MainPhoto.showBig(this, t.bigMainPath(g.id), t.mthumb, "${t.ownerName} · ${t.line()}") }
             }
@@ -310,17 +314,49 @@ class GroupTripsActivity : Activity() {
             .setNegativeButton("취소", null).show()
     }
 
+    // v6.51 (327): 올린 사람 알약 (나 = 하늘 · 남 = 사람마다 정해진 색)
+    private val chipCols = listOf(
+        "#FFD27A" to "#3A2F10", "#9EF0B8" to "#0F3A22", "#FFB3C7" to "#401827", "#C9A7FF" to "#2A1A48",
+        "#FFB98A" to "#40220F", "#8FE3E0" to "#0F3836")
+    private fun ownerChip(t: Cloud.RemoteTrip): TextView {
+        val me = t.owner == Cloud.uid
+        val (fg, bg) = if (me) "#7FD6FF" to "#123A52" else chipCols[Math.floorMod(t.owner.hashCode(), chipCols.size)]
+        return Ui.text(this, 15.5f, Color.parseColor(fg), true, if (me) "나" else t.ownerName).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; maxWidth = dp(150)
+            setPadding(dp(11), dp(4), dp(11), dp(4))
+            background = Ui.bg(this@GroupTripsActivity, Color.parseColor(bg), 99, Color.parseColor(fg))
+        }
+    }
+
+    /** v6.51 (327): 카드 아래 '💬 댓글 N' (+ 안 본 새 댓글 NEW) · 누르면 상세 (댓글 칸) */
+    private fun cmtRow(t: Cloud.RemoteTrip): View {
+        val g = Cloud.active
+        val n = g?.let { Comments.metas[it.id]?.get(t.id)?.n } ?: 0
+        val isNew = g != null && Comments.hasNew(g.id, t.id)
+        val r = Ui.row(this)
+        r.addView(Ui.text(this, 13.5f, if (n > 0) Ui.TEXT else Ui.SUB, n > 0, if (n > 0) "💬 댓글 $n" else "💬 댓글 달기").apply {
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = Ui.bg(this@GroupTripsActivity, Color.TRANSPARENT, 99, if (isNew) Color.parseColor("#FF5A5F") else Ui.LINE)
+            setOnClickListener { if (!selMode) openTrip(t, true) }
+        })
+        if (isNew) r.addView(Ui.text(this, 11f, Color.WHITE, true, "NEW").apply {
+            setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@GroupTripsActivity, Color.parseColor("#E5484D"), 6)
+        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+        return r
+    }
+
     // v5.2 (239): 카드를 누르면 내 출조 상세와 같은 화면 (보기 전용)
-    private fun openTrip(t: Cloud.RemoteTrip) {
+    private fun openTrip(t: Cloud.RemoteTrip, toCmt: Boolean = false) {
         TripActivity.remoteView = t
         @Suppress("DEPRECATION")
-        startActivityForResult(Intent(this, TripActivity::class.java).putExtra("remote", true), TripActivity.REQ_REMOTE)
+        startActivityForResult(Intent(this, TripActivity::class.java).putExtra("remote", true).putExtra("toCmt", toCmt).putExtra("gid", Cloud.active?.id), TripActivity.REQ_REMOTE)
     }
 
     @Deprecated("startActivityForResult")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == TripActivity.REQ_REMOTE && resultCode != RESULT_OK && trips.isNotEmpty()) render()   // 댓글 수 · NEW 다시
         if (requestCode != TripActivity.REQ_REMOTE || resultCode != RESULT_OK) return
         if (data?.getBooleanExtra("edited", false) == true) { load(); return }   // v5.2 (240): 조과를 고쳤으면 목록 새로
         val id = data?.getStringExtra("remove") ?: return

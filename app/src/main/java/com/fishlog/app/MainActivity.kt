@@ -332,6 +332,7 @@ class MainActivity : Activity() {
             "chat" -> startActivity(Intent(this, ChatActivity::class.java).putExtra("room", gid))
             "notice" -> startActivity(Intent(this, NoticeActivity::class.java))
             "event", "rsvp" -> startActivity(Intent(this, ScheduleActivity::class.java))
+            "cmt" -> startActivity(Intent(this, GroupTripsActivity::class.java))   // v6.51 (327)
             "live" -> openNowDialog()
         }
     }
@@ -2877,7 +2878,7 @@ class MainActivity : Activity() {
         if (tomN > 0) { schedBtn.setTextColor(Ui.BG); schedBtn.background = Ui.bg(this, Ui.GREEN, 99) }
         pair(noticeBtn, schedBtn)
         // 그룹 출조 기록: 새로 올라온 출조가 있으면 초록 강조 + 개수 (열면 꺼짐)
-        val newTr = GroupNews.newTrips(activeId)
+        val newTr = GroupNews.newTrips(activeId) + GroupNews.newCmts(activeId)   // v6.51 (327): 새 댓글도
         val tripsBtn = gbtn("📒 그룹 출조 기록", newTr > 0) {
             startActivity(Intent(this, GroupTripsActivity::class.java))
         }
@@ -2916,9 +2917,10 @@ class MainActivity : Activity() {
 
     /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
     private fun newsCard(it: GroupNews.Item): View {
-        val isTrip = it.kind == "trip"
-        val col = if (it.isNotice) Color.parseColor("#F2C14E") else if (isTrip) Ui.GREEN else Ui.BLUE
-        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
+        val isCmt = it.kind == "cmt"
+        val isTrip = it.kind == "trip" || isCmt
+        val col = if (it.isNotice) Color.parseColor("#F2C14E") else if (isCmt) Color.parseColor("#C9A7FF") else if (isTrip) Ui.GREEN else Ui.BLUE
+        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else if (isCmt) Color.parseColor("#2A1450") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(10), dp(10))
@@ -2930,7 +2932,7 @@ class MainActivity : Activity() {
         }
         val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
-        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else if (isTrip) "조과" else "일정").apply {
+        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else if (isCmt) "댓글" else if (isTrip) "조과" else "일정").apply {
             setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@MainActivity, col, 6)
         })
         line.addView(Ui.text(this, 14f, Ui.TEXT, true, it.title).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },

@@ -57,6 +57,106 @@ class TripActivity : Activity() {
     private var remote: Cloud.RemoteTrip? = null
     private var remoteTrip: Store.Trip? = null
     private val viewOnly get() = remote != null
+    // v6.51 (327): 💬 그룹 출조 댓글 (그룹 출조 기록에서 열었을 때만 · gid 를 넘겨받음)
+    private val cmtGid: String? get() = if (isPub) null else intent.getStringExtra("gid")
+    private var cmts: List<Comments.Cmt>? = null
+    private var cmtErr: String? = null
+    private var cmtHead: View? = null
+    private var cmtJump = false
+    private val cmtInput by lazy {
+        EditText(this).apply {
+            hint = "댓글 달기 (300자)"; setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); textSize = 15f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            maxLines = 4; filters = arrayOf(android.text.InputFilter.LengthFilter(300))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = Ui.bg(this@TripActivity, Ui.CARD, 14, Ui.LINE)
+        }
+    }
+
+    private fun loadCmts() {
+        val gid = cmtGid ?: return
+        val r = remote ?: return
+        Comments.load(gid, r.id) { l, err ->
+            if (isFinishing) return@load
+            if (l != null) { cmts = l; cmtErr = null } else cmtErr = err
+            Comments.markSeen(gid, r.id)
+            keepScroll { render() }
+            if (cmtJump) { cmtJump = false; root.post { cmtHead?.let { h -> (root.parent as? ScrollView)?.smoothScrollTo(0, maxOf(0, h.top - dp(12))) } } }
+        }
+    }
+
+    private fun renderCmts(r: Cloud.RemoteTrip) {
+        val gid = cmtGid ?: return
+        val l = cmts
+        val head = Ui.text(this, 16f, Ui.TEXT, true, "💬 댓글" + (l?.let { " ${it.size}" } ?: ""))
+        root.addView(head, Ui.lp(this, MATCH, WRAP, top = 22)); cmtHead = head
+        when {
+            l == null && cmtErr != null -> root.addView(Ui.text(this, 13f, Ui.ORANGE, false, cmtErr!!), Ui.lp(this, MATCH, WRAP, top = 8))
+            l == null -> root.addView(Ui.text(this, 13f, Ui.SUB, false, "불러오는 중…"), Ui.lp(this, MATCH, WRAP, top = 8))
+            l.isEmpty() -> root.addView(Ui.text(this, 13f, Ui.SUB, false, "아직 댓글이 없어요 · 첫 댓글을 남겨 보세요"), Ui.lp(this, MATCH, WRAP, top = 8))
+            else -> l.forEach { c -> root.addView(cmtCard(gid, r, c), Ui.lp(this, MATCH, WRAP, top = 8)) }
+        }
+        // 입력칸 + 보내기 (다시 그려도 쓰던 글은 그대로)
+        (cmtInput.parent as? android.view.ViewGroup)?.removeView(cmtInput)
+        val row = Ui.row(this)
+        row.addView(cmtInput, LinearLayout.LayoutParams(0, WRAP, 1f))
+        row.addView(Ui.button(this, "보내기", true) {
+            val txt = cmtInput.text.toString()
+            if (txt.isBlank()) { Toast.makeText(this, "내용을 적어 주세요", Toast.LENGTH_SHORT).show(); return@button }
+            if (Cloud.user == null) { Toast.makeText(this, "로그인이 필요해요", Toast.LENGTH_SHORT).show(); return@button }
+            Comments.add(gid, r.id, txt) { err ->
+                if (isFinishing) return@add
+                if (err != null) { Toast.makeText(this, err, Toast.LENGTH_LONG).show(); return@add }
+                cmtInput.setText("")
+                (getSystemService(INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)?.hideSoftInputFromWindow(cmtInput.windowToken, 0)
+                loadCmts()
+            }
+        }.apply { minHeight = dp(46) }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
+        root.addView(row, Ui.lp(this, MATCH, WRAP, top = 10))
+        root.addView(Ui.text(this, 11.5f, Ui.SUB, false, "그룹원만 보여요 · 내 댓글은 꾹 눌러 고치기 · 지우기"), Ui.lp(this, MATCH, WRAP, top = 6))
+    }
+
+    private fun cmtCard(gid: String, r: Cloud.RemoteTrip, c: Comments.Cmt): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(9), dp(12), dp(10))
+            background = Ui.bg(this@TripActivity, if (c.mine) android.graphics.Color.parseColor("#123A52") else Ui.CARD, 14, Ui.LINE)
+        }
+        val h = Ui.row(this)
+        h.addView(Ui.text(this, 14f, if (c.mine) android.graphics.Color.parseColor("#7FD6FF") else Ui.TEXT, true, if (c.mine) "나" else c.name).apply {
+            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+        if (c.uid == r.owner) h.addView(Ui.text(this, 11f, android.graphics.Color.parseColor("#F2C14E"), true, " 글쓴이"))
+        h.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        h.addView(Ui.text(this, 11.5f, Ui.SUB, false, SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(Date(c.t)) + if (c.edited > 0) " · 고침" else ""))
+        box.addView(h)
+        box.addView(Ui.text(this, 14.5f, Ui.TEXT, false, c.text), Ui.lp(this, MATCH, WRAP, top = 4))
+        val canDel = c.mine || Cloud.isAdmin || Cloud.groups.firstOrNull { it.id == gid }?.owner == Cloud.uid
+        if (c.mine || canDel) box.setOnLongClickListener { cmtMenu(gid, r, c); true }
+        return box
+    }
+
+    private fun cmtMenu(gid: String, r: Cloud.RemoteTrip, c: Comments.Cmt) {
+        val items = mutableListOf<String>()
+        if (c.mine) items.add("✎ 고치기")
+        items.add("🗑 지우기")
+        AlertDialog.Builder(this, R.style.FlAlert).setItems(items.toTypedArray()) { _, i ->
+            if (items[i].startsWith("✎")) {
+                val ed = EditText(this).apply {
+                    setText(c.text); setTextColor(Ui.TEXT); filters = arrayOf(android.text.InputFilter.LengthFilter(300))
+                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                }
+                AlertDialog.Builder(this, R.style.FlAlert).setTitle("댓글 고치기").setView(ed)
+                    .setPositiveButton("저장") { _, _ -> Comments.edit(gid, r.id, c, ed.text.toString()) { err ->
+                        if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show() else loadCmts() } }
+                    .setNegativeButton("취소", null).show()
+            } else {
+                AlertDialog.Builder(this, R.style.FlAlert).setTitle("댓글을 지울까요?")
+                    .setPositiveButton("지우기") { _, _ -> Comments.delete(gid, r.id, c) { err ->
+                        if (err != null) Toast.makeText(this, err, Toast.LENGTH_LONG).show() else loadCmts() } }
+                    .setNegativeButton("취소", null).show()
+            }
+        }.show()
+    }
+
     /** v6.9 (255): 전체 게시판 글을 보는 중 (그룹 기록이 아님) */
     private val isPub get() = remote?.pubId?.isNotBlank() == true
 
@@ -101,6 +201,7 @@ class TripActivity : Activity() {
         root = Ui.column(this)
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(root) })
         loadTide()
+        if (remote != null && cmtGid != null) { cmtJump = intent.getBooleanExtra("toCmt", false); loadCmts() }
         if (savedInstanceState == null && intent.getBooleanExtra("publish", false)) {
             trip?.let { t -> root.post { doPublish(t) } }
         }
@@ -803,6 +904,7 @@ class TripActivity : Activity() {
         }
         // v5.2: 보기 전용 메뉴 — 함께한 출조 · (올린 사람 · 그룹장 · 관리자) 그룹에서 내리기
         remote?.let { r ->
+            renderCmts(r)
             section("메뉴")
             root.addView(Ui.button(this, "🗺 함께한 출조 지도 · 순위", true) { account.showTogether(r) }, Ui.lp(this, MATCH, WRAP, top = 10))
             val mine = r.owner == Cloud.uid

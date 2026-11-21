@@ -392,7 +392,30 @@ service cloud.firestore {
           allow delete: if isMember(gid) && (uid == request.auth.uid || isGroupOwner(gid));
         }
       }
+      // v6.51 (327): 출조 댓글 수 · 마지막 댓글 시각 (출조 문서를 다시 올려도 안 지워지게 따로)
+      match /cmtMeta/{tid} {
+        allow read: if isMember(gid) || isAdmin();
+        allow create, update: if ((isMember(gid) && notBanned()) || isAdmin())
+          && request.resource.data.by == request.auth.uid
+          && request.resource.data.keys().hasOnly(['n', 'at', 'by'])
+          && request.resource.data.n is int && request.resource.data.at is int;
+        allow delete: if isAdmin() || isGroupOwner(gid);
+      }
       match /trips/{tripId} {
+        // v6.51 (327): 💬 출조 댓글 — 그룹원만 보고 쓰기 · 고치기 = 쓴 사람 · 지우기 = 쓴 사람 · 그룹장 · 관리자
+        match /comments/{cid} {
+          allow read: if isMember(gid) || isAdmin();
+          allow create: if isMember(gid) && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 't'])
+            && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
+            && request.resource.data.name is string && request.resource.data.name.size() <= 30 && okName(request.resource.data.name)
+            && request.resource.data.t is int;
+          allow update: if isMember(gid) && notBanned() && resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited'])
+            && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300;
+          allow delete: if isAdmin() || (isMember(gid) && (resource.data.uid == request.auth.uid || isGroupOwner(gid)));
+        }
         allow read: if isMember(gid) || isAdmin();
         allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
         // v5.2 (240): 올린 사람 + 관리자(조과 고치기 · 올린 사람은 그대로)

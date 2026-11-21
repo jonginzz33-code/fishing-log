@@ -44,7 +44,9 @@ object GroupNews {
     fun today(gid: String?): Int = gid?.let { today[it] } ?: 0
     fun tomorrow(gid: String?): Int = gid?.let { tomorrow[it] } ?: 0
     /** 안 본 새 일정 / 새 공지 수 */
-    fun newEvents(gid: String?): Int = items(gid).count { !it.isNotice }
+    fun newEvents(gid: String?): Int = items(gid).count { it.kind == "event" }
+    /** v6.51 (327): 내 출조 · 내가 댓글 단 출조에 남이 단 새 댓글 (출조 수) */
+    fun newCmts(gid: String?): Int = items(gid).count { it.kind == "cmt" }
     fun newNotices(gid: String?): Int = items(gid).count { it.isNotice }
     /** 새로 올라온 그룹 출조 (조과 후기) */
     fun newTrips(gid: String?): Int = items(gid).count { it.kind == "trip" }
@@ -73,6 +75,8 @@ object GroupNews {
                 { ns -> rawNotices[g.id] = ns; loadedAt = System.currentTimeMillis(); recompute(); fireLive() },
                 { ts -> rawTrips[g.id] = ts; recompute(); fireLive() })
         }
+        // v6.51 (327): 댓글 수는 켤 때 한 번 받음 (실시간 감시는 안 함 · 읽기 줄이기)
+        Cloud.groups.forEach { g -> Comments.loadMeta(g.id) { recompute(); fireLive() } }
     }
 
     /** 그만 보기: 다른 화면에 갔다 곧 돌아오는 경우가 많아서 3분 뒤에 끊음 (다시 붙일 때 전부 다시 읽지 않게) */
@@ -134,6 +138,19 @@ object GroupNews {
                         t.end))
                 }
             }
+            // v6.51 (327): 새 댓글 (내 출조 · 내가 댓글 단 출조 · 남이 단 것 · 열어 보면 꺼짐)
+            Comments.metas[g.id]?.forEach { (tid, m) ->
+                if (m.n > 0 && m.by != me && m.at > b && m.at > Comments.seenAt(g.id, tid) && Comments.concernsMe(g.id, tid)) {
+                    val id = "c_${tid}_${m.at}"
+                    if (id !in seen) {
+                        val t = rawTrips[g.id]?.firstOrNull { it.id == tid }
+                        val who = if (tid.substringBefore("_") == me) "내 출조" else (t?.ownerName?.let { "$it 님 출조" } ?: "출조")
+                        list.add(Item(g.id, "cmt", id,
+                            "$who" + (t?.let { " · " + showFmt.format(Date(it.start)) } ?: "") + " · 댓글 ${m.n}개",
+                            "새 댓글 · " + agoFmt.format(Date(m.at)), m.at))
+                    }
+                }
+            }
             out[g.id] = list.sortedByDescending { it.time }
         }
         unseen = out
@@ -150,7 +167,7 @@ object GroupNews {
         done?.let { waiting.add(it) }
         if (loading) return
         loading = true
-        var left = gs.size * 2
+        var left = gs.size * 3
         fun step() {
             left--
             if (left == 0) {
@@ -164,6 +181,7 @@ object GroupNews {
         gs.forEach { g ->
             Cloud.loadEventsOf(g) { list, _ -> if (list != null) rawEvents[g.id] = list; step() }
             Cloud.loadNoticesOf(g) { list, _ -> if (list != null) rawNotices[g.id] = list; step() }
+            Comments.loadMeta(g.id) { step() }
         }
     }
 
@@ -182,6 +200,13 @@ object GroupNews {
         if (gid == null) return
         markSeen(items(gid).filter { it.kind == kind })
     }
+
+    /** v6.51 (327): 출조 상세를 열어 댓글을 봄 → 그 출조 새 댓글 소식 지움 */
+    fun markCmtSeen(gid: String, tid: String) {
+        markSeen(items(gid).filter { it.kind == "cmt" && it.id.startsWith("c_${tid}_") })
+    }
+    /** 그룹 출조 기록 화면을 열면 새 댓글은 그대로 (그 출조를 열어야 꺼짐) */
+    fun refresh() = recompute()
 
     /** 공지 화면에서 받아온 최신 목록으로 바꾸기 */
     fun putNotices(gid: String, list: List<Cloud.Notice>) { rawNotices[gid] = list; recompute() }

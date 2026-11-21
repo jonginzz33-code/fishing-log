@@ -33,7 +33,7 @@ object GroupAlert {
 
     val KINDS = listOf("live" to "🟢 그룹원 출조 중", "chat" to "💬 그룹 채팅 새 글", "notice" to "📢 새 공지",
         "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답", "remind" to "📅 내일 출조 (전날 낮 12시)",
-        "allchat" to "🌐 전체 채팅 새 글")
+        "cmt" to "💬 출조 댓글 (내 출조 · 내가 댓글 단 출조)", "allchat" to "🌐 전체 채팅 새 글")
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun on(c: Context, kind: String) = prefs(c).getBoolean("ga_$kind", kind != "allchat")   // v6.48: 전체 채팅은 기본 꺼짐
@@ -275,6 +275,22 @@ object GroupAlert {
                 }
                 if (lines.isNotEmpty()) post(c, ("rsvp$gid").hashCode(), CH_GROUP, "rsvp", "🙋 $gname · 참석 답 ${lines.size}개",
                     lines, openPi(c, gid, "rsvp", ("rsvp$gid").hashCode()), lines.size)
+            }
+            // v6.51 (327): 💬 출조 댓글 — 내 출조 · 내가 댓글 단 출조에 남이 단 새 댓글
+            if (on(c, "cmt")) {
+                val lines = mutableListOf<String>()
+                wait(gref.collection("cmtMeta").whereGreaterThan("at", last).get())?.documents
+                    ?.filter { it.getString("by") != me && (it.id.substringBefore("_") == me || p.getBoolean("cmtMine_${gid}_${it.id}", false)) }
+                    ?.take(5)?.forEach { m ->
+                        val mineTrip = m.id.substringBefore("_") == me
+                        wait(gref.collection("trips").document(m.id).collection("comments").whereGreaterThan("t", maxOf(last, p.getLong("cmtSeen_${gid}_${m.id}", 0L))).get())
+                            ?.documents?.filter { it.getString("uid") != me && !Moderation.isBlocked(it.getString("uid") ?: "") }
+                            ?.sortedBy { it.getLong("t") ?: 0L }?.forEach { d ->
+                                lines.add((if (mineTrip) "내 출조" else "댓글 단 출조") + " · ${d.getString("name") ?: "?"}: " + (d.getString("text") ?: "").take(60))
+                            }
+                    }
+                if (lines.isNotEmpty()) post(c, ("cmt$gid").hashCode(), CH_GROUP, "cmt", "💬 $gname · 출조 댓글 ${lines.size}개",
+                    lines.takeLast(5), openPi(c, gid, "cmt", ("cmt$gid").hashCode()), lines.size)
             }
         }
         // v6.48 (321): 🌐 전체 채팅 (숫자는 늘 · 알림은 스위치 켰을 때만)
