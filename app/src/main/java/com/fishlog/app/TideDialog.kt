@@ -228,6 +228,15 @@ object TideDialog {
         val wxHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         val wxTitle = Ui.text(a, 15f, Ui.TEXT, true, "날씨 · 바람 · 파도 · 수온")
         wxHead.addView(wxTitle, LinearLayout.LayoutParams(0, WRAP, 1f))
+        // v6.53 (329): 🌬 우리 앱 바람 지도 (모두 · 윈디 창과 따로)
+        wxHead.addView(Ui.text(a, 12f, Color.parseColor("#7FD6FF"), true, "🌬 바람 지도").apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
+            background = Ui.bg(a, Color.parseColor("#123A52"), 99, Color.parseColor("#7FD6FF"))
+            setOnClickListener {
+                val sea = if (Store.windSea) Weather.seaPoint(lat, lon, net = false) else null
+                WindMap.show(a, sea?.lat ?: lat, sea?.lon ?: lon, Spot.current?.name ?: Tide.stationFor(a, lat, lon)?.name ?: "")
+            }
+        }, LinearLayout.LayoutParams(WRAP, dp(32)).apply { rightMargin = dp(6) })
         if (Cloud.can("wx")) wxHead.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), true, "↻ 새로고침").apply {
             gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0)
             background = Ui.bg(a, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
