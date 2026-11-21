@@ -278,7 +278,8 @@ object TideDialog {
                 maxLines = 2
             }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(4) })
             // v5.1: 🌬 윈디 지도 (관리자 테스트)
-            if (Cloud.isAdmin) basisRow.addView(Ui.text(a, 11.5f, Color.parseColor("#F2C14E"), true, "🌬 윈디\n테스트").apply {
+            // v6.54 (328): 관리자 + 관리자 페이지에서 '윈디' 권한 받은 사람
+            if (Cloud.can("windy")) basisRow.addView(Ui.text(a, 11.5f, Color.parseColor("#F2C14E"), true, if (Cloud.isAdmin) "🌬 윈디\n테스트" else "🌬\n윈디").apply {
                 gravity = Gravity.CENTER
                 background = Ui.bg(a, Color.parseColor("#2A2310"), 12, Color.parseColor("#F2C14E"))
                 setOnClickListener {

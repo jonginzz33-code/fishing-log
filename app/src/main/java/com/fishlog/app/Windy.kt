@@ -38,7 +38,7 @@ object Windy {
         bar.addView(Ui.text(a, 15f, Ui.TEXT, true, "🌬 윈디 바람" + if (place.isBlank()) "" else " · $place").apply {
             maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        bar.addView(Ui.text(a, 11f, Color.parseColor("#F2C14E"), true, "관리자 테스트").apply {
+        if (Cloud.isAdmin) bar.addView(Ui.text(a, 11f, Color.parseColor("#F2C14E"), true, "관리자 테스트").apply {
             setPadding(dp(8), dp(2), dp(8), dp(2))
             background = Ui.bg(a, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
         }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })

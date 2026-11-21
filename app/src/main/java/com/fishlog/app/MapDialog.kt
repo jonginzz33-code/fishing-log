@@ -691,6 +691,13 @@ object MapDialog {
             map.invalidate()
         }
         addPill(quakeBtn)
+        // v6.54 (330): 🌬 바람 지도 (지금 보던 자리 가운데로)
+        addPill(pill("🌬 바람").apply {
+            setOnClickListener {
+                val c = map.mapCenter
+                WindMap.show(a, c.latitude, c.longitude, "")
+            }
+        })
         // v6.38 (299): 메인 지도(내 위치)는 🌋 지진 · 지난 기록 처음부터 켜짐 (폰에 저장된 것 먼저 · 새 글만 서버)
         if (layers.isEmpty()) { quakeBtn.performClick(); pastBtn.performClick() }
         val zBar = Zones.bar(a, map) { updateLegend() }
