@@ -188,12 +188,45 @@ object WindMap {
         return names[(((d % 360) + 360) % 360 / 22.5f).roundToInt() % 16]
     }
 
+    // ---------------- 육지 모양 (v6.55 · 331: 육지 어둡게 · 육지 위엔 숫자 안 놓기) ----------------
+    /** assets/korea_map.json (권역 지도와 같은 메르카토르 그림 좌표) — 지도도 메르카토르라 확대 · 이동만 맞추면 겹침 */
+    private class Land(val k: Double, val tx: Double, val ty: Double, val path: Path)
+    @Volatile private var land: Land? = null
+    private fun land(c: android.content.Context): Land? {
+        land?.let { return it }
+        return try {
+            val o = JSONObject(c.assets.open("korea_map.json").bufferedReader().use { it.readText() })
+            val p = Path()
+            for (key in listOf("K", "O")) {
+                val a = o.getJSONArray(key)
+                for (i in 0 until a.length()) {
+                    val r = a.getJSONArray(i); var j = 0
+                    while (j + 1 < r.length()) { val x = r.getInt(j).toFloat(); val y = r.getInt(j + 1).toFloat(); if (j == 0) p.moveTo(x, y) else p.lineTo(x, y); j += 2 }
+                    p.close()
+                }
+            }
+            Land(o.getDouble("k"), o.getDouble("tx"), o.getDouble("ty"), p).also { land = it }
+        } catch (_: Exception) { null }
+    }
+    private fun landXY(l: Land, lat: Double, lon: Double): Pair<Float, Float> =
+        (l.tx + l.k * Math.toRadians(lon)).toFloat() to (l.ty - l.k * Math.log(Math.tan(Math.PI / 4 + Math.toRadians(lat) / 2))).toFloat()
+
     // ---------------- 지도 위 그림 ----------------
     private class WindOverlay(val a: Activity) : Overlay() {
         var grid: Grid? = null
         var t = 0
         var tap: GeoPoint? = null
         var onTap: ((GeoPoint) -> Unit)? = null
+        /** 누른 자리 말풍선 (이름, 고른 예보 값) */
+        var bubble: Pair<String, String>? = null
+        private val landGeo = land(a)
+        private val landScr = Path()
+        private val landRgn = android.graphics.Region()
+        private var landKey = ""
+        private val landPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(225, 12, 16, 22) }
+        private val coastPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.argb(140, 255, 255, 255) }
+        private val bubP = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val bubT = Paint(Paint.ANTI_ALIAS_FLAG)
         var running = true
         private val d = a.resources.displayMetrics.density
         private var field: Bitmap? = null
@@ -202,8 +235,8 @@ object WindMap {
         private val lp = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; color = Color.WHITE }
         private val cp = Paint(Paint.ANTI_ALIAS_FLAG)
         private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textAlign = Paint.Align.CENTER; isFakeBoldText = true }
-        private val N = 420
-        private val TRAIL = 7
+        private val N = 520
+        private val TRAIL = 14
         private val px = Array(N) { FloatArray(TRAIL) }
         private val py = Array(N) { FloatArray(TRAIL) }
         private val age = IntArray(N)
@@ -238,11 +271,28 @@ object WindMap {
                 val bmp = field?.takeIf { it.width == fw && it.height == fh } ?: Bitmap.createBitmap(fw, fh, Bitmap.Config.ARGB_8888)
                 for (yy in 0 until fh) for (xx in 0 until fw) {
                     val gp = proj.fromPixels(xx * cell, yy * cell)
-                    bmp.setPixel(xx, yy, if (g.uv(t, gp.latitude, gp.longitude, uv)) colorOf(sqrt(uv[0] * uv[0] + uv[1] * uv[1]), 150) else Color.TRANSPARENT)
+                    bmp.setPixel(xx, yy, if (g.uv(t, gp.latitude, gp.longitude, uv)) colorOf(sqrt(uv[0] * uv[0] + uv[1] * uv[1]), 235) else Color.TRANSPARENT)
                 }
                 field = bmp; fieldKey = fk
             }
             field?.let { c.drawBitmap(it, null, Rect(0, 0, (it.width * (10 * d).toInt().coerceAtLeast(6)), (it.height * (10 * d).toInt().coerceAtLeast(6))), fp) }
+            // ①-2 육지 어둡게 (윈디처럼 · 너무 확대하면 그림이 거칠어서 지도 그대로)
+            val useLand = landGeo != null && map.zoomLevelDouble <= 11.5
+            if (useLand && viewKey != landKey) {
+                val l = landGeo!!
+                val a1 = landXY(l, 33.0, 124.0); val a2 = landXY(l, 39.0, 131.0)
+                val p1 = Point(); val p2 = Point()
+                proj.toPixels(GeoPoint(33.0, 124.0), p1); proj.toPixels(GeoPoint(39.0, 131.0), p2)
+                val sxm = (p2.x - p1.x) / (a2.first - a1.first); val sym = (p2.y - p1.y) / (a2.second - a1.second)
+                val mtx = android.graphics.Matrix().apply { setScale(sxm, sym); postTranslate(p1.x - a1.first * sxm, p1.y - a1.second * sym) }
+                landScr.reset(); l.path.transform(mtx, landScr)
+                landRgn.setPath(landScr, android.graphics.Region(-50, -50, w + 50, h + 50))
+                landKey = viewKey
+            }
+            if (useLand) {
+                c.drawPath(landScr, landPaint)
+                coastPaint.strokeWidth = 1f * d; c.drawPath(landScr, coastPaint)
+            }
             // ② 흘러가는 선
             if (viewKey != lastView) { lastView = viewKey; resetParticles(w, h) }
             val step = 0.22f * d
@@ -256,12 +306,12 @@ object WindMap {
                 val fade = when { age[i] < 8 -> age[i] / 8f; life[i] - age[i] < 8 -> (life[i] - age[i]) / 8f; else -> 1f }
                 for (k in 0 until TRAIL - 1) {
                     val f = (1f - k / TRAIL.toFloat()) * fade
-                    lp.alpha = (210 * f).toInt().coerceIn(0, 255); lp.strokeWidth = (0.8f + 1.4f * f) * d
+                    lp.alpha = (220 * f).toInt().coerceIn(0, 255); lp.strokeWidth = (0.5f + 0.9f * f) * d
                     c.drawLine(px[i][k + 1], py[i][k + 1], px[i][k], py[i][k], lp)
                 }
             }
             // ③ 격자 화살표 · m/s (너무 빽빽하면 건너뜀)
-            val minGap = 64 * d
+            val minGap = 58 * d
             var lastY = -9999f
             tp.textSize = 11.5f * d
             for (r in g.rows - 1 downTo 0) {
@@ -275,18 +325,22 @@ object WindMap {
                     if (pt.x - lastX < minGap) continue
                     lastX = pt.x.toFloat()
                     val sp = g.spd[t][r][col]; if (sp.isNaN()) continue
+                    if (useLand && landRgn.contains(pt.x, pt.y)) continue   // 육지 위엔 숫자 안 놓기
                     val dir = g.dir[t][r][col]
                     val x = pt.x.toFloat(); val y = pt.y.toFloat()
-                    cp.style = Paint.Style.FILL; cp.color = Color.argb(190, 10, 20, 30)
-                    c.drawCircle(x, y, 14 * d, cp)
-                    c.save(); c.rotate(dir + 180f, x, y)
-                    cp.style = Paint.Style.STROKE; cp.strokeWidth = 2f * d; cp.color = Color.WHITE; cp.strokeCap = Paint.Cap.ROUND
-                    c.drawLine(x, y + 9 * d, x, y - 9 * d, cp)
-                    val ah = Path().apply { moveTo(x - 4.5f * d, y - 4 * d); lineTo(x, y - 10 * d); lineTo(x + 4.5f * d, y - 4 * d) }
-                    c.drawPath(ah, cp)
+                    // v6.55 (331): 동그라미 안 큰 숫자 + 테두리 = 세기 색 + 밖에 작은 세모 = 바람이 가는 쪽
+                    cp.style = Paint.Style.FILL; cp.color = Color.argb(215, 10, 18, 26)
+                    c.drawCircle(x, y, 15 * d, cp)
+                    cp.style = Paint.Style.STROKE; cp.strokeWidth = 2f * d; cp.color = colorOf(sp)
+                    c.drawCircle(x, y, 15 * d, cp)
+                    tp.textSize = 14.5f * d; tp.setShadowLayer(0f, 0f, 0f, 0)
+                    c.drawText(sp.roundToInt().toString(), x, y + 5.2f * d, tp)
+                    val rr = Math.toRadians((dir + 180f).toDouble())
+                    val ax = x + (sin(rr) * 21 * d).toFloat(); val ay = y - (cos(rr) * 21 * d).toFloat()
+                    c.save(); c.rotate(dir + 180f, ax, ay)
+                    cp.style = Paint.Style.FILL; cp.color = Color.WHITE
+                    c.drawPath(Path().apply { moveTo(ax, ay - 6 * d); lineTo(ax + 5 * d, ay + 3.5f * d); lineTo(ax - 5 * d, ay + 3.5f * d); close() }, cp)
                     c.restore()
-                    tp.setShadowLayer(3 * d, 0f, 0f, Color.BLACK)
-                    c.drawText(sp.roundToInt().toString(), x, y + 27 * d, tp)
                 }
             }
             // ④ 누른 자리
@@ -296,6 +350,23 @@ object WindMap {
                 c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 11 * d, cp)
                 cp.style = Paint.Style.FILL; cp.color = Color.parseColor("#FFD166")
                 c.drawCircle(pt.x.toFloat(), pt.y.toFloat(), 4.5f * d, cp)
+                // 말풍선 (흰 바탕 · 이름 + 고른 예보 값)
+                bubble?.let { (t1, t2) ->
+                    bubT.isFakeBoldText = true; bubT.textSize = 13.5f * d
+                    val w1 = bubT.measureText(t1)
+                    bubT.isFakeBoldText = false; bubT.textSize = 12.5f * d
+                    val w2 = bubT.measureText(t2)
+                    val bw = max(w1, w2) + 20 * d; val bh = 46 * d
+                    var bx = pt.x - bw / 2; var by = pt.y - 16 * d - bh
+                    if (by < 4 * d) by = pt.y + 18 * d
+                    bx = bx.coerceIn(4 * d, w - bw - 4 * d)
+                    bubP.color = Color.argb(240, 255, 255, 255)
+                    c.drawRoundRect(bx, by, bx + bw, by + bh, 10 * d, 10 * d, bubP)
+                    bubT.color = Color.parseColor("#14202B"); bubT.isFakeBoldText = true; bubT.textSize = 13.5f * d
+                    c.drawText(t1, bx + 10 * d, by + 19 * d, bubT)
+                    bubT.isFakeBoldText = false; bubT.textSize = 12.5f * d; bubT.color = Color.parseColor("#33414D")
+                    c.drawText(t2, bx + 10 * d, by + 37 * d, bubT)
+                }
             }
             if (running) map.postInvalidateDelayed(33)
         }
@@ -405,6 +476,7 @@ object WindMap {
         fun paintCard() {
             card.removeAllViews()
             val tap = ov.tap
+            ov.bubble = if (tap != null) ("📍 " + cmpName) to (if (cmpLoading) "받는 중…" else "-") else null
             if (tap == null) {
                 card.addView(Ui.text(a, 13f, Ui.SUB, false, "지도를 누르면 그 자리 바람을 기상청 · 유럽(윈디) · 미국 예보로 비교해요"))
                 return
@@ -416,6 +488,9 @@ object WindMap {
                 cmp == null -> card.addView(Ui.text(a, 12.5f, Ui.ORANGE, false, cmpErr ?: "못 받았어요"), Ui.lp(a, MATCH, WRAP, top = 4))
                 else -> {
                     val idx = tt?.let { t0 -> cmpTimes.indexOfFirst { it == t0 }.takeIf { it >= 0 } } ?: ov.t
+                    cmp?.get(model)?.getOrNull(idx)?.let { p ->
+                        ov.bubble = ("📍 " + cmpName) to (if (p.spd.isNaN()) "-" else "${dirName(p.dir)} ${String.format(Locale.US, "%.1f", p.spd)} m/s" + (if (!p.gust.isNaN()) " · 돌풍 ${p.gust.roundToInt()}" else ""))
+                    }
                     MODELS.forEach { (m, label) ->
                         val p = cmp?.get(m)?.getOrNull(idx)
                         val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
