@@ -98,6 +98,7 @@ object GroupAlert {
 
     private fun openPi(c: Context, gid: String, kind: String, req: Int): PendingIntent =
         PendingIntent.getActivity(c, req, Intent(c, MainActivity::class.java)
+            .setAction("fishlog.ga.$gid.$kind")   // v6.52 (326): 위젯과 번호가 같아도 서로 안 덮어쓰게
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra("open", "ga:$gid:$kind"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 

@@ -97,6 +97,7 @@ object WidgetData {
 
     fun openIntent(c: Context, what: String, req: Int): PendingIntent =
         PendingIntent.getActivity(c, req, Intent(c, MainActivity::class.java).putExtra("open", what)
+            .setAction("fishlog.open.$what")   // v6.52 (326): 알림과 번호가 같아도 서로 안 덮어쓰게
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 }
