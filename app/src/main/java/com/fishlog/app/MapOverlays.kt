@@ -115,6 +115,10 @@ class DotsOverlay(
     var icons = false
     /** v6.9 (256): '이 출조만 보기' — 이 출조가 없는 묶음은 흐리게 */
     var focus: String? = null
+    /** v6.58 (336): 지난 기록 어종 골라 보기 — null = 전체 · 고른 어종만 진하게 (hideOthers 면 나머지 숨김) */
+    var only: Set<String>? = null
+    var hideOthers = false
+    private fun picked(d: MapDot): Boolean { val o = only ?: return true; return d.species.ifBlank { d.kind } in o }
     private val art = SpeciesArtView(ctx)
     private val PINK = Color.parseColor("#F07AA0")
     private val PURPLE = Color.parseColor("#B9A6FF")
@@ -223,19 +227,31 @@ class DotsOverlay(
         if (shadow) return
         val proj = map.projection
         val r = mergeDp * d
-        val list = ArrayList<Cluster>()
-        for (dot in dots) {
-            proj.toPixels(dot.point, pt)
-            val x = pt.x.toFloat(); val y = pt.y.toFloat()
-            var hit: Cluster? = null
-            for (cl in list) {
-                val dx = cl.x - x; val dy = cl.y - y
-                if (dx * dx + dy * dy < r * r) { hit = cl; break }
+        fun group(src: List<MapDot>): ArrayList<Cluster> {
+            val list = ArrayList<Cluster>()
+            for (dot in src) {
+                proj.toPixels(dot.point, pt)
+                val x = pt.x.toFloat(); val y = pt.y.toFloat()
+                var hit: Cluster? = null
+                for (cl in list) {
+                    val dx = cl.x - x; val dy = cl.y - y
+                    if (dx * dx + dy * dy < r * r) { hit = cl; break }
+                }
+                if (hit != null) hit.items.add(dot) else list.add(Cluster(x, y, mutableListOf(dot)))
             }
-            if (hit != null) hit.items.add(dot) else list.add(Cluster(x, y, mutableListOf(dot)))
+            return list
         }
-        clusters = list
+        // v6.58 (336): 고른 어종은 따로 묶어 진하게 · 안 고른 어종은 흐리게(또는 숨김) — 숫자 · 이름표도 고른 어종만
+        val rest: ArrayList<Cluster>
+        val list: ArrayList<Cluster>
+        if (only == null) { rest = ArrayList(); list = group(dots) }
+        else {
+            rest = if (hideOthers) ArrayList() else group(dots.filter { !picked(it) })
+            list = group(dots.filter { picked(it) })
+        }
+        clusters = rest + list
         if (icons) {
+            for (cl in rest) { c.saveLayerAlpha(null, 45); drawIcon(c, map, cl); c.restore() }
             for (cl in list) {
                 val dim = focus != null && cl.items.none { it.trip == focus }
                 if (dim) c.saveLayerAlpha(null, 55)
@@ -244,8 +260,13 @@ class DotsOverlay(
             }
             return
         }
+        for (cl in rest) { c.saveLayerAlpha(null, 45); drawPlain(c, cl); c.restore() }
+        for (cl in list) drawPlain(c, cl)
+    }
+
+    private fun drawPlain(c: Canvas, cl: Cluster) {
         val alpha = if (faded) 105 else 255
-        for (cl in list) {
+        run {
             val n = cl.items.size
             val color = cl.items.groupingBy { it.color }.eachCount().maxByOrNull { it.value }!!.key
             val rad = if (n == 1) 7 * d else (12 + min(n, 40) * 0.2f) * d

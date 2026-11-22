@@ -391,7 +391,14 @@ object MapDialog {
         var focusFn: (String?) -> Unit = {}
         val pastRoutes = PastRoutesOverlay(a).apply { isEnabled = false }
         map.overlays.add(pastRoutes)
-        val past = DotsOverlay(a, emptyList(), true) { showCluster(a, it) { k -> focusFn(k) } }
+        var pastRef: DotsOverlay? = null
+        val past = DotsOverlay(a, emptyList(), true) { items ->
+            // v6.58 (336): 고른 어종이 있으면 창에도 그 어종만
+            val o = pastRef?.only
+            val f = if (o == null) items else items.filter { it.species.ifBlank { it.kind } in o }
+            showCluster(a, f.ifEmpty { items }) { k -> focusFn(k) }
+        }
+        pastRef = past
         past.isEnabled = false
         map.overlays.add(past)
 
@@ -614,6 +621,98 @@ object MapDialog {
             })
             chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
         }
+        // v6.58 (336): 🐟 지난 기록 어종 골라 보기 (기본 = 전체 · 고른 건 기억 · 안 고른 어종은 흐리게/숨김)
+        val spPrefs = a.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
+        var spSel: Set<String> = spPrefs.getStringSet("past_sp", emptySet())?.toSet() ?: emptySet()
+        var spHide = spPrefs.getBoolean("past_sp_hide", false)
+        val spRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+        val spWrap = Ui.hscroll(a, spRow).apply { visibility = android.view.View.GONE }
+        var spNote = ""
+        var paintSpecies: () -> Unit = {}
+        fun spOf(d: MapDot) = d.species.ifBlank { d.kind }
+        fun applySpecies() {
+            spPrefs.edit().putStringSet("past_sp", spSel).putBoolean("past_sp_hide", spHide).apply()
+            val counts = past.dots.groupingBy { spOf(it) }.eachCount()
+            val sel = spSel.filter { (counts[it] ?: 0) > 0 }.toSet()
+            past.only = if (sel.isEmpty()) null else sel
+            past.hideOthers = spHide
+            val oldSp = spNote
+            spNote = if (sel.isEmpty()) "" else {
+                val ds = past.dots.filter { spOf(it) in sel }
+                "\n🐟 " + sel.joinToString(" · ") + " ${ds.size}마리 (내 ${ds.count { it.src == 0 }} · 그 밖 ${ds.count { it.src != 0 }}) · 안 고른 어종은 " + (if (spHide) "숨김" else "흐리게")
+            }
+            if (oldSp.isNotEmpty() && pastNote.endsWith(oldSp)) pastNote = pastNote.removeSuffix(oldSp)
+            if (pastNote.isNotEmpty() && !pastNote.contains("불러오는 중")) { pastNote += spNote; updateLegend() }
+            val base = pastBar.text.toString().substringBefore("  ·  🐟")
+            pastBar.text = base + if (sel.isEmpty()) "" else "  ·  🐟 " + sel.joinToString(" · ") + "만"
+            paintSpecies()
+            map.invalidate()
+        }
+        fun openSpeciesSheet() {
+            val counts = past.dots.groupingBy { spOf(it) }.eachCount().entries.sortedByDescending { it.value }
+            val pick = spSel.toMutableSet()
+            var hide = spHide
+            val sh = Sheet(a, 0.62f)
+            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "🐟 보고 싶은 어종"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            sh.body.addView(Ui.text(a, 12f, Ui.SUB, false, "여러 개 고를 수 있어요 · 아무것도 안 고르면 전체 · 고른 건 다음에도 기억해요"))
+            val listBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            sh.body.addView(listBox)
+            val hideRow = TextView(a).apply { textSize = 13f; setTextColor(Ui.SUB); setPadding(dp(a, 4), dp(a, 12), dp(a, 4), dp(a, 4)) }
+            sh.body.addView(hideRow)
+            val go = Ui.button(a, "", true) {}
+            fun paint() {
+                listBox.removeAllViews()
+                fun line(label: String, n: Int, on: Boolean, click: () -> Unit) = LinearLayout(a).apply {
+                    orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(a, 4), dp(a, 11), dp(a, 4), dp(a, 11))
+                    addView(TextView(a).apply {
+                        text = if (on) "✓" else ""; gravity = Gravity.CENTER; textSize = 14f; typeface = Typeface.DEFAULT_BOLD
+                        setTextColor(Color.parseColor("#1B0E02"))
+                        background = if (on) Ui.bg(a, Ui.ORANGE, 6) else Ui.bg(a, Color.TRANSPARENT, 6, Color.parseColor("#9FB4C2"))
+                    }, LinearLayout.LayoutParams(dp(a, 24), dp(a, 24)))
+                    addView(Ui.text(a, 15f, Ui.TEXT, on, label), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = dp(a, 12) })
+                    addView(Ui.text(a, 13f, Ui.SUB, false, n.toString()))
+                    setOnClickListener { click() }
+                }
+                listBox.addView(line("전체 (모두 보기 · 기본)", past.dots.size, pick.isEmpty()) { pick.clear(); paint() })
+                counts.forEach { (sp, n) -> listBox.addView(line(sp, n, sp in pick) { if (!pick.add(sp)) pick.remove(sp); paint() }) }
+                hideRow.text = "안 고른 어종:  " + (if (!hide) "● 흐리게   ○ 숨기기" else "○ 흐리게   ● 숨기기") + "   (눌러서 바꾸기)"
+                go.text = if (pick.isEmpty()) "전체 보기" else pick.sortedByDescending { p -> counts.firstOrNull { it.key == p }?.value ?: 0 }.joinToString(" · ") + "만 보기"
+            }
+            hideRow.setOnClickListener { hide = !hide; paint() }
+            go.setOnClickListener { spSel = pick.toSet(); spHide = hide; applySpecies(); sh.close() }
+            sh.foot.visibility = android.view.View.VISIBLE
+            sh.foot.addView(go, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            paint()
+            sh.show()
+        }
+        paintSpecies = {
+            spRow.removeAllViews()
+            val counts = past.dots.groupingBy { spOf(it) }.eachCount().entries.sortedByDescending { it.value }
+            spWrap.visibility = if (past.isEnabled && counts.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+            if (counts.isNotEmpty()) {
+                spRow.addView(TextView(a).apply { text = "🐟 어종"; textSize = 12f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#9FB4C2")) },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
+                fun chip(label: String, on: Boolean, allChip: Boolean, click: () -> Unit) = TextView(a).apply {
+                    text = label; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+                    setPadding(dp(a, 11), dp(a, 5), dp(a, 11), dp(a, 5))
+                    setTextColor(if (on) Color.parseColor(if (allChip) "#06303A" else "#1B0E02") else Color.parseColor("#C9D3DE"))
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(a, 14).toFloat()
+                        if (on) setColor(if (allChip) Color.parseColor("#7FD6FF") else Ui.ORANGE) else { setColor(Color.parseColor("#12293A")); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+                    }
+                    setOnClickListener { click() }
+                }
+                val sel = spSel.filter { s0 -> counts.any { it.key == s0 } }.toSet()
+                spRow.addView(chip("전체", sel.isEmpty(), true) { spSel = emptySet(); applySpecies() },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
+                counts.take(6).forEach { (sp, n) ->
+                    spRow.addView(chip("$sp $n", sp in sel, false) { spSel = if (sp in spSel) spSel - sp else spSel + sp; applySpecies() },
+                        LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
+                }
+                spRow.addView(chip(if (counts.size > 6) "⋯ 더보기 (${counts.size})" else "⋯ 고르기", false, false) { openSpeciesSheet() })
+            }
+        }
         fun loadPastNow() {
             val mode = pastModeNow()
             pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
@@ -626,6 +725,8 @@ object MapDialog {
                 paintChips()
                 pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode.startsWith("public")) "게시판" else "친구") + " 조과 $others)" +
                     " · 색 = 출조 · 얇은 선 = 그 출조 이동 경로 · 숫자 = 마릿수 · 점이나 색 범례를 누르면 '이 출조만 보기'"
+                spNote = ""
+                applySpecies()
                 updateLegend()
                 map.invalidate()
             }
@@ -651,6 +752,7 @@ object MapDialog {
             setOn(pastBtn, past.isEnabled)
             pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
             chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+            paintSpecies()
             if (past.isEnabled && !pastLoaded) {
                 pastLoaded = true
                 loadPastNow()
@@ -718,6 +820,7 @@ object MapDialog {
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(chipWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
+        root.addView(spWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         // v6.37 (298): 🌊 지진해일 특보가 있으면 지도 맨 위 빨간 띠
         val tsuBar = TextView(a).apply {
