@@ -293,6 +293,8 @@ class TripActivity : Activity() {
 
     // ---------------- v5.2 (240): 출조 후 조과 고치기 (올린 사람 · 관리자만) ----------------
     private var editMode = false
+    /** v6.57: 마리 수 바로 고치기 — 저장 전 어종별 늘리고 줄인 수 */
+    private val cntDelta = HashMap<Int, Int>()
     private val picked: MutableSet<Store.Catch> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
 
     private fun canEdit(t: Store.Trip): Boolean {
@@ -394,6 +396,78 @@ class TripActivity : Activity() {
                 }
             }
             .setNegativeButton("취소", null).show()
+    }
+
+    /** v6.57: 🔢 어종별 마리 수 바로 고치기 */
+    private fun countBox(t: Store.Trip): View {
+        val box = Ui.card(this)
+        box.addView(Ui.text(this, 13.5f, Ui.TEXT, true, "🔢 마리 수 바로 고치기"))
+        box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "− ＋ 로 늘리고 줄이거나 숫자를 눌러 직접 적어요 · 다 고치고 아래 [저장] (그룹 기록 · 순위 · 게시판에도 같이)"),
+            Ui.lp(this, MATCH, WRAP, top = 2))
+        val slots = ((1..maxOf(2, t.names.size)).toList() + t.catches.map { it.slot }).distinct().sorted()
+        fun now(sl: Int) = (t.count(sl) + (cntDelta[sl] ?: 0)).coerceAtLeast(0)
+        fun setTo(sl: Int, v: Int) {
+            val d = v.coerceIn(0, 9999) - t.count(sl)
+            if (d == 0) cntDelta.remove(sl) else cntDelta[sl] = d
+            keepScroll { render() }
+        }
+        slots.forEach { sl ->
+            val r = Ui.row(this).apply { setPadding(0, dp(8), 0, 0) }
+            r.addView(View(this).apply { background = Ui.bg(this@TripActivity, (if (sl in 1..Ui.SLOT.size) Ui.SLOT[sl - 1] else Store.slotColor(sl)), 99) },
+                LinearLayout.LayoutParams(dp(10), dp(10)))
+            val d = cntDelta[sl] ?: 0
+            r.addView(Ui.text(this, 15f, Ui.TEXT, true, t.name(sl) + if (d != 0) "  (${if (d > 0) "+" else ""}$d)" else "").apply {
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                if (d != 0) setTextColor(android.graphics.Color.parseColor("#F2C14E"))
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            fun pm(label: String, click: () -> Unit) = Ui.text(this, 20f, Ui.TEXT, true, label).apply {
+                gravity = Gravity.CENTER; background = Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
+                setOnClickListener { click() }
+            }
+            r.addView(pm("−") { if (now(sl) > 0) setTo(sl, now(sl) - 1) }, LinearLayout.LayoutParams(dp(44), dp(40)))
+            r.addView(Ui.text(this, 18f, if (d != 0) android.graphics.Color.parseColor("#F2C14E") else Ui.TEXT, true, now(sl).toString()).apply {
+                gravity = Gravity.CENTER; background = Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#0F2233"), 10, Ui.LINE)
+                setOnClickListener {
+                    val ed = EditText(this@TripActivity).apply {
+                        inputType = InputType.TYPE_CLASS_NUMBER; setText(now(sl).toString()); setTextColor(Ui.TEXT); setSelectAllOnFocus(true)
+                    }
+                    AlertDialog.Builder(this@TripActivity, R.style.FlAlert).setTitle("${t.name(sl)} 몇 마리?").setView(ed)
+                        .setPositiveButton("확인") { _, _ -> ed.text.toString().trim().toIntOrNull()?.let { setTo(sl, it) } }
+                        .setNegativeButton("취소", null).show()
+                }
+            }, LinearLayout.LayoutParams(dp(64), dp(40)).apply { leftMargin = dp(6); rightMargin = dp(6) })
+            r.addView(pm("＋") { setTo(sl, now(sl) + 1) }, LinearLayout.LayoutParams(dp(44), dp(40)))
+            box.addView(r, Ui.lp(this, MATCH, WRAP))
+        }
+        if (cntDelta.isNotEmpty()) {
+            val sum = cntDelta.entries.sortedBy { it.key }.joinToString(" · ") { "${t.name(it.key)} ${if (it.value > 0) "+" else ""}${it.value}" }
+            val br = Ui.row(this).apply { setPadding(0, dp(12), 0, 0) }
+            br.addView(Ui.button(this, "되돌리기") { cntDelta.clear(); keepScroll { render() } }, LinearLayout.LayoutParams(WRAP, WRAP))
+            br.addView(Ui.button(this, "💾 저장 ($sum)", true) { applyCounts(t) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            box.addView(br, Ui.lp(this, MATCH, WRAP))
+            box.addView(Ui.text(this, 11f, Ui.SUB, false, "늘린 건 위치 없이 마지막 기록 시각으로 들어가요 · 줄이면 그 어종의 가장 늦은 기록부터 빠져요"),
+                Ui.lp(this, MATCH, WRAP, top = 6))
+        }
+        return box
+    }
+
+    private fun applyCounts(t: Store.Trip) {
+        if (cntDelta.isEmpty()) return
+        val list = t.catches.toMutableList()
+        val baseTime = t.catches.maxOfOrNull { it.time } ?: (if (t.end > 0) t.end else t.start)
+        cntDelta.forEach { (sl, d) ->
+            if (d > 0) {
+                val at = t.catches.filter { it.slot == sl }.maxOfOrNull { it.time } ?: baseTime
+                repeat(d) { list.add(Store.Catch(at, sl)) }
+            } else if (d < 0) {
+                val gone: MutableSet<Store.Catch> = java.util.Collections.newSetFromMap(java.util.IdentityHashMap())
+                gone.addAll(list.filter { it.slot == sl }.sortedByDescending { it.time }.take(-d))
+                list.removeAll { it in gone }
+            }
+        }
+        val msg = "마리 수 고쳤어요 (" + cntDelta.entries.sortedBy { it.key }.joinToString(" · ") { "${t.name(it.key)} ${if (it.value > 0) "+" else ""}${it.value}" } + ")"
+        cntDelta.clear()
+        commitCatches(t, list, msg)
     }
 
     private fun askDelete(t: Store.Trip, what: Collection<Store.Catch>) {
@@ -793,7 +867,7 @@ class TripActivity : Activity() {
             gravity = Gravity.CENTER; setPadding(dp(14), dp(7), dp(14), dp(7))
             background = if (editMode) Ui.bg(this@TripActivity, android.graphics.Color.TRANSPARENT, 99, Ui.LINE)
                 else Ui.bg(this@TripActivity, android.graphics.Color.parseColor("#5BC8E8"), 99)
-            setOnClickListener { editMode = !editMode; picked.clear(); keepScroll { render() } }
+            setOnClickListener { editMode = !editMode; picked.clear(); cntDelta.clear(); keepScroll { render() } }
         })
         root.addView(secRow, Ui.lp(this, MATCH, WRAP, top = 22))
         val edInfo = listOfNotNull(
@@ -801,6 +875,8 @@ class TripActivity : Activity() {
             remote?.takeIf { it.editAt > 0 }?.let { "수정됨 · ${it.editName} · " + SimpleDateFormat("MM.dd HH:mm", Locale.KOREA).format(Date(it.editAt)) })
         if (edInfo.isNotEmpty()) root.addView(Ui.text(this, 11.5f, android.graphics.Color.parseColor("#F2C14E"), false, edInfo.joinToString("\n")),
             Ui.lp(this, MATCH, WRAP, top = 4))
+        // v6.57: 고치는 중 — 🔢 어종별 마리 수 바로 고치기 (− 숫자 ＋ · 숫자 누르면 직접 입력 · 저장 한 번에)
+        if (editMode && canEd) root.addView(countBox(t), Ui.lp(this, MATCH, WRAP, top = 8))
         // v6.12: 고치는 중 — 어종 이름 한 번에 바꾸기 (잘못 고른 어종 · 오타, 예: '니ㅏㄱ지' → 낙지)
         if (editMode && canEd) {
             val sp = t.slots().filter { t.count(it) > 0 }
