@@ -404,8 +404,11 @@ object WindMap {
         root.addView(bar, LinearLayout.LayoutParams(MATCH, WRAP))
 
         // 예보 고르기
-        val mRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(12), 0, dp(12), dp(8)) }
-        root.addView(mRow, LinearLayout.LayoutParams(MATCH, WRAP))
+        // v6.60 (339): 예보 고르기 상자
+        val (mBox, mIn) = Ui.panel(a, "🔀 예보 고르기", "기상청 · 유럽(윈디) · 미국")
+        root.addView(mBox, LinearLayout.LayoutParams(MATCH, WRAP).apply { leftMargin = dp(10); rightMargin = dp(10); bottomMargin = dp(8) })
+        val mRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+        mIn.addView(mRow, LinearLayout.LayoutParams(MATCH, WRAP))
 
         // 지도
         val frame = FrameLayout(a)

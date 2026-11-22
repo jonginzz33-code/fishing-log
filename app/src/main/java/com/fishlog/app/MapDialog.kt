@@ -520,7 +520,11 @@ object MapDialog {
         }
         var pastNote = ""
         var zoneNote = ""
-        fun updateLegend() { legendView.text = legend + pastNote + (if (zoneNote.isNotBlank()) "\n$zoneNote" else "") + "\n지도 © OpenStreetMap · 위성 © Esri" }
+        var pastSum: TextView? = null   // v6.60 (338): 지난 기록 합계는 지난 기록 상자 안에
+        fun updateLegend() {
+            pastSum?.let { it.text = pastNote.trim(); it.visibility = if (pastNote.isBlank()) android.view.View.GONE else android.view.View.VISIBLE }
+            legendView.text = legend + (if (pastSum == null) pastNote else "") + (if (zoneNote.isNotBlank()) "\n$zoneNote" else "") + "\n지도 © OpenStreetMap · 위성 © Esri"
+        }
         zoneOv.hint = { zoneNote = it; updateLegend() }
         updateLegend()
 
@@ -583,14 +587,36 @@ object MapDialog {
             paintTest()
         }
 
-        val pastBtn = pill("지난 기록")
+        val pastBtn = pill("📜 지난 기록")
         var pastLoaded = false
-        // 맨 위 한 줄: 지금 어떤 기록을 겹쳐 보는지 + 보기 바꾸기
-        val pastBar = TextView(a).apply {
-            textSize = 12f; setTextColor(Color.WHITE)
-            setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
-            background = GradientDrawable().apply { setColor(Color.parseColor("#12293A")); cornerRadius = dp(a, 10).toFloat() }
+        // v6.60 (338): 지난 기록 상자 — 버튼에 붙은 하늘 테두리 상자 하나에 제목 · 보기 바꾸기 · × · 출조 색 · 어종 · 합계
+        val PANEL_BG = Color.parseColor("#16334A"); val PANEL_EDGE = Color.parseColor("#7FD6FF")
+        val pastPanel = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(a, 10), dp(a, 8), dp(a, 10), dp(a, 8))
+            background = GradientDrawable().apply { setColor(PANEL_BG); cornerRadius = dp(a, 16).toFloat(); setStroke(dp(a, 2), PANEL_EDGE) }
             visibility = android.view.View.GONE
+        }
+        val pastHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+        val pastBar = TextView(a).apply { textSize = 13f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD; maxLines = 2 }
+        pastHead.addView(pastBar, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val pastModeBtn = TextView(a).apply {
+            text = "보기 바꾸기 ▾"; textSize = 12f; setTextColor(PANEL_EDGE); typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(a, 10), dp(a, 4), dp(a, 10), dp(a, 4))
+            background = GradientDrawable().apply { cornerRadius = dp(a, 14).toFloat(); setStroke(dp(a, 1), PANEL_EDGE) }
+        }
+        pastHead.addView(pastModeBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = dp(a, 6) })
+        val pastClose = TextView(a).apply {
+            text = "×"; textSize = 15f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dp(a, 14).toFloat(); setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+        }
+        pastHead.addView(pastClose, LinearLayout.LayoutParams(dp(a, 30), dp(a, 28)).apply { leftMargin = dp(a, 6) })
+        pastPanel.addView(pastHead)
+        val pastSumView = TextView(a).apply { textSize = 11f; setTextColor(Color.parseColor("#9FB4C2")); setPadding(dp(a, 2), dp(a, 4), dp(a, 2), 0); visibility = android.view.View.GONE }
+        pastSum = pastSumView
+        fun paintPastBtn(on: Boolean) {
+            pastBtn.text = if (on) "📜 지난 기록 ▾" else "📜 지난 기록"
+            pastBtn.setTextColor(if (on) PANEL_EDGE else Color.WHITE)
+            (pastBtn.background as GradientDrawable).apply { setColor(if (on) PANEL_BG else Color.TRANSPARENT); setStroke(dp(a, if (on) 2 else 1), if (on) PANEL_EDGE else Color.parseColor("#3A5A70")) }
         }
         past.icons = true
         // v6.9 (256): 출조 색 범례 줄 (누르면 그 출조만 보기)
@@ -713,44 +739,168 @@ object MapDialog {
                 spRow.addView(chip(if (counts.size > 6) "⋯ 더보기 (${counts.size})" else "⋯ 고르기", false, false) { openSpeciesSheet() })
             }
         }
-        fun loadPastNow() {
-            val mode = pastModeNow()
-            pastBar.text = "지난 기록: " + pastModeLabel(mode) + "   보기 바꾸기 ▾"
-            pastNote = "\n지난 기록 불러오는 중…"
-            updateLegend()
-            loadPast(excludeId, mode) { list, mine, others, trips ->
-                past.dots = list
-                pastList = trips
-                pastRoutes.routes = trips.filter { it.track.size >= 2 }.map { PastRoutesOverlay.Route(it.key, it.color, it.track) }
-                paintChips()
-                pastNote = "\n지난 기록 (내 조과 $mine · " + (if (mode.startsWith("public")) "게시판" else "친구") + " 조과 $others)" +
-                    " · 색 = 출조 · 얇은 선 = 그 출조 이동 경로 · 숫자 = 마릿수 · 점이나 색 범례를 누르면 '이 출조만 보기'"
-                spNote = ""
-                applySpecies()
-                updateLegend()
-                map.invalidate()
+        // v6.60 (338): 기간 — 연도(0 = 전체) · 몇 월 ~ 몇 월(0 = 전체 · 11~2 처럼 해 넘김 가능) · 폰에서 거름 · 기억
+        var pYear = spPrefs.getInt("past_year", 0)
+        var pM1 = spPrefs.getInt("past_m1", 0); var pM2 = spPrefs.getInt("past_m2", 0)
+        var rawDots: List<MapDot> = emptyList(); var rawTrips: List<PastTrip> = emptyList()
+        val calP = java.util.Calendar.getInstance()
+        fun inPeriod(t: Long): Boolean {
+            if (pYear == 0 && pM1 == 0) return true
+            calP.timeInMillis = t
+            val y = calP.get(java.util.Calendar.YEAR); val m = calP.get(java.util.Calendar.MONTH) + 1
+            if (pM1 == 0) return y == pYear
+            val wrap = pM1 > pM2
+            val inM = if (!wrap) m in pM1..pM2 else (m >= pM1 || m <= pM2)
+            if (pYear == 0) return inM
+            return if (!wrap) y == pYear && inM else (y == pYear && m >= pM1) || (y == pYear + 1 && m <= pM2)
+        }
+        fun periodLabel(y: Int = pYear, m1: Int = pM1, m2: Int = pM2): String {
+            val mm = if (m1 == 0) "" else if (m1 == m2) "${m1}월" else "${m1}~${m2}월"
+            return when {
+                y == 0 && m1 == 0 -> "전체 기간"
+                y == 0 -> "해마다 $mm"
+                m1 == 0 -> "${y}년"
+                m1 > m2 -> "${y}년 ${m1}월 ~ ${y + 1}년 ${m2}월"
+                else -> "${y}년 $mm"
             }
         }
-        pastBar.setOnClickListener {
+        fun whoLabel(mode: String): String = when {
+            mode == "mine" -> "내 기록"
+            mode == "allg" -> "내 기록 + 그룹 전부"
+            mode.startsWith("public") -> "내 기록 + 게시판"
+            mode.startsWith("g:") -> "내 기록 + " + (Cloud.groups.firstOrNull { "g:${it.id}" == mode }?.title ?: "그룹")
+            else -> mode
+        }
+        fun paintPastTitle() { pastBar.text = "📜 " + whoLabel(pastModeNow()) + " · " + periodLabel() }
+        var lastMode = ""
+        fun applyPeriod() {
+            val dots = rawDots.filter { inPeriod(it.time) }
+            val trips = rawTrips.filter { p -> inPeriod(p.start) }
+            past.dots = dots
+            pastList = trips
+            pastRoutes.routes = trips.filter { it.track.size >= 2 }.map { PastRoutesOverlay.Route(it.key, it.color, it.track) }
+            paintChips()
+            val mine = dots.count { it.src == 0 }; val others = dots.size - mine
+            pastNote = "\n" + periodLabel() + " · 내 조과 $mine · " + (if (lastMode.startsWith("public")) "게시판" else "친구") + " 조과 $others" +
+                (if (dots.isEmpty() && rawDots.isNotEmpty()) " · 이 기간엔 기록이 없어요" else "") +
+                " · 색 = 출조 · 숫자 = 마릿수 · 점이나 색을 누르면 '이 출조만 보기'"
+            spNote = ""
+            paintPastTitle()
+            applySpecies()
+            updateLegend()
+            map.invalidate()
+        }
+        fun loadPastNow() {
+            val mode = pastModeNow()
+            lastMode = mode
+            paintPastTitle()
+            pastNote = "\n지난 기록 불러오는 중…"
+            updateLegend()
+            loadPast(excludeId, mode) { list, _, _, trips ->
+                rawDots = list; rawTrips = trips
+                applyPeriod()
+            }
+        }
+        // v6.60 (338): 보기 바꾸기 = 밑에서 올라오는 창 (누구 기록 · 연도 · 몇 월 ~ 몇 월)
+        fun openPastSheet() {
             val modes = mutableListOf("mine")
             Cloud.groups.forEach { modes.add("g:${it.id}") }
             if (Cloud.groups.size > 1) modes.add("allg")
-            if (Cloud.user != null) { modes.add("public"); modes.add("publicAll") }   // v6.26: 전체 기간도
-            val cur = pastModeNow()
-            AlertDialog.Builder(a, R.style.FlAlert)
-                .setTitle("지난 기록 보기")
-                .setItems(modes.map { (if (it == cur) "● " else "○ ") + pastModeLabel(it) }.toTypedArray()) { _, i ->
-                    Store.pastMode = modes[i]
-                    loadPastNow()
+            if (Cloud.user != null) modes.add("publicAll")
+            var mode = pastModeNow().let { if (it == "public") "publicAll" else it }
+            var y = pYear; var m1 = pM1; var m2 = pM2
+            var picking = false
+            val years = (rawDots.map { it.time } + rawTrips.map { it.start } + System.currentTimeMillis()).map { t -> calP.timeInMillis = t; calP.get(java.util.Calendar.YEAR) }.distinct().sortedDescending()
+            val sh = Sheet(a, 0.8f)
+            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "📜 지난 기록 보기"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            sh.body.addView(box)
+            val go = Ui.button(a, "이 기간으로 보기", true) {}
+            fun chipV(label: String, on: Boolean, onCol: Int, onInk: Int, click: () -> Unit) = TextView(a).apply {
+                text = label; textSize = 13f; gravity = Gravity.CENTER; typeface = if (on) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setTextColor(if (on) onInk else Color.WHITE); setPadding(dp(a, 12), dp(a, 7), dp(a, 12), dp(a, 7))
+                background = GradientDrawable().apply { cornerRadius = dp(a, 16).toFloat(); if (on) setColor(onCol) else setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+                setOnClickListener { click() }
+            }
+            fun flow(views: List<android.view.View>): android.view.View {
+                val wrap = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                var row: LinearLayout? = null; var n = 0
+                views.forEach { v ->
+                    if (row == null || n == 3) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; wrap.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 6) }); n = 0 }
+                    row!!.addView(v, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(a, 6) }); n++
                 }
-                .show()
+                return wrap
+            }
+            fun sec(t: String) = Ui.text(a, 12.5f, Color.parseColor("#9FB4C2"), true, t).apply { setPadding(0, dp(a, 14), 0, 0) }
+            val SKY = Color.parseColor("#7FD6FF"); val YEL = Color.parseColor("#F2C14E")
+            fun paint() {
+                box.removeAllViews()
+                box.addView(sec("누구 기록"))
+                box.addView(flow(modes.map { md -> chipV(whoLabel(md).replace("내 기록 + ", "+ ").let { if (md == "mine") "내 기록만" else it }, md == mode, SKY, Color.parseColor("#06303A")) { mode = md; paint() } }))
+                box.addView(sec("연도"))
+                box.addView(flow(listOf(chipV("전체 연도", y == 0, YEL, Color.parseColor("#2A1E02")) { y = 0; paint() }) +
+                    years.map { yy -> chipV("$yy", y == yy, YEL, Color.parseColor("#2A1E02")) { y = yy; paint() } }))
+                box.addView(sec("몇 월 ~ 몇 월 (시작 → 끝 차례로 · 다시 누르면 새로)"))
+                val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                for (r in 0 until 2) {
+                    val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+                    for (c in 1..6) {
+                        val m = r * 6 + c
+                        val inR = m1 != 0 && (if (m1 <= m2) m in m1..m2 else (m >= m1 || m <= m2))
+                        val end = m1 != 0 && (m == m1 || m == m2)
+                        row.addView(TextView(a).apply {
+                            text = "${m}월"; textSize = 13f; gravity = Gravity.CENTER
+                            setTextColor(if (end) Color.parseColor("#1B0E02") else Color.WHITE); typeface = if (end) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                            setPadding(0, dp(a, 8), 0, dp(a, 8))
+                            background = GradientDrawable().apply {
+                                cornerRadius = dp(a, 10).toFloat()
+                                when { end -> setColor(Ui.ORANGE); inR -> setColor(Color.parseColor("#1E4A63")); else -> setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+                            }
+                            setOnClickListener {
+                                if (!picking || m1 == 0) { m1 = m; m2 = m; picking = true } else { m2 = m; picking = false }
+                                paint()
+                            }
+                        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(a, 5) })
+                    }
+                    grid.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 5) })
+                }
+                box.addView(grid)
+                val nowCal = java.util.Calendar.getInstance()
+                box.addView(flow(listOf(
+                    chipV("전체 달", m1 == 0, SKY, Color.parseColor("#06303A")) { m1 = 0; m2 = 0; picking = false; paint() },
+                    chipV("이번 달", false, SKY, Color.parseColor("#06303A")) {
+                        y = nowCal.get(java.util.Calendar.YEAR); m1 = nowCal.get(java.util.Calendar.MONTH) + 1; m2 = m1; picking = false; paint() },
+                    chipV("지난 3개월", false, SKY, Color.parseColor("#06303A")) {
+                        val c0 = java.util.Calendar.getInstance().apply { add(java.util.Calendar.MONTH, -2) }
+                        y = c0.get(java.util.Calendar.YEAR); m1 = c0.get(java.util.Calendar.MONTH) + 1; m2 = nowCal.get(java.util.Calendar.MONTH) + 1; picking = false; paint() })))
+                box.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "📅 " + periodLabel(y, m1, m2) + " · " + whoLabel(mode)).apply {
+                    setPadding(dp(a, 12), dp(a, 10), dp(a, 12), dp(a, 10))
+                    background = Ui.bg(a, Color.parseColor("#0F2233"), 12, Color.parseColor("#2C4256"))
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 14) })
+                if (mode.startsWith("public")) box.addView(Ui.text(a, 11f, Color.parseColor("#9FB4C2"), false, "게시판 글은 최근 글부터 정해진 개수만 받아서, 아주 오래된 게시판 글은 빠질 수 있어요 (내 기록은 다 나와요)"),
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(a, 6) })
+            }
+            go.setOnClickListener {
+                pYear = y; pM1 = m1; pM2 = if (m1 == 0) 0 else m2
+                spPrefs.edit().putInt("past_year", pYear).putInt("past_m1", pM1).putInt("past_m2", pM2).apply()
+                val modeChanged = mode != pastModeNow()
+                Store.pastMode = mode
+                sh.close()
+                if (modeChanged || rawDots.isEmpty()) loadPastNow() else { lastMode = mode; applyPeriod() }
+            }
+            sh.foot.visibility = android.view.View.VISIBLE
+            sh.foot.addView(go, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            paint()
+            sh.show()
         }
+        pastBar.setOnClickListener { openPastSheet() }
+        pastModeBtn.setOnClickListener { openPastSheet() }
         pastBtn.setOnClickListener {
             past.isEnabled = !past.isEnabled
             pastRoutes.isEnabled = past.isEnabled
             if (!past.isEnabled) focusFn(null)
-            setOn(pastBtn, past.isEnabled)
-            pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
+            paintPastBtn(past.isEnabled)
+            pastPanel.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
             chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
             paintSpecies()
             if (past.isEnabled && !pastLoaded) {
@@ -763,6 +913,7 @@ object MapDialog {
             map.invalidate()
         }
         addPill(pastBtn)
+        pastClose.setOnClickListener { if (past.isEnabled) pastBtn.performClick() }
         // v6.37 (298): 🌋 지진 최근 4일 핀 (기상청) · 누르면 자세히
         val quakeOv = Quake.QuakeOverlay(a) { e ->
             val me = Tracker.last
@@ -819,9 +970,11 @@ object MapDialog {
         root.addView(Ui.hscroll(a, bar))
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
-        root.addView(chipWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
-        root.addView(spWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
-        root.addView(pastBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
+        // v6.60 (338): 지난 기록 상자 하나 (제목 · 출조 색 · 어종 · 합계)
+        pastPanel.addView(chipWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(a, 6) })
+        pastPanel.addView(spWrap, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = Ui.dp(a, 6) })
+        pastPanel.addView(pastSumView, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        root.addView(pastPanel, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 10), 0, Ui.dp(a, 10), Ui.dp(a, 6)) })
         // v6.37 (298): 🌊 지진해일 특보가 있으면 지도 맨 위 빨간 띠
         val tsuBar = TextView(a).apply {
             textSize = 13.5f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
@@ -990,7 +1143,7 @@ object MapDialog {
         val gs = Cloud.groups
         return when {
             Cloud.user == null -> "mine"
-            m == null -> Cloud.active?.let { "g:${it.id}" } ?: "mine"
+            m == null || m == "public" -> "publicAll"   // v6.60 (338): 기본 = 내 기록 + 전체 게시판 · 전체 기간 (기간은 보기 바꾸기에서)
             m.startsWith("g:") && gs.none { "g:${it.id}" == m } -> Cloud.active?.let { "g:${it.id}" } ?: "mine"
             else -> m
         }

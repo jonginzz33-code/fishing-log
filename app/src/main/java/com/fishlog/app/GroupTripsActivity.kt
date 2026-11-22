@@ -66,10 +66,13 @@ class GroupTripsActivity : Activity() {
         top.addView(Ui.text(this, 19f, Ui.TEXT, true, "$gl 출조 기록"), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(14) })
         col.addView(top)
         GroupBand.view(this, false)?.let { col.addView(it, Ui.lp(this, MATCH, WRAP, top = 12)) }
+        // v6.60 (339): 기간 · 사람 고르기를 상자 하나로
+        val (fBox, fIn) = Ui.panel(this, "🔎 걸러 보기", "기간 · 사람")
+        col.addView(fBox, Ui.lp(this, MATCH, WRAP, top = 12))
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 14))
+        fIn.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 4))
         peopleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        col.addView(Ui.hscroll(this, peopleRow), Ui.lp(this, MATCH, WRAP, top = 8))
+        fIn.addView(Ui.hscroll(this, peopleRow), Ui.lp(this, MATCH, WRAP, top = 8))
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(body, Ui.lp(this, MATCH, WRAP, top = 6))
         // 맨 아래 고정 띠 (꾹 눌러 고를 때만)

@@ -33,6 +33,37 @@ object Ui {
 
     fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
 
+    /** v6.60 (339): 설정 묶음 상자 — 둥근 16dp · 옅은 파란 테두리 · 위 제목(+ 부제 · 오른쪽 작은 버튼). 돌려주는 것 = (바깥 상자, 안쪽 내용 넣을 곳) */
+    val PANEL_BG = android.graphics.Color.parseColor("#12283A")
+    val PANEL_EDGE = android.graphics.Color.parseColor("#3A6A88")
+    fun panel(c: Context, title: String, sub: String = "", right: android.view.View? = null): Pair<android.widget.LinearLayout, android.widget.LinearLayout> {
+        val d = c.resources.displayMetrics.density
+        val outer = android.widget.LinearLayout(c).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding((12 * d).toInt(), (10 * d).toInt(), (12 * d).toInt(), (12 * d).toInt())
+            background = bg(c, PANEL_BG, 16, PANEL_EDGE)
+        }
+        val head = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val tv = text(c, 14.5f, TEXT, true, title)
+        if (sub.isNotBlank()) tv.text = android.text.SpannableStringBuilder(title + "  ").apply {
+            val st = length; append(sub)
+            setSpan(android.text.style.ForegroundColorSpan(SUB), st, length, 0)
+            setSpan(android.text.style.RelativeSizeSpan(0.8f), st, length, 0)
+            setSpan(android.text.style.StyleSpan(android.graphics.Typeface.NORMAL), st, length, 0)
+        }
+        head.addView(tv, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        if (right != null) head.addView(right, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT).apply { leftMargin = (8 * d).toInt() })
+        outer.addView(head)
+        val content = android.widget.LinearLayout(c).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        outer.addView(content, android.widget.LinearLayout.LayoutParams(android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = (4 * d).toInt() })
+        return outer to content
+    }
+    /** 상자 오른쪽 위 작은 글자 버튼 */
+    fun panelLink(c: Context, label: String, click: () -> Unit) = text(c, 12f, android.graphics.Color.parseColor("#7FD6FF"), true, label).apply {
+        val d = c.resources.displayMetrics.density
+        setPadding((6 * d).toInt(), (4 * d).toInt(), (2 * d).toInt(), (4 * d).toInt()); setOnClickListener { click() }
+    }
+
     fun bg(c: Context, color: Int, radius: Int, stroke: Int = 0): GradientDrawable =
         GradientDrawable().apply {
             setColor(color)

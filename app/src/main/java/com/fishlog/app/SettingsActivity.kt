@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -22,6 +23,9 @@ class SettingsActivity : Activity() {
 
 
     private lateinit var box: LinearLayout
+    /** v6.60 (339): 화면 전체 칸 (box 는 지금 그리는 상자 안쪽을 가리킴) */
+    private lateinit var rootBox: LinearLayout
+    private var gaOpen = false
     private fun dp(v: Int) = Ui.dp(this, v)
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
 
@@ -35,8 +39,9 @@ class SettingsActivity : Activity() {
         top.addView(Ui.button(this, "← 뒤로") { finish() }.apply { minHeight = dp(44) }, LinearLayout.LayoutParams(WRAP, WRAP))
         top.addView(Ui.text(this, 20f, Ui.TEXT, true, "개인 설정"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(14) })
         col.addView(top)
-        box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        col.addView(box, Ui.lp(this, MATCH, WRAP, top = 6))
+        rootBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box = rootBox
+        col.addView(rootBox, Ui.lp(this, MATCH, WRAP, top = 6))
         setContentView(ScrollView(this).apply { setBackgroundColor(Ui.BG); isFillViewport = true; addView(col) })
         if (intent.getBooleanExtra("askNick", false)) toast("다른 사람에게 보일 닉네임을 먼저 정해 주세요")
         if (intent.getBooleanExtra("fakeNick", false)) AlertDialog.Builder(this, R.style.FlAlert)
@@ -257,14 +262,21 @@ class SettingsActivity : Activity() {
 
     override fun onResume() { super.onResume(); render() }
 
-    private fun section(t: String) = box.addView(Ui.text(this, 12f, Ui.SUB, false, t), Ui.lp(this, MATCH, WRAP, top = 18))
+    /** v6.60 (339): 섹션 = 제목 달린 상자 하나 · 그 뒤로 넣는 줄은 이 상자 안으로 (다음 section 까지) */
+    private fun section(t: String, right: View? = null) {
+        val main = t.substringBefore(" · ").trim()
+        val sub = if (t.contains(" · ")) t.substringAfter(" · ") else ""
+        val (outer, content) = Ui.panel(this, main, sub, right)
+        rootBox.addView(outer, Ui.lp(this, MATCH, WRAP, top = 14))
+        box = content
+    }
 
     /** 켜기/끄기 스위치 줄 */
     private fun switchRow(title: String, sub: String, on: Boolean, toggle: (Boolean) -> Unit) {
         val r = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
-            background = Ui.bg(this@SettingsActivity, Ui.CARD, 14)
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = Ui.bg(this@SettingsActivity, android.graphics.Color.parseColor("#0F2233"), 12)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
         val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         t.addView(Ui.text(this, 15f, Ui.TEXT, true, title))
@@ -283,7 +295,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun render() {
-        box.removeAllViews()
+        rootBox.removeAllViews()
+        box = rootBox
         renderNick()
         section("화면 표시")
         renderScale()
@@ -302,8 +315,14 @@ class SettingsActivity : Activity() {
         }
 
         // v6.40 (303): 🔔 그룹 알림 (1시간마다 정각쯤 확인 · 앱을 보고 있을 땐 안 울림)
-        section("🔔 그룹 알림 · 1시간마다 정각쯤 확인 (앱을 보고 있을 땐 안 울려요 · 내가 쓴 건 안 와요)")
-        GroupAlert.KINDS.forEach { (k, label) ->
+        // v6.60 (339): 줄이 많아 접어 두기 ('8개 중 6 켬 ▾')
+        val gaOn = GroupAlert.KINDS.count { GroupAlert.on(this, it.first) }
+        section("🔔 그룹 알림 · 1시간마다 정각쯤 확인 · 앱을 보고 있을 땐 안 울려요",
+            Ui.panelLink(this, "${GroupAlert.KINDS.size}개 중 $gaOn 켬 " + if (gaOpen) "▴" else "▾") { gaOpen = !gaOpen; render() })
+        if (!gaOpen) box.addView(Ui.text(this, 12f, Ui.SUB, false, "출조 중 · 그룹 채팅 · 공지 · 일정 · 참석 답 · 내일 출조 · 댓글 · 전체 채팅 — 눌러서 펼쳐 켜고 꺼요 (내가 쓴 건 안 와요)").apply {
+            setOnClickListener { gaOpen = true; render() }
+        }, Ui.lp(this, MATCH, WRAP, top = 4))
+        if (gaOpen) GroupAlert.KINDS.forEach { (k, label) ->
             val sub = when (k) {
                 "live" -> "누가 출조 중이면 상단에 조용히 · 모두 끝나면 사라져요"
                 "chat" -> "그룹 채팅에 안 읽은 새 글이 오면 (누르면 그 채팅방 · 읽으면 사라져요)"

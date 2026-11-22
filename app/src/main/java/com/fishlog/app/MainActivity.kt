@@ -673,8 +673,8 @@ class MainActivity : Activity() {
         // 기록 방식 카드: 처음엔 네 가지 모두, 고른 뒤엔 한 줄 칩 + "바꾸기 ▼"
         methodBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = Ui.bg(this@MainActivity, Ui.CARD, 14, Color.parseColor("#2B5468"))
-            setPadding(dp(14), dp(12), dp(14), dp(12))
+            // v6.60 (339): '🎮 기록 방식' 상자 안에 넣음 (바탕 · 테두리는 상자가)
+            setPadding(0, dp(2), 0, 0)
         }
         message = Ui.text(this, 13f, Ui.GREEN).apply { visibility = View.GONE }
 
@@ -682,7 +682,9 @@ class MainActivity : Activity() {
         tripBtn = Ui.button(this, "출조 시작", filled = true) { onTripButton() }.apply { maxLines = 1 }
         col.addView(tripBtn, Ui.lp(this, MATCH, WRAP, top = 14))
         // v4.7 (217): 기록 방식은 출조 시작 바로 밑 한 줄 + 눈에 띄는 '바꾸기'
-        col.addView(methodBox, Ui.lp(this, MATCH, WRAP, top = 8))
+        val (methodPanel, methodIn) = Ui.panel(this, "🎮 기록 방식", "리모컨 · 터치 · 워치")
+        methodIn.addView(methodBox, LinearLayout.LayoutParams(MATCH, WRAP))
+        col.addView(methodPanel, Ui.lp(this, MATCH, WRAP, top = 8))
         col.addView(message, Ui.lp(this, MATCH, WRAP, top = 6))
         Zones.listener = { msg -> runOnUiThread { if (!isFinishing) showMessage(msg) } }
 

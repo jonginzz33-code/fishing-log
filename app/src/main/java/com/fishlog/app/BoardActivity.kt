@@ -143,11 +143,14 @@ class BoardActivity : Activity() {
         tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         col.addView(tabRow, Ui.lp(this, MATCH, WRAP, top = 10))
         // 종류 칩: 글자가 줄바꿈되지 않게 가로로 밀어서 보기
+        // v6.60 (339): 종류 · 기간을 '🔎 걸러 보기' 상자 하나로
+        val (filterBox, filterIn) = Ui.panel(this, "🔎 걸러 보기")
+        col.addView(filterBox, Ui.lp(this, MATCH, WRAP, top = 10))
         catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        col.addView(Ui.hscroll(this, catRow),
-            Ui.lp(this, MATCH, WRAP, top = 10))
+        filterIn.addView(Ui.hscroll(this, catRow),
+            Ui.lp(this, MATCH, WRAP, top = 2))
         periodRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        col.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 8))
+        filterIn.addView(periodRow, Ui.lp(this, MATCH, WRAP, top = 8))
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(listBox, Ui.lp(this, MATCH, WRAP, top = 6))
         // 맨 아래 고정 띠 (꾹 눌러 선택할 때만)

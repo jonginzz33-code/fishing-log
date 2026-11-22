@@ -200,6 +200,13 @@ object TideDialog {
         val bprefs = a.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
         var boatType = bprefs.getInt("side_boat", 0)
         var onBoatType: () -> Unit = {}
+        // v6.60 (339): 선상이면 배 종류 · 물흐름 막대 · 설명을 '⛴ 선상 자리 예상' 상자 하나로 (막대 · 계산은 그대로 · 담는 곳만)
+        var flowHost: LinearLayout = col
+        if (boatMode) {
+            val (bx, bxIn) = Ui.panel(a, "⛴ 선상 자리 예상", "대충 · 막대 = 시간별 물흐름")
+            col.addView(bx, Ui.lp(a, MATCH, WRAP, top = 10))
+            flowHost = bxIn
+        }
         if (boatMode) {
             val btRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
             fun paintBt() {
@@ -218,11 +225,11 @@ object TideDialog {
                 }
             }
             paintBt()
-            col.addView(btRow, Ui.lp(a, MATCH, WRAP, top = 8))
+            flowHost.addView(btRow, Ui.lp(a, MATCH, WRAP, top = 4))
         }
-        col.addView(flow, Ui.lp(a, MATCH, dp(if (boatMode) 86 else 70), top = 4))
+        flowHost.addView(flow, Ui.lp(a, MATCH, dp(if (boatMode) 86 else 70), top = 4))
         val flowNote = Ui.text(a, 11f, Ui.SUB, false, "")
-        col.addView(flowNote, Ui.lp(a, MATCH, WRAP, top = 2))
+        flowHost.addView(flowNote, Ui.lp(a, MATCH, WRAP, top = 2))
         val info = Ui.text(a, 13f, Ui.SUB, false, "")
         col.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
         // 실측 조류 (가까운 관측소 지금 유향·유속)
@@ -278,11 +285,14 @@ object TideDialog {
         col.addView(extraBox, Ui.lp(a, MATCH, WRAP, top = 2))
         // [오늘 시간별] [주간 (7일)] 탭
         val tabRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        col.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        // v6.60 (339): 시간별 | 주간 · 바람 기준 · 표를 상자 하나로
+        val (wxBox, wxIn) = Ui.panel(a, "💨 바람 · 파도 · 수온 표")
+        col.addView(wxBox, Ui.lp(a, MATCH, WRAP, top = 8))
+        wxIn.addView(tabRow, Ui.lp(a, MATCH, WRAP, top = 4))
         // v5.0 (230): 바람 기준 [육상 | 해상] (기본 해상 = 가까운 바다 칸)
         var onBasis: () -> Unit = {}
         val basisRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
-        col.addView(basisRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        wxIn.addView(basisRow, Ui.lp(a, MATCH, WRAP, top = 8))
         fun paintBasis() {
             basisRow.removeAllViews()
             basisRow.addView(Ui.text(a, 12.5f, Ui.SUB, true, "바람 기준"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(10) })
@@ -315,8 +325,8 @@ object TideDialog {
         paintBasis()
         val hourBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         val weekBox = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
-        col.addView(hourBox, Ui.lp(a, MATCH, WRAP))
-        col.addView(weekBox, Ui.lp(a, MATCH, WRAP))
+        wxIn.addView(hourBox, Ui.lp(a, MATCH, WRAP))
+        wxIn.addView(weekBox, Ui.lp(a, MATCH, WRAP))
         val wxSummary = Ui.text(a, 14f, Ui.TEXT, false, "")
         hourBox.addView(wxSummary, Ui.lp(a, MATCH, WRAP, top = 8))
         val wxGrid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
