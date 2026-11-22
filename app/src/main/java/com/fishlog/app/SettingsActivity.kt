@@ -292,6 +292,14 @@ class SettingsActivity : Activity() {
         section("알림")
         switchRow("같이 출조 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
             Store.friendAlerts) { Store.friendAlerts = it }
+        // v6.56 (332): ⌚ 리모컨으로 셀 때 갤럭시 워치 진동 (폰 알림으로)
+        switchRow("⌚ 리모컨으로 셀 때 워치 진동", "폰에 '🎣 주꾸미 12마리' 알림을 띄워 갤럭시 워치를 울려요 · 1번 = 한 번 · 2번↑ = 두 번 · 취소 = 길게 · 5초 뒤 사라져요\n(삼성은 폰 화면이 꺼져 있을 때만 워치로 보내요)",
+            WearBuzz.on(this)) { v ->
+            WearBuzz.set(this, v)
+            if (v && android.os.Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 3032)
+        }
 
         // v6.40 (303): 🔔 그룹 알림 (1시간마다 정각쯤 확인 · 앱을 보고 있을 땐 안 울림)
         section("🔔 그룹 알림 · 1시간마다 정각쯤 확인 (앱을 보고 있을 땐 안 울려요 · 내가 쓴 건 안 와요)")

@@ -826,23 +826,23 @@ class FlowBarView(c: Context) : View(c) {
         for (hh in 0..24 step 3) canvas.drawText(hh.toString(), left + hh * slot, h - 2 * d, tp)
         // ⛴ 3시간 칸 중 가장 높은 막대 바로 위에 '선수'(주황) / '선미'(파랑)
         sides?.forEachIndexed { b, v ->
-            if (v != 1 && v != 2 && v != 3) return@forEachIndexed
+            if (v !in 1..4) return@forEachIndexed
             val f = (0..2).mapNotNull { k -> s.hourly.getOrNull(b * 3 + k) }.maxOrNull()?.let { (it / max).toFloat() } ?: 0f
             val top = bottom - (bottom - 4 * d - extra) * f.coerceAtLeast(0.05f)
             val cx = left + (b * 3 + 1.5f) * slot
-            val label = when (v) { 1 -> "선수"; 2 -> "선미"; else -> "비슷" }
+            val label = when (v) { 1 -> "선수"; 2 -> "선미"; 4 -> "?"; else -> "비슷" }   // v6.56 (333): 4 = 물 방향 따라 (풍돛)
             val tw = sideT.measureText(label)
             val y1 = top - 3 * d; val y0 = y1 - 13 * d
-            if (v == 3) {
+            if (v == 3 || v == 4) {
                 // v6.35 (290): '비슷' = 속 비운 칸 + 흰 테두리 + 흰 글자 (어두운 칸은 잘 안 보였음)
-                sideP.style = Paint.Style.STROKE; sideP.strokeWidth = 1.5f * d; sideP.color = Color.parseColor("#C9D3DE")
+                sideP.style = Paint.Style.STROKE; sideP.strokeWidth = 1.5f * d; sideP.color = if (v == 4) Color.parseColor("#F2C14E") else Color.parseColor("#C9D3DE")
                 canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
                 sideP.style = Paint.Style.FILL
             } else {
                 sideP.color = if (v == 1) Ui.ORANGE else Color.parseColor("#3A8FD8")
                 canvas.drawRoundRect(cx - tw / 2 - 4 * d, y0, cx + tw / 2 + 4 * d, y1, 4 * d, 4 * d, sideP)
             }
-            sideT.color = when (v) { 1 -> Color.parseColor("#1B0E02"); 2 -> Color.WHITE; else -> Color.parseColor("#EAF2F6") }
+            sideT.color = when (v) { 1 -> Color.parseColor("#1B0E02"); 2 -> Color.WHITE; 4 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#EAF2F6") }
             canvas.drawText(label, cx, y1 - 3.5f * d, sideT)
         }
     }

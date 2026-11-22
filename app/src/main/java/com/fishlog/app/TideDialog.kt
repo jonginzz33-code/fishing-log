@@ -196,6 +196,30 @@ object TideDialog {
         val flow = FlowBarView(a)
         // v6.31 (285): 선상낚시면 막대 위 '선수 · 선미' 글자 자리만큼 조금 더 높게 (막대 비율은 그대로)
         val boatMode = Store.category == "boat" || Store.catLabel(Store.category).contains("선상")
+        // v6.56 (333): ⛴ 배 종류 [풍 없음 | 물닻 | 풍돛] — 선수 · 선미 판단만 바꿈 (물흐름 막대 · 물세기는 그대로)
+        val bprefs = a.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
+        var boatType = bprefs.getInt("side_boat", 0)
+        var onBoatType: () -> Unit = {}
+        if (boatMode) {
+            val btRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+            fun paintBt() {
+                btRow.removeAllViews()
+                btRow.addView(Ui.text(a, 11.5f, Ui.SUB, true, "⛴ 자리 예상 배"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+                listOf(0 to "풍 없음", 1 to "물닻", 2 to "풍돛").forEach { (k, label) ->
+                    val on = boatType == k
+                    btRow.addView(Ui.text(a, 11.5f, if (on) Color.parseColor("#06303A") else Ui.TEXT, true, label).apply {
+                        gravity = Gravity.CENTER
+                        background = if (on) Ui.bg(a, Ui.BLUE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+                        setOnClickListener {
+                            if (boatType == k) return@setOnClickListener
+                            boatType = k; bprefs.edit().putInt("side_boat", k).apply(); paintBt(); onBoatType()
+                        }
+                    }, LinearLayout.LayoutParams(0, dp(28), 1f).apply { leftMargin = dp(4) })
+                }
+            }
+            paintBt()
+            col.addView(btRow, Ui.lp(a, MATCH, WRAP, top = 8))
+        }
         col.addView(flow, Ui.lp(a, MATCH, dp(if (boatMode) 86 else 70), top = 4))
         val flowNote = Ui.text(a, 11f, Ui.SUB, false, "")
         col.addView(flowNote, Ui.lp(a, MATCH, WRAP, top = 2))
@@ -357,26 +381,45 @@ object TideDialog {
                 val wv = winds.average(); val fv = flows.average()
                 val ws = wv / 8.0      // 바람 8m/s ≈ 1
                 val fs = fv / 60.0     // 물살 60% ≈ 1
-                out[b] = when {
-                    wv < 2.5 && fv < 30 -> { calm++; 3 }             // 바람도 물살도 거의 없음 → 거의 안 흐름
-                    fs - ws > 0.25 -> 2                               // 물살이 확실히 셈 → 무거운 뒤(선미)가 끌려 앞장
-                    wv >= 2.5 && (fv < 30 || ws - fs > 0.15) -> 1     // 물살 약하거나 바람이 더 셈 → 가벼운 앞(선수)이 밀려 앞장
-                    else -> 3                                         // 둘이 겨룸 → 비슷
+                // 어느 쪽이 셈: 'C' 물살 · 'W' 바람 · 'S' 둘 다 약함 · 'E' 겨룸
+                val who = when {
+                    wv < 2.5 && fv < 30 -> 'S'                        // 바람도 물살도 거의 없음 → 거의 안 흐름
+                    fs - ws > 0.25 -> 'C'                             // 물살이 확실히 셈
+                    wv >= 2.5 && (fv < 30 || ws - fs > 0.15) -> 'W'   // 물살 약하거나 바람이 더 셈
+                    else -> 'E'                                       // 둘이 겨룸 → 비슷
+                }
+                // v6.56 (333): 배 종류에 따라 (대충 · 원리로)
+                //  풍 없음: 바람 → 가벼운 앞(선수)이 밀려 앞장 · 물살 → 무거운 뒤(선미)가 끌려 앞장
+                //  물닻(뱃머리 물 낙하산): 거꾸로 — 물살 → 풍이 뱃머리를 끌어 선수 · 바람 → 풍이 버텨 선미
+                //  풍돛(선미 돛): 바람 → 뱃머리가 바람 쪽 · 뒤로 밀려 선미 · 물살 → 물 방향 따라(자료 없음 → '?')
+                out[b] = when (who) {
+                    'S' -> { calm++; 3 }
+                    'E' -> 3
+                    'W' -> if (boatType == 0) 1 else 2
+                    else -> when (boatType) { 0 -> 2; 1 -> 1; else -> 4 }
                 }
             }
-            val nB = out.count { it == 1 }; val nS = out.count { it == 2 }
-            sideText = "\n⛴ 막대 위 = 자리 예상(대충): 바람에 밀리면 선수 · 물살에 끌리면 선미 · 비슷 = 둘이 겨룸/거의 안 흐름 · 배와 선장님에 따라 달라요" +
+            val nB = out.count { it == 1 }; val nS = out.count { it == 2 }; val nQ = out.count { it == 4 }
+            val rule = when (boatType) {
+                1 -> "물닻(풍) 배: 바람에 밀리면 선미 · 물살에 끌리면 선수"
+                2 -> "풍돛 배: 바람에 밀리면 선미 · 물살 셀 땐 ? = 물이 바람과 같은 쪽이면 선미 · 반대면 선수"
+                else -> "풍 없는 배: 바람에 밀리면 선수 · 물살에 끌리면 선미"
+            }
+            sideText = "\n⛴ 막대 위 = 자리 예상(대충) · $rule · 비슷 = 둘이 겨룸/거의 안 흐름 · 엔진으로 자리 잡는 배 · 풍을 옆으로 다는 배는 또 달라요" +
                 when {
                     known == 0 -> ""
                     calm == known -> "\n⛴ 이날은 바람 · 물살 둘 다 약해서 배가 거의 안 흘러요 · 자리 차이 적어요"
-                    nB > 0 && nS == 0 -> "\n⛴ 이날은 물살보다 바람이 세서 대체로 선수 쪽이 앞장서요"
-                    nS > 0 && nB == 0 -> "\n⛴ 이날은 물살이 세서 대체로 선미 쪽이 앞장서요"
-                    else -> "\n⛴ 시간에 따라 바뀌어요 (선수 ${nB * 3}시간 · 선미 ${nS * 3}시간)"
+                    nQ > 0 && nB == 0 && nS == 0 -> "\n⛴ 이날은 물살이 세서 물 방향에 따라 달라요 (풍돛)"
+                    nB > 0 && nS == 0 && nQ == 0 -> "\n⛴ 이날은 대체로 선수 쪽이 앞장서요"
+                    nS > 0 && nB == 0 && nQ == 0 -> "\n⛴ 이날은 대체로 선미 쪽이 앞장서요"
+                    else -> "\n⛴ 시간에 따라 바뀌어요 (선수 ${nB * 3}시간 · 선미 ${nS * 3}시간" + (if (nQ > 0) " · 물 방향 따라 ${nQ * 3}시간" else "") + ")"
                 }
             flow.setSides(out)
             val base = flowNote.text.toString().substringBefore("\n⛴")
             flowNote.text = base + sideText
         }
+
+        onBoatType = { paintSides() }
 
         fun renderWeather(w: Weather.Day) {
             sideW = w; paintSides()

@@ -159,6 +159,7 @@ object ButtonRouter {
             val undone = Store.undoLast()
             if (undone != 0) {
                 Haptics.undo(ctx)
+                WearBuzz.undo(ctx, undone)   // v6.56 (332)
                 onMessage?.invoke("마지막 기록을 취소했어요")
             } else {
                 Haptics.error(ctx)
@@ -166,7 +167,8 @@ object ButtonRouter {
             return
         }
 
-        Store.addCatch(slot)
+        val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
+        WearBuzz.count(ctx, slot, n)   // v6.56 (332): ⌚ 워치 진동 (켰을 때만)
     }
 }
