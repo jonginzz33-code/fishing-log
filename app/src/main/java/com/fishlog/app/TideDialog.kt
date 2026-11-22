@@ -368,10 +368,22 @@ object TideDialog {
         // ---- v6.31 (285): ⛴ 선수 · 선미 자리 예상 (대충) = 그 시각 바람 세기 vs 잡은 때 물살 % ----
         var sideDay: Tide.Day? = null; var sideSt: Tide.Strength? = null; var sideW: Weather.Day? = null
         var sideText = ""
+        // v6.59 (337): 🌊 시간별 물 가는 방향 (Open-Meteo 해류 예보 · 대충) — 풍돛 배 '?' 를 선수/선미로 · 막대 아래 방향 한 줄
+        var curDay: Currents.Day? = null
+        var curKey = -1L
+        var curTried = false
+        var paintSidesRef: () -> Unit = {}
         fun paintSides() {
             val dy = sideDay; val st = sideSt; val w = sideW
             if (!boatMode || dy == null || st == null || w == null || w.dayStart != dayStart(dy.dateMillis + 12 * 3_600_000L)) { flow.setSides(null); sideText = ""; return }
             // v6.34 (289): 물살이 약해도 바람이 불면 배는 바람에 밀려 흘러요 → 선수 (사용자 '물이 안 가더라도 바람은 불잖아')
+            // 물 방향은 하루 한 번 받기 (선상 · 바다 칸)
+            if (curKey != w.dayStart) {
+                curKey = w.dayStart; curDay = null; curTried = false
+                val sea = Weather.seaPoint(lat, lon, net = false)
+                Currents.load(sea.lat, sea.lon, w.dayStart) { cd -> if (curKey == w.dayStart) { curDay = cd; curTried = true; paintSidesRef() } }
+            }
+            val cd = curDay?.takeIf { it.dayStart == w.dayStart }
             val out = IntArray(8); var calm = 0; var known = 0
             for (b in 0 until 8) {
                 val winds = (0..2).mapNotNull { k -> w.at(b * 3 + k)?.wind }
@@ -396,13 +408,29 @@ object TideDialog {
                     'S' -> { calm++; 3 }
                     'E' -> 3
                     'W' -> if (boatType == 0) 1 else 2
-                    else -> when (boatType) { 0 -> 2; 1 -> 1; else -> 4 }
+                    else -> when (boatType) {
+                        0 -> 2; 1 -> 1
+                        else -> {
+                            // 풍돛: 뱃머리는 바람 쪽 → 물이 바람 불어 가는 쪽으로 흐르면 선미 · 거슬러 흐르면 선수 · 옆으로면 비슷
+                            val cds = (0..2).mapNotNull { k -> cd?.dir?.getOrNull(b * 3 + k) }
+                            val wds = (0..2).mapNotNull { k -> w.at(b * 3 + k)?.dir }
+                            if (cds.isEmpty() || wds.isEmpty()) 4 else {
+                                fun mean(l: List<Double>): Double {
+                                    val x = l.sumOf { Math.cos(Math.toRadians(it)) }; val y = l.sumOf { Math.sin(Math.toRadians(it)) }
+                                    return (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
+                                }
+                                val windTo = (mean(wds) + 180) % 360
+                                val diff = Math.abs(((mean(cds) - windTo) % 360 + 540) % 360 - 180)
+                                when { diff < 60 -> 2; diff > 120 -> 1; else -> 3 }
+                            }
+                        }
+                    }
                 }
             }
             val nB = out.count { it == 1 }; val nS = out.count { it == 2 }; val nQ = out.count { it == 4 }
             val rule = when (boatType) {
                 1 -> "물닻(풍) 배: 바람에 밀리면 선미 · 물살에 끌리면 선수"
-                2 -> "풍돛 배: 바람에 밀리면 선미 · 물살 셀 땐 ? = 물이 바람과 같은 쪽이면 선미 · 반대면 선수"
+                2 -> "풍돛 배: 바람에 밀리면 선미 · 물살 셀 땐 물 방향(해류 예보)으로 — 바람과 같은 쪽 선미 · 반대 선수 · 옆 비슷 · 못 받으면 ?"
                 else -> "풍 없는 배: 바람에 밀리면 선수 · 물살에 끌리면 선미"
             }
             sideText = "\n⛴ 막대 위 = 자리 예상(대충) · $rule · 비슷 = 둘이 겨룸/거의 안 흐름 · 엔진으로 자리 잡는 배 · 풍을 옆으로 다는 배는 또 달라요" +
@@ -414,12 +442,25 @@ object TideDialog {
                     nS > 0 && nB == 0 && nQ == 0 -> "\n⛴ 이날은 대체로 선미 쪽이 앞장서요"
                     else -> "\n⛴ 시간에 따라 바뀌어요 (선수 ${nB * 3}시간 · 선미 ${nS * 3}시간" + (if (nQ > 0) " · 물 방향 따라 ${nQ * 3}시간" else "") + ")"
                 }
+            // 🌊 3시간마다 물 가는 쪽 (대충)
+            if (cd != null) {
+                val parts = (0 until 8).mapNotNull { b ->
+                    val l = (0..2).mapNotNull { k -> cd.dir.getOrNull(b * 3 + k) }
+                    if (l.isEmpty()) null else {
+                        val x = l.sumOf { Math.cos(Math.toRadians(it)) }; val y = l.sumOf { Math.sin(Math.toRadians(it)) }
+                        val m = (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
+                        "${b * 3}시 ${Currents.arrow(m)}"
+                    }
+                }
+                if (parts.isNotEmpty()) sideText += "\n🌊 물 가는 쪽 (해류 예보 · 칸 약 8km · 대충): " + parts.joinToString(" · ")
+            } else if (boatType == 2) sideText += if (curTried) "\n🌊 물 방향 자료를 못 받았어요 · 물살 센 시간은 '?' 그대로" else "\n🌊 물 방향 받는 중…"
             flow.setSides(out)
             val base = flowNote.text.toString().substringBefore("\n⛴")
             flowNote.text = base + sideText
         }
 
         onBoatType = { paintSides() }
+        paintSidesRef = { paintSides() }
 
         fun renderWeather(w: Weather.Day) {
             sideW = w; paintSides()
