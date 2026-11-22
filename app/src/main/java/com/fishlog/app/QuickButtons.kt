@@ -78,6 +78,10 @@ class QuickButtons(
             setOnClickListener { addNew() }
         }, LinearLayout.LayoutParams(0, dp(54), 2f).apply { if (used > 0) leftMargin = dp(8) })
         used += 2
+        // v6.61 (340): 🔊 조과 소리 (누르면 켬/끔 · 꾹 = 소리 고르기)
+        if (used + 2 > 6) { fill(); newRow() }
+        row!!.addView(soundTile(), LinearLayout.LayoutParams(0, dp(54), 2f).apply { if (used > 0) leftMargin = dp(8) })
+        used += 2
         fill()
         // 설명문처럼 안 보이게: 하늘색 테두리 버튼
         if (list.isNotEmpty()) box.addView(Ui.text(a, 14f, Color.parseColor("#9FE0F2"), true, "⚙ 퀵 버튼 관리").apply {
@@ -89,6 +93,32 @@ class QuickButtons(
             background = Ui.bg(a, Color.parseColor("#10303E"), 99, Color.parseColor("#5BC8DF"))
             setOnClickListener { manage() }
         }, Ui.lp(a, MATCH, WRAP, top = 10))
+    }
+
+    private var soundView: TextView? = null
+    private fun paintSound() {
+        val v = soundView ?: return
+        val on = CountSound.on(a)
+        v.text = android.text.SpannableStringBuilder(if (on) "🔊 조과 소리\n" else "🔇 조과 소리\n").apply {
+            val st = length
+            append(if (on) "켬 · ${CountSound.kindName(a)}" else "꺼짐")
+            setSpan(android.text.style.AbsoluteSizeSpan(10, true), st, length, 0)
+            setSpan(android.text.style.StyleSpan(Typeface.NORMAL), st, length, 0)
+        }
+        v.setTextColor(if (on) Color.parseColor("#BFF2CF") else Color.parseColor("#8A98A4"))
+        v.background = if (on) Ui.bg(a, Color.parseColor("#123423"), 12).apply { setStroke(dp(2), Color.parseColor("#43C46B")) }
+            else Ui.bg(a, Color.parseColor("#1A222A"), 12).apply { setStroke(dp(1), Color.parseColor("#4A5866")) }
+    }
+    private fun soundTile(): View = TextView(a).apply {
+        gravity = Gravity.CENTER; textSize = 13f; typeface = Typeface.DEFAULT_BOLD
+        soundView = this; paintSound()
+        setOnClickListener {
+            val on = !CountSound.on(a)
+            CountSound.setOn(a, on); paintSound()
+            if (on) CountSound.preview(CountSound.kind(a))
+            message(if (on) "조과 소리 켬 · 리모컨으로 셀 때 '${CountSound.kindName(a)}' (꾹 누르면 소리 고르기)" else "조과 소리 끔")
+        }
+        setOnLongClickListener { CountSound.openSheet(a) { paintSound() }; true }
     }
 
     private fun card(q: Store.Quick): View {

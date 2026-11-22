@@ -290,14 +290,50 @@ class RemoteService : Service() {
             .setState(PlaybackState.STATE_PLAYING, 0L, 1f).build())
     }
 
-    /** 워치 음악 화면에 지금 마릿수 보이기 (제목 = 1번, 가수 = 2번) */
+    /**
+     * 워치 음악 화면 · v6.61 (341) 꺼진 화면(AOD) · 잠금화면 음악 칸에 지금 마릿수
+     *  - 제목 = 모든 어종 '주꾸미 13 · 갑오징어 4 · 우럭 2' (길면 이름을 짧게 · 많이 잡힌 순 5개까지)
+     *  - 워치 기록을 켰으면 1 · 2번 앞에 ⏮ ⏭ (워치 버튼 안내)
+     *  - 가수 = '조과일지 · 총 N마리 · 2시간 10분째' · 앨범 그림 = 가장 많이 잡은 어종 그림
+     *  - 셀 때마다(Store 바뀜) 바로 고침
+     */
+    private var artKey: String? = null
+    private var artBmp: android.graphics.Bitmap? = null
     private fun updateMetadata() {
         val t = Store.current ?: return
-        session?.setMetadata(android.media.MediaMetadata.Builder()
-            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, "⏮ ${t.name(1)} ${t.count(1)}  ·  ⏭ ${t.name(2)} ${t.count(2)}")
-            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과일지 · 총 ${t.catches.size}마리")
+        val slots = (1..t.names.size).filter { it <= 2 || t.count(it) > 0 }
+        val parts = slots.map { sl -> Triple(sl, t.name(sl), t.count(sl)) }
+        fun build(short: Boolean): String {
+            val ordered = if (parts.size > 5) parts.sortedByDescending { it.third }.take(5) else parts
+            return ordered.joinToString("  ·  ") { (sl, nm, n) ->
+                val name = if (short && nm.length > 2) nm.take(2) else nm
+                val pre = if (Store.watchMode) when (sl) { 1 -> "⏮ "; 2 -> "⏭ "; else -> "" } else ""
+                "$pre$name $n"
+            }
+        }
+        val title = build(false).let { if (it.length > 30) build(true) else it }
+        val min = ((System.currentTimeMillis() - t.start) / 60000L).coerceAtLeast(0)
+        val dur = if (min >= 60) "${min / 60}시간 ${min % 60}분째" else "${min}분째"
+        val top = parts.maxByOrNull { it.third }?.takeIf { it.third > 0 }?.second ?: t.name(1)
+        if (top != artKey) {
+            artKey = top
+            artBmp = try {
+                SpeciesArt.bitmap(this, top)?.let { src ->
+                    // 어두운 바탕 정사각형 320px 가운데에 (음악 칸 그림)
+                    val out = android.graphics.Bitmap.createBitmap(320, 320, android.graphics.Bitmap.Config.ARGB_8888)
+                    val cv = android.graphics.Canvas(out)
+                    cv.drawColor(android.graphics.Color.parseColor("#12283A"))
+                    cv.drawBitmap(src, null, SpeciesArt.fitRect(src, 24f, 24f, 296f, 296f), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                    out
+                }
+            } catch (_: Exception) { null }
+        }
+        val b = android.media.MediaMetadata.Builder()
+            .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, title)
+            .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, "조과일지 · 총 ${t.catches.size}마리 · $dur")
             .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, "조과일지")
-            .build())
+        artBmp?.let { b.putBitmap(android.media.MediaMetadata.METADATA_KEY_ALBUM_ART, it) }
+        session?.setMetadata(b.build())
     }
 
     /** 리모컨을 등록했거나 워치 기록을 켰을 때만 무음 재생 (버튼 우선권 유지 + 워치 음악 화면에 보이기) */
