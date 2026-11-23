@@ -1,0 +1,24 @@
+name: KMA key test
+
+# 기상청 API허브 키(KMA_HUB_KEY)가 들어갔는지 · 해양기상부이 자료가 오는지 확인만 해요 (앱은 안 만들어요)
+on:
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/kma-test.yml' ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check key and call buoy API
+        env:
+          KEY: ${{ secrets.KMA_HUB_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "KMA_HUB_KEY 없음 (비밀값 이름 확인)"; exit 1; fi
+          echo "KMA_HUB_KEY 있음 · 길이 ${#KEY}"
+          TM=$(TZ=Asia/Seoul date -d '-2 hour' +%Y%m%d%H00)
+          for P in "kma_buoy.php?tm=$TM&stn=0&help=1" "kma_buoy2.php?tm=$TM&stn=0&help=1" "sea_obs.php?tm=$TM&stn=0&help=1"; do
+            echo "==== $P"
+            curl -s -m 25 -w '\n[HTTP %{http_code}]\n' "https://apihub.kma.go.kr/api/typ01/url/$P&authKey=$KEY" | head -n 60
+          done

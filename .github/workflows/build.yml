@@ -10,6 +10,7 @@ on:
       - 'rules-test/**'
       - 'CLAUDE.md'
       - '.github/workflows/store.yml'
+      - '.github/workflows/kma-test.yml'
   workflow_dispatch:
 
 permissions:
