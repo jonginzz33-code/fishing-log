@@ -140,6 +140,7 @@ class ChatActivity : Activity() {
 
     override fun onPause() {
         if (Cloud.user != null) { Chat.markSeen(room); Chat.stop(onChange); Chat.stopPresence() }
+        ChatRead.stop()
         super.onPause()
     }
 
@@ -259,6 +260,11 @@ class ChatActivity : Activity() {
         if (lastCount < 0 || msgs.size > lastCount && (atBottom || msgs.lastOrNull()?.mine == true)) scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
         lastCount = msgs.size
         Chat.markSeen(room)
+        // v6.62 (343): 그룹방 읽음 기록 (서버) · 안 읽은 사람 수 듣기
+        if (room != Chat.ALL) {
+            ChatRead.mark(room, maxOf(System.currentTimeMillis(), msgs.lastOrNull()?.time ?: 0L))
+            ChatRead.listen(room) { if (!isFinishing) renderList() }
+        } else ChatRead.stop()
     }
 
     private fun bubble(m: Chat.Msg, today: String, owner: String?, cont: Boolean = false): View {
@@ -303,14 +309,29 @@ class ChatActivity : Activity() {
             iv.setOnLongClickListener { menu(m); true }
             col.addView(iv, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
         }
-        if (m.text.isNotBlank() || m.th.isBlank()) col.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
+        // v6.62 (343): 안 읽은 사람 수 (노란 숫자 · 누르면 누가)
+        val un = ChatRead.unread(m)
+        val badge = if (un.isEmpty()) null else Ui.text(this, 11.5f, YELLOW, true, un.size.toString()).apply {
+            setPadding(dp(4), 0, dp(4), dp(2))
+            setOnClickListener {
+                val names = un.map { u -> Cloud.memberNames[u] ?: Chat.messages(room).lastOrNull { it.uid == u }?.name ?: "이름 모름" }
+                AlertDialog.Builder(this@ChatActivity, R.style.FlAlert).setTitle("👀 안 읽은 사람 ${un.size}명")
+                    .setMessage(names.joinToString("\n") + "\n\n앱을 업데이트 안 한 사람은 읽어도 '안 읽음'으로 보일 수 있어요")
+                    .setPositiveButton("닫기", null).show()
+            }
+        }
+        val bubbleRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.BOTTOM }
+        if (m.mine && badge != null) bubbleRow.addView(badge)
+        if (m.text.isNotBlank() || m.th.isBlank()) bubbleRow.addView(Ui.text(this, 14.5f, if (m.mine) Color.parseColor("#04342C") else Ui.TEXT, false, m.text).apply {
             setPadding(dp(11), dp(8), dp(11), dp(8))
             setLineSpacing(0f, 1.15f)
             maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = if (m.mine) Ui.bg(this@ChatActivity, Ui.BLUE, 14) else Ui.bg(this@ChatActivity, Color.parseColor("#1E3247"), 14)
             setTextIsSelectable(false)
             setOnLongClickListener { menu(m); true }
-        }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
+        }, LinearLayout.LayoutParams(WRAP, WRAP))
+        if (!m.mine && badge != null) bubbleRow.addView(badge)
+        if (bubbleRow.childCount > 0) col.addView(bubbleRow, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
         if (Cloud.isAdmin && masked >= 2 && !m.mine)
             col.addView(Ui.text(this, 10.5f, Color.parseColor("#FF8A92"), false, "욕설 가림 · 꾹 눌러서 삭제·채팅 금지"))
         return col

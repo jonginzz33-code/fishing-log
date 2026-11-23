@@ -173,6 +173,16 @@ await no('그룹 밖 사람이 댓글 보기', getDoc(doc(C, 'groups/g1/trips/A_
 await no('그룹 밖 사람이 댓글 달기', setDoc(doc(C, 'groups/g1/trips/A_1/comments/c6'), { uid: 'C', name: 'c', text: 'x', t: now }));
 await ok('그룹장이 남의 댓글 지우기', deleteDoc(doc(A, 'groups/g1/trips/A_1/comments/c1')));
 await ok('내 댓글 지우기', (async () => { await setDoc(doc(B, 'groups/g1/trips/A_1/comments/c7'), { uid: 'B', name: 'b', text: 'y', t: now }); await deleteDoc(doc(B, 'groups/g1/trips/A_1/comments/c7')); })());
+console.log('[v6.62 채팅 읽음]');
+{
+  const D = env.authenticatedContext('D', { email: 'd@x.com' }).firestore();
+  await ok('그룹원이 내 읽음 쓰기', setDoc(doc(B, 'groups/g1/chatRead/B'), { t: now, at: now }));
+  await ok('그룹원이 읽음 보기', getDoc(doc(A, 'groups/g1/chatRead/B')));
+  await no('남의 읽음 쓰기', setDoc(doc(B, 'groups/g1/chatRead/A'), { t: now, at: now }));
+  await no('읽음에 이상한 칸', setDoc(doc(B, 'groups/g1/chatRead/B'), { t: now, at: now, x: 1 }));
+  await no('그룹 밖 사람이 읽음 보기', getDoc(doc(D, 'groups/g1/chatRead/B')));
+  await no('그룹 밖 사람이 읽음 쓰기', setDoc(doc(D, 'groups/g1/chatRead/D'), { t: now, at: now }));
+}
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

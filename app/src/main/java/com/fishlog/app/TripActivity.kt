@@ -203,7 +203,13 @@ class TripActivity : Activity() {
         loadTide()
         if (remote != null && cmtGid != null) { cmtJump = intent.getBooleanExtra("toCmt", false); loadCmts() }
         if (savedInstanceState == null && intent.getBooleanExtra("publish", false)) {
-            trip?.let { t -> root.post { doPublish(t) } }
+            trip?.let { t -> root.post {
+                // v6.62 (335): '출조 끝나면 늘 공개'를 켰으면 묻지 않고 그 방식으로
+                val auto = PublicBoard.autoPub(this)
+                if (auto != 0) PublicBoard.publishQuiet(this, t, auto == 2) { err ->
+                    Toast.makeText(this, err ?: "전체 게시판에 공개했어요 (${if (auto == 2) "정확한 위치" else "대략 위치"} · 늘 공개 설정)", Toast.LENGTH_LONG).show()
+                } else doPublish(t)
+            } }
         }
     }
 

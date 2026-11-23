@@ -100,13 +100,20 @@ object Weather {
     }
 
     /** 출조 기록에 넣어 둔 날씨 (시간별 + 실측 수온) */
-    class Snap(val hours: List<Hour>, val measured: Map<Long, Double>, val station: String, val note: String)
+    class Snap(val hours: List<Hour>, val measured: Map<Long, Double>, val station: String, val note: String,
+               /** v6.62 (347 ⑥): 정각마다 부이 · 등표 실측 (없으면 빈 것) */
+               val obs: Map<Long, ObsH> = emptyMap())
+    class ObsH(val ws: Double?, val gust: Double?, val wave: Double?, val tw: Double?, val pa: Double?, val src: String)
 
     fun snapFromJson(s: String): Snap? = try {
         val o = JSONObject(s)
         val m = HashMap<Long, Double>()
         o.optJSONObject("m")?.let { mj -> mj.keys().forEach { k -> k.toLongOrNull()?.let { m[it] = mj.getDouble(k) } } }
-        Snap(hoursFromJson(o.optJSONObject("h") ?: JSONObject()), m, o.optString("st"), o.optString("n"))
+        val ob = HashMap<Long, ObsH>()
+        o.optJSONObject("o")?.let { oj -> oj.keys().forEach { k -> val t = k.toLongOrNull() ?: return@forEach; val x = oj.optJSONObject(k) ?: return@forEach
+            fun d(n: String) = if (x.has(n)) x.optDouble(n).takeIf { !it.isNaN() } else null
+            ob[t] = ObsH(d("ws"), d("gs"), d("wh"), d("tw"), d("pa"), listOf(x.optString("wsn"), x.optString("whn"), x.optString("twn")).filter { it.isNotBlank() }.distinct().joinToString(" · ")) } }
+        Snap(hoursFromJson(o.optJSONObject("h") ?: JSONObject()), m, o.optString("st"), o.optString("n"), ob)
     } catch (_: Exception) { null }
 
     /**
@@ -135,7 +142,11 @@ object Weather {
                     if (station.isNotBlank()) o.put("st", station)
                     notes.firstOrNull()?.let { o.put("n", it) }
                     o.put("at", System.currentTimeMillis())
-                    done(o.toString())
+                    // v6.62 (347 ⑥): 잡은 시각 가까운 부이 · 등표 실측(바람 · 돌풍 · 파고 · 수온 · 기압)도 같이 저장
+                    if (KmaObs.hasKey()) Thread {
+                        try { KmaObs.tripJson(ctx, loc.first, loc.second, from, to)?.let { o.put("o", it) } } catch (_: Exception) {}
+                        android.os.Handler(android.os.Looper.getMainLooper()).post { done(o.toString()) }
+                    }.start() else done(o.toString())
                 }
             }
         }

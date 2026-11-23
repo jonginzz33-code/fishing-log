@@ -146,6 +146,14 @@ class BoardActivity : Activity() {
         // v6.60 (339): 종류 · 기간을 '🔎 걸러 보기' 상자 하나로
         val (filterBox, filterIn) = Ui.panel(this, "🔎 걸러 보기")
         col.addView(filterBox, Ui.lp(this, MATCH, WRAP, top = 10))
+        // v6.62 (335): 아직 게시판에 안 올린 내 출조 → 한 번에 공개하기
+        pubBanner = Ui.text(this, 13.5f, android.graphics.Color.parseColor("#FFE2B8"), true, "").apply {
+            setPadding(dp(14), dp(11), dp(14), dp(11)); visibility = View.GONE
+            background = Ui.bg(this@BoardActivity, android.graphics.Color.parseColor("#3A2A12"), 14, android.graphics.Color.parseColor("#F2A13C"))
+            setOnClickListener { openUnpublished() }
+        }
+        col.addView(pubBanner, Ui.lp(this, MATCH, WRAP, top = 8))
+        paintPubBanner()
         catRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         filterIn.addView(Ui.hscroll(this, catRow),
             Ui.lp(this, MATCH, WRAP, top = 2))
@@ -962,7 +970,64 @@ class BoardActivity : Activity() {
         dlg.show()
     }
 
-    override fun onResume() { super.onResume(); refreshNick() }
+    override fun onResume() { super.onResume(); refreshNick(); paintPubBanner() }
+
+    private var pubBanner: TextView? = null
+    private fun paintPubBanner() {
+        val b = pubBanner ?: return
+        val off = getSharedPreferences("fishlog", Context.MODE_PRIVATE).getBoolean("pub_nag_off", false)
+        val n = if (Cloud.user == null || off) 0 else PublicBoard.unpublished().size
+        b.visibility = if (n > 0) View.VISIBLE else View.GONE
+        b.text = "📤 내 출조 ${n}개가 아직 게시판에 없어요 · 공개하기 ›"
+    }
+
+    /** v6.62 (335): 안 올린 출조 목록 (줄마다 공개 · 전부 대략으로 · 다시 묻지 않기) */
+    private fun openUnpublished() {
+        val sh = Sheet(this, 0.7f)
+        sh.head.addView(Ui.text(this, 17f, Ui.TEXT, true, "📤 아직 안 올린 내 출조"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val listB = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        sh.body.addView(Ui.text(this, 12f, Ui.SUB, false, "그룹에만 올렸거나 공개를 안 누른 출조예요. [공개]를 누르면 위치(정확/대략)를 고르고 올려요."))
+        sh.body.addView(listB, Ui.lp(this, MATCH, WRAP, top = 6))
+        val fmt = SimpleDateFormat("M/d(E) HH:mm", Locale.KOREA)
+        fun paint() {
+            listB.removeAllViews()
+            val l = PublicBoard.unpublished()
+            if (l.isEmpty()) { listB.addView(Ui.text(this, 14f, Ui.GREEN, true, "✓ 다 올렸어요"), Ui.lp(this, MATCH, WRAP, top = 12)); return }
+            l.forEach { t ->
+                val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(10), dp(4), dp(10)) }
+                val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                tx.addView(Ui.text(this, 14.5f, Ui.TEXT, true, fmt.format(Date(t.start)) + " · " + Store.catLabel(t.cat)))
+                tx.addView(Ui.text(this, 12f, Ui.SUB, false, t.slots().filter { t.count(it) > 0 }.joinToString(" · ") { "${t.name(it)} ${t.count(it)}" } + " · 총 ${t.catches.size}마리"))
+                r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.text(this, 13f, android.graphics.Color.parseColor("#1B0E02"), true, "공개").apply {
+                    gravity = Gravity.CENTER; setPadding(dp(14), dp(7), dp(14), dp(7)); background = Ui.bg(this@BoardActivity, Ui.ORANGE, 99)
+                    setOnClickListener { PublicBoard.publishFlow(this@BoardActivity, t) { err ->
+                        Toast.makeText(this@BoardActivity, err ?: "전체 게시판에 공개했어요", Toast.LENGTH_SHORT).show(); paint(); paintPubBanner()
+                    } }
+                })
+                listB.addView(r)
+            }
+        }
+        paint()
+        val all = Ui.button(this, "전부 대략 위치로 공개 (사진 빼고)", true) {
+            val l = PublicBoard.unpublished()
+            if (l.isEmpty()) return@button
+            var left = l.size; var bad = 0
+            Toast.makeText(this, "${l.size}개 올리는 중…", Toast.LENGTH_SHORT).show()
+            l.forEach { t -> PublicBoard.publishQuiet(this, t, false) { err ->
+                if (err != null) bad++
+                if (--left == 0) { Toast.makeText(this, if (bad == 0) "다 올렸어요" else "${l.size - bad}개 올림 · ${bad}개 실패", Toast.LENGTH_LONG).show(); paint(); paintPubBanner() }
+            } }
+        }
+        val never = Ui.text(this, 12.5f, Ui.SUB, false, "이 안내 다시 보지 않기").apply {
+            gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(2))
+            setOnClickListener { getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putBoolean("pub_nag_off", true).apply(); paintPubBanner(); sh.close() }
+        }
+        sh.foot.visibility = View.VISIBLE
+        sh.foot.addView(all, LinearLayout.LayoutParams(MATCH, WRAP))
+        sh.foot.addView(never, LinearLayout.LayoutParams(MATCH, WRAP))
+        sh.show()
+    }
 
     // v6.9 (255): 큰 상세 화면에서 차단 · 내리기 하고 돌아오면 목록 새로
     private val REQ_PUB = 7255

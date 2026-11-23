@@ -166,7 +166,7 @@ object Region {
                 latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
                 LIST.forEach { r ->
                     val l2 = java.util.concurrent.CountDownLatch(1)
-                    Warn.forPlace(r.lat, r.lon) { s -> if (!s.isNullOrBlank() && (s.contains("풍랑") || s.contains("태풍") || s.contains("해일"))) synchronized(w) { w[r.id] = s }; l2.countDown() }
+                    Warn.forPlace(r.lat, r.lon) { s -> if (!s.isNullOrBlank() && (s.contains("풍랑") || s.contains("태풍주의보") || s.contains("태풍경보") || s.contains("해일"))) synchronized(w) { w[r.id] = s }; l2.countDown() }
                     l2.await(3, java.util.concurrent.TimeUnit.SECONDS)
                 }
             } catch (_: Exception) {}
@@ -423,6 +423,21 @@ object Region {
             val mul = Tide.mulName(today + dayIdx * 86_400_000L + 12 * 3_600_000L).substringBefore(" (").substringBefore(" · ")
             cell(g2, "🌊 물때 · 🌡 수온", "$mul · ${s?.pct ?: "-"}%" + (c?.sst?.let { String.format(Locale.KOREA, " · %.1f℃", it) } ?: ""), Ui.TEXT, false)
             box.addView(g1, Ui.lp(a, MATCH, WRAP, top = 9)); box.addView(g2, Ui.lp(a, MATCH, WRAP, top = 7))
+            // v6.62 (347 ⑧): 오늘은 대표 항구 가까운 부이 · 등표 실측 한 줄
+            if (dayIdx == 0 && KmaObs.hasKey()) {
+                val ob = Ui.text(a, 12f, Color.parseColor("#9FDCF5"), false, "🛟 실제 바다 불러오는 중…")
+                box.addView(ob, Ui.lp(a, MATCH, WRAP, top = 7))
+                KmaObs.now(a, r.lat, r.lon) { n ->
+                    val m = n?.m
+                    if (m == null) { ob.text = "🛟 실제 바다: 가까운 부이 · 등표 자료 없음"; return@now }
+                    val parts = listOfNotNull(
+                        m.ws?.let { o -> "바람 " + (o.wd?.let { Weather.dir16(it) + " " } ?: "") + String.format(Locale.KOREA, "%.1fm/s", o.ws) },
+                        m.wave?.let { o -> String.format(Locale.KOREA, "파고 %.1fm", o.whSig) },
+                        m.tw?.let { o -> String.format(Locale.KOREA, "수온 %.1f℃", o.tw) })
+                    val src = listOfNotNull(m.ws, m.wave, m.tw).distinctBy { it.stn.id }.joinToString(" · ") { "${it.stn.label} ${String.format(Locale.KOREA, "%.0f", it.km)}km" }
+                    ob.text = "🛟 지금 실제: " + parts.joinToString(" · ") + "\n" + src + " (점수는 예보 기준)"
+                }
+            }
             if (s != null) {
                 box.addView(Ui.text(a, 12f, Ui.SUB, false, "").apply {
                     text = "왜 이렇게?\n🌤 " + s.envWhy.ifBlank { "-" } + "\n🎣 " + s.catchWhy.ifBlank { "-" }

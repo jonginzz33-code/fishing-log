@@ -13,12 +13,14 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 142
-        versionName = "6.61"
+        versionCode = 143
+        versionName = "6.62"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KAKAO_KEY", "\"" + (System.getenv("KAKAO_REST_KEY") ?: "") + "\"")
+        // v6.62 (347): 기상청 API허브 인증키 (부이 · 등표 · 태풍): GitHub 비밀값(KMA_HUB_KEY)에서 빌드할 때만 넣음
+        buildConfigField("String", "KMA_HUB_KEY", "\"" + (System.getenv("KMA_HUB_KEY") ?: "") + "\"")
     }
 
     // v6.41 (304): GitHub판은 없앰 · 플레이 스토어판 하나만 (빌드 이름은 그대로 assemblePlayDebug · bundlePlayRelease)

@@ -252,6 +252,47 @@ object TideDialog {
             sb.append("\n${c.station} 관측소 ${hm} · ${String.format(Locale.KOREA, "%.0f", c.km)}km · 유향 = 물이 흘러가는 방향")
             curView.text = sb
         }
+        // v6.62 (347): 🛟 지금 실제 바다 — 기상청 부이 · 등표 실측 (바람 · 돌풍 · 파고 · 수온 · 기압 변화 · 예보와 비교)
+        val seaView = Ui.text(a, 12.5f, Ui.SUB, false, "🛟 실제 바다(부이 · 등표) 불러오는 중…").apply {
+            setPadding(dp(12), dp(8), dp(12), dp(8)); background = Ui.bg(a, Color.parseColor("#102536"), 12, Color.parseColor("#2E5F7E"))
+            visibility = if (KmaObs.hasKey()) View.VISIBLE else View.GONE
+        }
+        col.addView(seaView, Ui.lp(a, MATCH, WRAP, top = 6))
+        var seaNow: KmaObs.Now? = null
+        var fcNow: Weather.Hour? = null
+        var obsWs: Double? = null
+        var paintSidesRef2: () -> Unit = {}
+        fun paintSea() {
+            val n = seaNow ?: return
+            val m = n.m
+            val sb = android.text.SpannableStringBuilder("🛟 지금 실제 바다  ")
+            fun bold(t: String, c: Int) { val st = sb.length; sb.append(t); sb.setSpan(android.text.style.ForegroundColorSpan(c), st, sb.length, 0); sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), st, sb.length, 0) }
+            val parts = ArrayList<String>()
+            m.ws?.let { o -> bold((o.wd?.let { Weather.dir16(it) + " " } ?: "") + String.format(Locale.KOREA, "%.1fm/s", o.ws) + (o.gust?.let { String.format(Locale.KOREA, " · 돌풍 %.0f", it) } ?: ""), Color.parseColor("#7FD6FF")); sb.append("  ") }
+            m.wave?.let { o -> bold(String.format(Locale.KOREA, "파고 %.1fm", o.whSig) + (o.whMax?.let { String.format(Locale.KOREA, "(최대 %.1f)", it) } ?: "") + (o.wp?.let { String.format(Locale.KOREA, " %.0f초", it) } ?: ""), Color.parseColor("#9BE7B0")); sb.append("  ") }
+            m.tw?.let { o -> bold(String.format(Locale.KOREA, "수온 %.1f℃", o.tw), Color.parseColor("#FFB27A")); sb.append("  ") }
+            m.pa?.let { o -> sb.append(String.format(Locale.KOREA, "기압 %.0fhPa", o.pa)); n.paDrop3h?.let { d -> if (kotlin.math.abs(d) >= 0.5) bold(String.format(Locale.KOREA, " %s%.1f (3시간)", if (d < 0) "▼" else "▲", kotlin.math.abs(d)), if (d <= -2) Color.parseColor("#FF8A92") else Ui.SUB) } }
+            fun src(o: KmaObs.Obs) = "${o.stn.label} ${String.format(Locale.KOREA, "%.0f", o.km)}km" + (if (o.stn.harbor) "(항구 안)" else "") + (if (o.km > 30) "(멀어요)" else "")
+            listOfNotNull(m.ws, m.wave, m.tw).distinctBy { it.stn.id }.forEach { parts.add(src(it)) }
+            val last = listOfNotNull(m.ws, m.wave, m.tw, m.pa).maxOfOrNull { it.time }
+            sb.append("\n" + parts.joinToString(" · ") + (last?.let { " · " + java.text.SimpleDateFormat("HH:mm", Locale.KOREA).format(java.util.Date(it)) + " 관측" } ?: ""))
+            // ④ 예보와 비교 (지금 시각 예보)
+            val f = fcNow
+            val diffs = ArrayList<String>()
+            if (f != null) {
+                val ow = m.ws?.ws; val fw = f.wind
+                if (ow != null && fw != null && kotlin.math.abs(ow - fw) >= 1.5) diffs.add(String.format(Locale.KOREA, "바람이 예보보다 %.1fm/s %s", kotlin.math.abs(ow - fw), if (ow > fw) "세요" else "약해요"))
+                val ov = m.wave?.whSig; val fv = f.wave
+                if (ov != null && fv != null && kotlin.math.abs(ov - fv) >= 0.3) diffs.add(String.format(Locale.KOREA, "파고가 예보보다 %.1fm %s", kotlin.math.abs(ov - fv), if (ov > fv) "높아요" else "낮아요"))
+            }
+            if (diffs.isNotEmpty()) { sb.append("\n"); bold("⚠ " + diffs.joinToString(" · ") + " (오늘 예보는 이만큼 감안해서 보세요)", Color.parseColor("#F2C14E")) }
+            seaView.text = sb
+        }
+        if (KmaObs.hasKey()) KmaObs.now(a, lat, lon) { n ->
+            if (n == null) { seaView.text = "🛟 실제 바다: 가까운 부이 · 등표(60km 안) 자료가 없어요"; return@now }
+            seaNow = n; obsWs = n.m.ws?.takeIf { !it.stn.harbor && it.km <= 30 }?.ws
+            paintSea(); paintSidesRef2()
+        }
 
         // ---- 바람 · 파도 · 수온 ----
         // 제목 + (관리자·권한 받은 사람만) 새로고침: 기억해 둔 값 무시하고 지금 바로 다시 받기
@@ -393,7 +434,9 @@ object TideDialog {
             val cd = curDay?.takeIf { it.dayStart == w.dayStart }
             val out = IntArray(8); var calm = 0; var known = 0
             for (b in 0 until 8) {
-                val winds = (0..2).mapNotNull { k -> w.at(b * 3 + k)?.wind }
+                // v6.62 (347): 지금 칸은 부이 · 등표 실측 바람으로
+                val nowB = if (w.dayStart == today) ((System.currentTimeMillis() - w.dayStart) / 3_600_000L).toInt() / 3 else -1
+                val winds = if (b == nowB && obsWs != null) listOf(obsWs!!) else (0..2).mapNotNull { k -> w.at(b * 3 + k)?.wind }
                 val flows = (0..2).mapNotNull { k -> BiteMemo.flowAt(dy, st, dy.dateMillis + (b * 3 + k) * 3_600_000L + 30 * 60_000L) }
                 if (winds.isEmpty() || flows.isEmpty()) continue
                 known++
@@ -468,8 +511,10 @@ object TideDialog {
 
         onBoatType = { paintSides() }
         paintSidesRef = { paintSides() }
+        paintSidesRef2 = { paintSides() }
 
         fun renderWeather(w: Weather.Day) {
+            if (w.dayStart == today) { fcNow = w.at(((System.currentTimeMillis() - w.dayStart) / 3_600_000L).toInt()); paintSea() }
             sideW = w; paintSides()
             // v6.50 (318): 실측이 없는 날(앞날 · 지난 날)도 기억해 둔 보정을 이어 씀 (표시만 · 물때 계산과 상관없음)
             val sstOffP = Weather.sstOffsetAt(w, lat, lon)
@@ -770,7 +815,35 @@ object TideDialog {
                     paintSides()
                 }
             }
-            Weather.fetch(a, lat, lon, cur, progressive = true) { w -> if (dlg.isShowing && id == loadId) renderWeather(w) }   // v6.35 (288): 먼저 온 것부터
+            // v6.62 (347 ③): 해양조사원 실측 수온이 없는 날(오늘 · 지난 날)은 가까운 기상청 부이(40km 안) 실측으로 채움
+            var buoyM: Weather.Measured? = null
+            var buoyAsked = false
+            var lastW: Weather.Day? = null
+            fun withBuoy(w: Weather.Day): Weather.Day {
+                val bm = buoyM ?: return w
+                if (w.measured != null) return w
+                return Weather.Day(w.dayStart, w.hours, w.windNote, w.seaNote, bm, "", w.kmaNote, w.fromKma, w.windBasis)
+            }
+            Weather.fetch(a, lat, lon, cur, progressive = true) { w ->
+                if (!dlg.isShowing || id != loadId) return@fetch
+                lastW = w
+                renderWeather(withBuoy(w))
+                if (w.measured == null && !buoyAsked && w.dayStart <= today && KmaObs.hasKey()) {
+                    buoyAsked = true
+                    val ds = w.dayStart
+                    Thread {
+                        val r = try { KmaObs.daySst(a, lat, lon, ds) } catch (_: Exception) { null }
+                        if (r != null) android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            if (!dlg.isShowing || id != loadId) return@post
+                            val (stn, ser) = r
+                            val lastT = ser.keys.maxOrNull() ?: return@post
+                            val nm = "${stn.name}(부이)"
+                            buoyM = Weather.Measured(ser[lastT]!!, SimpleDateFormat("HH:mm", Locale.KOREA).format(Date(lastT)), nm, ser, ser.keys.associateWith { nm })
+                            lastW?.let { lw -> if (lw.measured == null) renderWeather(withBuoy(lw)) }
+                        }
+                    }.start()
+                }
+            }   // v6.35 (288): 먼저 온 것부터
         }
 
         // ---- 주간 (7일): 날짜 · 하늘 · 기온(+수온) · 비 · 바람 · 파고 · 물때 · 물세기 ----

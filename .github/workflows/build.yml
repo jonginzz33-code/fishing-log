@@ -39,6 +39,7 @@ jobs:
         env:
           KHOA_KEY: ${{ secrets.KHOA_KEY }}
           KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          KMA_HUB_KEY: ${{ secrets.KMA_HUB_KEY }}
           PLAY_KEY_PASS: ${{ secrets.PLAY_KEY_PASS }}
         run: |
           if [ -z "$PLAY_KEY_PASS" ]; then echo "::warning::PLAY_KEY_PASS 비밀값이 없어서 스토어용 AAB는 건너뛰어요"; exit 0; fi

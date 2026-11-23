@@ -214,7 +214,10 @@ object Warn {
                     .map { it.substringBefore(":").trim() }.filter { it.isNotBlank() }.distinct()
                     .joinToString(" · ")
             } catch (e: Exception) { lastErr = e.message ?: ""; null }
-            Net.main.post { done(r) }
+            // v6.62 (347 ⑩): 진행 중 · 한반도 영향 태풍 (기상청 API허브 · 물때 창 · 메인 · 위젯 특보 띠에 같이)
+            val typ = try { KmaObs.typhoonLine() } catch (_: Exception) { "" }
+            val all = if (typ.isBlank()) r else listOfNotNull(r?.takeIf { it.isNotBlank() }, typ).joinToString(" · ")
+            Net.main.post { done(all) }
         }.start()
     }
 }

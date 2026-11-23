@@ -108,9 +108,13 @@ object PointMap {
             }
             return out
         }
-        fun recs(): List<Analysis.Rec> = (if (showMine) mineRecs else emptyList()) +
-            (if (showPub) pubRecs + (if (showMine) emptyList() else pubMine) else emptyList()) +
-            groupRecs()
+        // v6.62 (345 ①): 그룹원이 같은 출조를 전체 게시판에도 올렸으면 그룹 쪽(정확한 위치) 하나만
+        fun recs(): List<Analysis.Rec> {
+            val g = groupRecs()
+            val gKeys = g.map { it.dupKey }.filter { it.isNotBlank() }.toHashSet()
+            val pub = if (showPub) (pubRecs + (if (showMine) emptyList() else pubMine)).filter { it.dupKey.isBlank() || it.dupKey !in gKeys } else emptyList()
+            return (if (showMine) mineRecs else emptyList()) + pub + g
+        }
         fun inside(): List<Analysis.Rec> {
             val c = circle.center ?: return emptyList()
             return Analysis.inCircle(recs(), c.latitude, c.longitude, circle.radiusM)

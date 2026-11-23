@@ -219,6 +219,8 @@ object WindMap {
         var onTap: ((GeoPoint) -> Unit)? = null
         /** 누른 자리 말풍선 (이름, 고른 예보 값) */
         var bubble: Pair<String, String>? = null
+        /** v6.62 (347 ⑨): 부이 · 등표 지금 실측 (흰 네모 숫자 · 지금 ±1.5시간 칸에서만) */
+        var obs: List<KmaObs.Obs> = emptyList()
         private val landGeo = land(a)
         private val landScr = Path()
         private val landRgn = android.graphics.Region()
@@ -343,6 +345,30 @@ object WindMap {
                     c.restore()
                 }
             }
+            // ③-2 실측 점 (지금 칸일 때만 · 예보 동그라미와 다르게 흰 네모)
+            val tt = g.times.getOrNull(t)
+            if (obs.isNotEmpty() && tt != null && kotlin.math.abs(tt - System.currentTimeMillis()) <= 90 * 60_000L) {
+                obs.forEach { o ->
+                    val ws = o.ws ?: return@forEach
+                    proj.toPixels(GeoPoint(o.stn.lat, o.stn.lon), pt)
+                    val x = pt.x.toFloat(); val y = pt.y.toFloat()
+                    if (x < -20 || y < -20 || x > w + 20 || y > h + 20) return@forEach
+                    val r0 = 13 * d
+                    cp.style = Paint.Style.FILL; cp.color = Color.WHITE
+                    c.drawRoundRect(x - r0, y - r0, x + r0, y + r0, 4 * d, 4 * d, cp)
+                    cp.style = Paint.Style.STROKE; cp.strokeWidth = 2.5f * d; cp.color = Color.parseColor("#1F6FB2")
+                    c.drawRoundRect(x - r0, y - r0, x + r0, y + r0, 4 * d, 4 * d, cp)
+                    tp.color = Color.parseColor("#0E2233"); tp.textSize = 12.5f * d
+                    c.drawText(String.format(java.util.Locale.KOREA, "%.0f", ws), x, y + 4.5f * d, tp)
+                    tp.color = Color.WHITE
+                    o.wd?.let { dir ->
+                        c.save(); c.rotate(dir.toFloat() + 180f, x, y)
+                        cp.style = Paint.Style.FILL; cp.color = Color.parseColor("#1F6FB2")
+                        c.drawPath(Path().apply { moveTo(x, y - r0 - 7 * d); lineTo(x + 5 * d, y - r0 - 1 * d); lineTo(x - 5 * d, y - r0 - 1 * d); close() }, cp)
+                        c.restore()
+                    }
+                }
+            }
             // ④ 누른 자리
             tap?.let { gp ->
                 proj.toPixels(gp, pt)
@@ -419,6 +445,11 @@ object WindMap {
         frame.addView(map, FrameLayout.LayoutParams(MATCH, MATCH))
         val ov = WindOverlay(a)
         map.overlays.add(ov)
+        // v6.62 (347 ⑨): 부이 · 등표 지금 실측 숫자 (흰 네모)
+        if (KmaObs.hasKey()) Thread {
+            val l = try { KmaObs.allAt(a, System.currentTimeMillis()) } catch (_: Exception) { emptyList() }
+            android.os.Handler(android.os.Looper.getMainLooper()).post { ov.obs = l.filter { it.ws != null }; map.invalidate() }
+        }.start()
         MapDialog.zoomButtons(a, frame, map)
         // 범례
         val legend = LinearLayout(a).apply {
@@ -426,6 +457,7 @@ object WindMap {
             background = Ui.bg(a, Color.argb(200, 10, 20, 30), 10)
         }
         legend.addView(Ui.text(a, 10.5f, Color.WHITE, true, "바람 m/s"))
+        if (KmaObs.hasKey()) legend.addView(Ui.text(a, 9.5f, Color.parseColor("#CFE6F5"), false, "□ 흰 네모 = 지금 실측\n(부이 · 등표 · 지금 칸만)"))
         legend.addView(View(a).apply {
             background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
                 intArrayOf(colorOf(0f), colorOf(4f), colorOf(7f), colorOf(10f), colorOf(12f), colorOf(14f), colorOf(17f))).apply { cornerRadius = dp(4).toFloat() }

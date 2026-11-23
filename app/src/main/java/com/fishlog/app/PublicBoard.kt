@@ -191,6 +191,20 @@ object PublicBoard {
         }
     }
 
+    /** v6.62 (335): 출조 끝나면 늘 공개 — 0 끔 · 1 대략으로 · 2 정확으로 (prefs auto_pub) */
+    fun autoPub(c: android.content.Context) = c.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE).getInt("auto_pub", 0)
+    fun setAutoPub(c: android.content.Context, v: Int) = c.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE).edit().putInt("auto_pub", v).apply()
+
+    /** v6.62 (335): 묻지 않고 공개 (위치 정확/대략은 정해 둔 대로 · 사진은 빼고 · 경로는 정확 공개 때만 지금 설정대로) */
+    fun publishQuiet(a: Activity, t: Store.Trip, exact: Boolean, done: (String?) -> Unit) {
+        if (Cloud.user == null) return done("전체 공개는 구글 로그인 후에 할 수 있어요")
+        if (t.catches.isEmpty()) return done("조과가 없는 출조는 공개할 수 없어요")
+        ensureNick(a) { publish(a, t, false, exact, done) }
+    }
+
+    /** v6.62 (335): 아직 게시판에 안 올린 내 출조 (끝난 · 조과 있는 · 그룹에만 올린 것 포함) */
+    fun unpublished(): List<Store.Trip> = Store.history.filter { !it.pub && it.end > 0 && it.catches.isNotEmpty() }.sortedByDescending { it.start }
+
     /** 위치 공개 방법 고르기 (마지막에 고른 게 기본) */
     private fun askPrecision(a: Activity, t: Store.Trip, then: (Boolean) -> Unit) {
         if (t.catches.none { it.lat != null && it.lon != null }) { then(Store.pubExact); return }

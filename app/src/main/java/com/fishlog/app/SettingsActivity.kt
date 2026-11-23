@@ -352,6 +352,20 @@ class SettingsActivity : Activity() {
         box.addView(Ui.button(this, "🔒 위치·개인정보 이용 동의 내용 보기") { Consent.show(this, readOnly = true) { render() } }
             .apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
 
+        // v6.62 (335): 출조 끝나면 늘 게시판에 공개
+        section("📰 전체 게시판 · 출조 끝나면 늘 공개")
+        box.addView(Ui.text(this, 12f, Ui.SUB, false, "켜면 출조를 끝낼 때 '전체 게시판에도 공개'가 체크된 채로, 위치를 묻지 않고 고른 방식으로 올려요 (사진은 빼고 · 조과 0이면 안 올림)"))
+        val apRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+        listOf("끔 (그때 물어봄)", "대략 위치로", "정확한 위치로").forEachIndexed { i, lb ->
+            val on = PublicBoard.autoPub(this) == i
+            apRow.addView(Ui.text(this, 12.5f, if (on) Color.parseColor("#06303A") else Ui.TEXT, true, lb).apply {
+                gravity = Gravity.CENTER; setPadding(0, dp(9), 0, dp(9))
+                background = if (on) Ui.bg(this@SettingsActivity, Ui.BLUE, 99) else Ui.bg(this@SettingsActivity, Color.TRANSPARENT, 99, Ui.LINE)
+                setOnClickListener { PublicBoard.setAutoPub(this@SettingsActivity, i); render() }
+            }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { if (i > 0) leftMargin = dp(6) })
+        }
+        box.addView(apRow, Ui.lp(this, MATCH, WRAP, top = 8))
+
         section("같이 출조 중 거리")
         val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
         listOf(50 to "50m", 200 to "200m", 1000 to "1km", 0 to "거리 상관없이").forEachIndexed { i, (v, l) ->
