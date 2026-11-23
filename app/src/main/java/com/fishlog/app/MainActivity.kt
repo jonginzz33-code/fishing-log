@@ -197,13 +197,10 @@ class MainActivity : Activity() {
     /** 채팅 버튼: 접속 인원 + 안 읽은 글 수 */
     private fun paintChat() {
         if (!::chatBtn.isInitialized) return
-        // v4.7 (217): 맨 아래 '채팅' 탭 이름 옆에 접속 인원 (예전처럼)
-        chatBtn.text = android.text.SpannableStringBuilder("채팅").apply {
-            if (Cloud.user != null && chatOnline > 0) {
-                val s0 = length; append(" 접속${chatOnline}")
-                setSpan(android.text.style.ForegroundColorSpan(Ui.GREEN), s0, length, 0)
-            }
-        }
+        // v6.65 (352): 맨 위 💬 버튼 아래 작은 '접속N'
+        val on = Cloud.user != null && chatOnline > 0
+        chatBtn.text = if (on) "접속$chatOnline" else ""
+        chatBtn.visibility = if (on) View.VISIBLE else View.GONE
         val n = if (Cloud.user == null) 0 else Chat.totalUnread()
         chatBadge.text = if (n > 99) "99+" else "$n"
         chatBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
@@ -531,6 +528,26 @@ class MainActivity : Activity() {
         // v4.8 (219): ⚙ 바로 왼쪽 네모 퀵바 (3개까지 · 4개부터는 제목 아래 한 줄)
         quickInline = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         header.addView(quickInline, LinearLayout.LayoutParams(WRAP, WRAP))
+        // v6.65 (352): 💬 채팅은 아래 탭에서 맨 위 오른쪽 작은 버튼으로 (빨간 숫자 = 안 읽은 글 · 아래 '접속N')
+        header.clipChildren = false; header.clipToPadding = false
+        val chatTop = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
+        chatTop.addView(Ui.text(this, 17f, Color.parseColor("#F2C14E"), true, "💬").apply {
+            gravity = Gravity.CENTER
+            background = Ui.bg(this@MainActivity, Color.parseColor("#2A2310"), 99, Color.parseColor("#F2C14E"))
+            contentDescription = "채팅"
+            setOnClickListener { startActivity(Intent(this@MainActivity, ChatActivity::class.java)) }
+        }, android.widget.FrameLayout.LayoutParams(dp(40), dp(40)))
+        chatBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0); minWidth = dp(18)
+            background = Ui.bg(this@MainActivity, RED, 99, Ui.BG); visibility = View.GONE
+        }
+        chatTop.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(6); rightMargin = -dp(6) })
+        chatBtn = Ui.text(this, 9.5f, Ui.GREEN, true, "").apply {
+            gravity = Gravity.CENTER; setPadding(dp(4), 0, dp(4), 0)
+            background = Ui.bg(this@MainActivity, Ui.BG, 99); visibility = View.GONE
+        }
+        chatTop.addView(chatBtn, android.widget.FrameLayout.LayoutParams(WRAP, dp(14), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = -dp(6) })
+        header.addView(chatTop, LinearLayout.LayoutParams(dp(40), dp(40)).apply { leftMargin = dp(4) })
         // v6.4 (249): 🔄 업데이트 확인 (⚙ 바로 왼쪽 · 새 버전 있으면 빨간 점)
         val updBox = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
         updBox.addView(Ui.text(this, 17f, Ui.GREEN, true, "🔄").apply {
@@ -584,14 +601,14 @@ class MainActivity : Activity() {
             text = two("🎣 출조추천", "좋은 날", Color.parseColor("#FFB27A"))
         }), LinearLayout.LayoutParams(0, WRAP, 1f))
         // 💬 채팅 (안 읽은 글은 빨간 숫자)
-        chatBtn = styled(smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }, Color.parseColor("#2A2310"), Color.parseColor("#F2C14E"))
-        val chatBox = cell(chatBtn)
-        chatBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
+        val oldChatBtn = styled(smallBtn("") { startActivity(Intent(this, ChatActivity::class.java)) }, Color.parseColor("#2A2310"), Color.parseColor("#F2C14E"))
+        val chatBox = cell(oldChatBtn)
+        val oldChatBadge = Ui.text(this, 10f, Color.WHITE, true, "").apply {
             gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
             background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
             visibility = View.GONE
         }
-        chatBox.addView(chatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(2) })
+        chatBox.addView(oldChatBadge, android.widget.FrameLayout.LayoutParams(WRAP, dp(18), Gravity.TOP or Gravity.END).apply { topMargin = -dp(8); rightMargin = -dp(2) })
         btnRow.addView(chatBox, LinearLayout.LayoutParams(0, WRAP, 1f))
         paintChat()
         // ✉ 문의 (관리자 1:1 · 답장 오면 빨간 숫자)
@@ -1080,12 +1097,12 @@ class MainActivity : Activity() {
         home.second.setTextColor(Ui.BLUE)
         val map = tabItem("🗺", "지도") { openMap() }
         val grp = tabItem("👥", "그룹") { openGroupDialog() }
-        val chat = tabItem("💬", "채팅") { startActivity(Intent(this, ChatActivity::class.java)) }
+        // v6.65 (352): '채팅' 자리 → 📒 내 조과 (지난 출조 · 내 기록 보관함 · 숫자 표시 없음)
+        val mine = tabItem("📒", "내 조과") { startActivity(Intent(this, HistoryActivity::class.java)) }
         val bag = tabItem("🎒", "가방") { Inventory.show(this) }
         val more = tabItem("⋯", "더보기") { openMenuDialog() }
-        listOf(home, map, grp, chat, bag, more).forEach { bar.addView(it.first, LinearLayout.LayoutParams(0, dp(52), 1f)) }
+        listOf(home, map, grp, mine, bag, more).forEach { bar.addView(it.first, LinearLayout.LayoutParams(0, dp(52), 1f)) }
         tabGroupBadge = grp.third
-        chatBtn = chat.second; chatBadge = chat.third
         tabMoreBadge = more.third
         paintChat()
         return LinearLayout(this).apply {
