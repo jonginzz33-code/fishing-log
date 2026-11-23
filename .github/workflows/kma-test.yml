@@ -22,18 +22,9 @@ jobs:
           T1=$(TZ=Asia/Seoul date -d '-3 hour' +%Y%m%d%H00); T2=$(TZ=Asia/Seoul date -d '-2 hour' +%Y%m%d%H00); D=$(TZ=Asia/Seoul date +%Y%m%d); Y=$(TZ=Asia/Seoul date +%Y)
           B=https://apihub.kma.go.kr/api
           set +e
-          try() { echo; echo "==== $1"; curl -s -m 20 -o out.txt -w '[HTTP %{http_code} · %{size_download}B]\n' "$B/$1&authKey=$KEY"; (iconv -f euc-kr -t utf-8 out.txt 2>/dev/null || cat out.txt) | grep -v '^\s*$' | head -n ${2:-25}; }
-          try "typ01/url/typ_lst.php?YY=$Y&disp=0&help=0" 3
-          try "typ01/url/typ_data.php?YY=2025&typ=0&seq=0&mode=0&disp=0&help=1"
-          try "typ01/url/lgt_kma_np3.php?tm1=$T1&tm2=$T2&itv=60&lon=126.5&lat=36.3&range=300&help=1"
-          try "typ01/url/lgt_kma_np.php?tm=$T2&itv=60&help=1"
-          try "typ01/url/kma_lhaws2.php?tm=$TM&stn=0&help=1" 40
-          try "typ01/url/kma_lhaws.php?tm=$TM&stn=0&help=1" 20
-          try "typ01/url/stn_inf.php?inf=LH&stn=&tm=$TM&help=1" 30
-          try "typ01/url/kma_sfctm2.php?tm=$TM&stn=0&help=1" 20
-          try "typ01/cgi-bin/url/nph-aws2_min?tm2=$TM&stn=0&disp=0&help=1" 20
-          try "typ01/url/sea_obs.php?tm=$TM&stn=0&help=1" 30
-          try "typ01/url/kma_buoy2.php?tm=$TM&stn=0&help=1" 20
-          try "typ01/url/kma_wavebuoy.php?tm=$TM&stn=0&help=1" 20
-          try "typ05/api/GK2A/LE2/SST/KO/dataList?date=${D}0000" 15
-          try "typ02/openApi/VilageFcstInfoService_2/getVilageFcst?pageNo=1&numOfRows=5&dataType=JSON&base_date=$D&base_time=0500&nx=55&ny=127" 15
+          try() { echo; echo "==== $1"; rm -f out.txt; curl -s -m 60 -o out.txt -w '[HTTP %{http_code} · %{size_download}B]\n' "$B/$1&authKey=$KEY"; (iconv -f euc-kr -t utf-8 out.txt 2>/dev/null || cat out.txt) | grep -v '^\s*$' | head -n ${2:-25}; }
+          try "typ01/url/kma_lhaws.php?tm=$TM&stn=0&help=1" 45
+          try "typ01/url/kma_lhaws.php?tm=$T1&stn=0&help=0" 10
+          try "typ01/url/kma_kship.php?tm=$TM&help=1" 40
+          try "typ01/url/stn_inf.php?inf=SEA_LH&stn=&tm=$TM&help=0" 10
+          try "typ01/url/stn_inf.php?inf=LHAWS&stn=&tm=$TM&help=0" 10
