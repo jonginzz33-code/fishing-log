@@ -27,6 +27,21 @@ object Ui {
     val BLUE = Color.parseColor("#5BC8DF")
     val GREEN = Color.parseColor("#5FD39A")
     val SLOT = intArrayOf(ORANGE, BLUE)
+    /** v6.68 (361): '내 것 · 그룹 · 전체' 색 — 앱 어디서든 이 셋으로 (점 · 핀 · 원 · 칩 · 범례) */
+    val MINE = Color.parseColor("#E8892A")
+    val GROUP = Color.parseColor("#2E8FB8")
+    val ALL = Color.parseColor("#8A63D2")
+    /** v6.68 (359): 칩 · 탭 높이 두 가지만 (같은 줄은 같은 높이 · 글자 크게 쓴 폰은 늘어남) */
+    const val PILL_M = 40
+    const val PILL_S = 32
+    fun pill(c: Context, label: CharSequence, on: Boolean, onColor: Int = TEXT, small: Boolean = false, onClick: (() -> Unit)? = null): TextView =
+        text(c, if (small) 12.5f else 13.5f, if (on) BG else TEXT, true).apply {
+            text = label; gravity = Gravity.CENTER; maxLines = 1
+            minHeight = dp(c, if (small) PILL_S else PILL_M); minimumHeight = minHeight
+            setPadding(dp(c, if (small) 11 else 14), 0, dp(c, if (small) 11 else 14), 0)
+            background = if (on) bg(c, onColor, 99) else bg(c, Color.TRANSPARENT, 99, LINE)
+            if (onClick != null) setOnClickListener { onClick() }
+        }
 
     const val MATCH = LinearLayout.LayoutParams.MATCH_PARENT
     const val WRAP = LinearLayout.LayoutParams.WRAP_CONTENT

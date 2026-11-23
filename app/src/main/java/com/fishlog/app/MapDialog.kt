@@ -550,7 +550,8 @@ object MapDialog {
 
         // 내 위치 기록 확인 (테스트용 · 출조 아닐 때 · 앱이 켜져 있는 동안만)
         var testListener: (() -> Unit)? = null
-        if (live == null) {
+        // v6.68 (360): '📍 내 기록'(움직인 길 시험)은 관리자만
+        if (live == null && Cloud.isAdmin) {
             val testLine = Polyline(map).apply {
                 outlinePaint.color = Color.parseColor("#2F7BF6"); outlinePaint.strokeWidth = dp(a, 4).toFloat()
                 outlinePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(dp(a, 8).toFloat(), dp(a, 6).toFloat()), 0f)
@@ -721,7 +722,7 @@ object MapDialog {
                     LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 6) })
                 fun chip(label: String, on: Boolean, allChip: Boolean, click: () -> Unit) = TextView(a).apply {
                     text = label; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-                    setPadding(dp(a, 11), dp(a, 5), dp(a, 11), dp(a, 5))
+                    setPadding(dp(a, 11), 0, dp(a, 11), 0); minHeight = dp(a, Ui.PILL_S); maxLines = 1
                     setTextColor(if (on) Color.parseColor(if (allChip) "#06303A" else "#1B0E02") else Color.parseColor("#C9D3DE"))
                     background = GradientDrawable().apply {
                         cornerRadius = dp(a, 14).toFloat()
@@ -771,7 +772,17 @@ object MapDialog {
             mode.startsWith("g:") -> "내 기록 + " + (Cloud.groups.firstOrNull { "g:${it.id}" == mode }?.title ?: "그룹")
             else -> mode
         }
-        fun paintPastTitle() { pastBar.text = "📜 " + whoLabel(pastModeNow()) + " · " + periodLabel() }
+        fun paintPastTitle() {
+            // v6.68 (361): 누구 기록인지 색 점 (내 것 주황 · 그룹 하늘 · 전체 보라)
+            val m = pastModeNow()
+            val sb = android.text.SpannableStringBuilder("📜 ")
+            fun dot(col: Int) { val st = sb.length; sb.append("●"); sb.setSpan(android.text.style.ForegroundColorSpan(col), st, sb.length, 0) }
+            dot(Ui.MINE)
+            if (m == "allg" || m.startsWith("g:")) dot(Ui.GROUP)
+            if (m.startsWith("public")) dot(Ui.ALL)
+            sb.append(" ").append(whoLabel(m)).append(" · ").append(periodLabel())
+            pastBar.text = sb
+        }
         var lastMode = ""
         fun applyPeriod() {
             val dots = rawDots.filter { inPeriod(it.time) }
@@ -944,6 +955,42 @@ object MapDialog {
             map.invalidate()
         }
         addPill(quakeBtn)
+        // v6.68 (360): 📌 포인트 핀 — 지도를 꾹 눌러 꽂기 · 내 것 주황 · 그룹 하늘 · 전체 보라
+        val pinBtn = pill("📌 포인트 ▾")
+        lateinit var pinOv: Pins.PinOverlay
+        fun loadPins() {
+            Pins.load(a) { l ->
+                pinOv.pins = l
+                pinBtn.text = "📌 포인트" + (if (l.isNotEmpty()) " ${l.size}" else "") + " ▾"
+                map.invalidate()
+            }
+        }
+        pinOv = Pins.PinOverlay(a, { p -> Pins.card(a, map, pinOv, p, past.dots) { loadPins() } },
+            { g -> Pins.edit(a, map, pinOv, g, null) { loadPins() } })
+        map.overlays.add(pinOv)
+        pinBtn.setOnClickListener {
+            val sh = Sheet(a, 0.5f)
+            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "📌 포인트 보기"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val show = Pins.shown(a)
+            fun row(scope: Int, label: String) {
+                val cb = Ui.checkFit(android.widget.CheckBox(a)).apply {
+                    text = label; textSize = 15f; setTextColor(Pins.color(scope)); isChecked = scope in show
+                    buttonTintList = android.content.res.ColorStateList.valueOf(Pins.color(scope))
+                    setOnCheckedChangeListener { _, on -> if (on) show.add(scope) else show.remove(scope); Pins.setShown(a, show); loadPins() }
+                }
+                sh.body.addView(cb, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 4))
+            }
+            row(Pins.MINE, "★ 내 포인트 (나만)"); row(Pins.GROUP, "★ 그룹 포인트"); row(Pins.ALL, "★ 전체 게시판 포인트")
+            sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "지도를 꾹 누르면 그 자리에 포인트(★)를 꽂아요 · 이름 · 설명 · 반경 · 누구에게 보일지 정할 수 있어요"),
+                Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 12))
+            sh.body.addView(Ui.text(a, 14f, Ui.BG, true, "📌 지도 가운데에 꽂기").apply {
+                gravity = Gravity.CENTER; minHeight = dp(a, 46); background = Ui.bg(a, Ui.GREEN, 99)
+                setOnClickListener { sh.close(); Pins.edit(a, map, pinOv, map.mapCenter as GeoPoint, null) { loadPins() } }
+            }, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 12))
+            sh.show()
+        }
+        addPill(pinBtn)
+        if (Cloud.user != null) loadPins()
         // v6.54 (330): 🌬 바람 지도 (지금 보던 자리 가운데로)
         addPill(pill("🌬 바람").apply {
             setOnClickListener {

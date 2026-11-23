@@ -107,7 +107,7 @@ object Boats {
         }
 
         fun chip(label: String, color: Int, click: () -> Unit) = Ui.text(a, 13f, color, true, label).apply {
-            gravity = Gravity.CENTER; setPadding(dp(10), 0, dp(10), 0)
+            gravity = Gravity.CENTER; setPadding(dp(10), 0, dp(10), 0); minHeight = dp(Ui.PILL_S)
             background = Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); setOnClickListener { click() }
         }
 

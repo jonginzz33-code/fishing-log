@@ -57,7 +57,7 @@ object GroupIcon {
         val px = Ui.dp(c, sizeDp)
         val d = android.graphics.drawable.BitmapDrawable(c.resources, circle(b, px)).apply { setBounds(0, 0, px, px) }
         return android.text.SpannableStringBuilder("\u00A0 ").apply {
-            setSpan(android.text.style.ImageSpan(d, android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM), 0, 1, 0)
+            setSpan(android.text.style.ImageSpan(d, if (android.os.Build.VERSION.SDK_INT >= 29) android.text.style.DynamicDrawableSpan.ALIGN_CENTER else android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM), 0, 1, 0)
         }
     }
 

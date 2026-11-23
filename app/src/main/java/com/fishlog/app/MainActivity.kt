@@ -1288,7 +1288,8 @@ class MainActivity : Activity() {
     private fun methodsChosen(): Boolean = Store.methodsChosen || Store.history.isNotEmpty() || remoteOn() || Store.watchMode
 
     private fun chip(label: String, on: Boolean) = Ui.text(this, 12f, if (on) Color.parseColor("#04222A") else Ui.SUB, on, label).apply {
-        setPadding(dp(10), dp(4), dp(10), dp(4))
+        gravity = Gravity.CENTER; minHeight = dp(Ui.PILL_S)   // v6.68 (359)
+        setPadding(dp(10), 0, dp(10), 0)
         background = if (on) Ui.bg(this@MainActivity, Ui.BLUE, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
     }
 
@@ -1641,7 +1642,7 @@ class MainActivity : Activity() {
                 val pg = checked.firstOrNull { it.id == pubChoice }
                 opts.addView(Ui.text(this, 13f, orange, true, "그룹 표시"), Ui.lp(this, MATCH, WRAP, top = 10))
                 val gLabel: CharSequence = if (pg == null) "그룹 고르기 ▾"
-                    else android.text.SpannableStringBuilder("✓ ").append(GroupIcon.prefix(this, pg, 18, GroupBand.catIcon(GroupBand.currentCat(pg)))).append(pg.title)
+                    else android.text.SpannableStringBuilder("✓ ").append(GroupIcon.prefix(this, pg, 16, GroupBand.catIcon(GroupBand.currentCat(pg)))).append(pg.title)
                         .append(if (pg.id == Cloud.active?.id) " · 지금 그룹" else "").append(" ▾")
                 opts.addView(two(pill(if (pg == null) "✓ 안 함" else "안 함", pg == null) { pubChoice = "" },
                     pill(gLabel, pg != null) {
@@ -2337,10 +2338,19 @@ class MainActivity : Activity() {
     }
 
     /** v6.36 (295): 밑에서 올라오는 창에 내 그룹 목록 → 누르면 바로 그 그룹으로 */
-    private fun openGroupSwitch() {
+    private var groupSortMode = false
+    private fun openGroupSwitch(reuse: Sheet? = null) {
         val gs = if (Cloud.user == null) emptyList() else Cloud.groups
         if (gs.isEmpty()) { account.openGroups(); return }
-        val sh = Sheet(this, 0.62f)
+        val sh = reuse ?: Sheet(this, 0.62f)
+        if (reuse == null) groupSortMode = false
+        sh.head.removeAllViews(); sh.body.removeAllViews()
+        // v6.68 (357): 순서 바꾸기 — ▲▼ 또는 꾹 메뉴
+        fun move(from: Int, to: Int) {
+            if (to !in gs.indices || from == to) return
+            val l = gs.map { it.id }.toMutableList(); val x = l.removeAt(from); l.add(to, x)
+            Cloud.setGroupOrder(l); openGroupSwitch(sh); renderGroupPanel()
+        }
         sh.head.addView(Ui.text(this, 17f, Ui.TEXT, true, "🔄 그룹 바꾸기").apply {
             append(android.text.SpannableStringBuilder("  · 내 그룹 ${gs.size}개").apply {
                 setSpan(android.text.style.AbsoluteSizeSpan(12, true), 0, length, 0)
@@ -2348,7 +2358,7 @@ class MainActivity : Activity() {
             })
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
         val activeId = Cloud.active?.id
-        gs.forEach { gr ->
+        gs.forEachIndexed { gi, gr ->
             val on = gr.id == activeId
             val r = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(8)); minimumHeight = dp(56)
@@ -2361,8 +2371,24 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val n = GroupNews.count(gr.id)
             if (n > 0 && !on) r.addView(redDot(n), LinearLayout.LayoutParams(WRAP, dp(20)).apply { rightMargin = dp(6) })
-            if (on) r.addView(Ui.text(this, 12.5f, Ui.GREEN, true, "✓ 지금"))
+            if (on && !groupSortMode) r.addView(Ui.text(this, 12.5f, Ui.GREEN, true, "✓ 지금"))
+            if (groupSortMode) {
+                fun arrow(t: String, to: Int) = Ui.text(this, 16f, if (to in gs.indices) Ui.TEXT else Ui.LINE, true, t).apply {
+                    gravity = Gravity.CENTER; background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, Ui.LINE)
+                    setOnClickListener { move(gi, to) }
+                }
+                r.addView(arrow("▲", gi - 1), LinearLayout.LayoutParams(dp(40), dp(36)).apply { leftMargin = dp(6) })
+                r.addView(arrow("▼", gi + 1), LinearLayout.LayoutParams(dp(40), dp(36)).apply { leftMargin = dp(6) })
+            }
+            r.setOnLongClickListener {
+                val items = arrayOf("▲ 위로", "▼ 아래로", "⤒ 맨 위로")
+                AlertDialog.Builder(this, R.style.FlAlert).setTitle(gr.name)
+                    .setItems(items) { _, w -> when (w) { 0 -> move(gi, gi - 1); 1 -> move(gi, gi + 1); else -> move(gi, 0) } }
+                    .setNegativeButton("닫기", null).show()
+                true
+            }
             r.setOnClickListener {
+                if (groupSortMode) return@setOnClickListener
                 if (on) { sh.close(); return@setOnClickListener }
                 fun go() { sh.close(); Cloud.setActive(gr.id); showMessage("'${gr.name}' 그룹으로 바꿨어요"); renderGroupPanel() }
                 if (Store.current != null && Store.current?.catches?.isNotEmpty() == true)
@@ -2375,12 +2401,17 @@ class MainActivity : Activity() {
             }
             sh.body.addView(r, Ui.lp(this, MATCH, WRAP, top = 7))
         }
+        if (gs.size >= 2) sh.body.addView(Ui.text(this, 13f, if (groupSortMode) Ui.BG else Ui.TEXT, true, if (groupSortMode) "✓ 완료" else "↕ 순서 바꾸기").apply {
+            gravity = Gravity.CENTER; minHeight = dp(42)
+            background = if (groupSortMode) Ui.bg(this@MainActivity, Ui.GREEN, 99) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Ui.LINE)
+            setOnClickListener { groupSortMode = !groupSortMode; openGroupSwitch(sh) }
+        }, Ui.lp(this, MATCH, WRAP, top = 12))
         sh.body.addView(Ui.text(this, 13f, Ui.SUB, true, "+ 그룹 만들기 · 가입").apply {
             gravity = Gravity.CENTER; minHeight = dp(42)
             background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 99, Color.parseColor("#2E4256"))
             setOnClickListener { sh.close(); account.openGroups() }
-        }, Ui.lp(this, MATCH, WRAP, top = 12))
-        sh.show()
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        if (reuse == null) sh.show()
     }
 
     private fun openGroupDialog() {

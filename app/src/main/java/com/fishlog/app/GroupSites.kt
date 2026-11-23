@@ -69,8 +69,8 @@ object GroupSites {
         }
         fun folderOf(s: Site) = if (folders.any { it.id == s.folder }) s.folder else ""
         fun chip(t: String, on: Boolean, dashed: Boolean = false, click: () -> Unit) = TextView(a).apply {
-            text = t; textSize = 13f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-            setPadding(dp(11), dp(6), dp(11), dp(6))
+            text = t; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
+            setPadding(dp(11), 0, dp(11), 0); minHeight = dp(Ui.PILL_S); maxLines = 1
             setTextColor(if (on) Color.parseColor("#06303A") else if (dashed) Ui.SUB else Ui.TEXT)
             background = if (on) Ui.bg(a, Color.parseColor("#5BC8E8"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#3A5A70"))
             setOnClickListener { click() }

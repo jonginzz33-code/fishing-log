@@ -120,8 +120,9 @@ class DotsOverlay(
     var hideOthers = false
     private fun picked(d: MapDot): Boolean { val o = only ?: return true; return d.species.ifBlank { d.kind } in o }
     private val art = SpeciesArtView(ctx)
-    private val PINK = Color.parseColor("#F07AA0")
-    private val PURPLE = Color.parseColor("#B9A6FF")
+    // v6.68 (361): 그룹 = 하늘 · 전체 = 보라 (앱 공통 색)
+    private val PINK = Ui.GROUP
+    private val PURPLE = Ui.ALL
     private val badge = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0B1A26") }
     private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val area = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -136,8 +137,8 @@ class DotsOverlay(
         cl.items.firstOrNull { it.src == 2 && it.radiusM > 0 }?.let { p ->
             val rr = map.projection.metersToPixels(p.radiusM.toFloat())
             if (rr > 14 * d) {
-                area.color = Color.argb(45, 185, 166, 255); c.drawCircle(cl.x, cl.y, rr, area)
-                edge.color = Color.argb(140, 185, 166, 255); edge.strokeWidth = 1 * d; c.drawCircle(cl.x, cl.y, rr, edge)
+                area.color = Color.argb(45, 138, 99, 210); c.drawCircle(cl.x, cl.y, rr, area)
+                edge.color = Color.argb(160, 138, 99, 210); edge.strokeWidth = 1 * d; c.drawCircle(cl.x, cl.y, rr, edge)
             }
         }
         // 대략 위치 조과: 오차 범위 원 (옅은 주황)
@@ -172,6 +173,12 @@ class DotsOverlay(
         c.drawRoundRect(cl.x - lw / 2, ly - 7 * d, cl.x + lw / 2, ly + 6 * d, 6.5f * d, 6.5f * d, area)
         tagTxt.color = Color.WHITE
         c.drawText(topName, cl.x, ly + 3.2f * d, tagTxt)
+        // v6.68 (361): 누구 기록인지 왼쪽 아래 작은 색 점 (내 것 주황 · 그룹 하늘 · 전체 보라)
+        run {
+            val ox = cl.x - rad * 0.78f; val oy = cl.y + rad * 0.78f
+            area.color = Color.WHITE; c.drawCircle(ox, oy, 5.5f * d, area)
+            area.color = when (src) { 1 -> Ui.GROUP; 2 -> Ui.ALL; else -> Ui.MINE }; c.drawCircle(ox, oy, 4f * d, area)
+        }
         // 마릿수 (오른쪽 위 검은 동그라미)
         val br = 9 * d + (if (n >= 100) 3 * d else if (n >= 10) 1.5f * d else 0f)
         val bx = cl.x + rad * 0.75f; val by = cl.y - rad * 0.75f

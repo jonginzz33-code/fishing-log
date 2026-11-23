@@ -107,6 +107,16 @@ object Cloud {
         private set
     val active: Group? get() = groups.firstOrNull { it.id == activeId } ?: groups.firstOrNull()
 
+    private fun sortByOrder(l: List<Group>, ord: List<String>): List<Group> =
+        l.withIndex().sortedWith(compareBy<IndexedValue<Group>> { ord.indexOf(it.value.id).let { i -> if (i < 0) Int.MAX_VALUE else i } }.thenBy { it.index }).map { it.value }
+    /** v6.68 (357): 내 그룹 순서 저장 (나만 보는 순서 · 다른 폰에서도 같게) */
+    fun setGroupOrder(ids: List<String>) {
+        groups = sortByOrder(groups, ids)
+        if (::appContext.isInitialized) appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putString("group_order", ids.joinToString(",")).apply()
+        uid?.let { db.collection("users").document(it).set(mapOf("groupOrder" to ids), SetOptions.merge()) }
+        fireChanged()
+    }
+
     private val listeners = mutableSetOf<() -> Unit>()
     fun addListener(l: () -> Unit) { listeners.add(l) }
     fun removeListener(l: () -> Unit) { listeners.remove(l) }
@@ -144,7 +154,12 @@ object Cloud {
                         .addOnCompleteListener {
                             left--
                             if (left == 0) {
-                                groups = ids.mapNotNull { i -> loaded.firstOrNull { it.id == i } }
+                                // v6.68 (357): 내가 정한 그룹 순서 (서버 users/{uid}.groupOrder · 없으면 폰) · 새 그룹은 맨 아래
+                                @Suppress("UNCHECKED_CAST")
+                                val ord = (doc.get("groupOrder") as? List<String>)
+                                    ?: appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE).getString("group_order", null)?.split(",")?.filter { it.isNotBlank() }
+                                    ?: emptyList()
+                                groups = sortByOrder(ids.mapNotNull { i -> loaded.firstOrNull { it.id == i } }, ord)
                                 // 멤버 목록에 내 이름 남기기 (예전에 가입한 경우 대비)
                                 // (이름이 바뀌었을 때만 다시 씀)
                                 val mp = appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)

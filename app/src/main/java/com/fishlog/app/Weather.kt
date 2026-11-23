@@ -316,13 +316,14 @@ object Weather {
         val c = URL(url).openConnection() as HttpURLConnection
         // v6.35 (288): 10초 → 6초 (느린 서버 하나 때문에 오래 기다리지 않게)
         c.connectTimeout = 6_000; c.readTimeout = 6_000
-        return try { c.inputStream.bufferedReader().use { it.readText() } }
-        catch (e: Exception) { if (url.startsWith("https://apis.data.go.kr")) httpsBad = true; throw e }
+        return try { c.inputStream.bufferedReader().use { it.readText() }.also { if (url.startsWith("https://apis.data.go.kr")) httpsBadAt = 0L } }
+        catch (e: Exception) { if (url.startsWith("https://apis.data.go.kr")) httpsBadAt = System.currentTimeMillis(); throw e }
         finally { c.disconnect() }
     }
     /** v6.35 (288): 공공데이터포털이 https 로 한 번 실패하면 다음부턴 http 먼저 (매번 6초씩 기다리지 않게) */
-    @Volatile private var httpsBad = false
-    private fun schemes() = if (httpsBad) listOf("http", "https") else listOf("https", "http")
+    // v6.68 (356 ③): 실패 기억은 30분만 (그 뒤엔 다시 https 먼저 · http 는 인증키가 그대로 보여서 되도록 적게)
+    @Volatile private var httpsBadAt = 0L
+    private fun schemes() = if (System.currentTimeMillis() - httpsBadAt < 30 * 60_000L) listOf("http", "https") else listOf("https", "http")
     /** v6.35 (288): 서로 상관없는 일을 동시에 (가장 느린 것만큼만 걸림) */
     private fun par(vararg jobs: () -> Unit) {
         val ts = jobs.map { j -> Thread { try { j() } catch (_: Exception) {} }.apply { start() } }

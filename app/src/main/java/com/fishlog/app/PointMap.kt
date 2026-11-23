@@ -66,7 +66,7 @@ object PointMap {
         // 그룹 포인트 커튼 (그룹 목록 체크)
         val curtain = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(6), dp(12), dp(8)); visibility = View.GONE
-            background = Ui.bg(a, Color.parseColor("#1A2A38"), 14, Color.parseColor("#FF8FB8"))
+            background = Ui.bg(a, Color.parseColor("#1A2A38"), 14, Ui.GROUP)
         }
         root.addView(curtain, LinearLayout.LayoutParams(MATCH, WRAP).apply { setMargins(dp(12), 0, dp(12), dp(8)) })
 
@@ -135,7 +135,7 @@ object PointMap {
         fun paintDots() {
             dots.dots = recs().map { r ->
                 val grp = r.group.isNotBlank()
-                MapDot(GeoPoint(r.lat, r.lon), if (r.mine) MapDialog.slotCol(1) else if (grp) Color.parseColor("#F28C38") else Color.parseColor("#5BC8DF"),
+                MapDot(GeoPoint(r.lat, r.lon), if (r.mine) Ui.MINE else if (grp) Ui.GROUP else Ui.ALL,   // v6.68 (361) 내 것 · 그룹 · 전체 색
                     (if (r.mine) "나" else if (grp) "${r.group} · ${r.who}" else "전체") + " · ${df.format(Date(r.time))} · ${r.species}" + if (r.approx) " (대략)" else "",
                     r.species, r.time, if (r.mine) "나" else if (grp) "${r.group} · ${r.who}" else "", r.species, false,
                     if (r.mine) 0 else if (grp) 1 else 2, if (r.approx) PublicBoard.APPROX_M / 2 else 0.0)
@@ -145,31 +145,31 @@ object PointMap {
         circle.onChange = { paintInfo() }
 
 
-        fun pill(label: String, on: Boolean, onClick: () -> Unit): TextView = Ui.text(a, 13f, if (on) Ui.BG else Ui.TEXT, true, label).apply {
-            gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
-            background = if (on) Ui.bg(a, Ui.TEXT, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+        fun pill(label: String, on: Boolean, col: Int = 0, onClick: () -> Unit): TextView = Ui.text(a, 13f, if (on && col != 0) Color.WHITE else if (on) Ui.BG else if (col != 0) col else Ui.TEXT, true, label).apply {
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
+            background = if (on) Ui.bg(a, if (col != 0) col else Ui.TEXT, 99) else Ui.bg(a, Color.TRANSPARENT, 99, if (col != 0) col else Ui.LINE)
             setOnClickListener { onClick() }
         }
         fun paintBar() {
             bar.removeAllViews()
             fun add(v: View) = bar.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             add(MapSearch.pill(a, map))   // v3.9.1 (159) 🔍 장소 검색
-            add(pill((if (showPub) "☑" else "☐") + " 전체 포인트", showPub) {
+            add(pill((if (showPub) "☑" else "☐") + " 전체 포인트", showPub, Ui.ALL) {
                 showPub = !showPub; p.edit().putBoolean("pm_pub", showPub).apply(); paintBar(); paintDots()
             })
-            add(pill((if (showMine) "☑" else "☐") + " 나만의 포인트", showMine) {
+            add(pill((if (showMine) "☑" else "☐") + " 나만의 포인트", showMine, Ui.MINE) {
                 showMine = !showMine; p.edit().putBoolean("pm_mine", showMine).apply(); paintBar(); paintDots()
             })
             // 그룹 포인트: 누르면 아래로 커튼 (가입한 그룹 체크)
             val gOn = selGroups.isNotEmpty()
-            add(Ui.text(a, 13f, if (gOn) Color.parseColor("#4B1528") else Color.parseColor("#FF8FB8"), true,
+            add(Ui.text(a, 13f, if (gOn) Color.WHITE else Ui.GROUP, true,
                 (if (gOn) "☑" else "☐") + " 그룹 포인트" + (if (gOn) " (${selGroups.size})" else "") + if (groupOpen) " ▴" else " ▾").apply {
-                gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
-                background = if (gOn) Ui.bg(a, Color.parseColor("#FF8FB8"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FF8FB8"))
+                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
+                background = if (gOn) Ui.bg(a, Ui.GROUP, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.GROUP)
                 setOnClickListener { groupOpen = !groupOpen; paintBar() }
             })
             add(Ui.text(a, 13f, if (circle.drawMode) Color.WHITE else Color.parseColor("#FF4FA8"), true, if (circle.drawMode) "⭕ 원 그리는 중" else "⭕ 원 그리기").apply {
-                gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7))
+                gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
                 background = if (circle.drawMode) Ui.bg(a, Color.parseColor("#FF4FA8"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, Color.parseColor("#FF4FA8"))
                 setOnClickListener { circle.drawMode = !circle.drawMode; paintBar(); paintInfo(); map.invalidate() }
             })
@@ -358,7 +358,7 @@ object PointMap {
             box.addView(detail, Ui.lp(a, MATCH, WRAP, top = 6))
             var spI = 0; var condI = 0
             fun chip(label: String, on: Boolean, col: Int, click: () -> Unit) = Ui.text(a, 12f, if (on) Color.WHITE else Ui.TEXT, on, label).apply {
-                gravity = Gravity.CENTER; setPadding(dp(10), dp(5), dp(10), dp(5)); maxLines = 1
+                gravity = Gravity.CENTER; setPadding(dp(10), 0, dp(10), 0); maxLines = 1; minHeight = dp(Ui.PILL_S)
                 background = if (on) Ui.bg(a, col, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
                 setOnClickListener { click() }
             }

@@ -512,7 +512,7 @@ object Zones {
         var busy = ""
         var confirmedMobile = false
         fun chip(label: String, on: Boolean, col: Int, onClick: () -> Unit) = Ui.text(a, 12.5f, if (on) Color.parseColor("#1B0E02") else col, true, label).apply {
-            gravity = Gravity.CENTER; maxLines = 1; setPadding(dp(10), dp(5), dp(10), dp(5))
+            gravity = Gravity.CENTER; maxLines = 1; setPadding(dp(10), 0, dp(10), 0); minHeight = dp(Ui.PILL_S)
             background = if (on) Ui.bg(a, Color.parseColor("#FFB27A"), 99) else Ui.bg(a, Color.TRANSPARENT, 99, col)
             setOnClickListener { onClick() }
         }
@@ -1675,7 +1675,7 @@ object Zones {
         MapDialog.zoomButtons(a, frame, map)   // v5.2 (237)
         root.addView(frame, LinearLayout.LayoutParams(MATCH, 0, 1f))
         fun pill(label: String, color: Int, onClick: () -> Unit) = Ui.text(a, 13f, color, true, label).apply {
-            gravity = Gravity.CENTER; setPadding(dp(12), dp(7), dp(12), dp(7)); maxLines = 1
+            gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
             background = Ui.bg(a, Color.TRANSPARENT, 99, color); setOnClickListener { onClick() }
         }
         var hintText = ""

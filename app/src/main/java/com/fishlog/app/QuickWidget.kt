@@ -123,7 +123,7 @@ class QuickWidget : AppWidgetProvider() {
                 val busy = prefs(c).getLong("w_refreshing", 0L).let { System.currentTimeMillis() - it < 60_000L }
                 val at = prefs(c).getLong("w_check_at", 0L)
                 rv.setTextViewText(R.id.wq_refresh, if (busy) "⏳ 확인 중" else "🔄 " + (if (at > 0) java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(java.util.Date(at)) else "새로고침"))
-                rv.setOnClickPendingIntent(R.id.wq_refresh, PendingIntent.getBroadcast(c, 7292, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "refresh"),
+                rv.setOnClickPendingIntent(R.id.wq_refresh, PendingIntent.getBroadcast(c, 7292, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "refresh").putExtra("tok", WidgetData.tok(c)),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
                 // v6.50 (325): ⬆ 앱 업데이트 있음 (지금 버전에서 확인한 것만) · ✉ 1:1 문의 답장
                 val upd = prefs(c).getInt("w_upd", 0) == BuildConfig.VERSION_CODE
@@ -185,7 +185,7 @@ class QuickWidget : AppWidgetProvider() {
                     sub?.second == RED -> R.drawable.widget_qtile_red
                     else -> R.drawable.widget_qtile })
                 val pi = if (t.id == "saver")
-                    PendingIntent.getBroadcast(c, 7400 + i, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "saver"),
+                    PendingIntent.getBroadcast(c, 7400 + i, Intent(c, QuickWidget::class.java).setAction(ACT).putExtra("cmd", "saver").putExtra("tok", WidgetData.tok(c)),
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 else WidgetData.openIntent(c, "q:" + t.id, 7300 + i)
                 rv.setOnClickPendingIntent(tid, pi)
@@ -233,6 +233,8 @@ class QuickWidget : AppWidgetProvider() {
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) { draw(c, m, id) }
 
     override fun onReceive(c: Context, intent: Intent) {
+        // v6.68 (356 ②): 확인 번호 다르면 무시 (다른 앱이 보낸 신호) · 그림만 다시 그려 새 번호로
+        if (intent.action == ACT && !WidgetData.ok(c, intent)) { updateAll(c.applicationContext); return }
         if (intent.action == ACT && intent.getStringExtra("cmd") == "refresh") {
             val app = c.applicationContext
             if (System.currentTimeMillis() - prefs(app).getLong("w_refreshing", 0L) < 60_000L) return   // 이미 확인 중

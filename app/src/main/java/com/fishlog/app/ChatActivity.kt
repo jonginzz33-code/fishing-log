@@ -152,15 +152,19 @@ class ChatActivity : Activity() {
 
     private fun renderTabs() {
         tabs.removeAllViews()
-        Chat.rooms().forEach { r ->
+        // v6.68 (358): '전체'는 맨 앞 · 그룹 방은 최근 글 순 (글 없는 방은 뒤 · 그 안에선 내 그룹 순서)
+        val rs = Chat.rooms()
+        val groupsSorted = rs.drop(1).withIndex().sortedWith(compareByDescending<IndexedValue<String>> { Chat.lastTime(it.value) }.thenBy { it.index }).map { it.value }
+        (listOf(rs.first()) + groupsSorted).forEach { r ->
             val on = r == room
             val label = if (r == Chat.ALL) "전체" else groupOf(r)?.let { groupLabel(it) } ?: "그룹"
             val n = if (on) 0 else Chat.unread(r)
             val box = android.widget.FrameLayout(this).apply { setPadding(0, dp(6), dp(6), 0); clipChildren = false; clipToPadding = false }
             val gr = if (r == Chat.ALL) null else groupOf(r)
             box.addView(Ui.text(this, 13f, if (on) Color.parseColor("#08311F") else Ui.TEXT, true).apply {
-                text = if (gr == null) label else android.text.SpannableStringBuilder(GroupIcon.prefix(this@ChatActivity, gr, 20, "🚤")).append(label)
-                setPadding(dp(13), dp(7), dp(13), dp(7))
+                text = if (gr == null) label else android.text.SpannableStringBuilder(GroupIcon.prefix(this@ChatActivity, gr, 16, "🚤")).append(label)
+                gravity = Gravity.CENTER; maxLines = 1   // v6.68 (358 · 359): 탭 높이 모두 같게
+                setPadding(dp(13), 0, dp(13), 0)
                 background = if (on) Ui.bg(this@ChatActivity, Ui.GREEN, 99) else Ui.bg(this@ChatActivity, Color.TRANSPARENT, 99, Ui.LINE)
                 setOnClickListener { if (room != r) { Chat.markSeen(room); room = r; renderAll() } }
             })
@@ -168,6 +172,7 @@ class ChatActivity : Activity() {
                 gravity = Gravity.CENTER; setPadding(dp(5), 0, dp(5), 0)
                 background = Ui.bg(this@ChatActivity, RED, 99)
             }, android.widget.FrameLayout.LayoutParams(WRAP, dp(16), Gravity.TOP or Gravity.END).apply { topMargin = -dp(6); rightMargin = -dp(4) })
+            (box.getChildAt(0).layoutParams as? android.widget.FrameLayout.LayoutParams)?.height = dp(Ui.PILL_M)
             tabs.addView(box, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(4) })
         }
     }
@@ -214,7 +219,7 @@ class ChatActivity : Activity() {
         nameRow.addView(Ui.text(this, 13f, Ui.TEXT, true, Chat.nameFor(room)), LinearLayout.LayoutParams(0, WRAP, 1f))
         if (!all) { nameRow.addView(Ui.text(this, 11f, Ui.SUB, false, "그룹방은 닉네임 그대로")); return }
         fun pill(label: String, click: () -> Unit) = Ui.text(this, 12f, Ui.TEXT, true, label).apply {
-            setPadding(dp(10), dp(4), dp(10), dp(4))
+            gravity = Gravity.CENTER; minHeight = dp(Ui.PILL_S); setPadding(dp(10), 0, dp(10), 0)
             background = Ui.bg(this@ChatActivity, Color.TRANSPARENT, 99, Ui.LINE)
             setOnClickListener { click() }
         }

@@ -64,6 +64,11 @@ service cloud.firestore {
       match /trips/{tid} {
         allow read, write: if signedIn() && request.auth.uid == uid;
       }
+      // v6.68 (360): 나만 보는 포인트 핀
+      match /pins/{pid} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid && okPin(request.resource.data);
+      }
     }
 
     // ---- 닉네임 (중복 금지, 언제든 바꾸기) ----
@@ -120,7 +125,68 @@ service cloud.firestore {
       return request.resource.data.uid == request.auth.uid
         && request.resource.data.text is string && request.resource.data.text.size() <= 500
         && request.resource.data.name is string && request.resource.data.name.size() <= 20 && okName(request.resource.data.name)
-        && request.resource.data.t is int;
+        && request.resource.data.t is int
+        // v6.68 (356): 칸 이름 · 크기 제한 (큰 글로 다른 사람 데이터 · 배터리 낭비 막기)
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 't', 'th', 'imgId', 'lp', 'edited'])
+        && (!('th' in request.resource.data) || (request.resource.data.th is string && request.resource.data.th.size() <= 160000))
+        && (!('imgId' in request.resource.data) || (request.resource.data.imgId is string && request.resource.data.imgId.size() <= 40))
+        && (!('lp' in request.resource.data) || okLp(request.resource.data.lp));
+    }
+    function okLp(lp) {
+      return lp is map && lp.keys().hasOnly(['u', 't', 'd', 'img'])
+        && lp.get('u', '') is string && lp.get('u', '').size() <= 2000
+        && lp.get('t', '') is string && lp.get('t', '').size() <= 200
+        && lp.get('d', '') is string && lp.get('d', '').size() <= 300
+        && lp.get('img', '') is string && lp.get('img', '').size() <= 45000;
+    }
+    // v6.68 (360): 포인트 핀 (이름 · 설명 · 자리 · 반경 50m~3km · 어종)
+    function okPin(d) {
+      return d.keys().hasOnly(['name', 'memo', 'lat', 'lon', 'r', 'sp', 'owner', 'ownerName', 't', 'edited'])
+        && d.owner == request.auth.uid
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
+        && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
+        && d.lat is number && d.lat >= -90 && d.lat <= 90 && d.lon is number && d.lon >= -180 && d.lon <= 180
+        && d.r is number && d.r >= 50 && d.r <= 3000
+        && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10))
+        && (!('ownerName' in d) || (d.ownerName is string && d.ownerName.size() <= 30 && okName(d.ownerName)))
+        && d.t is int;
+    }
+    // 그룹장이 남의 핀을 고칠 때 (owner 는 그대로)
+    function okPinBy(d) {
+      return d.keys().hasOnly(['name', 'memo', 'lat', 'lon', 'r', 'sp', 'owner', 'ownerName', 't', 'edited'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
+        && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
+        && d.lat is number && d.lon is number && d.r is number && d.r >= 50 && d.r <= 3000
+        && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10)) && d.t is int;
+    }
+    match /pins/{pid} {
+      allow read: if signedIn();
+      allow create: if notBanned() && okPin(request.resource.data);
+      allow update: if notBanned() && resource.data.owner == request.auth.uid && okPin(request.resource.data);
+      allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+    }
+    // v6.68 (356): 게시판 글 칸 이름 · 크기 제한
+    function okPub(d) {
+      return d.keys().hasOnly(['owner', 'nick', 'start', 'end', 'cat', 'names', 'catches', 'total', 'photoCount', 'prec',
+          'created', 'upd', 'updated', 'paid', 'mthumb', 'mainId', 'wx', 'hasTrack', 'gname', 'gid', 'gimg'])
+        && (!('nick' in d) || (d.nick is string && d.nick.size() <= 30))
+        && (!('cat' in d) || (d.cat is string && d.cat.size() <= 40))
+        && (!('names' in d) || (d.names is list && d.names.size() <= 60))
+        && (!('catches' in d) || (d.catches is list && d.catches.size() <= 3000))
+        && (!('mthumb' in d) || (d.mthumb is string && d.mthumb.size() <= 200000))
+        && (!('mainId' in d) || (d.mainId is string && d.mainId.size() <= 200))
+        && (!('wx' in d) || (d.wx is string && d.wx.size() <= 8000))
+        && (!('gname' in d) || (d.gname is string && d.gname.size() <= 60))
+        && (!('gid' in d) || (d.gid is string && d.gid.size() <= 60))
+        && (!('gimg' in d) || (d.gimg is string && d.gimg.size() <= 16000));
+    }
+    // v6.68 (356): 지금 출조 중 · 접속 표시 크기 제한
+    function okLive(d) {
+      return d.keys().size() <= 40
+        && (!('name' in d) || (d.name is string && d.name.size() <= 40))
+        && (!('line' in d) || (d.line is string && d.line.size() <= 400))
+        && (!('area' in d) || (d.area is string && d.area.size() <= 80))
+        && (!('cat' in d) || (d.cat is string && d.cat.size() <= 40));
     }
     match /chat/{mid} {
       allow read: if signedIn();
@@ -146,7 +212,9 @@ service cloud.firestore {
     }
     match /presence/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['t', 'name']) && okLive(request.resource.data);
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // ---- 1:1 문의 (문의한 사람과 운영자만) ----
@@ -245,14 +313,15 @@ service cloud.firestore {
     }
     match /publicLive/{uid} {
       allow read: if signedIn();
-      allow create, update: if notBanned() && request.auth.uid == uid && request.resource.data.owner == uid;
+      allow create, update: if notBanned() && request.auth.uid == uid && request.resource.data.owner == uid
+        && request.resource.data.keys().hasOnly(['owner', 'name', 't', 'start', 'cat', 'line', 'area', 'lat', 'lon']) && okLive(request.resource.data);
       allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
     }
     match /public/{pid} {
       allow read: if signedIn();
-      allow create: if notBanned() && request.resource.data.owner == request.auth.uid;
+      allow create: if notBanned() && request.resource.data.owner == request.auth.uid && okPub(request.resource.data);
       allow update: if (notBanned() && resource.data.owner == request.auth.uid
-        && request.resource.data.owner == request.auth.uid)
+        && request.resource.data.owner == request.auth.uid && okPub(request.resource.data))
         // v6.28 (279): 관리자가 예전 글에 그룹 번호 채우기 (그룹 번호 · 이름 · 그림 · 바뀐 시각만)
         || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gid', 'gname', 'gimg', 'upd']));
       allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
@@ -323,13 +392,21 @@ service cloud.firestore {
       // 실시간 조과 지도 (그룹) — 그룹원 중 관리자가 권한(liveMap) 준 사람만 보기
       match /liveMap/{mid} {
         allow read: if isMember(gid) && (request.auth.uid == mid || isAdmin() || hasPerm('liveMap'));
-        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid && okLive(request.resource.data);
         allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid) || isAdmin());
       }
       match /live/{mid} {
         allow read: if isMember(gid);
-        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid;
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid && okLive(request.resource.data);
         allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid));
+      }
+      // v6.68 (360): 그룹 포인트 핀 — 그룹원 누구나 · 고치기/지우기 = 올린 사람 · 그룹장
+      match /pins/{pid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && notBanned() && okPin(request.resource.data);
+        allow update: if isMember(gid) && notBanned() && (resource.data.owner == request.auth.uid || isGroupOwner(gid))
+          && request.resource.data.owner == resource.data.owner && okPinBy(request.resource.data);
+        allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
       }
       match /meta/{mid} {
         allow read: if isMember(gid);

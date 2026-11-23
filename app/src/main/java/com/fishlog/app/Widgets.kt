@@ -28,6 +28,16 @@ import java.util.Locale
  *  - 누르면 앱의 그 화면 (MainActivity 에 "open" = "tide" / "bag")
  */
 object WidgetData {
+    /** v6.68 (356 ②): 위젯 버튼 신호 확인 번호 — 설치마다 무작위 · 다른 앱이 보낸 가짜 신호(가방 −/＋ · 새로고침)는 무시 */
+    fun tok(c: Context): String {
+        val p = c.applicationContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
+        p.getString("w_tok", null)?.let { return it }
+        val b = ByteArray(16); java.security.SecureRandom().nextBytes(b)
+        val t = b.joinToString("") { "%02x".format(it) }
+        p.edit().putString("w_tok", t).apply(); return t
+    }
+    fun ok(c: Context, i: Intent): Boolean = i.getStringExtra("tok") == tok(c)
+
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
     /** 메인 물때 카드가 계산할 때마다 저장 (위젯은 이걸 그림) */
@@ -363,7 +373,7 @@ class BagWidget : AppWidgetProvider() {
         }
 
         private fun pi(c: Context, cmd: String, idx: Int, req: Int): PendingIntent =
-            PendingIntent.getBroadcast(c, req, Intent(c, BagWidget::class.java).setAction(ACT).putExtra("cmd", cmd).putExtra("i", idx),
+            PendingIntent.getBroadcast(c, req, Intent(c, BagWidget::class.java).setAction(ACT).putExtra("cmd", cmd).putExtra("tok", WidgetData.tok(c)).putExtra("i", idx),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         fun draw(c: Context, m: AppWidgetManager, id: Int) = m.updateAppWidget(id, build(c))
@@ -413,6 +423,7 @@ class BagWidget : AppWidgetProvider() {
 
     override fun onReceive(c: Context, intent: Intent) {
         if (intent.action == ACT) {
+            if (!WidgetData.ok(c, intent)) { updateAll(c); return }   // v6.68 (356): 확인 번호 다르면 무시 (그림만 다시 · 옛 위젯 버튼도 새 번호로)
             val cats = Inventory.load(c)
             if (cats.isNotEmpty()) {
                 val ci = prefs(c).getInt("w_bag_cat", 0).let { if (it in cats.indices) it else 0 }

@@ -55,6 +55,8 @@ object Chat {
     private val stopLater = Runnable { if (listeners.isEmpty()) stopAll() }
 
     fun rooms(): List<String> = listOf(ALL) + Cloud.groups.map { it.id }
+    /** v6.68 (358): 그 방 마지막 글 시각 (못 받았으면 0) */
+    fun lastTime(room: String): Long = latest[room]?.maxOfOrNull { it.time } ?: 0L
 
     /** 화면이 켜져 있는 동안 모든 방을 지켜봄 (빨간 숫자용). 바뀌면 onChange (메인 스레드) */
     fun start(onChange: () -> Unit) {
