@@ -18,9 +18,22 @@ jobs:
           if [ -z "$KEY" ]; then echo "KMA_HUB_KEY 없음 (비밀값 이름 확인)"; exit 1; fi
           echo "KMA_HUB_KEY 있음 · 길이 ${#KEY}"
           TM=$(TZ=Asia/Seoul date -d '-2 hour' +%Y%m%d%H00)
-          # 부이 지점 위치표 (지점정보 활용신청 뒤 · 2026-11-23)
-          for P in "stn_inf.php?inf=BUOY&stn=&tm=$TM&help=1" "stn_inf.php?inf=SEA&stn=&tm=$TM&help=1" "stn_inf.php?inf=SFC&stn=&tm=$TM&help=1"; do
-            echo "==== $P"
-            curl -s -m 25 -o out.txt -w '[HTTP %{http_code}]\n' "https://apihub.kma.go.kr/api/typ01/url/$P&authKey=$KEY"
-            (iconv -f euc-kr -t utf-8 out.txt 2>/dev/null || cat out.txt) | head -n 120
-          done
+          # 활용신청한 것들 한꺼번에 시험 (2026-11-23)
+          T1=$(TZ=Asia/Seoul date -d '-3 hour' +%Y%m%d%H00); T2=$(TZ=Asia/Seoul date -d '-2 hour' +%Y%m%d%H00); D=$(TZ=Asia/Seoul date +%Y%m%d); Y=$(TZ=Asia/Seoul date +%Y)
+          B=https://apihub.kma.go.kr/api
+          try() { echo; echo "==== $1"; curl -s -m 30 -o out.txt -w '[HTTP %{http_code} · %{size_download}B]\n' "$B/$1&authKey=$KEY"; (iconv -f euc-kr -t utf-8 out.txt 2>/dev/null || cat out.txt) | grep -v '^\s*$' | head -n ${2:-25}; }
+          try "typ01/url/typ_lst.php?YY=$Y&disp=0&help=1" 30
+          try "typ01/url/typ_lst.php?YY=2025&disp=0&help=0" 15
+          try "typ01/url/typ_data.php?YY=2025&typ=0&seq=0&mode=0&disp=0&help=1"
+          try "typ01/url/lgt_kma_np3.php?tm1=$T1&tm2=$T2&itv=60&lon=126.5&lat=36.3&range=300&help=1"
+          try "typ01/url/lgt_kma_np.php?tm=$T2&itv=60&help=1"
+          try "typ01/url/kma_lhaws2.php?tm=$TM&stn=0&help=1" 40
+          try "typ01/url/kma_lhaws.php?tm=$TM&stn=0&help=1" 20
+          try "typ01/url/stn_inf.php?inf=LH&stn=&tm=$TM&help=1" 30
+          try "typ01/url/kma_sfctm2.php?tm=$TM&stn=0&help=1" 20
+          try "typ01/cgi-bin/url/nph-aws2_min?tm2=$TM&stn=0&disp=0&help=1" 20
+          try "typ01/url/sea_obs.php?tm=$TM&stn=0&help=1" 30
+          try "typ01/url/kma_buoy2.php?tm=$TM&stn=0&help=1" 20
+          try "typ01/url/kma_wavebuoy.php?tm=$TM&stn=0&help=1" 20
+          try "typ05/api/GK2A/LE2/SST/KO/dataList?date=${D}0000" 15
+          try "typ02/openApi/VilageFcstInfoService_2/getVilageFcst?pageNo=1&numOfRows=5&dataType=JSON&base_date=$D&base_time=0500&nx=55&ny=127" 15
