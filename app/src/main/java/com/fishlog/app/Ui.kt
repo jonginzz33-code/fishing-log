@@ -362,14 +362,25 @@ object Ui {
     }
 }
 
-/** 시간대별 입질 막대 그래프 */
+/** 시간대별 입질 막대 그래프 — v6.64 (349): 어종마다 색 · 색 설명 · 막대 위 숫자 · 누르면 자세히 */
 class BarView(c: Context) : View(c) {
+    companion object {
+        val COLORS = intArrayOf(Ui.ORANGE, Ui.BLUE, Color.parseColor("#6BD08A"), Color.parseColor("#B48CF0"),
+            Color.parseColor("#F2D45C"))
+        val OTHER = Color.parseColor("#7C8C99")
+    }
+    class Group(val name: String, val color: Int, val total: Int)
     private var start = 0
     private var hours = 0
-    private var a = IntArray(0)
-    private var b = IntArray(0)
+    var groups: List<Group> = emptyList(); private set
+    private var cnt = Array(0) { IntArray(0) }   // [시간][그룹]
+    private var sel = -1
+    private val d = c.resources.displayMetrics.density
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = Ui.dp(c, 11).toFloat(); textAlign = Paint.Align.CENTER }
+    private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.SUB; textSize = 11 * d; textAlign = Paint.Align.CENTER }
+    private val np = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.TEXT; textSize = 10 * d; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.DEFAULT_BOLD }
+    private val tipBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#EAF2F6") }
+    private val tipTx = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0B1722"); textSize = 11.5f * d; typeface = android.graphics.Typeface.DEFAULT_BOLD }
 
     fun set(t: Store.Trip) {
         val cal = java.util.Calendar.getInstance()
@@ -377,32 +388,85 @@ class BarView(c: Context) : View(c) {
         start = cal.get(java.util.Calendar.HOUR_OF_DAY)
         val endTime = if (t.end > 0) t.end else System.currentTimeMillis()
         hours = (((endTime - t.start) / 3600_000L).toInt() + 2).coerceIn(1, 24)
-        a = IntArray(hours); b = IntArray(hours)
+        // 많이 잡힌 어종 순 · 앞 5개만 색 · 나머지는 '그 밖'
+        val ranked = t.catches.groupingBy { it.slot }.eachCount().entries.sortedByDescending { it.value }
+        val top = ranked.take(if (ranked.size <= COLORS.size) COLORS.size else COLORS.size - 1)
+        val idx = HashMap<Int, Int>()
+        val g = ArrayList<Group>()
+        top.forEachIndexed { k, e -> idx[e.key] = k; g.add(Group(t.name(e.key), COLORS[k], e.value)) }
+        val rest = ranked.drop(top.size)
+        if (rest.isNotEmpty()) g.add(Group("그 밖", OTHER, rest.sumOf { it.value }))
+        groups = g
+        cnt = Array(hours) { IntArray(g.size) }
         val base = t.start - (cal.get(java.util.Calendar.MINUTE) * 60_000L + cal.get(java.util.Calendar.SECOND) * 1000L)
         t.catches.forEach {
             val i = ((it.time - base) / 3600_000L).toInt()
-            if (i in 0 until hours) { if (it.slot == 1) a[i]++ else b[i]++ }
+            if (i in 0 until hours) cnt[i][idx[it.slot] ?: (g.size - 1)]++
         }
+        sel = -1
         invalidate()
     }
+
+    /** 그래프 위 색 설명 한 줄 */
+    fun legend(): CharSequence {
+        val sb = android.text.SpannableStringBuilder()
+        groups.forEachIndexed { k, gr ->
+            if (k > 0) sb.append("   ")
+            val s = sb.length
+            sb.append("■")
+            sb.setSpan(android.text.style.ForegroundColorSpan(gr.color), s, sb.length, 0)
+            sb.append(" ${gr.name} ${gr.total}")
+        }
+        return sb
+    }
+
+    private fun total(i: Int) = cnt[i].sum()
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (hours == 0) return false
+        if (e.action == android.view.MotionEvent.ACTION_DOWN) return true
+        if (e.action == android.view.MotionEvent.ACTION_UP) {
+            val i = (e.x / (width.toFloat() / hours)).toInt().coerceIn(0, hours - 1)
+            sel = if (sel == i || total(i) == 0) -1 else i
+            invalidate(); performClick(); return true
+        }
+        return super.onTouchEvent(e)
+    }
+    override fun performClick(): Boolean { super.performClick(); return true }
 
     override fun onDraw(canvas: Canvas) {
         if (hours == 0) return
         val w = width.toFloat(); val h = height.toFloat()
-        val labelH = Ui.dp(context, 16).toFloat()
-        val chartH = h - labelH
-        val max = (0 until hours).maxOf { a[it] + b[it] }.coerceAtLeast(1)
+        val labelH = 16 * d
+        val topH = 14 * d
+        val chartH = h - labelH - topH
+        val max = (0 until hours).maxOf { total(it) }.coerceAtLeast(1)
         val slot = w / hours
         val bw = slot * 0.6f
         for (i in 0 until hours) {
             val x = i * slot + (slot - bw) / 2
-            val ha = chartH * a[i] / max
-            val hb = chartH * b[i] / max
-            p.color = Ui.ORANGE
-            canvas.drawRect(x, chartH - ha, x + bw, chartH, p)
-            p.color = Ui.BLUE
-            canvas.drawRect(x, chartH - ha - hb, x + bw, chartH - ha, p)
+            var y = topH + chartH
+            for (k in groups.indices) {
+                val hh = chartH * cnt[i][k] / max
+                if (hh <= 0f) continue
+                p.color = groups[k].color
+                if (sel >= 0 && sel != i) p.alpha = 110
+                canvas.drawRect(x, y - hh, x + bw, y, p)
+                y -= hh
+            }
+            val n = total(i)
+            if (n > 0 && slot >= 14 * d) canvas.drawText("$n", x + bw / 2, y - 3 * d, np)
             if (hours <= 12 || i % 2 == 0) canvas.drawText("${(start + i) % 24}시", x + bw / 2, h - 2, tp)
+        }
+        // 누른 막대 자세히
+        if (sel in 0 until hours) {
+            val parts = groups.indices.filter { cnt[sel][it] > 0 }.joinToString(" · ") { "${groups[it].name} ${cnt[sel][it]}" }
+            val txt = "${(start + sel) % 24}시: $parts"
+            val tw = tipTx.measureText(txt) + 16 * d
+            val cx = (sel * slot + slot / 2).coerceIn(tw / 2, w - tw / 2)
+            val r = android.graphics.RectF(cx - tw / 2, 0f, cx + tw / 2, 20 * d)
+            canvas.drawRoundRect(r, 10 * d, 10 * d, tipBg)
+            canvas.drawText(txt, r.left + 8 * d, r.bottom - 6 * d, tipTx)
         }
     }
 }

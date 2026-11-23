@@ -11,6 +11,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.HorizontalScrollView
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -328,10 +329,29 @@ class ChatActivity : Activity() {
             maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = if (m.mine) Ui.bg(this@ChatActivity, Ui.BLUE, 14) else Ui.bg(this@ChatActivity, Color.parseColor("#1E3247"), 14)
             setTextIsSelectable(false)
+            // v6.64 (351): 주소는 밑줄 링크 (누르면 인터넷 창)
+            LinkPreview.linkify(this, m.text, if (m.mine) Color.parseColor("#0B4A6E") else Color.parseColor("#7FD3F5"))
             setOnLongClickListener { menu(m); true }
         }, LinearLayout.LayoutParams(WRAP, WRAP))
         if (!m.mine && badge != null) bubbleRow.addView(badge)
         if (bubbleRow.childCount > 0) col.addView(bubbleRow, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = if (cont) 0 else dp(2) })
+        // v6.64 (351): 링크 미리보기 카드 (보낸 사람 폰이 만든 것 · 예전 글은 그룹 방에서만 내 폰이 받아 봄)
+        val url = LinkPreview.firstUrl(m.text)
+        if (url != null) {
+            val cardLp = LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(5) }
+            val lp0 = m.lp
+            if (lp0 != null) col.addView(LinkPreview.card(this, lp0) { menu(m) }, cardLp)
+            else if (m.room != Chat.ALL) {
+                val holder = FrameLayout(this)
+                col.addView(holder, cardLp)
+                LinkPreview.load(url) { p -> if (p != null && !isFinishing) holder.addView(LinkPreview.card(this, p) { menu(m) }) }
+            }
+            if (m.room == Chat.ALL && !m.mine)
+                col.addView(Ui.text(this, 11f, Color.parseColor("#F0B45A"), false, "⚠ 모르는 사람이 올린 링크는 조심하세요").apply {
+                    setPadding(dp(8), dp(3), dp(8), dp(3))
+                    background = Ui.bg(this@ChatActivity, Color.parseColor("#3A2A12"), 8)
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(4) })
+        }
         if (Cloud.isAdmin && masked >= 2 && !m.mine)
             col.addView(Ui.text(this, 10.5f, Color.parseColor("#FF8A92"), false, "욕설 가림 · 꾹 눌러서 삭제·채팅 금지"))
         return col
@@ -366,6 +386,7 @@ class ChatActivity : Activity() {
                 })
             }
         }
+        items.addAll(0, LinkPreview.menuItems(this, m.text, m.lp?.t))
         items.add("글 복사" to {
             val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("chat", m.text)); toast("복사했어요")
@@ -426,9 +447,21 @@ class ChatActivity : Activity() {
         val t = input.text.toString()
         if (t.isBlank()) return
         sending = true
-        Chat.send(room, t) { err ->
-            sending = false
-            if (err != null) toast(err) else input.setText("")
+        // v6.64 (351): 링크가 있으면 미리보기를 먼저 만들어 같이 보냄 (최대 몇 초 · 못 만들면 그냥 보냄)
+        val url = LinkPreview.firstUrl(t)
+        if (url == null) {
+            Chat.send(room, t) { err -> sending = false; if (err != null) toast(err) else input.setText("") }
+            return
         }
+        val r = room
+        val oldHint = input.hint
+        input.hint = "🔗 링크 미리보기 만드는 중…"
+        Thread {
+            val p = try { LinkPreview.fetch(url) } catch (_: Throwable) { null }
+            runOnUiThread {
+                input.hint = oldHint
+                Chat.send(r, t, p) { err -> sending = false; if (err != null) toast(err) else input.setText("") }
+            }
+        }.start()
     }
 }

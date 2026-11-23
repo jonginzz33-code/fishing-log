@@ -190,13 +190,18 @@ class GroupTripsActivity : Activity() {
 
         // 많이 잡은 사람 순위 (모든 사람일 때)
         if (person == null && sorted.isNotEmpty()) {
-            val sp = rankSpecies?.takeIf { totals.containsKey(it) } ?: sorted[0].key
+            // v6.64 (350): 맨 앞 '🚤 출조 횟수' = 출조 많이 간 사람
+            val TRIPS = "\u0001trips"
+            val sp = rankSpecies?.takeIf { it == TRIPS || totals.containsKey(it) } ?: sorted[0].key
+            val byTrips = sp == TRIPS
             val card = Ui.card(this)
             card.background = Ui.bg(this, Ui.CARD, 14, Ui.LINE)
             val pname = if (period == -1) "새 글" else listOf("이번 달", "3개월", "올해", "전체")[period]
-            card.addView(Ui.text(this, 12f, Ui.SUB, false, "$pname $sp 많이 잡은 사람"))
-            if (sorted.size > 1) {
+            card.addView(Ui.text(this, 12f, Ui.SUB, false, if (byTrips) "$pname 출조 많이 간 사람" else "$pname $sp 많이 잡은 사람"))
+            run {
                 val chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+                chips.addView(pill("🚤 출조 횟수", byTrips, Ui.BLUE) { rankSpecies = TRIPS; render() },
+                    LinearLayout.LayoutParams(WRAP, dp(30)).apply { rightMargin = dp(6) })
                 sorted.forEach { e ->
                     chips.addView(pill(e.key, e.key == sp, Ui.BLUE) { rankSpecies = e.key; render() },
                         LinearLayout.LayoutParams(WRAP, dp(30)).apply { rightMargin = dp(6) })
@@ -204,14 +209,15 @@ class GroupTripsActivity : Activity() {
                 card.addView(Ui.hscroll(this, chips, Ui.CARD), Ui.lp(this, MATCH, WRAP, top = 6))
             }
             val per = HashMap<String, Int>()
-            list.forEach { t -> for (s in t.slots()) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }
+            if (byTrips) list.forEach { t -> per[t.owner] = (per[t.owner] ?: 0) + 1 }
+            else list.forEach { t -> for (s in t.slots()) if (t.name(s) == sp) per[t.owner] = (per[t.owner] ?: 0) + t.count(s) }
             val nameOf = owners.toMap()
             per.entries.filter { it.value > 0 }.sortedByDescending { it.value }.take(5).forEachIndexed { i, e ->
                 val r = Ui.row(this)
                 val me = e.key == Cloud.uid
                 r.addView(Ui.text(this, 15f, if (i == 0) Color.parseColor("#F2C14E") else Ui.TEXT, i == 0 || me,
                     (if (i == 0) "♛ " else "${i + 1}  ") + (nameOf[e.key] ?: "?") + if (me) " (나)" else ""), LinearLayout.LayoutParams(0, WRAP, 1f))
-                r.addView(Ui.text(this, 15f, Ui.TEXT, true, e.value.toString()))
+                r.addView(Ui.text(this, 15f, Ui.TEXT, true, if (byTrips) "${e.value}번" else e.value.toString()))
                 card.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
             }
             body.addView(card, Ui.lp(this, MATCH, WRAP, top = 10))

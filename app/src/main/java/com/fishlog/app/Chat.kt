@@ -31,7 +31,9 @@ object Chat {
     class Msg(val id: String, val room: String, val uid: String, val name: String, val text: String,
               val time: Long, val edited: Long,
               /** v6.25 (274): 사진 미리보기(작은 JPEG base64) · 큰 사진 문서 번호(chatImg) */
-              val th: String = "", val imgId: String = "") {
+              val th: String = "", val imgId: String = "",
+              /** v6.64 (351): 링크 미리보기 (보낸 사람 폰이 만든 것) */
+              val lp: LinkPreview.Prev? = null) {
         val mine get() = uid == Cloud.uid
     }
 
@@ -70,7 +72,8 @@ object Chat {
                     if (q == null) return@addSnapshotListener
                     latest[r] = q.documents.map { d ->
                         Msg(d.id, r, d.getString("uid") ?: "", d.getString("name") ?: "?", d.getString("text") ?: "",
-                            d.getLong("t") ?: 0L, d.getLong("edited") ?: 0L, d.getString("th") ?: "", d.getString("imgId") ?: "")
+                            d.getLong("t") ?: 0L, d.getLong("edited") ?: 0L, d.getString("th") ?: "", d.getString("imgId") ?: "",
+                            LinkPreview.fromMap(d.get("lp")))
                     }.sortedBy { it.time }
                     fire()
                 }
@@ -139,13 +142,15 @@ object Chat {
     }
 
     // ---------------- 보내기 · 고치기 · 지우기 ----------------
-    fun send(room: String, text: String, done: (String?) -> Unit) {
+    fun send(room: String, text: String, lp: LinkPreview.Prev? = null, done: (String?) -> Unit) {
         val me = Cloud.uid ?: return done("로그인이 필요해요")
         val t = text.trim()
         if (t.isEmpty()) return done("내용을 적어 주세요")
         if (t.length > 500) return done("한 번에 500자까지 보낼 수 있어요")
-        ref(room).document().set(mapOf("uid" to me, "name" to nameFor(room), "text" to Profanity.mask(t),
-            "t" to System.currentTimeMillis()))
+        val doc = hashMapOf<String, Any>("uid" to me, "name" to nameFor(room), "text" to Profanity.mask(t),
+            "t" to System.currentTimeMillis())
+        if (lp != null) doc["lp"] = lp.toMap()
+        ref(room).document().set(doc)
             .addOnSuccessListener { markSeen(room); done(null) }
             .addOnFailureListener { done(failMsg(it)) }
     }
@@ -182,6 +187,8 @@ object Chat {
             "t" to m.time, "edited" to System.currentTimeMillis())
         if (m.th.isNotBlank()) doc["th"] = m.th
         if (m.imgId.isNotBlank()) doc["imgId"] = m.imgId
+        // v6.64 (351): 같은 링크면 미리보기 그대로
+        if (m.lp != null && LinkPreview.firstUrl(t) == m.lp.u) doc["lp"] = m.lp.toMap()
         ref(m.room).document(m.id).set(doc)
             .addOnSuccessListener { done(null) }
             .addOnFailureListener { done(failMsg(it)) }

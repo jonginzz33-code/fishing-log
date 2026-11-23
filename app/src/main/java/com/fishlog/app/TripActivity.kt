@@ -784,7 +784,10 @@ class TripActivity : Activity() {
             val bc = Ui.card(this)
             val bars = BarView(this)
             bars.set(t)
-            bc.addView(bars, Ui.lp(this, MATCH, dp(110)))
+            // v6.64 (349): 색 설명 한 줄 + 누르면 자세히
+            bc.addView(Ui.text(this, 12.5f, Ui.TEXT, false, "").apply { text = bars.legend() }, Ui.lp(this, MATCH, WRAP))
+            bc.addView(bars, Ui.lp(this, MATCH, dp(130), top = 6))
+            bc.addView(Ui.text(this, 11f, Ui.SUB, false, "막대를 누르면 그 시간 어종별 마릿수가 보여요"), Ui.lp(this, MATCH, WRAP, top = 4))
             root.addView(bc, Ui.lp(this, MATCH, WRAP, top = 10))
         }
 

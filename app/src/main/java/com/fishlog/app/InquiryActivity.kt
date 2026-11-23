@@ -208,7 +208,22 @@ class InquiryActivity : Activity() {
             setPadding(dp(11), dp(8), dp(11), dp(8)); setLineSpacing(0f, 1.15f)
             maxWidth = (Ui.contentW(context) * 0.78).toInt()
             background = Ui.bg(this@InquiryActivity, if (mine) Ui.BLUE else Color.parseColor(if (fromAdmin) "#2A2310" else "#1E3247"), 14)
+            // v6.64 (351): 주소는 밑줄 링크 · 꾹 = 열기 · 복사 · 내 사이트에 담기
+            LinkPreview.linkify(this, text, if (mine) Color.parseColor("#0B4A6E") else Color.parseColor("#7FD3F5"))
+            setOnLongClickListener {
+                val items = LinkPreview.menuItems(this@InquiryActivity, text, null)
+                if (items.isEmpty()) return@setOnLongClickListener false
+                android.app.AlertDialog.Builder(this@InquiryActivity, R.style.FlAlert)
+                    .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }.show()
+                true
+            }
         }, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(2) })
+        // 링크 미리보기 카드 (운영자와 1:1 이라 내 폰이 받아 봄)
+        LinkPreview.firstUrl(text)?.let { u ->
+            val holder = android.widget.FrameLayout(this)
+            col.addView(holder, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(5) })
+            LinkPreview.load(u) { p -> if (p != null && !isFinishing) holder.addView(LinkPreview.card(this, p)) }
+        }
         return col
     }
 
