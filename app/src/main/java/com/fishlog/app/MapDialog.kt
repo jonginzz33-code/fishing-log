@@ -908,35 +908,31 @@ object MapDialog {
         }
         pastBar.setOnClickListener { openPastSheet() }
         pastModeBtn.setOnClickListener { openPastSheet() }
-        // v6.70: 누를 때마다 켜기(상자 펼침) → 상자 접기(기록은 그대로) → 끄기 → 다시 처음
-        var pastFolded = false
-        pastBtn.setOnClickListener {
-            if (past.isEnabled && !pastFolded) {
-                pastFolded = true
-                pastPanel.visibility = android.view.View.GONE
-                pastBtn.text = "📜 지난 기록 ▸"
-                return@setOnClickListener
+        // v6.71: 지난 기록 3단 — 0 꺼짐 · 1 켜짐(상자 접힘 ▸) · 2 켜짐 + 상자 펼침
+        //  누를 때마다 1 → 2 → 0 → 1 … · 메인 지도는 처음 1 · 그 뒤엔 마지막 상태를 기억 (prefs past_state)
+        var pastState = 0
+        fun setPast(stNew: Int, save: Boolean) {
+            val wantOn = stNew != 0
+            if (wantOn != past.isEnabled) {
+                past.isEnabled = wantOn
+                pastRoutes.isEnabled = wantOn
+                if (!wantOn) focusFn(null)
+                chipWrap.visibility = if (wantOn && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
+                paintSpecies()
+                if (wantOn && !pastLoaded) { pastLoaded = true; loadPastNow() }
+                else { pastNote = if (wantOn && pastLoaded) pastNote else ""; updateLegend() }
             }
-            pastFolded = false
-            past.isEnabled = !past.isEnabled
-            pastRoutes.isEnabled = past.isEnabled
-            if (!past.isEnabled) focusFn(null)
-            paintPastBtn(past.isEnabled)
-            pastPanel.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
-            chipWrap.visibility = if (past.isEnabled && pastList.isNotEmpty()) android.view.View.VISIBLE else android.view.View.GONE
-            paintSpecies()
-            if (past.isEnabled && !pastLoaded) {
-                pastLoaded = true
-                loadPastNow()
-            } else {
-                pastNote = if (past.isEnabled && pastLoaded) pastNote else ""
-                updateLegend()
-            }
+            pastState = stNew
+            paintPastBtn(wantOn)
+            if (stNew == 1) pastBtn.text = "📜 지난 기록 ▸"
+            pastPanel.visibility = if (stNew == 2) android.view.View.VISIBLE else android.view.View.GONE
+            if (save && layers.isEmpty()) spPrefs.edit().putInt("past_state", stNew).apply()
             map.invalidate()
         }
+        pastBtn.setOnClickListener { setPast(when (pastState) { 1 -> 2; 2 -> 0; else -> 1 }, true) }
         addPill(pastBtn)
         // × = 바로 끄기
-        pastClose.setOnClickListener { if (past.isEnabled) { pastFolded = true; pastBtn.performClick() } }
+        pastClose.setOnClickListener { setPast(0, true) }
         // v6.37 (298): 🌋 지진 최근 4일 핀 (기상청) · 누르면 자세히
         val quakeOv = Quake.QuakeOverlay(a) { e ->
             val me = Tracker.last
@@ -1011,7 +1007,7 @@ object MapDialog {
             }
         })
         // v6.38 (299): 메인 지도(내 위치)는 🌋 지진 · 지난 기록 처음부터 켜짐 (폰에 저장된 것 먼저 · 새 글만 서버)
-        if (layers.isEmpty()) { quakeBtn.performClick(); pastBtn.performClick() }
+        if (layers.isEmpty()) { quakeBtn.performClick(); setPast(spPrefs.getInt("past_state", 1).coerceIn(0, 2), false) }
         val zBar = Zones.bar(a, map) { updateLegend() }
         addPill(zBar.pill)
 
