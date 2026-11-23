@@ -287,6 +287,11 @@ object GroupSites {
                         val tc = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
                         tc.addView(Ui.text(a, 14.5f, Ui.TEXT, true, s.name).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
                         if (s.memo.isNotBlank()) tc.addView(Ui.text(a, 12f, Color.parseColor("#9FB4C2"), false, s.memo).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                        // v6.67 (354): 🌐 주소 한 줄 (https:// · www. 빼고 · 길면 …)
+                        val shortUrl = s.url.trim().replace(Regex("^(?i)https?://"), "").replace(Regex("^(?i)www\\."), "").trimEnd('/')
+                        if (shortUrl.isNotBlank()) tc.addView(Ui.text(a, 11.5f, Color.parseColor("#7FD3F5"), false, "🌐 $shortUrl").apply {
+                            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                        }, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(1) })
                         r.addView(tc, LinearLayout.LayoutParams(0, WRAP, 1f))
                         r.addView(Ui.text(a, 18f, Color.parseColor("#7FD3F5"), true, "›"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(8) })
                         card.addView(r)
@@ -308,6 +313,14 @@ object GroupSites {
             fcol(g.id).get().addOnSuccessListener { q ->
                 folders = q.documents.map { d -> Folder(d.id, d.getString("name") ?: "", d.getString("icon") ?: "📁", d.getLong("order") ?: 0L) }
                     .sortedWith(compareBy({ it.order }, { it.name }))
+                // v6.67 (354): 묶음이 하나도 없는 그룹은 그룹장이 처음 열 때 '🚤 선단 사이트' 한 번만 만들어 줌 (지운 뒤엔 다시 안 만듦)
+                val defKey = "gsite_def_${g.id}"
+                if (isBoss && folders.isEmpty() && !prefs(a).getBoolean(defKey, false)) {
+                    prefs(a).edit().putBoolean(defKey, true).apply()
+                    val ref = fcol(g.id).document()
+                    ref.set(mapOf("name" to "선단 사이트", "icon" to "🚤", "order" to 1L))
+                    folders = listOf(Folder(ref.id, "선단 사이트", "🚤", 1L))
+                } else if (folders.isNotEmpty()) prefs(a).edit().putBoolean(defKey, true).apply()
                 done()
             }.addOnFailureListener { folders = emptyList(); done() }   // 규칙 게시 전이면 묶음 없이
             col(g.id).get().addOnSuccessListener { q ->

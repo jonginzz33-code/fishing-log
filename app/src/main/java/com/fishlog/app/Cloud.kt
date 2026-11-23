@@ -204,6 +204,9 @@ object Cloud {
         batch.commit()
             .addOnSuccessListener {
                 ref.collection("members").document(id).set(mapOf("name" to displayName, "joined" to System.currentTimeMillis()))
+                // v6.67 (354): 새 그룹에 '🚤 선단 사이트' 묶음 기본으로
+                ref.collection("siteFolders").document().set(mapOf("name" to "선단 사이트", "icon" to "🚤", "order" to 1L))
+                appContext.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE).edit().putBoolean("gsite_def_${ref.id}", true).apply()
                 activeId = ref.id; refresh(done)
             }
             .addOnFailureListener { done(it.message ?: "그룹 만들기 실패") }

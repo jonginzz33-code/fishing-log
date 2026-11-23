@@ -61,6 +61,27 @@ class Sheet(private val a: Activity, private val frac: Float = 0.66f) {
             w.setDimAmount(0.55f)
         }
         Ui.edge(dlg.window, Color.TRANSPARENT)   // 상태바 · 하단 버튼 여백 · 큰 화면 가운데
+        // v6.67: 키보드가 올라오면 창 높이를 남은 화면에 맞춤 (위쪽 제목 · 첫 칸이 잘리지 않게) · 누른 칸까지 스크롤
+        dlg.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+        root.addOnLayoutChangeListener { _, _, t, _, b, _, ot, _, ob ->
+            if (wantH > 0 && (b - t) != (ob - ot)) root.post {
+                val target = wantH.coerceIn(dp(80), fullH())
+                if (panel.layoutParams.height != target) setH(wantH, false)
+            }
+        }
+        root.viewTreeObserver.addOnGlobalFocusChangeListener { _, nv ->
+            if (nv == null || nv.parent == null) return@addOnGlobalFocusChangeListener
+            var p: android.view.ViewParent? = nv.parent
+            var inBody = false
+            while (p != null) { if (p === body) { inBody = true; break }; p = p.parent }
+            if (!inBody) return@addOnGlobalFocusChangeListener
+            scroll.postDelayed({
+                val r = android.graphics.Rect(); nv.getDrawingRect(r)
+                try { scroll.offsetDescendantRectToMyCoords(nv, r) } catch (_: Exception) { return@postDelayed }
+                val y = scroll.scrollY
+                if (r.top < y + dp(8) || r.bottom > y + scroll.height - dp(8)) scroll.smoothScrollTo(0, (r.top - dp(48)).coerceAtLeast(0))
+            }, 300)
+        }
         dlg.setOnKeyListener { _, code, ev ->
             if (code == android.view.KeyEvent.KEYCODE_BACK && ev.action == android.view.KeyEvent.ACTION_UP) { close(); true } else false
         }
@@ -68,7 +89,12 @@ class Sheet(private val a: Activity, private val frac: Float = 0.66f) {
 
     private fun fullH() = (root.height - root.paddingTop - root.paddingBottom).coerceAtLeast(dp(200))
     private fun baseH() = (fullH() * frac).toInt()
-    private fun setH(h: Int) { panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h.coerceIn(dp(80), fullH()) } }
+    /** 사용자가 원한 높이 (키보드가 올라와 화면이 줄면 그만큼 줄였다가, 내려가면 되돌림) */
+    private var wantH = 0
+    private fun setH(h: Int, remember: Boolean = true) {
+        if (remember) wantH = h
+        panel.layoutParams = (panel.layoutParams as FrameLayout.LayoutParams).apply { height = h.coerceIn(dp(80), fullH()) }
+    }
     private fun animH(to: Int, end: (() -> Unit)? = null) {
         ValueAnimator.ofInt(panel.height, to).apply {
             duration = 180
