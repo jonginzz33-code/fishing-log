@@ -29,7 +29,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * v6.68 (360): 📌 지도 포인트 핀 — 지도를 꾹 눌러 핀(별 모양) · 이름 · 설명 · 반경(50m~3km) · 어종
+ * v6.68 (360): 📌 지도 포인트 핀 — [📌 포인트] 누르면 가운데 핀 → 끌어 옮기고 [💾 저장] (v6.72 · 꾹 누르기 없앰) · 이름 · 설명 · 반경(50m~3km) · 어종
  *  공유: 🔒 나만(users/{uid}/pins) · 👥 그룹(groups/{gid}/pins) · 🌐 전체(pins)
  *  색: 내 것 주황 · 그룹 하늘 · 전체 보라 (Ui.MINE/GROUP/ALL)
  */
@@ -123,11 +123,17 @@ object Pins {
     }
     fun rLabel(r: Double) = if (r >= 1000) String.format(Locale.KOREA, "%.1fkm", r / 1000) else "${r.toInt()}m"
 
-    /** 지도 위 핀 · 반경 원 · 이름표 (꾹 누르면 새 핀) */
-    class PinOverlay(ctx: Context, private val onTap: (Pin) -> Unit, private val onLong: (GeoPoint) -> Unit) : Overlay() {
+    /** 지도 위 핀 · 반경 원 · 이름표 · v6.72: 꽂는 중인 핀은 손가락으로 끌어 옮기고 위 [💾 저장] [✕ 취소] */
+    class PinOverlay(ctx: Context, private val onTap: (Pin) -> Unit) : Overlay() {
         var pins: List<Pin> = emptyList()
         /** 만들거나 고치는 중인 핀 (반경 미리보기) */
         var draft: Pin? = null
+        /** 꽂는 중(끌어 옮기기 · 저장/취소 버튼 보임) — 저장 창이 떠 있으면 false */
+        var placing = false
+        var onSave: (() -> Unit)? = null
+        var onCancel: (() -> Unit)? = null
+        private val saveR = android.graphics.RectF(); private val cancelR = android.graphics.RectF()
+        private var dragging = false; private var grabDx = 0f; private var grabDy = 0f
         private val d = ctx.resources.displayMetrics.density
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -180,9 +186,56 @@ object Pins {
             spots.clear()
             pins.filter { it.id != draft?.id }.forEach { drawPin(c, map, it, false) }
             draft?.let { drawPin(c, map, it, true) }
+            val dp0 = draft
+            if (placing && dp0 != null) {
+                // 핀 위 [💾 저장] [✕ 취소] (핀을 따라 다님)
+                val pt = map.projection.toPixels(dp0.point, null)
+                val x = pt.x.toFloat(); val top = pt.y.toFloat() - 12 * d - 13 * d * 1.8f - 30 * d
+                txt.textSize = 14f * d
+                val w1 = txt.measureText("💾 저장") + 26 * d; val w2 = txt.measureText("✕ 취소") + 26 * d; val h = 36 * d; val gap = 8 * d
+                val left = x - (w1 + gap + w2) / 2
+                saveR.set(left, top - h, left + w1, top); cancelR.set(left + w1 + gap, top - h, left + w1 + gap + w2, top)
+                fill.color = Color.argb(90, 0, 0, 0)
+                c.drawRoundRect(saveR.left, saveR.top + 3 * d, saveR.right, saveR.bottom + 3 * d, h / 2, h / 2, fill)
+                c.drawRoundRect(cancelR.left, cancelR.top + 3 * d, cancelR.right, cancelR.bottom + 3 * d, h / 2, h / 2, fill)
+                fill.color = Color.parseColor("#5FD39A"); c.drawRoundRect(saveR, h / 2, h / 2, fill)
+                fill.color = Color.WHITE; c.drawRoundRect(cancelR, h / 2, h / 2, fill)
+                txt.color = Color.parseColor("#04222A"); c.drawText("💾 저장", saveR.centerX(), saveR.centerY() + 5 * d, txt)
+                txt.color = Color.parseColor("#14232E"); c.drawText("✕ 취소", cancelR.centerX(), cancelR.centerY() + 5 * d, txt)
+                txt.textSize = 11f * d
+            }
+        }
+
+        /** 꽂는 중인 핀을 손가락으로 끌기 (핀 근처를 잡았을 때만 · 아니면 지도가 움직임) */
+        override fun onTouchEvent(e: MotionEvent, map: MapView): Boolean {
+            val dp0 = draft
+            if (!placing || dp0 == null) return false
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    val pt = map.projection.toPixels(dp0.point, null)
+                    val sx = pt.x.toFloat(); val sy = pt.y.toFloat() - 12 * d - 13 * d * 0.8f
+                    val near = (e.x - sx) * (e.x - sx) + (e.y - sy) * (e.y - sy) < (40 * d) * (40 * d) ||
+                        (e.x - pt.x) * (e.x - pt.x) + (e.y - pt.y) * (e.y - pt.y) < (30 * d) * (30 * d)
+                    if (near && !saveR.contains(e.x, e.y) && !cancelR.contains(e.x, e.y)) {
+                        dragging = true; grabDx = pt.x - e.x; grabDy = pt.y - e.y; return true
+                    }
+                }
+                MotionEvent.ACTION_MOVE -> if (dragging) {
+                    val g = map.projection.fromPixels((e.x + grabDx).toInt(), (e.y + grabDy).toInt()) as GeoPoint
+                    draft = Pin(dp0.id, dp0.scope, dp0.gid, dp0.name, dp0.memo, g.latitude, g.longitude, dp0.r, dp0.sp, dp0.owner, dp0.ownerName, dp0.t)
+                    map.invalidate(); return true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (dragging) { dragging = false; return true }
+            }
+            return false
         }
 
         override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
+            if (placing && draft != null) {
+                if (saveR.contains(e.x, e.y)) { onSave?.invoke(); return true }
+                if (cancelR.contains(e.x, e.y)) { onCancel?.invoke(); return true }
+                return false
+            }
             if (draft != null) return false
             val hit = spots.minByOrNull { (_, s) -> (s.x - e.x) * (s.x - e.x) + (s.y - e.y) * (s.y - e.y) } ?: return false
             val dx = hit.second.x - e.x; val dy = hit.second.y - e.y
@@ -190,21 +243,33 @@ object Pins {
             onTap(hit.first); return true
         }
 
-        override fun onLongPress(e: MotionEvent, mapView: MapView): Boolean {
-            if (!isEnabled || draft != null) return false
-            val g = mapView.projection.fromPixels(e.x.toInt(), e.y.toInt()) as GeoPoint
-            onLong(g); return true
+    }
+
+    /** v6.72: 지도 가운데(또는 고칠 핀 자리)에 핀 → 끌어서 옮기기 → 핀 위 [💾 저장] 누르면 저장 창 */
+    fun place(a: Activity, map: MapView, ov: PinOverlay, old: Pin?, after: () -> Unit) {
+        if (Cloud.uid == null) { Ui.toast(a, "로그인하면 포인트를 꽂을 수 있어요"); return }
+        val at = old?.point ?: (map.mapCenter as GeoPoint)
+        ov.draft = Pin(old?.id ?: "_draft", old?.scope ?: MINE, old?.gid ?: "", old?.name ?: "새 포인트", old?.memo ?: "",
+            at.latitude, at.longitude, old?.r ?: 300.0, old?.sp ?: emptyList(), old?.owner ?: "", old?.ownerName ?: "", old?.t ?: 0L)
+        ov.placing = true
+        if (old != null) map.controller.animateTo(at)
+        ov.onCancel = { ov.placing = false; ov.draft = null; map.invalidate() }
+        ov.onSave = {
+            val d = ov.draft
+            if (d != null) { ov.placing = false; map.invalidate(); edit(a, map, ov, d.point, old, after, d) }
         }
+        map.invalidate()
+        Ui.toast(a, "핀을 끌어서 원하는 자리로 옮기고 위 [💾 저장]을 눌러요")
     }
 
     /** 핀 만들기 · 고치기 창 (밑에서 올라옴 · 움직이면 지도 원도 같이) */
-    fun edit(a: Activity, map: MapView, ov: PinOverlay, at: GeoPoint, old: Pin?, after: () -> Unit) {
+    fun edit(a: Activity, map: MapView, ov: PinOverlay, at: GeoPoint, old: Pin?, after: () -> Unit, from: Pin? = null) {
         if (Cloud.uid == null) { Ui.toast(a, "로그인하면 포인트를 꽂을 수 있어요"); return }
         val dp = { v: Int -> Ui.dp(a, v) }
-        var scope = old?.scope ?: MINE
-        var gid = old?.gid?.ifBlank { null } ?: Cloud.active?.id ?: ""
-        var r = old?.r ?: 300.0
-        val sp = (old?.sp ?: emptyList()).toMutableList()
+        var scope = from?.scope ?: old?.scope ?: MINE
+        var gid = (from?.gid ?: old?.gid)?.ifBlank { null } ?: Cloud.active?.id ?: ""
+        var r = from?.r ?: old?.r ?: 300.0
+        val sp = (from?.sp ?: old?.sp ?: emptyList()).toMutableList()
         fun draftNow(name: String) = Pin(old?.id ?: "_draft", scope, gid, name.ifBlank { "새 포인트" }, "", at.latitude, at.longitude, r, sp, "", "", 0L)
         ov.draft = draftNow(old?.name ?: ""); map.invalidate()
         val sh = Sheet(a, 0.72f)
@@ -295,7 +360,12 @@ object Pins {
                 }
             }
         }, Ui.lp(a, -1, -2))
-        sh.onClose = { ov.draft = null; map.invalidate(); if (saved) after() }
+        // v6.72: 저장 안 하고 닫으면 다시 꽂는 중으로 (핀 옮기거나 취소)
+        sh.onClose = {
+            if (saved) { ov.placing = false; ov.draft = null; map.invalidate(); after() }
+            else if (from != null) { ov.draft = draftNow(nameE.text.toString()); ov.placing = true; map.invalidate() }
+            else { ov.draft = null; map.invalidate() }
+        }
         sh.show()
     }
 
@@ -334,7 +404,7 @@ object Pins {
         }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
         sh.body.addView(row1, Ui.lp(a, -1, -2, top = 12))
         val row2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        if (canEdit(p)) row2.addView(btn("✎ 고치기 · 공유 바꾸기") { sh.close(); edit(a, map, ov, p.point, p, after) }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (canEdit(p)) row2.addView(btn("✎ 고치기 · 옮기기 · 공유") { sh.close(); place(a, map, ov, p, after) }, LinearLayout.LayoutParams(0, -2, 1f))
         if (canDelete(p)) row2.addView(btn("🗑 지우기", Color.parseColor("#FF8A80")) {
             AlertDialog.Builder(a, R.style.FlAlert).setTitle("'${p.name}' 포인트를 지울까요?")
                 .setPositiveButton("지우기") { _, _ -> delete(p) { e -> if (e != null) Ui.toast(a, e) else { sh.close(); after() } } }

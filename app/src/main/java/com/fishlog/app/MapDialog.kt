@@ -963,22 +963,26 @@ object MapDialog {
             map.invalidate()
         }
         addPill(quakeBtn)
-        // v6.68 (360): 📌 포인트 핀 — 지도를 꾹 눌러 꽂기 · 내 것 주황 · 그룹 하늘 · 전체 보라
-        val pinBtn = pill("📌 포인트 ▾")
+        // v6.68 (360) · v6.72: 📌 포인트 — 누르면 지도 가운데에 핀 → 끌어서 옮기고 핀 위 [💾 저장] · 내 것 주황 · 그룹 하늘 · 전체 보라
+        val pinBtn = pill("📌 포인트")
+        val pinShowBtn = pill("👁 ▾")
         lateinit var pinOv: Pins.PinOverlay
         fun loadPins() {
             Pins.load(a) { l ->
                 pinOv.pins = l
-                pinBtn.text = "📌 포인트" + (if (l.isNotEmpty()) " ${l.size}" else "") + " ▾"
+                pinShowBtn.text = "👁 " + (if (l.isNotEmpty()) "${l.size} " else "") + "▾"
                 map.invalidate()
             }
         }
-        pinOv = Pins.PinOverlay(a, { p -> Pins.card(a, map, pinOv, p, past.dots) { loadPins() } },
-            { g -> Pins.edit(a, map, pinOv, g, null) { loadPins() } })
+        pinOv = Pins.PinOverlay(a) { p -> Pins.card(a, map, pinOv, p, past.dots) { loadPins() } }
         map.overlays.add(pinOv)
         pinBtn.setOnClickListener {
+            if (pinOv.placing) { pinOv.onCancel?.invoke(); return@setOnClickListener }
+            Pins.place(a, map, pinOv, null) { loadPins() }
+        }
+        pinShowBtn.setOnClickListener {
             val sh = Sheet(a, 0.5f)
-            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "📌 포인트 보기"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "👁 지도에 보일 포인트"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             val show = Pins.shown(a)
             fun row(scope: Int, label: String) {
                 val cb = Ui.checkFit(android.widget.CheckBox(a)).apply {
@@ -989,15 +993,11 @@ object MapDialog {
                 sh.body.addView(cb, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 4))
             }
             row(Pins.MINE, "★ 내 포인트 (나만)"); row(Pins.GROUP, "★ 그룹 포인트"); row(Pins.ALL, "★ 전체 게시판 포인트")
-            sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "지도를 꾹 누르면 그 자리에 포인트(★)를 꽂아요 · 이름 · 설명 · 반경 · 누구에게 보일지 정할 수 있어요"),
+            sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "새 포인트는 [📌 포인트]를 누르면 지도 가운데에 핀이 생겨요 → 핀을 끌어서 옮기고 → 핀 위 [💾 저장]"),
                 Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 12))
-            sh.body.addView(Ui.text(a, 14f, Ui.BG, true, "📌 지도 가운데에 꽂기").apply {
-                gravity = Gravity.CENTER; minHeight = dp(a, 46); background = Ui.bg(a, Ui.GREEN, 99)
-                setOnClickListener { sh.close(); Pins.edit(a, map, pinOv, map.mapCenter as GeoPoint, null) { loadPins() } }
-            }, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 12))
             sh.show()
         }
-        addPill(pinBtn)
+        addPill(pinBtn); addPill(pinShowBtn)
         if (Cloud.user != null) loadPins()
         // v6.54 (330): 🌬 바람 지도 (지금 보던 자리 가운데로)
         addPill(pill("🌬 바람").apply {
