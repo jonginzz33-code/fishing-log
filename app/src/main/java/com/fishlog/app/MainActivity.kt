@@ -1584,7 +1584,7 @@ class MainActivity : Activity() {
                 groups.forEach { g ->
                     val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(46) }
                     val cb = Ui.checkFit(CheckBox(this)).apply {
-                        buttonTintList = ColorStateList.valueOf(Ui.BLUE); isChecked = g.id == Cloud.active?.id
+                        buttonTintList = ColorStateList.valueOf(Ui.GROUP); isChecked = g.id == Cloud.active?.id
                         setOnCheckedChangeListener { _, _ -> syncAll(); refreshSum(); titleRef?.text = titleText0(); paintOk(); drawOptsRef?.invoke() }
                     }
                     picks[g.id] = cb
@@ -1602,7 +1602,7 @@ class MainActivity : Activity() {
             val pubBox = Ui.checkFit(CheckBox(this)).apply {
                 text = "전체 게시판에도 공개 (위치는 다음 창에서 정확/대략 선택, 경로·배 이름은 안 올라감)"
                 setTextColor(Ui.TEXT); textSize = 14f
-                buttonTintList = ColorStateList.valueOf(Ui.BLUE)
+                buttonTintList = ColorStateList.valueOf(Ui.ALL)
                 isChecked = canShare
                 visibility = if (canShare) View.VISIBLE else View.GONE
                 setOnCheckedChangeListener { _, _ -> refreshSum(); optsRef?.visibility = if (isChecked) View.VISIBLE else View.GONE; paintOk() }
@@ -2464,9 +2464,9 @@ class MainActivity : Activity() {
                     sb.setSpan(android.text.style.ForegroundColorSpan(fg), st, sb.length, 0)
                     sb.setSpan(android.text.style.RelativeSizeSpan(0.85f), st, sb.length, 0)
                 }
-                m.groups.take(2).forEach { tag(it, Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF")) }
-                if (m.groups.size > 2) tag("+${m.groups.size - 2}", Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF"))
-                if (m.pub) tag("전체", Color.parseColor("#5A3B12"), Color.parseColor("#FFD79A"))
+                m.groups.take(2).forEach { tag(it, Color.parseColor("#12384A"), Color.parseColor("#9FD8F0")) }
+                if (m.groups.size > 2) tag("+${m.groups.size - 2}", Color.parseColor("#12384A"), Color.parseColor("#9FD8F0"))
+                if (m.pub) tag("전체", Color.parseColor("#2E2148"), Color.parseColor("#CDB8F5"))
             }
             sb.append((if (l.size > 3) "\n외 ${l.size - 3}명" else "") + " · 눌러서 보기")
             nowSub.text = sb
@@ -2522,8 +2522,8 @@ class MainActivity : Activity() {
                     where.setSpan(android.text.style.StyleSpan(Typeface.BOLD), st, where.length, 0)
                     where.append(" ")
                 }
-                m.groups.forEach { tag(it, Color.parseColor("#2B4A6B"), Color.parseColor("#BFE0FF")) }
-                if (m.pub) tag("전체 공유" + if (m.area.isNotBlank()) " · ${m.area} 부근" else "", Color.parseColor("#5A3B12"), Color.parseColor("#FFD79A"))
+                m.groups.forEach { tag(it, Color.parseColor("#12384A"), Color.parseColor("#9FD8F0")) }
+                if (m.pub) tag("전체 공유" + if (m.area.isNotBlank()) " · ${m.area} 부근" else "", Color.parseColor("#2E2148"), Color.parseColor("#CDB8F5"))
                 where.append(if (hasLoc) "· 📍 위치 공유 중" else "· 위치 끔")
                 tx.addView(Ui.text(this, 11.5f, Ui.SUB, false, "").apply { text = where; setLineSpacing(0f, 1.25f) }, Ui.lp(this, MATCH, WRAP, top = 3))
                 r.addView(tx, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -2551,7 +2551,9 @@ class MainActivity : Activity() {
             val on = scope == key
             val o = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(9), dp(12), dp(9))
-                background = Ui.bg(this@MainActivity, Color.TRANSPARENT, 10, if (on) Ui.TEXT else Ui.LINE)
+                // v6.69 (364): 나만 주황 · 그룹 하늘 · 전체 보라
+                val kc = when (key) { "groups" -> Ui.GROUP; "public" -> Ui.ALL; else -> Ui.MINE }
+                background = Ui.bg(this@MainActivity, if (on) Color.argb(40, Color.red(kc), Color.green(kc), Color.blue(kc)) else Color.TRANSPARENT, 10, if (on) kc else Ui.LINE)
                 isClickable = true
                 setOnClickListener {
                     if (key == "groups" && Store.liveGroups == null) Store.liveGroups = Live.checkedGroupIds()
@@ -2560,7 +2562,7 @@ class MainActivity : Activity() {
                 }
             }
             val r = Ui.row(this)
-            r.addView(Ui.text(this, 15f, if (on) Ui.TEXT else Ui.SUB, true, if (on) "◉" else "○"), LinearLayout.LayoutParams(dp(26), WRAP))
+            r.addView(Ui.text(this, 15f, if (on) (when (key) { "groups" -> Ui.GROUP; "public" -> Ui.ALL; else -> Ui.MINE }) else Ui.SUB, true, if (on) "◉" else "○"), LinearLayout.LayoutParams(dp(26), WRAP))
             val tx = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             tx.addView(Ui.text(this, 14f, Ui.TEXT, on, title))
             sub?.let { tx.addView(Ui.text(this, 11f, Ui.SUB, false, it)) }
@@ -2585,7 +2587,7 @@ class MainActivity : Activity() {
                 }
                 r.addView(Ui.text(this, 13f, if (checked) Ui.BG else Ui.SUB, true, if (checked) "✓" else "").apply {
                     gravity = Gravity.CENTER
-                    background = if (checked) Ui.bg(this@MainActivity, Ui.GREEN, 4) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 4, Ui.SUB)
+                    background = if (checked) Ui.bg(this@MainActivity, Ui.GROUP, 4) else Ui.bg(this@MainActivity, Color.TRANSPARENT, 4, Ui.SUB)
                 }, LinearLayout.LayoutParams(dp(20), dp(20)))
                 r.addView(Ui.text(this, 13f, if (checked) Ui.TEXT else Ui.SUB, false, "").apply {
                     text = android.text.SpannableStringBuilder(GroupIcon.prefix(this@MainActivity, gr, 16)).append(gr.title)
@@ -2658,8 +2660,10 @@ class MainActivity : Activity() {
                 else "🟢 " + (if (gs.size == 1) gs[0].title else "${gs[0].title} 외 ${gs.size - 1}곳") + "에 알리는 중 ▾"
             }
         }
-        liveChip.setTextColor(if (none) Ui.SUB else Ui.GREEN)
-        liveChip.background = Ui.bg(this, Color.TRANSPARENT, 99, if (none) Ui.LINE else Ui.GREEN)
+        // v6.69 (364): 그룹 하늘 · 전체 보라
+        val lc = if (none) Ui.SUB else if (Store.liveScope == "public") Ui.ALL else Ui.GROUP
+        liveChip.setTextColor(lc)
+        liveChip.background = Ui.bg(this, Color.TRANSPARENT, 99, if (none) Ui.LINE else lc)
     }
     private lateinit var boardBtn: LinearLayout
     private lateinit var boardSub: TextView

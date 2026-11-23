@@ -306,9 +306,10 @@ class HistoryActivity : Activity() {
 
     // ---------------- 공개 범위 배지 ----------------
     private class BadgeStyle(val bg: Int, val text: Int, val line: Int)
-    private val BADGE_GROUP = BadgeStyle(android.graphics.Color.parseColor("#1F4D3A"), android.graphics.Color.parseColor("#8FE3B8"), android.graphics.Color.parseColor("#3FA77A"))
-    private val BADGE_ALL = BadgeStyle(android.graphics.Color.parseColor("#5A3410"), android.graphics.Color.parseColor("#FFC48A"), Ui.ORANGE)
-    private val BADGE_ME = BadgeStyle(android.graphics.Color.parseColor("#2A3A4A"), android.graphics.Color.parseColor("#B9C6D2"), android.graphics.Color.parseColor("#4A5B6B"))
+    // v6.69 (364): 내 것 주황 · 그룹 하늘 · 전체 보라 (앱 공통 색)
+    private val BADGE_GROUP = BadgeStyle(android.graphics.Color.parseColor("#12384A"), android.graphics.Color.parseColor("#9FD8F0"), Ui.GROUP)
+    private val BADGE_ALL = BadgeStyle(android.graphics.Color.parseColor("#2E2148"), android.graphics.Color.parseColor("#CDB8F5"), Ui.ALL)
+    private val BADGE_ME = BadgeStyle(android.graphics.Color.parseColor("#4A2E12"), android.graphics.Color.parseColor("#FFC48A"), Ui.MINE)
 
     private fun badge(label: String, st: BadgeStyle, onClick: () -> Unit): android.widget.TextView =
         Ui.text(this, 12f, st.text, true, label).apply {

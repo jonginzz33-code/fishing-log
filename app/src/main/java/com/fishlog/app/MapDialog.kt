@@ -847,7 +847,9 @@ object MapDialog {
             fun paint() {
                 box.removeAllViews()
                 box.addView(sec("누구 기록"))
-                box.addView(flow(modes.map { md -> chipV(whoLabel(md).replace("내 기록 + ", "+ ").let { if (md == "mine") "내 기록만" else it }, md == mode, SKY, Color.parseColor("#06303A")) { mode = md; paint() } }))
+                box.addView(flow(modes.map { md -> chipV(whoLabel(md).replace("내 기록 + ", "+ ").let { if (md == "mine") "내 기록만" else it }, md == mode,
+                    // v6.69 (364): 내 기록 주황 · 그룹 하늘 · 게시판 보라
+                    if (md == "mine") Ui.MINE else if (md.startsWith("public")) Ui.ALL else Ui.GROUP, Color.WHITE) { mode = md; paint() } }))
                 box.addView(sec("연도"))
                 box.addView(flow(listOf(chipV("전체 연도", y == 0, YEL, Color.parseColor("#2A1E02")) { y = 0; paint() }) +
                     years.map { yy -> chipV("$yy", y == yy, YEL, Color.parseColor("#2A1E02")) { y = yy; paint() } }))
