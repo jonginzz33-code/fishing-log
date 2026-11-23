@@ -18,8 +18,9 @@ jobs:
           if [ -z "$KEY" ]; then echo "KMA_HUB_KEY 없음 (비밀값 이름 확인)"; exit 1; fi
           echo "KMA_HUB_KEY 있음 · 길이 ${#KEY}"
           TM=$(TZ=Asia/Seoul date -d '-2 hour' +%Y%m%d%H00)
-          # 부이 지점 위치표 찾기 (2026-11-23)
-          for P in "stn_inf.php?inf=BUOY&stn=&tm=$TM&help=1" "stn_inf.php?inf=SEA&stn=&tm=$TM&help=1" "stn_inf.php?inf=KMA_BUOY&stn=&tm=$TM&help=1" "stn_inf.php?inf=SFC&stn=&tm=$TM&help=0" "kma_buoy_stn.php?help=1" "sea_stn.php?help=1"; do
+          # 부이 지점 위치표 (지점정보 활용신청 뒤 · 2026-11-23)
+          for P in "stn_inf.php?inf=BUOY&stn=&tm=$TM&help=1" "stn_inf.php?inf=SEA&stn=&tm=$TM&help=1" "stn_inf.php?inf=SFC&stn=&tm=$TM&help=1"; do
             echo "==== $P"
-            curl -s -m 25 -w '\n[HTTP %{http_code}]\n' "https://apihub.kma.go.kr/api/typ01/url/$P&authKey=$KEY" | iconv -f euc-kr -t utf-8 2>/dev/null | head -n 70
+            curl -s -m 25 -o out.txt -w '[HTTP %{http_code}]\n' "https://apihub.kma.go.kr/api/typ01/url/$P&authKey=$KEY"
+            (iconv -f euc-kr -t utf-8 out.txt 2>/dev/null || cat out.txt) | head -n 120
           done
