@@ -91,6 +91,19 @@ await no('그룹원이 그룹장 공지 지우기', deleteDoc(doc(B, 'groups/g1/
 await no('그룹 밖 사람이 사이트 추가', setDoc(doc(ADM, 'groups/g1/sites/s9'), { name: 'x', url: 'y', memo: '', owner: 'ADM', ownerName: 'a', t: now, order: 1 }));
 await no('남이 올린 사이트 고치기', updateDoc(doc(B, 'groups/g1/sites/s7'), { name: 'z' }));
 await no('사이트에 다른 값 끼워 넣기', setDoc(doc(B, 'groups/g1/sites/s8'), { name: 'x', url: 'y', memo: '', owner: 'B', ownerName: 'b', t: now, order: 1, evil: 1 }));
+// v6.66 (353): 사이트 묶음
+await ok('그룹원이 묶음 넣어 사이트 추가', setDoc(doc(B, 'groups/g1/sites/s5'), { name: '채비', url: 'www.r.com', memo: '', owner: 'B', ownerName: 'b', t: now, order: 3, folder: 'f1' }));
+await ok('올린 사람이 묶음 옮기기', updateDoc(doc(B, 'groups/g1/sites/s5'), { folder: '' }));
+await ok('그룹장이 남의 사이트 묶음 옮기기', updateDoc(doc(A, 'groups/g1/sites/s5'), { folder: 'f1' }));
+await no('묶음 이름에 숫자 넣기', updateDoc(doc(B, 'groups/g1/sites/s5'), { folder: 5 }));
+await ok('그룹장이 묶음 만들기', setDoc(doc(A, 'groups/g1/siteFolders/f1'), { name: '배 선단', icon: '🚤', order: 1 }));
+await ok('그룹원이 묶음 보기', getDoc(doc(B, 'groups/g1/siteFolders/f1')));
+await no('그룹원이 묶음 만들기', setDoc(doc(B, 'groups/g1/siteFolders/f2'), { name: 'x', icon: '🛒', order: 2 }));
+await no('그룹원이 묶음 지우기', deleteDoc(doc(B, 'groups/g1/siteFolders/f1')));
+await no('그룹 밖 사람이 묶음 보기', getDoc(doc(ADM, 'groups/g1/siteFolders/f1')));
+await no('묶음에 다른 값 끼워 넣기', setDoc(doc(A, 'groups/g1/siteFolders/f3'), { name: 'x', icon: '🛒', order: 2, evil: 1 }));
+await ok('그룹장이 묶음 순서 바꾸기', updateDoc(doc(A, 'groups/g1/siteFolders/f1'), { order: 5 }));
+await ok('그룹장이 묶음 지우기', deleteDoc(doc(A, 'groups/g1/siteFolders/f1')));
 await ok('그룹원이 참석 답하기', setDoc(doc(B, 'groups/g1/events/e1/rsvp/B'), { name: 'b', s: 'yes', note: '6시 도착', t: now }));
 await ok('그룹원이 참석 현황 보기', getDoc(doc(A, 'groups/g1/events/e1/rsvp/B')));
 await ok('내 답 바꾸기', setDoc(doc(B, 'groups/g1/events/e1/rsvp/B'), { name: 'b', s: 'no', note: '', t: now }));

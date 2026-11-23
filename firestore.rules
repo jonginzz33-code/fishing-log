@@ -366,15 +366,27 @@ service cloud.firestore {
       match /sites/{sid} {
         allow read: if isMember(gid);
         allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
-          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order'])
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order', 'folder'])
           && request.resource.data.name is string && request.resource.data.name.size() <= 40
           && request.resource.data.url is string && request.resource.data.url.size() <= 300
-          && request.resource.data.memo is string && request.resource.data.memo.size() <= 200;
+          && request.resource.data.memo is string && request.resource.data.memo.size() <= 200
+          && (!('folder' in request.resource.data) || (request.resource.data.folder is string && request.resource.data.folder.size() <= 40));
         allow update: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid))
           && request.resource.data.owner == resource.data.owner
-          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order'])
-          && request.resource.data.name.size() <= 40 && request.resource.data.url.size() <= 300 && request.resource.data.memo.size() <= 200;
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order', 'folder'])
+          && request.resource.data.name.size() <= 40 && request.resource.data.url.size() <= 300 && request.resource.data.memo.size() <= 200
+          && (!('folder' in request.resource.data) || (request.resource.data.folder is string && request.resource.data.folder.size() <= 40));
         allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+      }
+      // v6.66 (353): 그룹 사이트 묶음 — 읽기 그룹원 · 만들기 · 고치기 · 지우기 그룹장
+      match /siteFolders/{fid} {
+        allow read: if isMember(gid);
+        allow create, update: if isGroupOwner(gid)
+          && request.resource.data.keys().hasOnly(['name', 'icon', 'order'])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 30
+          && request.resource.data.icon is string && request.resource.data.icon.size() <= 8
+          && request.resource.data.order is int;
+        allow delete: if isGroupOwner(gid);
       }
       match /events/{eid} {
         allow read: if isMember(gid);
