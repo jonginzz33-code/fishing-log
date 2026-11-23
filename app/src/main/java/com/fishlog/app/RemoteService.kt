@@ -408,6 +408,12 @@ class RemoteService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+    /** 나우바 · 상태바 칩 짧은 글자 (많이 잡은 어종 + 총) */
+    private fun nowBarText(t: Store.Trip): String {
+        val top = t.slots().filter { t.count(it) > 0 }.maxByOrNull { t.count(it) }
+        return if (top == null) "🎣 0" else "🎣 ${t.name(top).take(3)} ${t.count(top)}" + (if (t.catches.size > t.count(top)) "·${t.catches.size}" else "")
+    }
+
     private fun buildNotification(): Notification {
         val t = Store.current
         val counts = if (t == null) "출조 준비" else "${t.line()} · 총 ${t.catches.size}"
@@ -430,6 +436,14 @@ class RemoteService : Service() {
             // 개인 설정: 잠금 화면·AOD에 보일지
             .setVisibility(if (Store.lockScreenShow) Notification.VISIBILITY_PUBLIC else Notification.VISIBILITY_SECRET)
             .setDeleteIntent(servicePi(ACT_REPOST, 3)) // 지우면 바로 다시 띄움
+        // v6.63 (348): 안드로이드 16 실시간 알림 — 삼성 나우바 · 상태바 칩에 '🎣 17' (받아 주는 폰만 · 아니면 지금 알림 그대로)
+        if (t != null && Build.VERSION.SDK_INT >= 36 && Store.lockScreenShow) {
+            try {
+                b.setStyle(Notification.BigTextStyle().bigText(sub))
+                b.setShortCriticalText(nowBarText(t))
+                b.extras.putBoolean("android.requestPromotedOngoing", true)
+            } catch (_: Throwable) {}
+        }
         if (t != null) {
             b.addAction(Notification.Action.Builder(Icon.createWithResource(this, R.drawable.ic_stat_octo),
                 "${t.name(1)} +1", servicePi(ACT_ADD1, 1)).build())

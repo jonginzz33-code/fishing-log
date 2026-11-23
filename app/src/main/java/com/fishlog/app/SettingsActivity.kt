@@ -302,6 +302,29 @@ class SettingsActivity : Activity() {
         renderScale()
         switchRow("꺼진 화면(AOD)·잠금 화면에 표시", "출조 중 주꾸미 아이콘, 마릿수, +1 버튼을 잠금 해제 없이 보여줘요",
             Store.lockScreenShow) { Store.lockScreenShow = it; if (Store.current != null) RemoteService.start(this) }
+        // v6.63 (348): 폰 설정은 앱이 못 바꿔서 바로 가기 버튼만 (안내 알림은 안 띄움)
+        fun openSettings(vararg intents: android.content.Intent) {
+            for (i in intents) { try { startActivity(i); return } catch (_: Exception) {} }
+            Toast.makeText(this, "설정 화면을 못 열었어요 · 폰 설정 → 잠금화면 및 AOD → 알림에서 바꿔 주세요", Toast.LENGTH_LONG).show()
+        }
+        box.addView(Ui.button(this, "📱 폰 잠금화면 알림 설정 열기") {
+            openSettings(
+                android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName),
+                android.content.Intent("android.settings.LOCK_SCREEN_SETTINGS"),
+                android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+        }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 8))
+        box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "잠금화면에 아이콘만 보이고 마릿수가 안 보이면: 폰 설정 → 잠금화면 및 AOD → 알림 → '상세히'(알림 내용 표시) · 조과일지 알림 켜기 (폰 설정은 앱이 직접 못 바꿔요)"),
+            Ui.lp(this, MATCH, WRAP, top = 4))
+        // 안드로이드 16: 나우바 · 상태바 칩(실시간 알림) 허용 바로 가기
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            val nm = getSystemService(android.app.NotificationManager::class.java)
+            val ok = try { nm?.canPostPromotedNotifications() ?: true } catch (_: Throwable) { true }
+            box.addView(Ui.button(this, if (ok) "⚡ 실시간 알림(나우바) 허용됨 · 설정 보기" else "⚡ 실시간 알림(나우바) 허용하기") {
+                openSettings(
+                    android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName),
+                    android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+            }.apply { minHeight = dp(44); textSize = 14f }, Ui.lp(this, MATCH, WRAP, top = 6))
+        }
         section("알림")
         switchRow("같이 출조 중 친구 돌파 알림", "같이 출조 중인 그룹원이 10·30·50… 마리를 넘으면 알려줘요",
             Store.friendAlerts) { Store.friendAlerts = it }
