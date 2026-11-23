@@ -593,7 +593,9 @@ object Zones {
                 confirmOn(a) { paintCurtain(); cur.visibility = View.VISIBLE; paint(); map.invalidate(); after() }
                 return@setOnClickListener
             }
-            if (cur.visibility == View.VISIBLE) cur.visibility = View.GONE else { paintCurtain(); cur.visibility = View.VISIBLE }
+            // v6.70: 켜져 있으면 누를 때마다 커튼 접기 → 끄기 → (다시 누르면 안내 → 켜고 펼침)
+            if (cur.visibility == View.VISIBLE) cur.visibility = View.GONE
+            else { setOn(a, false); map.invalidate(); after() }
             paint()
         }
         return bar

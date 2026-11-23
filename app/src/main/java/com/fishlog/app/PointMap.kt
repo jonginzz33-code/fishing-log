@@ -132,6 +132,7 @@ object PointMap {
                 anBtn.visibility = if (l.isEmpty()) View.GONE else View.VISIBLE
             }
         }
+        var loadGroupRef: (String) -> Unit = {}
         fun paintDots() {
             dots.dots = recs().map { r ->
                 val grp = r.group.isNotBlank()
@@ -166,7 +167,23 @@ object PointMap {
                 (if (gOn) "☑" else "☐") + " 그룹 포인트" + (if (gOn) " (${selGroups.size})" else "") + if (groupOpen) " ▴" else " ▾").apply {
                 gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
                 background = if (gOn) Ui.bg(a, Ui.GROUP, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.GROUP)
-                setOnClickListener { groupOpen = !groupOpen; paintBar() }
+                // v6.70: 커튼 펼침 → 접기 → (고른 그룹 있으면) 끄기 → 다시 누르면 예전 고른 그룹 켜고 펼침
+                setOnClickListener {
+                    when {
+                        groupOpen -> groupOpen = false
+                        selGroups.isNotEmpty() -> {
+                            p.edit().putStringSet("pm_groups_last", HashSet(selGroups)).putStringSet("pm_groups", emptySet()).apply()
+                            selGroups.clear(); paintDots()
+                        }
+                        else -> {
+                            (p.getStringSet("pm_groups_last", emptySet()) ?: emptySet()).filter { id -> myGroups.any { it.id == id } }
+                                .forEach { selGroups.add(it); loadGroupRef(it) }
+                            p.edit().putStringSet("pm_groups", HashSet(selGroups)).apply()
+                            groupOpen = true; paintDots()
+                        }
+                    }
+                    paintBar()
+                }
             })
             add(Ui.text(a, 13f, if (circle.drawMode) Color.WHITE else Color.parseColor("#FF4FA8"), true, if (circle.drawMode) "⭕ 원 그리는 중" else "⭕ 원 그리기").apply {
                 gravity = Gravity.CENTER; setPadding(dp(12), 0, dp(12), 0); maxLines = 1; minHeight = dp(Ui.PILL_M)
@@ -211,6 +228,7 @@ object PointMap {
                 }
             }
         }
+        loadGroupRef = { loadGroup(it) }
         selGroups.forEach { loadGroup(it) }
         anBtn.setOnClickListener {
             val c = circle.center ?: return@setOnClickListener

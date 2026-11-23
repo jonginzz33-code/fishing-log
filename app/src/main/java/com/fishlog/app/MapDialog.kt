@@ -908,7 +908,16 @@ object MapDialog {
         }
         pastBar.setOnClickListener { openPastSheet() }
         pastModeBtn.setOnClickListener { openPastSheet() }
+        // v6.70: 누를 때마다 켜기(상자 펼침) → 상자 접기(기록은 그대로) → 끄기 → 다시 처음
+        var pastFolded = false
         pastBtn.setOnClickListener {
+            if (past.isEnabled && !pastFolded) {
+                pastFolded = true
+                pastPanel.visibility = android.view.View.GONE
+                pastBtn.text = "📜 지난 기록 ▸"
+                return@setOnClickListener
+            }
+            pastFolded = false
             past.isEnabled = !past.isEnabled
             pastRoutes.isEnabled = past.isEnabled
             if (!past.isEnabled) focusFn(null)
@@ -926,7 +935,8 @@ object MapDialog {
             map.invalidate()
         }
         addPill(pastBtn)
-        pastClose.setOnClickListener { if (past.isEnabled) pastBtn.performClick() }
+        // × = 바로 끄기
+        pastClose.setOnClickListener { if (past.isEnabled) { pastFolded = true; pastBtn.performClick() } }
         // v6.37 (298): 🌋 지진 최근 4일 핀 (기상청) · 누르면 자세히
         val quakeOv = Quake.QuakeOverlay(a) { e ->
             val me = Tracker.last
@@ -1555,7 +1565,11 @@ object MapDialog {
                 }
                 .show()
         }
+        // v6.70: 켜기(설정 줄 보임) → 줄 접기 → 끄기 → 다시 처음
+        var pFolded = false
         pill("지난 기록") { v ->
+            if (past.isEnabled && !pFolded) { pFolded = true; pastBar.visibility = android.view.View.GONE; v.text = "지난 기록 ▸"; return@pill }
+            pFolded = false; v.text = "지난 기록"
             past.isEnabled = !past.isEnabled
             (v.background as GradientDrawable).setColor(if (past.isEnabled) Color.parseColor("#2B4A5E") else Color.TRANSPARENT)
             pastBar.visibility = if (past.isEnabled) android.view.View.VISIBLE else android.view.View.GONE
