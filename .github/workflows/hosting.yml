@@ -17,4 +17,4 @@ jobs:
         run: |
           echo "$SA" > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx -y firebase-tools@13 deploy --only hosting --project fishing-log-9109d --non-interactive
+          npx -y firebase-tools@13 deploy --only hosting --project fishing-log-9109d --non-interactive --debug 2>&1 | grep -vE "^\[debug\].*(Authorization|token)" | tail -60; test ${PIPESTATUS[0]} -eq 0
