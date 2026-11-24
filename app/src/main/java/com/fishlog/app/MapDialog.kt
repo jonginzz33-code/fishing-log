@@ -476,13 +476,15 @@ object MapDialog {
         // ---- 화면 구성 ----
         val bg = Color.parseColor("#0B1A26")
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
-        root.addView(TextView(a).apply {
+        // v6.73 (370): 제목 줄 오른쪽에 닫기 (버튼 줄은 지도 왼쪽 세로 줄로)
+        val headRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(a, 16), dp(a, 8), dp(a, 12), dp(a, 6)) }
+        headRow.addView(TextView(a).apply {
             text = title
             textSize = 17f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(a, 16), dp(a, 10), dp(a, 16), dp(a, 4))
-        })
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(headRow)
 
         fun pill(label: String): TextView = TextView(a).apply {
             text = label
@@ -497,7 +499,7 @@ object MapDialog {
             }
         }
         fun setOn(v: TextView, on: Boolean) {
-            (v.background as GradientDrawable).setColor(if (on) Color.parseColor("#2B4A5E") else Color.TRANSPARENT)
+            (v.background as GradientDrawable).setColor(if (on) Color.parseColor("#2B4A5E") else Color.argb(235, 15, 29, 41))   // v6.73: 지도 위에 떠 있어 끔도 짙은 바탕
         }
         val bar = LinearLayout(a).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false
@@ -505,7 +507,8 @@ object MapDialog {
         }
         fun addPill(v: TextView) = bar.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = dp(a, 8) })
         // v3.9.1 (159): 맨 왼쪽 🔍 장소 검색
-        addPill(MapSearch.pill(a, map))
+        val searchPill = MapSearch.pill(a, map)
+        addPill(searchPill)
 
         val legendView = TextView(a).apply {
             textSize = 12f
@@ -615,7 +618,7 @@ object MapDialog {
         val pastSumView = TextView(a).apply { textSize = 11f; setTextColor(Color.parseColor("#9FB4C2")); setPadding(dp(a, 2), dp(a, 4), dp(a, 2), 0); visibility = android.view.View.GONE }
         pastSum = pastSumView
         fun paintPastBtn(on: Boolean) {
-            pastBtn.text = if (on) "📜 지난 기록 ▾" else "📜 지난 기록"
+            pastBtn.text = if (on) "📜\n지난 기록 ▾" else "📜\n지난 기록"
             pastBtn.setTextColor(if (on) PANEL_EDGE else Color.WHITE)
             (pastBtn.background as GradientDrawable).apply { setColor(if (on) PANEL_BG else Color.TRANSPARENT); setStroke(dp(a, if (on) 2 else 1), if (on) PANEL_EDGE else Color.parseColor("#3A5A70")) }
         }
@@ -924,7 +927,7 @@ object MapDialog {
             }
             pastState = stNew
             paintPastBtn(wantOn)
-            if (stNew == 1) pastBtn.text = "📜 지난 기록 ▸"
+            if (stNew == 1) pastBtn.text = "📜\n지난 기록 ▸"
             pastPanel.visibility = if (stNew == 2) android.view.View.VISIBLE else android.view.View.GONE
             if (save && layers.isEmpty()) spPrefs.edit().putInt("past_state", stNew).apply()
             map.invalidate()
@@ -983,12 +986,12 @@ object MapDialog {
         addPill(portBtn)
         // v6.68 (360) · v6.72: 📌 포인트 — 누르면 지도 가운데에 핀 → 끌어서 옮기고 핀 위 [💾 저장] · 내 것 주황 · 그룹 하늘 · 전체 보라
         val pinBtn = pill("📌 포인트")
-        val pinShowBtn = pill("👁 ▾")
+        val pinShowBtn = pill("👁 포인트 보기 ▾")
         lateinit var pinOv: Pins.PinOverlay
         fun loadPins() {
             Pins.load(a) { l ->
                 pinOv.pins = l
-                pinShowBtn.text = "👁 " + (if (l.isNotEmpty()) "${l.size} " else "") + "▾"
+                pinShowBtn.text = "👁 포인트 보기 " + (if (l.isNotEmpty()) "${l.size} " else "") + "▾"
                 map.invalidate()
             }
         }
@@ -1019,7 +1022,8 @@ object MapDialog {
         addPill(pinBtn); addPill(pinShowBtn)
         if (Cloud.user != null) loadPins()
         // v6.54 (330): 🌬 바람 지도 (지금 보던 자리 가운데로)
-        addPill(pill("🌬 바람").apply {
+        val windPill = pill("🌬 바람")
+        addPill(windPill.apply {
             setOnClickListener {
                 val c = map.mapCenter
                 WindMap.show(a, c.latitude, c.longitude, "")
@@ -1040,8 +1044,41 @@ object MapDialog {
         addPill(toggle)
         val close = pill("닫기")
         close.setOnClickListener { dialog.dismiss() }
-        addPill(close)
-        root.addView(Ui.hscroll(a, bar))
+        // v6.73 (370): 닫기는 제목 줄 오른쪽
+        close.minHeight = dp(a, 36); headRow.addView(close)
+        // v6.73 (370) A안: 지도 왼쪽 세로 줄 — 🔍 장소 · 📜 지난 기록 · 📌 포인트 · 🗂 지도 표시(묶음) · 🌬 바람
+        val rail = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        val flyout = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(a, 10), dp(a, 8), dp(a, 10), dp(a, 10)); visibility = android.view.View.GONE
+            background = GradientDrawable().apply { setColor(Color.argb(246, 19, 43, 61)); cornerRadius = dp(a, 16).toFloat(); setStroke(dp(a, 2), Color.parseColor("#7FD6FF")) }
+            isClickable = true
+        }
+        val groupBtn = pill("🗂\n지도 표시")
+        fun railify(v: TextView, label: String? = null) {
+            label?.let { v.text = it }
+            v.textSize = 11.5f; v.gravity = Gravity.CENTER; v.maxLines = 3
+            v.setPadding(dp(a, 2), dp(a, 7), dp(a, 2), dp(a, 7)); v.minHeight = dp(a, 54)
+            (v.background as? GradientDrawable)?.let { g -> g.cornerRadius = dp(a, 16).toFloat(); if (v !== pastBtn) g.setColor(Color.argb(235, 15, 29, 41)) }
+            rail.addView(v, LinearLayout.LayoutParams(dp(a, 66), ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 7) })
+        }
+        val railSet = setOf<android.view.View>(searchPill, pastBtn, pinBtn, windPill)
+        val kids = (0 until bar.childCount).map { bar.getChildAt(it) }
+        bar.removeAllViews()
+        flyout.addView(TextView(a).apply { text = "🗂 지도에 표시"; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#7FD6FF")) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 6) })
+        for (v in kids) {
+            if (v in railSet) continue
+            if (v is TextView && v.text.toString().startsWith("내 위치로")) continue   // ◎ 버튼과 같음
+            flyout.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 6) })
+        }
+        railify(searchPill, "🔍\n장소"); railify(pastBtn, pastBtn.text.toString())
+        if (kids.contains(pinBtn)) railify(pinBtn, "📌\n포인트")
+        railify(groupBtn); railify(windPill, "🌬\n바람")
+        groupBtn.setOnClickListener {
+            val open = flyout.visibility != android.view.View.VISIBLE
+            flyout.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            setOn(groupBtn, open); groupBtn.setTextColor(if (open) Color.parseColor("#7FD6FF") else Color.WHITE)
+        }
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
         // v6.60 (338): 지난 기록 상자 하나 (제목 · 출조 색 · 어종 · 합계)
@@ -1066,6 +1103,11 @@ object MapDialog {
 
         val frame = FrameLayout(a)
         frame.addView(map, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        // v6.73 (370): 왼쪽 세로 줄 + 🗂 묶음 펼침 (지도 위에 떠 있음 · 길면 위아래로 밀기)
+        frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; clipToPadding = false; addView(rail) },
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 8); topMargin = dp(a, 8) })
+        frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(flyout) },
+            FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)
         if (all.isEmpty() && live == null && layers.isNotEmpty()) {
             frame.addView(TextView(a).apply {
