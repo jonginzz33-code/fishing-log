@@ -377,6 +377,14 @@ object Store {
         get() = prefs.getBoolean("watch", false)
         set(v) { prefs.edit().putBoolean("watch", v).apply(); fireChanged() }
 
+    /** v6.81 (378): 워치 '두 번 꼬집기'(재생/정지 신호) — 0 끔 · 1 = 1번 어종 고정 · 2 = 고른 어종 (⏮⏭ = 어종 바꾸기) */
+    var pinchMode: Int
+        get() = prefs.getInt("pinch_mode", 0)
+        set(v) { prefs.edit().putInt("pinch_mode", v).apply(); fireChanged() }
+    var pinchSlot: Int
+        get() = prefs.getInt("pinch_slot", 1)
+        set(v) { prefs.edit().putInt("pinch_slot", v).apply(); fireChanged() }
+
     /** 기록 방식(리모컨·터치·워치·배터리 절약)을 한 번이라도 골랐는지 */
     var methodsChosen: Boolean
         get() = prefs.getBoolean("methodsChosen", false)

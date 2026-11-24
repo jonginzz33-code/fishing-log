@@ -242,8 +242,9 @@ class RemoteService : Service() {
             // 갤럭시 워치 음악 컨트롤러는 버튼 신호 대신 이쪽으로 들어옴
             override fun onSkipToNext() { ButtonRouter.watch(this@RemoteService, 2) }
             override fun onSkipToPrevious() { ButtonRouter.watch(this@RemoteService, 1) }
-            override fun onPlay() { keepPlaying() }
-            override fun onPause() { keepPlaying() }
+            // v6.81 (378): 워치 '두 번 꼬집기'(재생/정지) = 셈 (꼬집기 켰을 때만)
+            override fun onPlay() { keepPlaying(); ButtonRouter.pinch(this@RemoteService) }
+            override fun onPause() { keepPlaying(); ButtonRouter.pinch(this@RemoteService) }
 
             override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
                 val ev: KeyEvent = if (Build.VERSION.SDK_INT >= 33) {
@@ -307,7 +308,8 @@ class RemoteService : Service() {
             val ordered = if (parts.size > 5) parts.sortedByDescending { it.third }.take(5) else parts
             return ordered.joinToString("  ·  ") { (sl, nm, n) ->
                 val name = if (short && nm.length > 2) nm.take(2) else nm
-                val pre = if (Store.watchMode) when (sl) { 1 -> "⏮ "; 2 -> "⏭ "; else -> "" } else ""
+                val pre = if (Store.watchMode && Store.pinchMode == 2) (if (sl == Store.pinchSlot) "▶ " else "")
+                    else if (Store.watchMode) when (sl) { 1 -> "⏮ "; 2 -> "⏭ "; else -> "" } else ""
                 "$pre$name $n"
             }
         }

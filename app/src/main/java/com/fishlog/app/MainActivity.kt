@@ -1484,9 +1484,23 @@ class MainActivity : Activity() {
             "(음악 리모컨 전용)") { remoteOpen = !remoteOpen }
         if (remoteOpen || learning) remoteRows()
         option("터치", "카드를 눌러 +1", Store.touchMode, null) { Store.touchMode = !Store.touchMode }
-        option("갤럭시 워치", "워치 음악 화면 ⏮ = 1번 · ⏭ = 2번", Store.watchMode, null) {
+        option("갤럭시 워치", if (Store.watchMode && Store.pinchMode == 2) "꼬집기 = 고른 어종 · ⏮⏭ = 어종 바꾸기" else "워치 음악 화면 ⏮ = 1번 · ⏭ = 2번" + (if (Store.watchMode && Store.pinchMode == 1) " · 꼬집기 = 1번" else ""),
+            Store.watchMode, null, "🤏 두 번 꼬집기로 세기" to PINCH_HELP) {
             Store.watchMode = !Store.watchMode
             if (Store.watchMode) showWatchGuide()
+        }
+        // v6.81 (378): 워치 '두 번 꼬집기' (갤럭시 워치 7 · 울트라 · 8)
+        if (Store.watchMode) {
+            val pr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(32), dp(4), 0, 0) }
+            pr.addView(Ui.text(this, 12.5f, Ui.SUB, true, "🤏 꼬집기"), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+            listOf(0 to "끔", 1 to "1번 어종", 2 to "고른 어종").forEach { (v, t) ->
+                pr.addView(Ui.pill(this, t, Store.pinchMode == v, Ui.BLUE, small = true) {
+                    Store.methodsChosen = true; Store.pinchMode = v
+                    if (v == 2) showMessage("꼬집기 = 고른 어종 · 워치 ⏮⏭ 로 어종을 바꿔요 (진동 횟수 = 번호)")
+                    renderMethods()
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(5) })
+            }
+            methodBox.addView(pr, Ui.lp(this, MATCH, WRAP))
         }
         option("배터리 절약", "위치 3분 간격 · 서버 올리기 5분마다", Store.saver, null, "🔋 배터리 절약이란?" to
             "출조 중 위치를 재는 간격을 3분으로 늘려서 배터리를 아껴요.\n\n" +
@@ -3040,6 +3054,13 @@ class MainActivity : Activity() {
     }
 
     /** 워치 기록을 켰을 때: 워치 음악 화면 자동 실행 설정 안내 */
+    private val PINCH_HELP = "갤럭시 워치 7 · 울트라 · 8 의 '두 번 꼬집기'(엄지와 검지를 두 번 톡톡)로 마릿수를 셀 수 있어요.\n\n" +
+        "• 꼬집기 '1번 어종': 꼬집기 = 1번 어종 +1 · 워치 ⏮ = 1번 · ⏭ = 2번 (지금처럼)\n" +
+        "• 꼬집기 '고른 어종': 꼬집기 = 고른 어종 +1 · 워치 ⏮⏭ = 고를 어종 바꾸기 (진동 횟수 = 어종 번호 · 워치 음악 화면 제목에 ▶ 표시)\n\n" +
+        "워치 설정: 워치 설정 → 유용한 기능 → 제스처(또는 '두 번 꼬집기') → 켜고 '미디어 재생/일시정지'로 (버전마다 이름이 조금 달라요).\n\n" +
+        "• 출조 중 · '갤럭시 워치' 기록을 켰을 때만 세요. 잘못 세면 폰 · 리모컨의 취소로 빼요.\n" +
+        "• 블루투스 이어폰 · 차가 연결될 때 '재생' 신호를 보내 한 마리가 세질 수 있어요. 그럴 땐 꼬집기를 '끔'으로."
+
     private fun showWatchGuide() {
         AlertDialog.Builder(this, R.style.FlAlert)
             .setTitle("갤럭시 워치로 기록")

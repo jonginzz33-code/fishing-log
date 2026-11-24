@@ -1023,7 +1023,15 @@ object MapDialog {
             if (pinOv.placing) { pinOv.onCancel?.invoke(); return@setOnClickListener }
             openPinBox(true)
         }
-        pinAddBtn.setOnClickListener { openPinBox(false); Pins.place(a, map, pinOv, null) { loadPins() } }
+        // v6.81 (379): 꽂는 중엔 포인트 버튼이 주황 '꽂는 중'
+        lateinit var placingLook: (Boolean) -> Unit
+        pinAddBtn.setOnClickListener {
+            openPinBox(false)
+            placingLook(true)
+            Pins.place(a, map, pinOv, null) { placingLook(false); loadPins() }
+            val orig = pinOv.onCancel
+            pinOv.onCancel = { orig?.invoke(); placingLook(false) }
+        }
         pinShowBtn.setOnClickListener {
             val sh = Sheet(a, 0.5f)
             sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "👁 지도에 보일 포인트"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1139,15 +1147,42 @@ object MapDialog {
             pinFly.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 6) })
         }
         (pinAddBtn.background as? GradientDrawable)?.setStroke(dp(a, 2), Ui.MINE)
+        // v6.81 (379) B안: 누른 버튼과 상자가 한 덩어리 (버튼 오른쪽이 열려 상자와 이어짐 · 같은 바탕 · 하늘 테두리)
+        val BOX = Color.argb(246, 19, 43, 61)
+        val SKY = Color.parseColor("#7FD6FF")
+        val tabCover = android.view.View(a).apply { setBackgroundColor(BOX); visibility = android.view.View.GONE }
+        lateinit var flyScroll: android.widget.ScrollView
+        fun tab(btn: TextView, on: Boolean) {
+            val g = btn.background as? GradientDrawable ?: return
+            val r = dp(a, 16).toFloat()
+            if (on) { g.setColor(BOX); g.setStroke(dp(a, 2), SKY); g.cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r); btn.setTextColor(SKY); btn.typeface = Typeface.DEFAULT_BOLD }
+            else { g.cornerRadius = r; g.setStroke(dp(a, 1), Color.parseColor("#3A5A70")); setOn(btn, false); btn.setTextColor(Color.WHITE); btn.typeface = Typeface.DEFAULT }
+            (btn.layoutParams as? LinearLayout.LayoutParams)?.let { it.width = dp(a, if (on) 76 else 66); btn.layoutParams = it }
+        }
+        fun cover(btn: TextView?) {
+            if (btn == null) { tabCover.visibility = android.view.View.GONE; return }
+            btn.post {
+                (tabCover.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
+                    lp.topMargin = dp(a, 8) + btn.top + dp(a, 2); lp.height = (btn.height - dp(a, 4)).coerceAtLeast(dp(a, 10)); tabCover.layoutParams = lp
+                }
+                tabCover.visibility = android.view.View.VISIBLE
+            }
+        }
         fun showGroupFly(open: Boolean) {
             flyout.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
-            setOn(groupBtn, open); groupBtn.setTextColor(if (open) Color.parseColor("#7FD6FF") else Color.WHITE)
+            tab(groupBtn, open)
+            if (open) { flyScroll.translationY = groupBtn.top.toFloat(); cover(groupBtn) } else if (pinFly.visibility != android.view.View.VISIBLE) cover(null)
         }
         openPinBox = { toggle ->
             val open = toggle && pinFly.visibility != android.view.View.VISIBLE
             pinFly.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
-            setOn(pinBtn, open); pinBtn.setTextColor(if (open) Color.parseColor("#7FD6FF") else Color.WHITE)
-            if (open) { showGroupFly(false); pinFly.translationY = pinBtn.top.toFloat() }
+            if (!pinOv.placing) tab(pinBtn, open)
+            if (open) { showGroupFly(false); pinFly.translationY = pinBtn.top.toFloat(); cover(pinBtn) } else if (flyout.visibility != android.view.View.VISIBLE) cover(null)
+        }
+        placingLook = { on ->
+            val g = pinBtn.background as? GradientDrawable
+            if (on) { g?.cornerRadius = dp(a, 16).toFloat(); g?.setColor(Ui.MINE); g?.setStroke(dp(a, 2), Color.parseColor("#FFD2A0")); pinBtn.text = "📌\n꽂는 중"; pinBtn.setTextColor(Color.WHITE) }
+            else { pinBtn.text = "📌\n포인트"; tab(pinBtn, false) }
         }
         groupBtn.setOnClickListener {
             val open = flyout.visibility != android.view.View.VISIBLE
@@ -1181,9 +1216,12 @@ object MapDialog {
         // v6.73 (370): 왼쪽 세로 줄 + 🗂 묶음 펼침 (지도 위에 떠 있음 · 길면 위아래로 밀기)
         frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; clipToPadding = false; addView(rail) },
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 8); topMargin = dp(a, 8) })
-        frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(flyout) },
+        flyScroll = android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(flyout) }
+        frame.addView(flyScroll,
             FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         frame.addView(pinFly, FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
+        // 버튼과 상자 사이 테두리를 가려 한 덩어리로 (B안)
+        frame.addView(tabCover, FrameLayout.LayoutParams(dp(a, 4), dp(a, 40), Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)
         if (all.isEmpty() && live == null && layers.isNotEmpty()) {
             frame.addView(TextView(a).apply {
@@ -1742,8 +1780,11 @@ object MapDialog {
         }
         // v6.70: 켜기(설정 줄 보임) → 줄 접기 → 끄기 → 다시 처음
         var pFolded = false
-        pill("지난 기록") { v ->
-            if (past.isEnabled && !pFolded) { pFolded = true; pastBar.visibility = android.view.View.GONE; v.text = "지난 기록 ▸"; return@pill }
+        // v6.81 (367): 마지막 상태 기억 pp_state (0 꺼짐 · 1 켜짐 접힘 · 2 켜짐 펼침 · 처음 1)
+        val ppPrefs = a.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE)
+        var ppRestoring = false
+        val ppBtn = pill("지난 기록") { v ->
+            if (past.isEnabled && !pFolded) { pFolded = true; pastBar.visibility = android.view.View.GONE; v.text = "지난 기록 ▸"; if (!ppRestoring) ppPrefs.edit().putInt("pp_state", 1).apply(); return@pill }
             pFolded = false; v.text = "지난 기록"
             past.isEnabled = !past.isEnabled
             (v.background as GradientDrawable).setColor(if (past.isEnabled) Color.parseColor("#2B4A5E") else Color.TRANSPARENT)
@@ -1751,7 +1792,12 @@ object MapDialog {
             if (past.isEnabled && !pastLoaded) { pastLoaded = true; loadPastNow() }
             else { if (!past.isEnabled) pastNote = ""; paintLegend() }
             if (!past.isEnabled) pastLoaded = false
+            if (!ppRestoring) ppPrefs.edit().putInt("pp_state", if (past.isEnabled) 2 else 0).apply()
             map.invalidate()
+        }
+        run {
+            val st = ppPrefs.getInt("pp_state", 1)
+            if (st > 0 && !past.isEnabled) { ppRestoring = true; ppBtn.performClick(); if (st == 1) ppBtn.performClick(); ppRestoring = false }
         }
         pill("닫기") { dialog.dismiss() }
         root.addView(Ui.hscroll(a, bar))

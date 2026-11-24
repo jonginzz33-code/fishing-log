@@ -47,7 +47,7 @@ object PointMap {
         val selGroups = (p.getStringSet("pm_groups", emptySet()) ?: emptySet()).filter { id -> myGroups.any { it.id == id } }.toMutableSet()
         val groupTrips = HashMap<String, List<Cloud.RemoteTrip>>()
         val groupLoading = HashSet<String>()
-        var groupOpen = false
+        var groupOpen = a.getSharedPreferences("fishlog", android.content.Context.MODE_PRIVATE).getBoolean("pm_gopen", false)   // v6.81 (367) 마지막 상태
 
         val dlg = Dialog(a, R.style.FlFull)
         val root = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Ui.BG) }
@@ -182,6 +182,7 @@ object PointMap {
                             groupOpen = true; paintDots()
                         }
                     }
+                    p.edit().putBoolean("pm_gopen", groupOpen).apply()
                     paintBar()
                 }
             })

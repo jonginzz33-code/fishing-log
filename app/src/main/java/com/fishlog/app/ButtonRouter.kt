@@ -107,12 +107,46 @@ object ButtonRouter {
 
     /** 키를 뗐을 때 호출. 누른 시간으로 짧게/길게 구분 */
     fun onKeyUp(ctx: Context, keyCode: Int, heldMs: Long) {
+        // v6.81 (378): 재생/정지 버튼 신호가 리모컨 버튼으로 등록 안 된 거면 = 워치 꼬집기
+        if ((keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY ||
+                keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PAUSE || keyCode == android.view.KeyEvent.KEYCODE_HEADSETHOOK) &&
+            Store.watchMode && Store.pinchMode != 0 && learningStep == 0 && Store.remoteNumOf(codeOf(keyCode)) == 0) { pinch(ctx); return }
         if (heldMs >= LONG_PRESS_MS) handle(ctx, codeOf(keyCode), true)
         else tap(ctx, codeOf(keyCode))
     }
 
     /** 갤럭시 워치 음악 컨트롤러: ⏮ (왼쪽) = 1번, ⏭ (오른쪽) = 2번 */
+    /**
+     * v6.81 (378): 워치 두 번 꼬집기 = 재생/정지 신호 → 셈
+     *  1 = 1번 어종 고정 · 2 = 고른 어종 (이때 ⏮⏭ 는 어종 바꾸기 · 진동 횟수 = 번호)
+     */
+    @Volatile private var pinchAt = 0L
+    fun pinch(ctx: Context) {
+        val cur = Store.current ?: return
+        if (!Store.watchMode || Store.pinchMode == 0 || learningStep != 0) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - pinchAt < 600) return   // 재생 · 정지가 겹쳐 와도 한 번만
+        pinchAt = now
+        val slot = if (Store.pinchMode == 1) 1 else Store.pinchSlot.coerceIn(1, maxOf(2, cur.slots().size))
+        val n = Store.addCatch(slot)
+        Haptics.slot(ctx, slot)
+        try { WearBuzz.count(ctx, slot, n) } catch (_: Exception) {}
+        try { CountSound.count(ctx, slot) } catch (_: Exception) {}
+        onMessage?.invoke("워치 꼬집기 → ${cur.name(slot)} ${n}마리")
+    }
+
     fun watch(ctx: Context, slot: Int) {
+        if (Store.watchMode && Store.pinchMode == 2 && Store.current != null && learningStep == 0) {
+            // 고른 어종 방식: ⏮⏭ = 어종 바꾸기
+            val cur = Store.current!!
+            val sl = cur.slots()
+            val i = sl.indexOf(Store.pinchSlot).let { if (it < 0) 0 else it }
+            val ni = ((i + (if (slot == 2) 1 else -1)) % sl.size + sl.size) % sl.size
+            Store.pinchSlot = sl[ni]
+            Haptics.slot(ctx, sl[ni])
+            onMessage?.invoke("꼬집기 어종 → ${cur.name(sl[ni])}")
+            return
+        }
         if (!Store.watchMode || Store.current == null || learningStep != 0) return
         // 워치는 한 번 누르면 신호도 한 번 → 연달아 눌러도 다 셈 (겹쳐 온 같은 신호만 0.08초 거름)
         val now = SystemClock.elapsedRealtime()

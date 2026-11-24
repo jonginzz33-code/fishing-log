@@ -1090,11 +1090,8 @@ object TideDialog {
         next.setOnClickListener { cur = dayStart(cur + 36 * 3_600_000L); load() }
         todayBtn.setOnClickListener { cur = today; load() }
         dateText.setOnClickListener {
-            val c = Calendar.getInstance().apply { timeInMillis = cur }
-            DatePickerDialog(a, R.style.FlAlert, { _, y, m, d ->
-                cur = Calendar.getInstance().apply { set(y, m, d, 0, 0, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
-                load()
-            }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+            // v6.81 (375): 우리 앱 달력 시트 (물때 이름 · 빠른 버튼)
+            DatePick.show(a, cur) { t -> cur = t; load() }
         }
         reloadTide = { load() }
         load()

@@ -586,17 +586,20 @@ object Zones {
                 else android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setStroke(dp(1), Color.parseColor("#3A5A70")) }
         }
         paintRef = { paint() }
+        // v6.81 (367): 마지막 상태 기억 (켜짐이면 펼침/접힘도 그대로 · 꺼짐은 그대로 꺼짐)
+        fun saveOpen() = prefs(a).edit().putBoolean("zone_open", cur.visibility == View.VISIBLE).apply()
+        if (on(a) && prefs(a).getBoolean("zone_open", false)) { paintCurtain(); cur.visibility = View.VISIBLE }
         paint()
         v.setOnClickListener {
             if (!on(a)) {
                 // v3.9 (157): 켤 때는 '참고용' 안내 → [확인]을 눌러야 켜짐 → 켜지면 커튼 펼침
-                confirmOn(a) { paintCurtain(); cur.visibility = View.VISIBLE; paint(); map.invalidate(); after() }
+                confirmOn(a) { paintCurtain(); cur.visibility = View.VISIBLE; saveOpen(); paint(); map.invalidate(); after() }
                 return@setOnClickListener
             }
             // v6.70: 켜져 있으면 누를 때마다 커튼 접기 → 끄기 → (다시 누르면 안내 → 켜고 펼침)
             if (cur.visibility == View.VISIBLE) cur.visibility = View.GONE
             else { setOn(a, false); map.invalidate(); after() }
-            paint()
+            saveOpen(); paint()
         }
         return bar
     }
