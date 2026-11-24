@@ -13,6 +13,9 @@ on:
       - '.github/workflows/kma-test.yml'
       - '.github/workflows/ports.yml'
       - 'tools/**'
+      - 'site/**'
+      - 'firebase.json'
+      - '.github/workflows/hosting.yml'
   workflow_dispatch:
 
 permissions:
