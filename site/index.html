@@ -42,6 +42,8 @@ footer a{text-decoration:underline;margin-right:12px}
 .step b{font-size:16px}.step div.t{color:#B8CAD6;font-size:14px;margin:2px 0 10px}
 .big{display:block;text-align:center;border-radius:14px;padding:14px;font-weight:900;font-size:16.5px;margin-top:8px}
 .big.g{background:#2FBF8F;color:#04222A}.big.b{background:#7FD6FF;color:#06222F}
+.warn{background:rgba(242,193,78,.15);border:1.5px solid #F2C14E;border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.6;color:#FDEBC0;margin-bottom:6px}
+.copy{width:100%;border:1.5px dashed #7FD6FF;background:transparent;color:#7FD6FF;cursor:pointer;margin-top:14px;font-family:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:560px){.two{grid-template-columns:1fr}}
 @media (max-width:560px){nav .links{display:none}}
@@ -56,22 +58,31 @@ footer a{text-decoration:underline;margin-right:12px}
 
 
 <section class="tester" id="tester">
-  <h2>🧪 테스터 참여하기</h2>
-  <p class="lead">조과일지 · 급할 때 두 앱 모두 같은 테스터 그룹이에요. 아래 순서대로 한 번만 하면 돼요.</p>
+  <h2>🧪 비공개 테스트 참여하기</h2>
+  <p class="lead">조과일지 · 급할 때 두 앱 모두 같은 테스터 그룹이에요. 아래 ①②③ 순서대로 한 번만 하면 돼요.</p>
+  <div class="warn">⚠ <b>카톡 · 밴드 안에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.</b><br>
+  👉 이 페이지를 <b>크롬</b>에서 열어 주세요 (카톡이면 오른쪽 위 ⋮ → '다른 브라우저로 열기')<br>
+  또는 링크를 꾹 눌러 '복사' → 크롬 주소창에 붙여 넣기 → 이동</div>
   <div class="step"><div class="n">1</div><div style="flex:1">
-    <b>테스터 그룹 가입</b><div class="t">구글 계정으로 그룹에 '가입'을 눌러요 (두 앱 같이 쓰는 그룹)</div>
+    <b>구글 그룹 가입</b><div class="t">앱을 설치할 구글 계정으로 로그인한 뒤 <b>[그룹 가입]</b> 누르기<br>(크롬 오른쪽 위 동그라미 사진에서 계정 확인 · <b>폰 플레이 스토어와 같은 계정</b>이어야 해요)</div>
     <a class="big g" href="https://groups.google.com/g/mytoilet-testers">👥 테스터 그룹 가입하기</a>
   </div></div>
   <div class="step"><div class="n">2</div><div style="flex:1">
-    <b>앱 테스트 참여</b><div class="t">쓰고 싶은 앱의 버튼을 눌러 '테스터 되기' → 플레이 스토어에서 설치</div>
+    <b>테스트 참여</b><div class="t">쓰고 싶은 앱 버튼 → <b>[테스터 되기]</b> 누르기 → '테스터가 되었습니다'가 나오면 성공!</div>
     <div class="two">
       <a class="big b" href="https://play.google.com/apps/testing/kr.jogwailji.app">🎣 조과일지 테스트 참여</a>
       <a class="big b" href="https://play.google.com/apps/testing/kr.mytoilet.app">🚻 급할 때 테스트 참여</a>
     </div>
   </div></div>
   <div class="step"><div class="n">3</div><div style="flex:1">
-    <b>설치</b><div class="t">참여 후 몇 분 뒤 플레이 스토어에서 설치돼요. '항목을 찾을 수 없음'이 나오면 1번 그룹 가입을 먼저 확인해 주세요.</div>
+    <b>앱 설치</b><div class="t"><b>[설치]</b> (이미 있으면 <b>[업데이트]</b>)</div>
+    <div class="two">
+      <a class="big g" href="https://play.google.com/store/apps/details?id=kr.jogwailji.app">▶ 조과일지 설치</a>
+      <a class="big g" href="https://play.google.com/store/apps/details?id=kr.mytoilet.app">▶ 급할 때 설치</a>
+    </div>
+    <div class="t" style="margin-top:10px">※ '항목을 찾을 수 없습니다'가 나오면: ①②를 <b>폰 플레이 스토어와 같은 계정</b>으로 했는지 확인 → 10분~1시간쯤 뒤 다시 열기 (가입이 반영되는 데 시간이 걸려요) · 그래도 안 되면 그룹 가입 메일 주소를 관리자에게 알려 주세요</div>
   </div></div>
+  <button class="big copy" onclick="copyGuide(this)">📋 이 안내를 카톡으로 보낼 글 복사하기</button>
 </section>
 <section class="hero">
   <h1>탈랄랄라의 앱 모음</h1>
@@ -113,5 +124,12 @@ footer a{text-decoration:underline;margin-right:12px}
   급할 때: <a href="geuphal/privacy.html">개인정보처리방침</a><a href="geuphal/delete-account.html">계정 삭제</a>
 </footer>
 </div>
+<script>
+function copyGuide(b){
+ var t="🎣 조과일지 · 🚻 급할 때 비공개 테스트 참여 부탁드려요!\n\n⚠ 카톡에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.\n👉 링크를 꾹 눌러 '복사' → 크롬을 열고 → 맨 위 주소창에 붙여 넣기 → 이동\n(아래 ①②③ 모두 이렇게 크롬에서 열어 주세요)\n\n① 구글 그룹 가입\nhttps://groups.google.com/g/mytoilet-testers\n→ 앱을 설치할 구글 계정으로 로그인한 뒤 [그룹 가입] 누르기\n(크롬 오른쪽 위 동그라미 사진에서 계정 확인 · 폰 플레이 스토어와 같은 계정이어야 해요)\n\n② 테스트 참여\n조과일지: https://play.google.com/apps/testing/kr.jogwailji.app\n급할 때: https://play.google.com/apps/testing/kr.mytoilet.app\n→ [테스터 되기] 누르기 → '테스터가 되었습니다'가 나오면 성공!\n\n③ 앱 설치\n조과일지: https://play.google.com/store/apps/details?id=kr.jogwailji.app\n급할 때: https://play.google.com/store/apps/details?id=kr.mytoilet.app\n→ [설치] (이미 있으면 [업데이트])\n※ '항목을 찾을 수 없습니다'가 나오면 ①②를 같은 계정으로 했는지 확인하고 10분~1시간 뒤 다시 열어 주세요.\n\n한 번에 보기: https://talla.co.kr";
+ var done=function(){b.textContent="✅ 복사했어요 · 카톡에 붙여 넣기";setTimeout(function(){b.textContent="📋 이 안내를 카톡으로 보낼 글 복사하기"},3000)};
+ if(navigator.clipboard){navigator.clipboard.writeText(t).then(done,function(){prompt("복사해 주세요",t)})}else{prompt("복사해 주세요",t)}
+}
+</script>
 </body>
 </html>
