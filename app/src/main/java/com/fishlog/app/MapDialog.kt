@@ -1213,7 +1213,7 @@ object MapDialog {
         val sHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
         sHead.addView(TextView(a).apply { text = "🔍 장소 찾기"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(SKY) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         sHead.addView(TextView(a).apply {
-            text = "✕"; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#CDE"))
+            text = "✕"; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#CCDDEE"))
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
             setOnClickListener { showSearch(false) }
         }, LinearLayout.LayoutParams(dp(a, 30), dp(a, 30)))
