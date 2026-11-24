@@ -1,19 +1,24 @@
 name: Ports data
 
-# 지도 ⚓ 항구 표시용 자료 받기 (오픈스트리트맵 · 손으로 실행 · 결과는 ports.json 파일로 내려받기)
+# 지도 ⚓ 항구 표시용 자료 받기 (오픈스트리트맵 + 카카오 장소 검색) → app/src/main/assets/ports.json 커밋
 on:
-  push:
-    branches: [ main ]
-    paths: [ '.github/workflows/ports.yml', 'tools/ports_fetch.py' ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 tools/ports_fetch.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ports
-          path: ports.json
+      - run: python3 tools/ports_fetch.py || true
+      - env:
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+        run: python3 tools/ports_kakao.py
+      - run: python3 tools/ports_merge.py
+      - run: |
+          git config user.name "ports-bot"; git config user.email "ports-bot@users.noreply.github.com"
+          git add app/src/main/assets/ports.json
+          git commit -m "항구 자료 갱신 [skip ci]" || echo "no change"
+          git push
