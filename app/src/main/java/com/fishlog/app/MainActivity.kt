@@ -815,6 +815,7 @@ class MainActivity : Activity() {
         }, Ui.lp(this, MATCH, WRAP))
         menuBox.addView(Ui.button(this, "🗺 권역 낚시환경 (출조환경 · 예상조과)") { Region.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "🌐 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        menuBox.addView(Ui.button(this, "🚤 선상 빈자리 (선상24 · 자리 나면 알림)") { Seats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         // v6.30 (282): 앱에서 바로 홈 화면에 위젯 놓기
         menuBox.addView(Ui.button(this, "📱 홈 화면에 위젯 추가 (퀵바 · 물때 · 가방)") { QuickWidget.pinMenu(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -891,6 +892,7 @@ class MainActivity : Activity() {
         QItem("bag", "🎒", "가방", "#12301F", "#5FD39A"),
         QItem("region", "🗾", "권역", "#10283A", "#2FBF8F"),   // v6.46 (317) 권역 낚시환경
         QItem("boats", "🌐", "사이트", "#10283A", "#5BC8DF"),   // v6.23 (270) · v6.24 (272) 자주 가는 사이트
+        QItem("seat", "🚤", "빈자리", "#10283A", "#F2C14E"),   // v6.75 (380) 선상 빈자리
         QItem("groupwin", "👥", "그룹", "#12301F", "#2F6A48"),
         QItem("settings", "⚙", "설정", "#1A2A30", "#5FC4E0"),
         QItem("cal", "🎣", "추천", "#2A2410", "#6A5A22"),
@@ -927,6 +929,7 @@ class MainActivity : Activity() {
             "chat" -> startActivity(Intent(this, ChatActivity::class.java))
             "bag" -> Inventory.show(this)
             "boats" -> Boats.show(this)
+            "seat" -> Seats.show(this)
             "region" -> Region.show(this)
             "groupwin" -> openGroupDialog()
             "settings" -> startActivity(Intent(this, SettingsActivity::class.java))
@@ -987,6 +990,9 @@ class MainActivity : Activity() {
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
         }, LinearLayout.LayoutParams(MATCH, dp(13)))
         f.addView(box, android.widget.FrameLayout.LayoutParams(dp(size), dp(size)))
+        if (q.id == "seat" && getSharedPreferences("fishlog", MODE_PRIVATE).getInt("w_seat_n", 0) > 0) f.addView(Ui.text(this, 9.5f, Color.WHITE, true, "자리!").apply {
+            gravity = Gravity.CENTER; setPadding(dp(4), 0, dp(4), 0); background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
+        }, android.widget.FrameLayout.LayoutParams(WRAP, dp(16), Gravity.TOP or Gravity.END).apply { topMargin = -dp(6); rightMargin = -dp(5) })
         if (q.id == "inq" && tabMoreN > 0) f.addView(Ui.text(this, 9.5f, Color.WHITE, true, "$tabMoreN").apply {
             gravity = Gravity.CENTER; setPadding(dp(4), 0, dp(4), 0); background = Ui.bg(this@MainActivity, RED, 99, Ui.BG)
         }, android.widget.FrameLayout.LayoutParams(WRAP, dp(16), Gravity.TOP or Gravity.END).apply { topMargin = -dp(6); rightMargin = -dp(5) })

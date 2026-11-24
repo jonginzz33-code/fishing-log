@@ -179,6 +179,7 @@ class QuickWidget : AppWidgetProvider() {
                     }
                     "inq" -> inqN.takeIf { it > 0 && !inqAdmin }?.let { "● 답장 " + n99(it) to RED }
                     "admin" -> inqN.takeIf { it > 0 && inqAdmin }?.let { "● 새 문의 " + n99(it) to RED }
+                    "seat" -> prefs(c).getInt("w_seat_n", 0).takeIf { it > 0 }?.let { "🔔 자리 남 " + n99(it) to RED }   // v6.75 (380)
                     "tide" -> WidgetData.warn(c)?.let { w -> "⚠ " + (Regex("\\S*(주의보|경보)").find(w)?.value ?: "특보") to RED }
                     else -> null
                 }

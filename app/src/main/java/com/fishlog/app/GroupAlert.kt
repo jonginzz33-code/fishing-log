@@ -61,6 +61,7 @@ object GroupAlert {
             override fun onActivityDestroyed(a: android.app.Activity) {}
         })
         schedule(app)
+        Seats.schedule(app)   // v6.75 (380) 선상 빈자리 알림 다시 예약
     }
 
     /** 다음 정각에 한 번 (계속 이어서) */
@@ -325,7 +326,7 @@ object GroupAlert {
 class GroupAlertReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val app = c.applicationContext
-        if (i.action != "com.fishlog.app.GROUP_ALERT") { GroupAlert.schedule(app); return }
+        if (i.action != "com.fishlog.app.GROUP_ALERT") { GroupAlert.schedule(app); Seats.schedule(app); return }
         val pr = goAsync()
         Thread {
             try { GroupAlert.check(app) } catch (_: Exception) {}

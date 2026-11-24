@@ -155,5 +155,9 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- v6.75 (380): 🚤 선상 빈자리 알림 (걸어 둔 동안 15분마다) -->
+        <receiver
+            android:name=".SeatAlarmReceiver"
+            android:exported="false" />
     </application>
 </manifest>
