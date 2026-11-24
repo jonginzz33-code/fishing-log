@@ -91,6 +91,14 @@ object Pins {
         }
     }
 
+    /** v6.74 (362 · 372): 한 그룹의 포인트만 (그룹 지도 · 새 소식) */
+    fun loadGroup(gid: String, done: (List<Pin>?) -> Unit) {
+        if (Cloud.uid == null) return done(null)
+        db.collection("groups").document(gid).collection("pins").limit(300).get()
+            .addOnSuccessListener { s -> done(s.documents.mapNotNull { parse(it, GROUP, gid) }.filter { !Moderation.isBlocked(it.owner) }) }
+            .addOnFailureListener { done(null) }
+    }
+
     fun save(p: Pin, old: Pin?, done: (String?) -> Unit) {
         val me = Cloud.uid ?: return done("로그인이 필요해요")
         val m = hashMapOf<String, Any>("name" to p.name.take(30), "memo" to p.memo.take(200), "lat" to p.lat, "lon" to p.lon,
@@ -275,10 +283,11 @@ object Pins {
     }
 
     /** v6.72: 지도 가운데(또는 고칠 핀 자리)에 핀 → 끌어서 옮기기 → 핀 위 [💾 저장] 누르면 저장 창 */
-    fun place(a: Activity, map: MapView, ov: PinOverlay, old: Pin?, after: () -> Unit) {
+    fun place(a: Activity, map: MapView, ov: PinOverlay, old: Pin?, scope0: Int = MINE, gid0: String = "", after: () -> Unit) {
         if (Cloud.uid == null) { Ui.toast(a, "로그인하면 포인트를 꽂을 수 있어요"); return }
         val at = old?.point ?: (map.mapCenter as GeoPoint)
-        ov.draft = Pin(old?.id ?: "_draft", old?.scope ?: MINE, old?.gid ?: "", old?.name ?: "새 포인트", old?.memo ?: "",
+        // v6.74 (372): 그룹 지도에서 꽂으면 처음부터 그 그룹 공유
+        ov.draft = Pin(old?.id ?: "_draft", old?.scope ?: scope0, old?.gid ?: gid0, old?.name ?: "새 포인트", old?.memo ?: "",
             at.latitude, at.longitude, old?.r ?: 300.0, old?.sp ?: emptyList(), old?.owner ?: "", old?.ownerName ?: "", old?.t ?: 0L)
         ov.placing = true
         if (old != null) map.controller.animateTo(at)
@@ -449,6 +458,7 @@ object Pins {
     /** 핀 누르면: 설명 카드 + 이 범위 안 지난 조과 */
     fun card(a: Activity, map: MapView, ov: PinOverlay, p: Pin, extraDots: List<MapDot>, after: () -> Unit) {
         val dp = { v: Int -> Ui.dp(a, v) }
+        if (p.scope == GROUP) GroupNews.markPinSeen(p.gid, p.id)   // v6.74 (362): 열어 보면 새 소식에서 빠짐
         val sh = Sheet(a, 0.6f)
         sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true).apply {
             val sb = android.text.SpannableStringBuilder()
@@ -481,7 +491,7 @@ object Pins {
         }, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
         sh.body.addView(row1, Ui.lp(a, -1, -2, top = 12))
         val row2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        if (canEdit(p)) row2.addView(btn("✎ 고치기 · 옮기기 · 공유") { sh.close(); place(a, map, ov, p, after) }, LinearLayout.LayoutParams(0, -2, 1f))
+        if (canEdit(p)) row2.addView(btn("✎ 고치기 · 옮기기 · 공유") { sh.close(); place(a, map, ov, p, after = after) }, LinearLayout.LayoutParams(0, -2, 1f))
         if (canDelete(p)) row2.addView(btn("🗑 지우기", Color.parseColor("#FF8A80")) {
             AlertDialog.Builder(a, R.style.FlAlert).setTitle("'${p.name}' 포인트를 지울까요?")
                 .setPositiveButton("지우기") { _, _ -> delete(p) { e -> if (e != null) Ui.toast(a, e) else { sh.close(); after() } } }

@@ -331,6 +331,7 @@ class MainActivity : Activity() {
             "event", "rsvp" -> startActivity(Intent(this, ScheduleActivity::class.java))
             "cmt" -> startActivity(Intent(this, GroupTripsActivity::class.java))   // v6.51 (327)
             "live" -> openNowDialog()
+            "pin" -> Cloud.groups.firstOrNull { it.id == gid }?.let { GroupMap.show(this, it) }   // v6.74 (362)
         }
     }
 
@@ -977,7 +978,10 @@ class MainActivity : Activity() {
             setOnClickListener { quickAction(q.id) }
             setOnLongClickListener { openQuickSettings(); true }
         }
-        box.addView(Ui.text(this, if (size >= 46) 17f else 15f, Ui.TEXT, false, q.icon).apply { gravity = Gravity.CENTER; includeFontPadding = false })
+        box.addView(Ui.text(this, if (size >= 46) 17f else 15f, Ui.TEXT, false, q.icon).apply {
+            gravity = Gravity.CENTER; includeFontPadding = false
+            if (q.id == "map") text = Ui.mapIcon(this@MainActivity, "🗺", if (size >= 46) 24 else 20)   // v6.74 (373)
+        })
         box.addView(Ui.text(this, 9.5f, Color.parseColor("#D7E3E8"), true, if (q.state != null) q.label + (if (on) " 켬" else " 끔") else q.label).apply {
             gravity = Gravity.CENTER; maxLines = 1; includeFontPadding = false
             setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -1071,7 +1075,10 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
         }
         val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-        colv.addView(Ui.text(this, 20f, Ui.TEXT, false, icon).apply { gravity = Gravity.CENTER })
+        colv.addView(Ui.text(this, 20f, Ui.TEXT, false, icon).apply {
+            gravity = Gravity.CENTER
+            if (icon == "🗺") { text = Ui.mapIcon(this@MainActivity, "🗺", 26); includeFontPadding = false }   // v6.74 (373) 지구본 All
+        })
         val lab = Ui.text(this, 11.5f, Ui.SUB, true, label).apply {
             gravity = Gravity.CENTER; maxLines = 1
             setAutoSizeTextTypeUniformWithConfiguration(8, 12, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
@@ -2181,7 +2188,7 @@ class MainActivity : Activity() {
         // v3.8.1: 출조 중이 아니면 지난 출조를 열지 않고 빈 지도 + 내 위치만 (지난 조과는 '지난 기록 겹치기'를 켰을 때만)
         val t = Store.current
         if (t == null) {
-            MapDialog.show(this, "🗺 지도 · 내 위치", emptyList(),
+            MapDialog.show(this, "🗺 지도 · 내 것 · 그룹 · 전체", emptyList(),
                 "출조 중 아님 · 지난 조과는 '지난 기록'을 누르면 보여요")
             return
         }
@@ -2951,7 +2958,13 @@ class MainActivity : Activity() {
         pair(chatG, gbtn("📅 출조 달력") { openPart("cal") })
         pair(gbtn("👥 멤버") { openPart("members") }, gbtn("💌 초대") { openPart("invite") })
         // v6.36 (294): 그룹원이 같이 보는 사이트 목록 (내 '🌐 자주 가는 사이트'와 따로)
-        pair(gbtn("🔖 그룹 사이트 메모") { g?.let { GroupSites.show(this, it) } }, gbtn("⚙️ 그룹 관리") { openPart("manage") })
+        // v6.74 (372 · 362): 🗺 그룹 지도 (그 그룹 포인트 전부 · 새 포인트 NEW)
+        val newPin = GroupNews.newPins(activeId)
+        val gmapBtn = gbtn("", newPin > 0) { g?.let { GroupMap.show(this, it) } }
+        gmapBtn.text = Ui.mapIcon(this, "🗺 그룹 지도", 20, Ui.MAP_GROUP)
+        withNew(gmapBtn, newPin)
+        pair(gmapBtn, gbtn("🔖 그룹 사이트 메모") { g?.let { GroupSites.show(this, it) } })
+        pair(gbtn("⚙️ 그룹 관리") { openPart("manage") }, null)
         // 그룹 탈퇴 (그룹원만, 빨갛게)
         if (g != null && g.owner != Cloud.uid) {
             groupBox.addView(Ui.text(this, 14f, Color.WHITE, true).apply {
@@ -2972,21 +2985,23 @@ class MainActivity : Activity() {
     /** 새 소식 카드: 일정(하늘) / 공지(노랑) + 확인 */
     private fun newsCard(it: GroupNews.Item): View {
         val isCmt = it.kind == "cmt"
+        val isPin = it.kind == "pin"   // v6.74 (362)
         val isTrip = it.kind == "trip" || isCmt
-        val col = if (it.isNotice) Color.parseColor("#F2C14E") else if (isCmt) Color.parseColor("#C9A7FF") else if (isTrip) Ui.GREEN else Ui.BLUE
-        val ink = if (it.isNotice) Color.parseColor("#3A2A02") else if (isCmt) Color.parseColor("#2A1450") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
+        val col = if (isPin) Ui.GROUP else if (it.isNotice) Color.parseColor("#F2C14E") else if (isCmt) Color.parseColor("#C9A7FF") else if (isTrip) Ui.GREEN else Ui.BLUE
+        val ink = if (isPin) Color.WHITE else if (it.isNotice) Color.parseColor("#3A2A02") else if (isCmt) Color.parseColor("#2A1450") else if (isTrip) Color.parseColor("#08311F") else Color.parseColor("#06303A")
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(10), dp(10), dp(10))
             background = Ui.bg(this@MainActivity, Ui.CARD, 14, col)
             isClickable = true
             setOnClickListener { _ ->
+                if (isPin) { Cloud.groups.firstOrNull { g -> g.id == it.gid }?.let { g -> GroupMap.show(this@MainActivity, g, it.id.removePrefix("p_")) }; return@setOnClickListener }
                 startActivity(Intent(this@MainActivity, if (it.isNotice) NoticeActivity::class.java else if (isTrip) GroupTripsActivity::class.java else ScheduleActivity::class.java))
             }
         }
         val txt = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
-        line.addView(Ui.text(this, 11f, ink, true, if (it.isNotice) "공지" else if (isCmt) "댓글" else if (isTrip) "조과" else "일정").apply {
+        line.addView(Ui.text(this, 11f, ink, true, if (isPin) "포인트" else if (it.isNotice) "공지" else if (isCmt) "댓글" else if (isTrip) "조과" else "일정").apply {
             setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(this@MainActivity, col, 6)
         })
         line.addView(Ui.text(this, 14f, Ui.TEXT, true, it.title).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END },

@@ -488,7 +488,7 @@ object MapDialog {
         // v6.73 (370): 제목 줄 오른쪽에 닫기 (버튼 줄은 지도 왼쪽 세로 줄로)
         val headRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(a, 16), dp(a, 8), dp(a, 12), dp(a, 6)) }
         headRow.addView(TextView(a).apply {
-            text = title
+            text = if (title.startsWith("🗺")) Ui.mapIcon(a, title, 24) else title   // v6.74 (373)
             textSize = 17f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD

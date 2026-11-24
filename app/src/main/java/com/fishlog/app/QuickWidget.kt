@@ -88,6 +88,12 @@ class QuickWidget : AppWidgetProvider() {
             if (dim) p.alpha = 120
             cv.drawCircle(px / 2f, px / 2f, px / 2f, p)
             p.alpha = 255; p.color = android.graphics.Color.WHITE
+            // v6.74 (373): 지도 칸 = 지구본 'All' 그림
+            if (icon == "🗺") {
+                androidx.core.content.ContextCompat.getDrawable(c, Ui.MAP_ALL)?.let { d ->
+                    val m = (px * .06f).toInt(); d.setBounds(m, m, px - m, px - m); if (dim) d.alpha = 140; d.draw(cv); return bmp
+                }
+            }
             p.textSize = px * .52f; p.textAlign = android.graphics.Paint.Align.CENTER
             val fm = p.fontMetrics
             cv.drawText(icon, px / 2f, px / 2f - (fm.ascent + fm.descent) / 2f, p)

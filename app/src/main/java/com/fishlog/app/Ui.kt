@@ -31,6 +31,21 @@ object Ui {
     val MINE = Color.parseColor("#E8892A")
     val GROUP = Color.parseColor("#2E8FB8")
     val ALL = Color.parseColor("#8A63D2")
+    /** v6.74 (373): 지도 그림 (지구본 + 보라 'All' = 전체 지도 · 하늘 '그룹' = 그룹 지도) */
+    val MAP_ALL get() = R.drawable.ic_map_all
+    val MAP_GROUP get() = R.drawable.ic_map_grp
+    /** 글 맨 앞 '🗺' 을 지도 그림으로 바꾼 글 (그림 크기 = 글자 크기에 맞춤 · sizeDp) */
+    fun mapIcon(c: Context, text: CharSequence, sizeDp: Int, res: Int = MAP_ALL): CharSequence {
+        val s = text.toString()
+        val body = if (s.startsWith("🗺")) s.removePrefix("🗺").removePrefix("\uFE0F") else " $s"
+        val sp = android.text.SpannableString("\uFFFC$body")
+        val d = androidx.core.content.ContextCompat.getDrawable(c, res) ?: return text
+        val px = dp(c, sizeDp); d.setBounds(0, 0, px, px)
+        val span = if (android.os.Build.VERSION.SDK_INT >= 29) android.text.style.ImageSpan(d, android.text.style.DynamicDrawableSpan.ALIGN_CENTER)
+            else android.text.style.ImageSpan(d, android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM)
+        sp.setSpan(span, 0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return sp
+    }
     /** v6.68 (359): 칩 · 탭 높이 두 가지만 (같은 줄은 같은 높이 · 글자 크게 쓴 폰은 늘어남) */
     const val PILL_M = 40
     const val PILL_S = 32

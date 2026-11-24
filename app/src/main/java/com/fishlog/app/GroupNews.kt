@@ -23,6 +23,7 @@ object GroupNews {
     private val rawEvents = HashMap<String, List<Cloud.Event>>()
     private val rawNotices = HashMap<String, List<Cloud.Notice>>()
     private val rawTrips = HashMap<String, List<Cloud.RemoteTrip>>()
+    private val rawPins = HashMap<String, List<Pins.Pin>>()   // v6.74 (362)
     @Volatile private var unseen: Map<String, List<Item>> = emptyMap()
     private val upcoming = HashMap<String, Int>()
     private val today = HashMap<String, Int>()
@@ -50,6 +51,10 @@ object GroupNews {
     fun newNotices(gid: String?): Int = items(gid).count { it.isNotice }
     /** 새로 올라온 그룹 출조 (조과 후기) */
     fun newTrips(gid: String?): Int = items(gid).count { it.kind == "trip" }
+    /** v6.74 (362): 그룹원이 새로 올린 포인트 */
+    fun newPins(gid: String?): Int = items(gid).count { it.kind == "pin" }
+    /** v6.74 (372): 그룹 지도에서 받은 최신 목록으로 바꾸기 */
+    fun putPins(gid: String, list: List<Pins.Pin>) { rawPins[gid] = list; recompute(); fireLive() }
     /** 공지 전체 개수 (내가 쓴 것 포함) */
     fun notices(gid: String?): Int = gid?.let { rawNotices[it]?.size } ?: 0
     /** v6.36 (296): 그룹 창 공지 칸용 (새것부터) */
@@ -77,6 +82,8 @@ object GroupNews {
         }
         // v6.51 (327): 댓글 수는 켤 때 한 번 받음 (실시간 감시는 안 함 · 읽기 줄이기)
         Cloud.groups.forEach { g -> Comments.loadMeta(g.id) { recompute(); fireLive() } }
+        // v6.74 (362): 그룹 포인트도 켤 때 한 번
+        Cloud.groups.forEach { g -> Pins.loadGroup(g.id) { l -> if (l != null) { rawPins[g.id] = l; recompute(); fireLive() } } }
     }
 
     /** 그만 보기: 다른 화면에 갔다 곧 돌아오는 경우가 많아서 3분 뒤에 끊음 (다시 붙일 때 전부 다시 읽지 않게) */
@@ -151,6 +158,13 @@ object GroupNews {
                     }
                 }
             }
+            // v6.74 (362): 그룹원이 새로 올린 포인트 (지도에서 보거나 카드 열면 꺼짐)
+            rawPins[g.id]?.forEach { p ->
+                val id = "p_${p.id}"
+                if (p.owner != me && p.t > b && id !in seen)
+                    list.add(Item(g.id, "pin", id, "📌 " + p.name,
+                        listOf(p.ownerName, agoFmt.format(Date(p.t)), p.memo.take(30)).filter { it.isNotBlank() }.joinToString(" · "), p.t))
+            }
             out[g.id] = list.sortedByDescending { it.time }
         }
         unseen = out
@@ -167,7 +181,7 @@ object GroupNews {
         done?.let { waiting.add(it) }
         if (loading) return
         loading = true
-        var left = gs.size * 3
+        var left = gs.size * 4
         fun step() {
             left--
             if (left == 0) {
@@ -182,6 +196,7 @@ object GroupNews {
             Cloud.loadEventsOf(g) { list, _ -> if (list != null) rawEvents[g.id] = list; step() }
             Cloud.loadNoticesOf(g) { list, _ -> if (list != null) rawNotices[g.id] = list; step() }
             Comments.loadMeta(g.id) { step() }
+            Pins.loadGroup(g.id) { l -> if (l != null) rawPins[g.id] = l; step() }
         }
     }
 
@@ -204,6 +219,11 @@ object GroupNews {
     /** v6.51 (327): 출조 상세를 열어 댓글을 봄 → 그 출조 새 댓글 소식 지움 */
     fun markCmtSeen(gid: String, tid: String) {
         markSeen(items(gid).filter { it.kind == "cmt" && it.id.startsWith("c_${tid}_") })
+    }
+    /** v6.74 (362): 포인트 하나 봄 */
+    fun markPinSeen(gid: String, pinId: String) {
+        val its = items(gid).filter { it.kind == "pin" && it.id == "p_$pinId" }
+        if (its.isNotEmpty()) { markSeen(its); fireLive() }
     }
     /** 그룹 출조 기록 화면을 열면 새 댓글은 그대로 (그 출조를 열어야 꺼짐) */
     fun refresh() = recompute()

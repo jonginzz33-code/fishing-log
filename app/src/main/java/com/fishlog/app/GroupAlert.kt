@@ -33,7 +33,7 @@ object GroupAlert {
 
     val KINDS = listOf("live" to "🟢 그룹원 출조 중", "chat" to "💬 그룹 채팅 새 글", "notice" to "📢 새 공지",
         "event" to "⏰ 새 일정", "rsvp" to "🙋 내 일정 참석 답", "remind" to "📅 내일 출조 (전날 낮 12시)",
-        "cmt" to "💬 출조 댓글 (내 출조 · 내가 댓글 단 출조)", "allchat" to "🌐 전체 채팅 새 글")
+        "cmt" to "💬 출조 댓글 (내 출조 · 내가 댓글 단 출조)", "allchat" to "🌐 전체 채팅 새 글", "pin" to "📌 그룹 새 포인트")
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun on(c: Context, kind: String) = prefs(c).getBoolean("ga_$kind", kind != "allchat")   // v6.48: 전체 채팅은 기본 꺼짐
@@ -249,6 +249,14 @@ object GroupAlert {
                     if (l.isNotEmpty()) post(c, ("notice$gid").hashCode(), CH_GROUP, "notice", "📢 $gname · 새 공지 ${l.size}개",
                         l.map { (it.getString("title") ?: "") + (it.getString("body")?.takeIf { b -> b.isNotBlank() }?.let { b -> " — " + b.take(40) } ?: "") },
                         openPi(c, gid, "notice", ("notice$gid").hashCode()), l.size)
+                }
+            // v6.74 (362): 📌 그룹원이 새로 올린 포인트 (누르면 그룹 지도)
+            if (on(c, "pin")) wait(gref.collection("pins").whereGreaterThan("t", last).get())?.documents
+                ?.filter { it.getString("owner") != me && !Moderation.isBlocked(it.getString("owner") ?: "") }?.let { l ->
+                    if (l.isNotEmpty()) post(c, ("pin$gid").hashCode(), CH_GROUP, "pin", "📌 $gname · 새 포인트 ${l.size}개",
+                        l.map { (it.getString("ownerName") ?: "?") + ": " + (it.getString("name") ?: "포인트") +
+                            (it.getString("memo")?.takeIf { m -> m.isNotBlank() }?.let { m -> " — " + m.take(40) } ?: "") },
+                        openPi(c, gid, "pin", ("pin$gid").hashCode()), l.size)
                 }
             // ⏰ 일정
             if (on(c, "event")) wait(gref.collection("events").whereGreaterThan("created", last).get())?.documents
