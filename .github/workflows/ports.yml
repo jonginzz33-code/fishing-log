@@ -21,4 +21,4 @@ jobs:
           git config user.name "ports-bot"; git config user.email "ports-bot@users.noreply.github.com"
           git add app/src/main/assets/ports.json
           git commit -m "항구 자료 갱신 [skip ci]" || echo "no change"
-          git push
+          for i in 1 2 3; do git pull --rebase -X theirs origin main && git push && break; sleep 5; done

@@ -17,4 +17,4 @@ os.makedirs("app/src/main/assets", exist_ok=True)
 json.dump(out, open("app/src/main/assets/ports.json", "w"), ensure_ascii=False, separators=(",", ":"))
 print("merged", len(out), "big", sum(1 for p in out if p[3]))
 for p in out:
-    if any(s in p[0] for s in ("무창포", "마검포", "오이도", "오천항", "궁평", "안흥")): print(p)
+    if any(s in p[0] for s in ("무창포", "마검포", "오이도", "오천항", "궁평", "안흥", "대천")): print(p)

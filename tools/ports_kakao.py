@@ -14,16 +14,25 @@ OK_CAT = re.compile(r"(항구|선착장|부두|여객터미널|해운|어항|마
 OK_NAME = re.compile(r"(항|포구|선착장|부두|여객터미널|물양장|마리나)(\s|$|\()")
 BAD = re.compile(r"(공항|항공|비행|헬기|주차장|식당|횟집|모텔|펜션|카페|편의점|약국|병원|마트|낚시점|낚시프라자|횟집|수산|회센터|정류장|버스|주유소|교회|학교)")
 res = {}
-qs = ["항", "포구", "선착장", "부두", "여객터미널", "물양장"]
-step = 0.2
-lat = 33.0; n = 0
+qs = ["항", "포구", "선착장", "부두", "여객터미널", "물양장", "어항", "선창"]
+step = 0.1   # 칸을 작게 (한 번에 45개까지라 '항'이 많은 곳에서 빠지던 것 막기)
+from concurrent.futures import ThreadPoolExecutor
+import threading
+lock = threading.Lock(); n = 0
+cells = []
+lat = 33.0
 while lat < 38.7:
     lon = 124.4
     while lon < 131.0:
-        rect = f"{lon},{lat},{lon+step},{lat+step}"
-        for q in qs:
-            for page in (1, 2, 3):
-                d = get(q, rect, page); n += 1
+        cells.append(f"{lon:.2f},{lat:.2f},{lon+step:.2f},{lat+step:.2f}"); lon += step
+    lat += step
+def work(rect):
+    global n
+    for q in qs:
+        for page in (1, 2, 3):
+            d = get(q, rect, page)
+            with lock:
+                n += 1
                 for doc in d.get("documents", []):
                     nm = doc["place_name"].strip(); cat = doc.get("category_name", "")
                     if BAD.search(nm) or BAD.search(cat): continue
@@ -31,8 +40,7 @@ while lat < 38.7:
                     la = float(doc["y"]); lo = float(doc["x"])
                     big = 1 if (re.search(r"항(\s|$)", nm + " ") or "여객터미널" in nm or "항구" in cat) and "선착장" not in nm else 0
                     res[doc["id"]] = [nm, round(la, 5), round(lo, 5), big, doc.get("address_name", "")]
-                if d.get("meta", {}).get("is_end", True): break
-        lon += step
-    lat += step
+            if d.get("meta", {}).get("is_end", True): break
+with ThreadPoolExecutor(8) as ex: list(ex.map(work, cells))
 print("requests", n, "kakao", len(res))
 json.dump(list(res.values()), open("kakao_ports.json", "w"), ensure_ascii=False)
