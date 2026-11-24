@@ -16,5 +16,6 @@ jobs:
           SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           echo "$SA" > "$RUNNER_TEMP/sa.json"
+          python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print('SA email:',d.get('client_email'),'project:',d.get('project_id'))" "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           npx -y firebase-tools@13 deploy --only hosting --project fishing-log-9109d --non-interactive --debug 2>&1 | grep -vE "^\[debug\].*(Authorization|token)" | tail -60; test ${PIPESTATUS[0]} -eq 0
