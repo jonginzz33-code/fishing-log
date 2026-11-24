@@ -47,10 +47,13 @@ footer a{text-decoration:underline;margin-right:12px}
 .tester summary::-webkit-details-marker{display:none}
 .tester summary small{font-weight:700;font-size:12.5px;color:#BFF0DD;white-space:nowrap}
 .tester[open] summary small{font-size:0}.tester[open] summary small::after{content:"접기 ▴";font-size:12.5px}
-.tester[open]>*:not(summary){margin-left:18px;margin-right:18px}
-.tester[open]{padding-bottom:18px}
+.tbody{padding:0 18px 18px}
+.steps{display:block}
+@media (min-width:900px){.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:stretch}.steps .step{margin-top:10px}.steps .two{grid-template-columns:1fr}.tbody{padding:0 22px 22px}.copy{max-width:520px;margin-left:auto;margin-right:auto}}
+@media (max-width:480px){.tbody{padding:0 12px 14px}.step{padding:12px 10px;gap:9px}.big{font-size:15.5px;padding:13px 10px}.warn{font-size:13.5px}.tester summary{padding:14px}}
 .warn{background:rgba(242,193,78,.15);border:1.5px solid #F2C14E;border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.6;color:#FDEBC0;margin-bottom:6px}
-.copy{width:100%;border:1.5px dashed #7FD6FF;background:transparent;color:#7FD6FF;cursor:pointer;margin-top:14px;font-family:inherit}
+.copy{display:block;width:100%;border:1.5px dashed #7FD6FF;background:transparent;color:#7FD6FF;cursor:pointer;margin-top:14px;font-family:inherit}
+.step{display:block}.step .n{float:left;width:30px;height:30px;margin:0 10px 4px 0;font-size:15px}.step>div>b:first-child{display:block;line-height:30px}.step .t{clear:both}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:560px){.two{grid-template-columns:1fr}}
 @media (max-width:560px){nav .links{display:none}}
@@ -66,10 +69,12 @@ footer a{text-decoration:underline;margin-right:12px}
 
 <details class="tester" id="tester">
   <summary><span>🧪 비공개 테스트 참여하기</span><small>눌러서 펼치기 ▾</small></summary>
+  <div class="tbody">
   <p class="lead">조과일지 · 급할 때 두 앱 모두 같은 테스터 그룹이에요. 아래 ①②③ 순서대로 한 번만 하면 돼요.</p>
   <div class="warn">⚠ <b>카톡 · 밴드 안에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.</b><br>
   👉 이 페이지를 <b>크롬</b>에서 열어 주세요 (카톡이면 오른쪽 위 ⋮ → '다른 브라우저로 열기')<br>
   또는 링크를 꾹 눌러 '복사' → 크롬 주소창에 붙여 넣기 → 이동</div>
+  <div class="steps">
   <div class="step"><div class="n">1</div><div style="flex:1">
     <b>구글 그룹 가입</b><div class="t">앱을 설치할 구글 계정으로 로그인한 뒤 <b>[그룹 가입]</b> 누르기<br>(크롬 오른쪽 위 동그라미 사진에서 계정 확인 · <b>폰 플레이 스토어와 같은 계정</b>이어야 해요)</div>
     <a class="big g" href="https://groups.google.com/g/mytoilet-testers">👥 테스터 그룹 가입하기</a>
@@ -89,7 +94,9 @@ footer a{text-decoration:underline;margin-right:12px}
     </div>
     <div class="t" style="margin-top:10px">※ '항목을 찾을 수 없습니다'가 나오면: ①②를 <b>폰 플레이 스토어와 같은 계정</b>으로 했는지 확인 → 10분~1시간쯤 뒤 다시 열기 (가입이 반영되는 데 시간이 걸려요) · 그래도 안 되면 그룹 가입 메일 주소를 관리자에게 알려 주세요</div>
   </div></div>
+  </div>
   <button class="big copy" onclick="copyGuide(this)">📋 이 안내를 카톡으로 보낼 글 복사하기</button>
+  </div>
 </details>
 <section class="hero">
   <h1>탈랄랄라의 앱 모음</h1>
