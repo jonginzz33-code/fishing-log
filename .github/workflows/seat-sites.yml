@@ -1,0 +1,40 @@
+name: Seat sites
+# 390: 선상24 배마다 선단 사이트 · 밴드 · 전화 모으기 → talla.co.kr/data/seat_sites.json
+on:
+  schedule:
+    - cron: '17 19 * * *'   # 한국 새벽 4:17
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: seat-sites, cancel-in-progress: false }
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Collect
+        run: python tools/seat_sites.py
+      - name: Commit
+        id: c
+        run: |
+          git config user.name "seat-sites bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add site/data/seat_sites.json
+          if git diff --cached --quiet; then echo "changed=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -m "배 사이트 목록 새로 고침 [skip ci]"
+          git pull --rebase -q origin main && git push -q origin HEAD:main
+          echo "changed=1" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        if: steps.c.outputs.changed == '1'
+        with: { node-version: 20 }
+      - name: Deploy to Firebase Hosting
+        if: steps.c.outputs.changed == '1'
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx -y firebase-tools@13 deploy --only hosting --project fishing-log-9109d --non-interactive

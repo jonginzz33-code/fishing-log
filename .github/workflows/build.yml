@@ -16,6 +16,7 @@ on:
       - 'site/**'
       - 'firebase.json'
       - '.github/workflows/hosting.yml'
+      - '.github/workflows/seat-sites.yml'
   workflow_dispatch:
 
 permissions:
