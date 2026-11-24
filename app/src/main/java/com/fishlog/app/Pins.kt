@@ -134,6 +134,9 @@ object Pins {
         var onCancel: (() -> Unit)? = null
         private val saveR = android.graphics.RectF(); private val cancelR = android.graphics.RectF()
         private var dragging = false; private var grabDx = 0f; private var grabDy = 0f
+        // v6.73: 원 안에서 두 손가락 벌리기/좁히기 = 반경 (원 밖 = 지도 확대/축소)
+        private var resizing = false; private var span0 = 1f; private var r0 = 300.0
+        private fun span(e: MotionEvent): Float { val dx = e.getX(0) - e.getX(1); val dy = e.getY(0) - e.getY(1); return kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(1f) }
         private val d = ctx.resources.displayMetrics.density
         private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
@@ -202,6 +205,13 @@ object Pins {
                 fill.color = Color.WHITE; c.drawRoundRect(cancelR, h / 2, h / 2, fill)
                 txt.color = Color.parseColor("#04222A"); c.drawText("💾 저장", saveR.centerX(), saveR.centerY() + 5 * d, txt)
                 txt.color = Color.parseColor("#14232E"); c.drawText("✕ 취소", cancelR.centerX(), cancelR.centerY() + 5 * d, txt)
+                // 반경 + 안내 (핀 아래)
+                val hint = "반경 ${rLabel(dp0.r)} · 원 안에서 두 손가락으로 크기"
+                txt.textSize = 12f * d
+                val hw = txt.measureText(hint) + 20 * d; val hy = pt.y.toFloat() + 22 * d
+                fill.color = Color.argb(215, 10, 24, 34); c.drawRoundRect(x - hw / 2, hy, x + hw / 2, hy + 26 * d, 13 * d, 13 * d, fill)
+                txt.color = if (resizing) Color.parseColor("#FFD34D") else Color.WHITE
+                c.drawText(hint, x, hy + 17.5f * d, txt)
                 txt.textSize = 11f * d
             }
         }
@@ -211,7 +221,17 @@ object Pins {
             val dp0 = draft
             if (!placing || dp0 == null) return false
             when (e.actionMasked) {
+                MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2) {
+                    val pt = map.projection.toPixels(dp0.point, null)
+                    val rr = maxOf(map.projection.metersToPixels(dp0.r.toFloat()), 60 * d)
+                    val mx = (e.getX(0) + e.getX(1)) / 2 - pt.x; val my = (e.getY(0) + e.getY(1)) / 2 - pt.y
+                    if (mx * mx + my * my <= rr * rr) {
+                        dragging = false; resizing = true; span0 = span(e); r0 = dp0.r; map.invalidate(); return true
+                    }
+                }
+                MotionEvent.ACTION_POINTER_UP -> if (resizing) { resizing = false; map.invalidate(); return true }
                 MotionEvent.ACTION_DOWN -> {
+                    resizing = false
                     val pt = map.projection.toPixels(dp0.point, null)
                     val sx = pt.x.toFloat(); val sy = pt.y.toFloat() - 12 * d - 13 * d * 0.8f
                     val near = (e.x - sx) * (e.x - sx) + (e.y - sy) * (e.y - sy) < (40 * d) * (40 * d) ||
@@ -220,12 +240,21 @@ object Pins {
                         dragging = true; grabDx = pt.x - e.x; grabDy = pt.y - e.y; return true
                     }
                 }
-                MotionEvent.ACTION_MOVE -> if (dragging) {
+                MotionEvent.ACTION_MOVE -> if (resizing && e.pointerCount >= 2) {
+                    val nr = (r0 * span(e) / span0).coerceIn(50.0, 3000.0)
+                    val rounded = if (nr < 1000) Math.round(nr / 10.0) * 10.0 else Math.round(nr / 50.0) * 50.0
+                    draft = Pin(dp0.id, dp0.scope, dp0.gid, dp0.name, dp0.memo, dp0.lat, dp0.lon, rounded, dp0.sp, dp0.owner, dp0.ownerName, dp0.t)
+                    map.invalidate(); return true
+                } else if (resizing) return true
+                else if (dragging) {
                     val g = map.projection.fromPixels((e.x + grabDx).toInt(), (e.y + grabDy).toInt()) as GeoPoint
                     draft = Pin(dp0.id, dp0.scope, dp0.gid, dp0.name, dp0.memo, g.latitude, g.longitude, dp0.r, dp0.sp, dp0.owner, dp0.ownerName, dp0.t)
                     map.invalidate(); return true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (dragging) { dragging = false; return true }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (resizing) { resizing = false; map.invalidate(); return false }   // 지도도 손가락 뗀 것 알게
+                    if (dragging) { dragging = false; return true }
+                }
             }
             return false
         }
