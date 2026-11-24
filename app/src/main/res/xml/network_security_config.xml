@@ -4,4 +4,17 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">apis.data.go.kr</domain>
     </domain-config>
+    <!-- 더피싱 선단 예약현황 (공개 화면 · 읽기만) · https 가 안 되는 선단이 있어서 http 도 허용 -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">thefishing.kr</domain>
+        <domain includeSubdomains="false">djfishing.com</domain>
+        <domain includeSubdomains="false">jnaksi.com</domain>
+        <domain includeSubdomains="false">morningstarho.com</domain>
+        <domain includeSubdomains="false">raraho.kr</domain>
+        <domain includeSubdomains="false">teammansu.kr</domain>
+        <domain includeSubdomains="false">woorinaksi.com</domain>
+        <domain includeSubdomains="false">www.haejinho.com</domain>
+        <domain includeSubdomains="false">xn--9m1bx7rzqh1yhbmj.com</domain>
+        <domain includeSubdomains="false">youngdong2ho.net</domain>
+    </domain-config>
 </network-security-config>

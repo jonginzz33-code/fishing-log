@@ -112,13 +112,16 @@ object Seats {
     private val mem = HashMap<String, Pair<Long, List<Sch>>>()
     private const val KEEP = 10 * 60 * 1000L
 
-    private fun get(url: String): String {
+    private fun get(url: String): String =
+        if (isTfUrl(url) && url.startsWith("https://")) try { get0(url) } catch (e: Exception) { try { get0("http://" + url.removePrefix("https://")) } catch (_: Exception) { throw e } }
+        else get0(url)
+    private fun get0(url: String): String {
         val cn = URL(url).openConnection() as HttpURLConnection
         // 개인 사이트(무료 서버)는 처음 깨어나는 데 오래 걸려서 넉넉히
         val slow = !url.contains("sunsang24.com")
         cn.connectTimeout = if (slow) 20000 else 8000; cn.readTimeout = if (slow) 40000 else 12000; cn.instanceFollowRedirects = true
         // 더피싱은 PC 화면 모양으로 읽어요 (폰 모양은 다를 수 있어서 · 저장해 본 화면이 PC 크롬)
-        cn.setRequestProperty("User-Agent", if (url.contains("thefishing.kr")) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+        cn.setRequestProperty("User-Agent", if (isTfUrl(url)) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
             else "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile")
         cn.setRequestProperty("Accept-Language", "ko-KR,ko")
         try {
@@ -362,7 +365,10 @@ object Seats {
     // 선단 예약현황 = /index.php?mid=bk&year=&month=&day=#list → 그 날부터 8일 · 날마다 <div id="new-div-YYYYMMDD">
     // 배 줄: 이름 <span style="font-size:15px; font-weight:bold;"> · 낚시종류 · 공지 · 상태 <div id="admin-right-날짜-배번호-0"><img alt="남은자리 N명">
     // ⚠ 더피싱은 해외 접속을 막아서 이 코드는 저장한 화면으로만 시험함 · 폰(한국)에서 확인
-    fun isTf(host: String) = host.endsWith(".thefishing.kr") && host.substringBefore('.') !in setOf("www", "js", "img", "image", "theimage", "css", "m")
+    /** 더피싱으로 만든 자기 도메인 선단 (assets/tf_sites.json 에 있는 것) */
+    val TF_DOMAINS = setOf("djfishing.com", "jnaksi.com", "morningstarho.com", "raraho.kr", "teammansu.kr", "woorinaksi.com", "www.haejinho.com", "xn--9m1bx7rzqh1yhbmj.com", "youngdong2ho.net")
+    fun isTf(host: String) = (host.endsWith(".thefishing.kr") && host.substringBefore('.') !in setOf("www", "js", "img", "image", "theimage", "css", "m")) || host.lowercase() in TF_DOMAINS
+    private fun isTfUrl(url: String) = url.contains("thefishing.kr") || TF_DOMAINS.any { url.contains("//$it/") }
     fun tfBook(host: String, date: String): String {
         val d = date.replace("-", "")
         return if (d.length == 8) "https://$host/index.php?mid=bk&year=${d.take(4)}&month=${d.substring(4, 6)}&day=${d.substring(6)}#list" else "https://$host/index.php?mid=bk"
@@ -418,14 +424,21 @@ object Seats {
     /** 더피싱 선단 목록 (관리자 폰이 모아 config/tfSites 에 저장 · 모두 읽기) */
     class TfShip(val uid: String, val ship: String, val area: String, val fleet: String, val fish: String, val seat: String, val host: String)
     @Volatile private var tfMem: List<TfShip>? = null
+    private fun tfParse(j: String?): List<TfShip> = try { val a = JSONArray(j ?: "[]"); (0 until a.length()).map { i -> a.getJSONArray(i).let { x ->
+        TfShip(x.optString(0), x.optString(1), x.optString(2), x.optString(3), x.optString(4), x.optString(5), x.optString(6)) } } } catch (_: Exception) { emptyList() }
+    /** 기본 = 앱 안 assets/tf_sites.json (사용자가 뽑은 678척 · v6.89) · 관리자가 그 뒤에 새로 모으면(config/tfSites t 가 더 새것) 그것 */
     fun tfShips(c: Context, done: (List<TfShip>) -> Unit) {
         tfMem?.let { done(it); return }
+        var baseT = 0L
+        val base = try { JSONObject(c.assets.open("tf_sites.json").bufferedReader().readText()).let { baseT = it.optLong("t"); tfParse(it.optJSONArray("j")?.toString()) } } catch (_: Exception) { emptyList() }
         com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("config").document("tfSites").get()
             .addOnSuccessListener { d ->
-                val l = try { val a = JSONArray(d.getString("j") ?: "[]"); (0 until a.length()).map { i -> a.getJSONArray(i).let { x ->
-                    TfShip(x.optString(0), x.optString(1), x.optString(2), x.optString(3), x.optString(4), x.optString(5), x.optString(6)) } } } catch (_: Exception) { emptyList() }
+                // 관리자가 새로 모은 목록: 주소를 못 찾은 배(자기 도메인 선단 등)는 기본 목록 주소로 채움
+                val bu = base.associateBy { it.uid }
+                val srv = if ((d.getLong("t") ?: 0L) > baseT) tfParse(d.getString("j")).map { x -> if (x.host.isBlank()) bu[x.uid]?.let { b -> TfShip(x.uid, x.ship, x.area, x.fleet, x.fish, x.seat, b.host) } ?: x else x }.filter { it.host.isNotBlank() } else emptyList()
+                val l = if (srv.size >= 100) srv else base
                 tfMem = l; done(l)
-            }.addOnFailureListener { done(emptyList()) }
+            }.addOnFailureListener { tfMem = base; done(base) }
     }
     /** 관리자: 더피싱 전체 목록 → 배마다 화면에서 선단 주소 → config/tfSites (몇 분 · 천천히) */
     fun tfCollect(progress: (String) -> Unit, done: (String) -> Unit) {
@@ -1525,7 +1538,7 @@ object Seats {
         var all: List<TfShip> = emptyList()
         fun draw() {
             box.removeAllViews()
-            if (all.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, "아직 모아 둔 더피싱 목록이 없어요 · 관리자가 '🎣 더피싱 선단 모으기'를 누르면 생겨요 · 그 전에는 [＋ 선단 추가]에 ○○.thefishing.kr 주소를 직접 넣으세요").apply { setPadding(0, dp(10), 0, 0) }); return }
+            if (all.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, "더피싱 목록을 못 읽었어요 · [＋ 선단 추가]에 ○○.thefishing.kr 주소를 직접 넣으세요").apply { setPadding(0, dp(10), 0, 0) }); return }
             val have = fleets(a).map { it.host }.toSet()
             val k = q.text.toString().trim()
             val groups = all.filter { it.host.isNotBlank() }.groupBy { it.host }
