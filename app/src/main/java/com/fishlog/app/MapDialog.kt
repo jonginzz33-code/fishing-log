@@ -996,21 +996,34 @@ object MapDialog {
         // v6.68 (360) · v6.72: 📌 포인트 — 누르면 지도 가운데에 핀 → 끌어서 옮기고 핀 위 [💾 저장] · 내 것 주황 · 그룹 하늘 · 전체 보라
         val pinBtn = pill("📌 포인트")
         val pinShowBtn = pill("👁 포인트 보기 ▾")
+        // v6.79: 📌 포인트 상자 — ＋ 포인트 추가 · 👁 포인트 보기 · 🐟 저장된 어종
+        val pinAddBtn = pill("＋ 포인트 추가")
+        val pinSpBtn = pill("🐟 저장된 어종 ▾")
         lateinit var pinOv: Pins.PinOverlay
+        var pinAll: List<Pins.Pin> = emptyList()
+        val pinSp = HashSet(spPrefs.getStringSet("pin_sp", emptySet()) ?: emptySet())
+        fun applyPinSp() {
+            pinOv.pins = if (pinSp.isEmpty()) pinAll else pinAll.filter { pp -> pp.sp.any { it in pinSp } }
+            pinSpBtn.text = if (pinSp.isEmpty()) "🐟 저장된 어종 ▾" else "🐟 " + pinSp.first() + (if (pinSp.size > 1) " 외 ${pinSp.size - 1}" else "") + " · ${pinOv.pins.size}개 ▾"
+            pinSpBtn.setTextColor(if (pinSp.isEmpty()) Color.WHITE else Color.parseColor("#FFB86B"))
+            map.invalidate()
+        }
         fun loadPins() {
             Pins.load(a) { l ->
-                pinOv.pins = l
+                pinAll = l
+                applyPinSp()
                 pinShowBtn.text = "👁 포인트 보기 " + (if (l.isNotEmpty()) "${l.size} " else "") + "▾"
-                map.invalidate()
             }
         }
         pinOv = Pins.PinOverlay(a) { p -> Pins.card(a, map, pinOv, p, past.dots) { loadPins() } }
         pinOvRef = { pinOv }; loadPinsRef = { loadPins() }
         map.overlays.add(pinOv)
+        lateinit var openPinBox: (Boolean) -> Unit
         pinBtn.setOnClickListener {
             if (pinOv.placing) { pinOv.onCancel?.invoke(); return@setOnClickListener }
-            Pins.place(a, map, pinOv, null) { loadPins() }
+            openPinBox(true)
         }
+        pinAddBtn.setOnClickListener { openPinBox(false); Pins.place(a, map, pinOv, null) { loadPins() } }
         pinShowBtn.setOnClickListener {
             val sh = Sheet(a, 0.5f)
             sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "👁 지도에 보일 포인트"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1024,9 +1037,39 @@ object MapDialog {
                 sh.body.addView(cb, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 4))
             }
             row(Pins.MINE, "★ 내 포인트 (나만)"); row(Pins.GROUP, "★ 그룹 포인트"); row(Pins.ALL, "★ 전체 게시판 포인트")
-            sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "새 포인트는 [📌 포인트]를 누르면 지도 가운데에 핀이 생겨요 → 핀을 끌어서 옮기고 → 핀 위 [💾 저장]"),
+            sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "새 포인트는 [📌 포인트] → [＋ 포인트 추가]를 누르면 지도 가운데에 핀이 생겨요 → 핀을 끌어서 옮기고 → 핀 위 [💾 저장]"),
                 Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 12))
             sh.show()
+        }
+        pinSpBtn.setOnClickListener {
+            val sh = Sheet(a, 0.62f)
+            sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "🐟 저장된 어종"), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            fun draw() {
+                sh.body.removeAllViews()
+                val cnt = pinAll.flatMap { it.sp }.groupingBy { it }.eachCount().toList().sortedByDescending { it.second }
+                if (cnt.isEmpty()) { sh.body.addView(Ui.text(a, 13.5f, Ui.SUB, false, "어종을 적어 둔 포인트가 아직 없어요 · 포인트를 저장할 때 어종을 골라 두면 여기서 골라 볼 수 있어요")); return }
+                val wrap = FlowLayout(a)
+                wrap.addView(Ui.pill(a, "전체 ${pinAll.size}", pinSp.isEmpty(), Ui.MINE, small = true) { pinSp.clear(); spPrefs.edit().putStringSet("pin_sp", HashSet(pinSp)).apply(); applyPinSp(); draw() })
+                cnt.forEach { (n, c) -> wrap.addView(Ui.pill(a, "$n $c", n in pinSp, Ui.MINE, small = true) {
+                    if (n in pinSp) pinSp.remove(n) else pinSp.add(n); spPrefs.edit().putStringSet("pin_sp", HashSet(pinSp)).apply(); applyPinSp(); draw() }) }
+                sh.body.addView(wrap)
+                val shown = pinOv.pins
+                sh.body.addView(Ui.text(a, 13f, Ui.TEXT, true, (if (pinSp.isEmpty()) "포인트 " else "고른 어종 포인트 ") + "${shown.size}개 · 누르면 그 자리로").apply { setPadding(0, dp(a, 14), 0, dp(a, 6)) })
+                shown.sortedByDescending { it.t }.take(60).forEach { pp ->
+                    sh.body.addView(Ui.text(a, 14f, Ui.TEXT, false, "").apply {
+                        val sb = android.text.SpannableStringBuilder("★ ")
+                        sb.setSpan(android.text.style.ForegroundColorSpan(Pins.color(pp.scope)), 0, 1, 0)
+                        sb.append(pp.name)
+                        if (pp.sp.isNotEmpty()) { val st = sb.length; sb.append("  " + pp.sp.joinToString(" · ")); sb.setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), st, sb.length, 0) }
+                        text = sb; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                        setPadding(dp(a, 10), dp(a, 10), dp(a, 10), dp(a, 10))
+                        background = Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66"))
+                        setOnClickListener { sh.close(); map.controller.animateTo(pp.point); if (map.zoomLevelDouble < 13.0) map.controller.setZoom(14.0); Pins.card(a, map, pinOv, pp, past.dots) { loadPins() } }
+                    }, Ui.lp(a, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, top = 6))
+                }
+                sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "고른 어종이 적힌 포인트만 지도에 보여요 (여러 개 · 기억)").apply { setPadding(0, dp(a, 10), 0, 0) })
+            }
+            draw(); sh.show()
         }
         addPill(pinBtn); addPill(pinShowBtn)
         if (Cloud.user != null) loadPins()
@@ -1070,7 +1113,7 @@ object MapDialog {
             (v.background as? GradientDrawable)?.let { g -> g.cornerRadius = dp(a, 16).toFloat(); if (v !== pastBtn) g.setColor(Color.argb(235, 15, 29, 41)) }
             rail.addView(v, LinearLayout.LayoutParams(dp(a, 66), ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 7) })
         }
-        val railSet = setOf<android.view.View>(searchPill, pastBtn, pinBtn, windPill)
+        val railSet = setOf<android.view.View>(searchPill, pastBtn, pinBtn, windPill, pinShowBtn)
         val kids = (0 until bar.childCount).map { bar.getChildAt(it) }
         bar.removeAllViews()
         flyout.addView(TextView(a).apply { text = "🗂 지도에 표시"; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#7FD6FF")) },
@@ -1083,10 +1126,33 @@ object MapDialog {
         railify(searchPill, "🔍\n장소"); railify(pastBtn, pastBtn.text.toString())
         if (kids.contains(pinBtn)) railify(pinBtn, "📌\n포인트")
         railify(groupBtn); railify(windPill, "🌬\n바람")
-        groupBtn.setOnClickListener {
-            val open = flyout.visibility != android.view.View.VISIBLE
+        // v6.79: 📌 포인트 상자 (누른 버튼 옆에 붙어 나옴)
+        val pinFly = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(a, 10), dp(a, 8), dp(a, 10), dp(a, 10)); visibility = android.view.View.GONE
+            background = GradientDrawable().apply { setColor(Color.argb(246, 19, 43, 61)); cornerRadius = dp(a, 16).toFloat(); setStroke(dp(a, 2), Color.parseColor("#7FD6FF")) }
+            isClickable = true
+        }
+        pinFly.addView(TextView(a).apply { text = "📌 포인트"; textSize = 12.5f; typeface = Typeface.DEFAULT_BOLD; setTextColor(Color.parseColor("#7FD6FF")) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 6) })
+        listOf(pinAddBtn, pinShowBtn, pinSpBtn).forEach { v ->
+            (v.background as? GradientDrawable)?.setColor(Color.argb(235, 15, 29, 41))
+            pinFly.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 6) })
+        }
+        (pinAddBtn.background as? GradientDrawable)?.setStroke(dp(a, 2), Ui.MINE)
+        fun showGroupFly(open: Boolean) {
             flyout.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
             setOn(groupBtn, open); groupBtn.setTextColor(if (open) Color.parseColor("#7FD6FF") else Color.WHITE)
+        }
+        openPinBox = { toggle ->
+            val open = toggle && pinFly.visibility != android.view.View.VISIBLE
+            pinFly.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            setOn(pinBtn, open); pinBtn.setTextColor(if (open) Color.parseColor("#7FD6FF") else Color.WHITE)
+            if (open) { showGroupFly(false); pinFly.translationY = pinBtn.top.toFloat() }
+        }
+        groupBtn.setOnClickListener {
+            val open = flyout.visibility != android.view.View.VISIBLE
+            if (open) openPinBox(false)
+            showGroupFly(open)
         }
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
         root.addView(zBar.curtain, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { setMargins(Ui.dp(a, 12), 0, Ui.dp(a, 12), Ui.dp(a, 6)) })
@@ -1117,6 +1183,7 @@ object MapDialog {
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 8); topMargin = dp(a, 8) })
         frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(flyout) },
             FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
+        frame.addView(pinFly, FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)
         if (all.isEmpty() && live == null && layers.isNotEmpty()) {
             frame.addView(TextView(a).apply {
