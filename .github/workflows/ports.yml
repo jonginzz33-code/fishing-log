@@ -1,0 +1,19 @@
+name: Ports data
+
+# 지도 ⚓ 항구 표시용 자료 받기 (오픈스트리트맵 · 손으로 실행 · 결과는 ports.json 파일로 내려받기)
+on:
+  push:
+    branches: [ main ]
+    paths: [ '.github/workflows/ports.yml', 'tools/ports_fetch.py' ]
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/ports_fetch.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ports
+          path: ports.json

@@ -11,6 +11,8 @@ on:
       - 'CLAUDE.md'
       - '.github/workflows/store.yml'
       - '.github/workflows/kma-test.yml'
+      - '.github/workflows/ports.yml'
+      - 'tools/**'
   workflow_dispatch:
 
 permissions:
