@@ -101,6 +101,7 @@ def main():
     # 사이트를 못 찾은 배는 하루 뒤 다시 · 찾은 배는 7일마다
     def due(n):
         o = old[str(n)]
+        if os.environ.get("MISSING") and "h" not in o: return True   # 손으로: 못 찾은 배 다시 전부
         return age(n) >= (1 if "h" not in o else KEEP_DAYS)
     stale = sorted([n for n in nos if str(n) in old and due(n)], key=lambda n: ("h" in old[str(n)], -age(n)))[:REFRESH]
     todo = (new + stale)[:max(REFRESH, 1)]
