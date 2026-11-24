@@ -50,6 +50,8 @@ object Seats {
         val key get() = "$host|$shipNo"
         // v6.86 (395 · 396): 배 사진 · 조황 글 수 · 그날 공지 · 예약 오픈 시각 · 선상24 물때
         var img = ""; var boards = -1; var notice = ""; var openAt = ""; var tideW = ""
+        /** v6.90 (399): 다른 곳(선상24 · 더피싱 · 개인 사이트)에 같이 올라온 같은 배 · 같은 날 */
+        var also: List<Sch> = emptyList()
         /** 운항 시간(시간 · 소수) · 출항 시각(분) — 모르면 -1 */
         val startMin: Int get() = Regex("^(\\d{1,2}):(\\d{2})").find(time)?.let { it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() } ?: -1
         val hours: Double get() {
@@ -359,6 +361,38 @@ object Seats {
                 g.optString("title") to (0 until it2.length()).map { j -> it2.optString(j) }.filter { it.isNotBlank() && it != "전체" } } } }
             S24Filter(grp("fish"), grp("area")).also { filterMem = System.currentTimeMillis() to it }
         } catch (_: Exception) { null }
+    }
+
+    // ─────────────── v6.90 (399): 출처 · 중복 거르기 · 항구 ───────────────
+    fun srcOf(host: String) = when { host == S24 || isS24Fleet(host) -> "선상24"; isTf(host) -> "더피싱"; else -> "개인 사이트" }
+    fun srcCol(src: String) = Color.parseColor(when (src) { "선상24" -> "#3D7BD9"; "더피싱" -> "#2FA06F"; else -> "#B8862B" })
+    /** 배 이름 비교용: 띄어쓰기 · [선장] · (오전) · 끝 '호' 빼고 */
+    fun normShip(x: String) = x.replace(Regex("\\[[^\\]]*\\]|\\([^)]*\\)"), "").replace(" ", "").trim().removeSuffix("호").lowercase()
+    fun normPort(x: String) = x.replace(" ", "").removeSuffix("항").removeSuffix("포구").lowercase()
+    private fun looksPort(x: String) = x.isNotBlank() && Regex("(항|포구|선착장|부두|포|항구|진두)$").containsMatchIn(x.trim())
+    /** 그 배가 나가는 항구 (모르면 "") */
+    fun portOf(c: Context, s: Sch): String = when {
+        s.host == S24 -> if (s.place.contains(" · ")) s.place.substringAfterLast(" · ").trim() else sites(c)[s.shipNo]?.port ?: ""
+        isS24Fleet(s.host) -> sites(c)[s.shipNo]?.port ?: ""
+        isTf(s.host) -> tfMem?.filter { it.host == s.host }?.let { l -> (l.firstOrNull { normShip(it.ship) == normShip(s.ship) } ?: l.firstOrNull())?.area?.substringAfterLast(" > ")?.substringAfterLast(" ") } ?: ""
+        else -> ""
+    }.trim().let { if (looksPort(it)) it else "" }
+    private fun portsOk(a: String, b: String): Boolean {
+        if (a.isBlank() || b.isBlank()) return true
+        val x = normPort(a); val y = normPort(b)
+        return x.contains(y) || y.contains(x)
+    }
+    /** 같은 날 · 같은 배 이름 · 같은 항구가 다른 곳(출처)에 또 있으면 한 카드로 (앞에 온 것 = 선단 페이지가 먼저) */
+    fun dedupe(c: Context, l: List<Sch>): List<Sch> {
+        val out = ArrayList<Sch>()
+        l.forEach { it.also = emptyList() }
+        l.forEach { s ->
+            val src = srcOf(s.host); val n = normShip(s.ship)
+            val p = out.firstOrNull { o -> o.date == s.date && n.isNotBlank() && normShip(o.ship) == n &&
+                srcOf(o.host) != src && o.also.none { srcOf(it.host) == src } && portsOk(portOf(c, o), portOf(c, s)) }
+            if (p != null) p.also = p.also + s else out.add(s)
+        }
+        return out
     }
 
     // ─────────────── v6.85 (394): 🎣 더피싱 (○○.thefishing.kr) ───────────────
@@ -705,7 +739,7 @@ object Seats {
         var q = ""
         val qRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), dp(6)); visibility = View.GONE }
         val qEd = EditText(a).apply {
-            hint = "배 이름 (예: 이배다, 뉴블루)"; setSingleLine(); textSize = 15f; setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB)
+            hint = "배 이름 · 항구 (예: 뉴블루, 마검포항)"; setSingleLine(); textSize = 15f; setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB)
             background = Ui.bg(a, Color.parseColor("#0F2231"), 12, Color.parseColor("#7FD6FF")); setPadding(dp(12), dp(9), dp(12), dp(9))
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         }
@@ -746,7 +780,7 @@ object Seats {
         fun countOn(d: String): Int {
             val mine = all.filter { x -> x.date == d }
             val nos = mine.map { it.shipNo }.toSet()
-            return (mine + s24.filter { it.date == d && it.shipNo !in nos }).count { x -> x.open && x.remain >= need && fishMatch(x) }
+            return dedupe(a, mine + s24.filter { it.date == d && it.shipNo !in nos }).count { x -> x.open && x.remain >= need && fishMatch(x) }
         }
         fun setDay(d: String) { day = d; savePrefs(); render(); load(false) }
         fun shift(n: Int) {
@@ -895,6 +929,15 @@ object Seats {
                     setOnClickListener { openBoards(a, s) }
                 })
             }
+            // v6.90 (399): 출처 꼬리표 [선상24] [더피싱] [개인 사이트] (같은 배가 여러 곳이면 다)
+            (listOf(srcOf(s.host)) + s.also.map { srcOf(it.host) }).distinct().forEach { src ->
+                l3.addView(Ui.text(a, 10.5f, Color.WHITE, true, src).apply {
+                    setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(a, srcCol(src), 6)
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(4) })
+            }
+            portOf(a, s).takeIf { it.isNotBlank() && !fleetName.contains(it) }?.let { pt ->
+                l3.addView(Ui.text(a, 11f, Ui.SUB, false, "⚓ $pt"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
+            }
             if (l3.childCount > 0) info.addView(l3, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) })
             head.addView(info, LinearLayout.LayoutParams(0, WRAP, 1f))
             box.addView(head)
@@ -957,6 +1000,8 @@ object Seats {
             ss?.tel?.let { t -> link("📞 전화") { dial(a, t) } }
             ss?.band?.let { b -> link("밴드") { Boats.openUrl(a, b) } }
             if (s.host == S24) link("📝 조황") { openBoards(a, s) }
+            // v6.90 (399): 같은 배가 다른 곳에도 있으면 그쪽 예약 버튼 (남은 자리 같이)
+            s.also.forEach { o -> link("${srcOf(o.host)} " + (if (o.open) "${o.remain}자리 ›" else "${o.stName} ›")) { Boats.openUrl(a, bookUrlOf(a, o)) } }
             if (ss?.host != null && s.host == S24 && !canBook) link("🌐 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
             links.addView(android.widget.HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(left) }, LinearLayout.LayoutParams(0, WRAP, 1f))
             if (vv == null && synchronized(voteAsked) { voteAsked.add(vk) }) loadVotes(vk) { a.runOnUiThread { later() } }
@@ -1015,54 +1060,89 @@ object Seats {
             if (q.isNotBlank()) {
                 fun norm(x: String) = x.replace(" ", "").replace("호", "").lowercase()
                 val nq = norm(q)
-                val cand = (all + s24).filter { norm(it.ship).contains(nq) || norm(it.ship.substringBefore('[')).contains(nq) }
-                val onDay = cand.filter { it.date == day }.distinctBy { it.host + it.shipNo + it.schNo }
-                val shown = onDay.map { it.shipNo }.toMutableSet()
-                sum.text = "🔎 '$q' · ${dayLabel(day)}"
-                onDay.forEach { list.addView(card(it, it.key in favs(a)), Ui.lp(a, MATCH, WRAP, top = 6)) }
-                // 아직 안 읽은 배: talla.co.kr 배 이름 목록에서
-                val more = sites(a).filter { (no, v) -> no !in shown && v.name.isNotBlank() && norm(v.name).contains(nq) }.entries.take(12)
-                more.forEach { (no, v) ->
-                    val f = found[no]
-                    val hit = f?.firstOrNull { it.date == day }
-                    if (hit != null) { list.addView(card(hit, hit.key in favs(a)), Ui.lp(a, MATCH, WRAP, top = 6)); return@forEach }
+                // v6.90 (399): ⚓ 항구 이름으로도 (마검포항 · 마검포 · 드르니항) — '항' 빼고 2글자 이상
+                val pq = normPort(q)
+                val byPort = pq.length >= 2
+                fun portHit(x: String) = byPort && x.isNotBlank() && normPort(x).contains(pq)
+                val nameC = (all + s24).filter { norm(it.ship).contains(nq) || norm(it.ship.substringBefore('[')).contains(nq) }
+                val portC = if (byPort) (all + s24).filter { portHit(portOf(a, it)) || (it.host == S24 && portHit(it.place.substringAfterLast(" · "))) } else emptyList()
+                val dayCards = ArrayList<Sch>()
+                dayCards.addAll((nameC + portC).filter { it.date == day }.distinctBy { it.host + it.shipNo + it.schNo })
+                val shown = dayCards.map { it.shipNo }.toMutableSet()
+                val notes = ArrayList<View>()
+                fun note(title: String, sub: String, subCol: Int, click: (() -> Unit)?) {
                     val row = LinearLayout(a).apply {
                         orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
                         background = Ui.bg(a, Color.parseColor("#12283A"), 14, Color.parseColor("#2C4F66"))
+                        if (click != null) { isClickable = true; setOnClickListener { click() } }
                     }
-                    row.addView(Ui.text(a, 15f, Ui.TEXT, true, "🚤 " + v.name + if (v.port.isNotBlank()) "  · ${v.port}" else ""))
+                    row.addView(Ui.text(a, 15f, Ui.TEXT, true, title))
+                    row.addView(Ui.text(a, 12.5f, subCol, false, sub))
+                    notes.add(row)
+                }
+                // 아직 안 읽은 선상24 배: talla.co.kr 배 목록에서 (이름 · 항구)
+                val more = sites(a).filter { (no, v) -> no !in shown && ((v.name.isNotBlank() && norm(v.name).contains(nq)) || portHit(v.port)) }.entries.take(if (byPort) 30 else 12)
+                more.forEach { (no, v) ->
+                    val f = found[no]
+                    val hit = f?.firstOrNull { it.date == day }
+                    if (hit != null) { dayCards.add(hit); return@forEach }
                     val next = f?.filter { it.date > day && (it.status == "ING" || it.status == "END") }?.minByOrNull { it.date }
-                    val sub = when {
-                        f == null -> "⏳ 일정 읽는 중…"
-                        next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} › (남은 ${next.remain}자리)"
-                        else -> "이 날 · 앞으로 두 달 일정이 없어요"
-                    }
-                    row.addView(Ui.text(a, 12.5f, if (next != null) Color.parseColor("#7FD6FF") else Ui.SUB, false, sub))
-                    if (next != null) row.setOnClickListener { setDay(next.date) }
-                    list.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
-                    if (f == null && synchronized(foundBusy) { foundBusy.add(no) }) Thread {
+                    note("🚤 " + v.name + if (v.port.isNotBlank()) "  · ${v.port}" else "",
+                        when { f == null -> "⏳ 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} › (남은 ${next.remain}자리)"; else -> "이 날 · 앞으로 두 달 일정이 없어요" },
+                        if (next != null) Color.parseColor("#7FD6FF") else Ui.SUB, next?.let { n -> { setDay(n.date) } })
+                    if (f == null && synchronized(foundBusy) { foundBusy.add(no) }) pool.execute {
                         val l = ArrayList<Sch>()
                         val cal = Calendar.getInstance().apply { time = ymd.parse(day)!! }
                         repeat(2) { try { l.addAll(s24Month(no, ymF.format(cal.time))) } catch (_: Exception) {}; cal.add(Calendar.MONTH, 1) }
-                        a.runOnUiThread { found[no] = l; if (dlg.isShowing) render() }
-                    }.start()
+                        a.runOnUiThread { found[no] = l; if (dlg.isShowing) later() }
+                    }
                 }
-                // v6.85 (394): 더피싱 배 이름도 (모아 둔 목록) → 누르면 그 선단을 내 선단에
+                // 더피싱 (기본 목록 678척)
                 val tf = tfMem
                 if (tf == null && synchronized(foundBusy) { foundBusy.add("tf") }) tfShips(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
-                val have = fleets(a).map { it.host }.toSet()
-                val tfHits = (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && norm(it.ship).contains(nq) }.take(8)
-                tfHits.forEach { t ->
-                    val row = LinearLayout(a).apply {
-                        orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10))
-                        background = Ui.bg(a, Color.parseColor("#12283A"), 14, Color.parseColor("#2C4F66")); isClickable = true
-                        setOnClickListener { addFleet(a, t.host, t.fleet.substringBefore(" (")) { load(true) } }
+                val have = fleets(a).filter { it.on }.map { it.host }.toSet()
+                // 항구로 찾으면: 그 항구 더피싱 선단 일정을 바로 읽어 이 날 배를 카드로
+                val tfPortHosts = if (byPort) (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && portHit(it.area.substringAfterLast(" > ")) }
+                    .groupBy { it.host }.entries.take(10) else emptyList()
+                tfPortHosts.forEach { (host, l) ->
+                    val k = "tf:$host|" + day.replace("-", "").take(6)
+                    val f = found[k]
+                    val names = l.map { normShip(it.ship) }.toSet()
+                    val onD = f?.filter { it.date == day }.orEmpty()
+                    val hits = onD.filter { x -> normShip(x.ship) in names }.ifEmpty { onD }
+                    if (hits.isNotEmpty()) { dayCards.addAll(hits); return@forEach }
+                    val next = f?.filter { it.date > day && (it.status == "ING" || it.status == "END") }?.minByOrNull { it.date }
+                    val fleetNm = l.first().fleet.substringBefore(" (").ifBlank { host.substringBefore('.') }
+                    note("🎣 $fleetNm  · " + l.joinToString(" · ") { it.ship }.take(40),
+                        when { f == null -> "⏳ 더피싱 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} ›"; else -> "이 달 · 이 날 일정이 없거나 못 읽었어요" },
+                        if (next != null) Color.parseColor("#7FD6FF") else Ui.SUB, next?.let { n -> { setDay(n.date) } })
+                    if (f == null && synchronized(foundBusy) { foundBusy.add(k) }) pool.execute {
+                        val r = try { month(host, day.replace("-", "").take(6)) } catch (_: Exception) { emptyList() }
+                        a.runOnUiThread { found[k] = r; if (dlg.isShowing) later() }
                     }
-                    row.addView(Ui.text(a, 15f, Ui.TEXT, true, "🎣 ${t.ship}  · 더피싱"))
-                    row.addView(Ui.text(a, 12.5f, Color.parseColor("#7FD6FF"), false, t.area.split(" > ").drop(1).joinToString(" ") + " · 누르면 '${t.fleet.substringBefore(" (")}' 선단을 내 선단에 넣고 자리를 읽어요"))
-                    list.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
                 }
-                if (onDay.isEmpty() && more.isEmpty() && tfHits.isEmpty()) list.addView(Ui.text(a, 13.5f, Ui.SUB, false, "'$q' 이름의 배를 못 찾았어요 · 띄어쓰기 없이 몇 글자만 쳐 보세요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
+                // 이름으로 찾은 더피싱 배 → 누르면 그 선단을 내 선단에
+                val tfPortSet = tfPortHosts.map { it.key }.toSet()
+                val tfHits = (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && it.host !in tfPortSet && norm(it.ship).contains(nq) }.take(8)
+                tfHits.forEach { t ->
+                    note("🎣 ${t.ship}  · 더피싱", t.area.split(" > ").drop(1).joinToString(" ") + " · 누르면 '${t.fleet.substringBefore(" (")}' 선단을 내 선단에 넣고 자리를 읽어요",
+                        Color.parseColor("#7FD6FF")) { addFleet(a, t.host, t.fleet.substringBefore(" (")) { load(true) } }
+                }
+                // 항구 이름 자동 완성 (지도 항구 2,267곳)
+                if (byPort) {
+                    val pn = Ports.list(a).map { it.name }.filter { normPort(it).contains(pq) && normPort(it) != pq }.distinct().take(6)
+                    if (pn.isNotEmpty()) {
+                        val w = FlowLayout(a)
+                        pn.forEach { t -> w.addView(Ui.pill(a, "⚓ $t", false, Ui.TEXT, small = true) { qEd.setText(t); qEd.setSelection(t.length) }) }
+                        list.addView(w)
+                    }
+                }
+                val cards = dedupe(a, dayCards.distinctBy { it.host + it.shipNo + it.schNo }).sortedWith(compareBy({ !(it.open && it.remain >= need) }, { -it.remain }, { it.ship }))
+                val portN = if (byPort) cards.count { c0 -> (listOf(c0) + c0.also).any { x -> portHit(portOf(a, x)) || (x.host == S24 && portHit(x.place.substringAfterLast(" · "))) || x.host in tfPortSet } } else 0
+                sum.text = "🔎 '$q' · ${dayLabel(day)}" + (if (portN > 0) " · ⚓ 항구 배 ${portN}척" else "") + " · 빈 배 ${cards.count { it.open && it.remain >= need }}척"
+                cards.forEach { list.addView(card(it, it.key in favs(a)), Ui.lp(a, MATCH, WRAP, top = 6)) }
+                notes.forEach { list.addView(it, Ui.lp(a, MATCH, WRAP, top = 6)) }
+                if (cards.isEmpty() && notes.isEmpty()) list.addView(Ui.text(a, 13.5f, Ui.SUB, false, "'$q' 배 · 항구를 못 찾았어요 · 띄어쓰기 없이 몇 글자만 쳐 보세요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
                 return@render
             }
             if (fleets(a).isEmpty() && !useS24) {
@@ -1072,7 +1152,7 @@ object Seats {
             }
             val mineDay = all.filter { it.date == day && it.host in fl.map { f -> f.host } }
             val mineNos = mineDay.map { it.shipNo }.toSet()
-            var day0 = mineDay + (if (useS24) s24.filter { it.date == day && it.shipNo !in mineNos } else emptyList())
+            var day0 = dedupe(a, mineDay + (if (useS24) s24.filter { it.date == day && it.shipNo !in mineNos } else emptyList()))
             val total = day0.size
             day0 = day0.filter { fishMatch(it) }
             val openN = day0.count { it.open && it.remain >= need }
