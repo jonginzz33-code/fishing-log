@@ -153,6 +153,21 @@ object Seats {
     fun bookUrl(w: Watch) = "https://${w.host}/ship/schedule_fleet/${w.date.replace("-", "").take(6)}"
 
     // ─────────────── 🔔 자리 나면 알림 (15분마다 · 내 폰) ───────────────
+    /** v6.76: 알림은 관리자가 체크한 사람만 (Cloud.PERMS 'seatAlarm') · 뒤에서 확인할 땐 마지막으로 본 권한(prefs seat_perm) */
+    const val PERM = "seatAlarm"
+    fun allowed(c: Context): Boolean = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM) else prefs(c).getBoolean("seat_perm", false)
+    /** 권한 다시 받아 기억 · 없어졌으면 걸어 둔 알림 지움 */
+    fun syncPerm(c: Context, done: () -> Unit) {
+        fun apply() {
+            val ok = Cloud.can(PERM)
+            prefs(c).edit().putBoolean("seat_perm", ok).apply()
+            if (!ok && watches(c).isNotEmpty()) { saveWatches(c, emptyList()); schedule(c) }
+            done()
+        }
+        if (Cloud.uid == null) { apply(); return }
+        try { Cloud.loadMyPerms { apply() } } catch (_: Exception) { apply() }
+    }
+
     private const val ACT = "com.fishlog.app.SEAT_ALARM"
     private const val CH = "seat_open"
     const val EVERY = 15 * 60 * 1000L
@@ -162,7 +177,7 @@ object Seats {
             val am = c.getSystemService(AlarmManager::class.java) ?: return
             val pi = PendingIntent.getBroadcast(c, 7601, Intent(c, SeatAlarmReceiver::class.java).setAction(ACT),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            if (watches(c).none { it.via == "phone" }) { am.cancel(pi); return }
+            if (watches(c).none { it.via == "phone" } || !prefs(c).getBoolean("seat_perm", false)) { am.cancel(pi); return }
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, System.currentTimeMillis() + EVERY, pi)
         } catch (_: Exception) {}
     }
@@ -176,6 +191,7 @@ object Seats {
 
     /** 걸어 둔 알림 확인 · 지난 날짜는 지움 · 새로 자리 난 수 돌려줌 */
     fun check(c: Context): Int {
+        if (!prefs(c).getBoolean("seat_perm", false)) return 0
         val today = ymd.format(Date())
         val ws = watches(c).filter { it.date >= today }.toMutableList()
         var fired = 0
@@ -346,11 +362,15 @@ object Seats {
             val canBook = s.open && s.remain >= need
             if (canBook) {
                 bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrl(s)) })
-            } else if (s.status != "CHECK") {
+            } else if (s.status != "CHECK" && allowed(a)) {
                 val label = if (w != null) "🔔 알림 켜짐 · ${w.need}자리" else "🔔 자리 나면 알림"
                 bot.addView(Ui.pill(a, label, w != null, Color.parseColor("#F2C14E"), small = true) {
                     if (w != null) askWatchOff(a, w) { render() } else addWatch(a, s, need) { render() }
                 })
+            } else if (s.status != "CHECK") {
+                bot.addView(Ui.pill(a, "🔒 알림", false, Ui.TEXT, small = true) {
+                    Ui.toast(a, "🔔 '자리 나면 알림'은 관리자가 허락한 분만 쓸 수 있어요 · ✉ 1:1 문의로 요청해 주세요")
+                }.apply { alpha = 0.7f })
             }
             box.addView(bot)
             box.setOnLongClickListener { Boats.openUrl(a, bookUrl(s)); true }
@@ -364,6 +384,7 @@ object Seats {
             needBtn.text = "👥 ${need}자리 이상 ▾"
             needBtn.setTextColor(if (need > 1) Color.parseColor("#7FD6FF") else Ui.TEXT)
             filtBtn.text = "⚙ " + arrayOf("자리 많은 순", "출항 빠른 순", "이름 순")[sort] + (if (openOnly) " · 빈자리만" else "")
+            alarmBtn.visibility = if (allowed(a)) View.VISIBLE else View.GONE
             val ws = watches(a)
             alarmBtn.text = if (ws.any { it.hit }) "🔔 ${ws.size} · 자리 남!" else "🔔 ${ws.size}"
             alarmBtn.setTextColor(if (ws.any { it.hit }) Color.parseColor("#FF6B6B") else Ui.TEXT)
@@ -480,6 +501,7 @@ object Seats {
         dlg.show()
         render()
         load(false)
+        syncPerm(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
         // 처음: 선단이 없으면 내 사이트 · 그룹 사이트에 있는 선상24 주소 추천
         if (fleets(a).isEmpty()) suggest(a)?.let { hs -> if (hs.isNotEmpty()) openFleets(a) { load(true) } }
     }
