@@ -42,6 +42,13 @@ footer a{text-decoration:underline;margin-right:12px}
 .step b{font-size:16px}.step div.t{color:#B8CAD6;font-size:14px;margin:2px 0 10px}
 .big{display:block;text-align:center;border-radius:14px;padding:14px;font-weight:900;font-size:16.5px;margin-top:8px}
 .big.g{background:#2FBF8F;color:#04222A}.big.b{background:#7FD6FF;color:#06222F}
+.tester{padding:0;overflow:hidden}
+.tester summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;font-weight:900;font-size:17px}
+.tester summary::-webkit-details-marker{display:none}
+.tester summary small{font-weight:700;font-size:12.5px;color:#BFF0DD;white-space:nowrap}
+.tester[open] summary small{font-size:0}.tester[open] summary small::after{content:"접기 ▴";font-size:12.5px}
+.tester[open]>*:not(summary){margin-left:18px;margin-right:18px}
+.tester[open]{padding-bottom:18px}
 .warn{background:rgba(242,193,78,.15);border:1.5px solid #F2C14E;border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.6;color:#FDEBC0;margin-bottom:6px}
 .copy{width:100%;border:1.5px dashed #7FD6FF;background:transparent;color:#7FD6FF;cursor:pointer;margin-top:14px;font-family:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -57,8 +64,8 @@ footer a{text-decoration:underline;margin-right:12px}
 </nav>
 
 
-<section class="tester" id="tester">
-  <h2>🧪 비공개 테스트 참여하기</h2>
+<details class="tester" id="tester">
+  <summary><span>🧪 비공개 테스트 참여하기</span><small>눌러서 펼치기 ▾</small></summary>
   <p class="lead">조과일지 · 급할 때 두 앱 모두 같은 테스터 그룹이에요. 아래 ①②③ 순서대로 한 번만 하면 돼요.</p>
   <div class="warn">⚠ <b>카톡 · 밴드 안에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.</b><br>
   👉 이 페이지를 <b>크롬</b>에서 열어 주세요 (카톡이면 오른쪽 위 ⋮ → '다른 브라우저로 열기')<br>
@@ -83,7 +90,7 @@ footer a{text-decoration:underline;margin-right:12px}
     <div class="t" style="margin-top:10px">※ '항목을 찾을 수 없습니다'가 나오면: ①②를 <b>폰 플레이 스토어와 같은 계정</b>으로 했는지 확인 → 10분~1시간쯤 뒤 다시 열기 (가입이 반영되는 데 시간이 걸려요) · 그래도 안 되면 그룹 가입 메일 주소를 관리자에게 알려 주세요</div>
   </div></div>
   <button class="big copy" onclick="copyGuide(this)">📋 이 안내를 카톡으로 보낼 글 복사하기</button>
-</section>
+</details>
 <section class="hero">
   <h1>탈랄랄라의 앱 모음</h1>
   <p>바다에서도, 길 위에서도 — 직접 쓰려고 만든 앱들이에요</p>
