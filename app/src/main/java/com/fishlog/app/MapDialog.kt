@@ -963,6 +963,24 @@ object MapDialog {
             map.invalidate()
         }
         addPill(quakeBtn)
+        // v6.73 (369): ⚓ 항구 자동 표시 (앱 안 자료 · 켜고 끄기 기억)
+        lateinit var pinOvRef: () -> Pins.PinOverlay
+        lateinit var loadPinsRef: () -> Unit
+        var portOv: Ports.PortOverlay? = null
+        portOv = Ports.PortOverlay(a) { pt ->
+            Ports.card(a, map, portOv!!, pt) { pp ->
+                map.controller.animateTo(GeoPoint(pp.lat, pp.lon))
+                map.postDelayed({ Pins.place(a, map, pinOvRef(), null) { loadPinsRef() } }, 400)
+            }
+        }.apply { isEnabled = Ports.on(a) }
+        map.overlays.add(portOv)
+        val portBtn = pill("⚓ 항구")
+        setOn(portBtn, portOv.isEnabled)
+        portBtn.setOnClickListener {
+            val v = !portOv!!.isEnabled; portOv!!.isEnabled = v; Ports.setOn(a, v); setOn(portBtn, v); map.invalidate()
+            if (v && map.zoomLevelDouble < 8.5) Ui.toast(a, "지도를 조금 확대하면 항구가 보여요")
+        }
+        addPill(portBtn)
         // v6.68 (360) · v6.72: 📌 포인트 — 누르면 지도 가운데에 핀 → 끌어서 옮기고 핀 위 [💾 저장] · 내 것 주황 · 그룹 하늘 · 전체 보라
         val pinBtn = pill("📌 포인트")
         val pinShowBtn = pill("👁 ▾")
@@ -975,6 +993,7 @@ object MapDialog {
             }
         }
         pinOv = Pins.PinOverlay(a) { p -> Pins.card(a, map, pinOv, p, past.dots) { loadPins() } }
+        pinOvRef = { pinOv }; loadPinsRef = { loadPins() }
         map.overlays.add(pinOv)
         pinBtn.setOnClickListener {
             if (pinOv.placing) { pinOv.onCancel?.invoke(); return@setOnClickListener }
