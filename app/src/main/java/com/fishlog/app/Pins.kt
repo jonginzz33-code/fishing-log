@@ -445,6 +445,7 @@ object Pins {
             ss.show()
         }
         sh.body.addView(Ui.hscroll(a, spWrap), Ui.lp(a, -1, -2, top = 4))
+        paintSp()   // v6.85 (391): 처음부터 어종 칩 보이게
         // 누구에게
         sh.body.addView(label("누구에게 보일까요?"), Ui.lp(a, -1, -2, top = 12))
         val scWrap = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }

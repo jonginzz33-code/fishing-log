@@ -149,6 +149,7 @@ class AdminActivity : Activity() {
         if (err != null) listBox.addView(Ui.text(this, 13f, Ui.ORANGE, false, err), Ui.lp(this, MATCH, WRAP, top = 10))
         renderMinVersion()
         renderGroupFill()
+        renderTfCollect()
         renderCatAdmin()
         renderLimit()
         renderReports()
@@ -191,6 +192,21 @@ class AdminActivity : Activity() {
         c.addView(Ui.button(this, "번호 채우기 시작", true) {
             st.text = "찾는 중…"
             GroupNames.backfill({ p -> runOnUiThread { st.text = "찾는 중… $p" } }) { msg -> runOnUiThread { st.text = msg; toast(msg); PublicBoard.clearCache() } }
+        }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(st, Ui.lp(this, MATCH, WRAP, top = 6))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    // ---------------- v6.85 (394): 🎣 더피싱 선단 모으기 (관리자 폰 · 한국에서만 열림) ----------------
+    private fun renderTfCollect() {
+        section("🎣 더피싱 선단 모으기", "한 달에 한 번")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 12.5f, Ui.SUB, false, "더피싱 전체 예약 목록(배 약 680척)을 넘기며 배마다 선단 홈페이지 주소를 찾아 서버에 저장해요. 모든 사람이 ⚙ 선단 → '🎣 더피싱 선단 고르기'에서 골라 넣을 수 있어요. 몇 분 걸려요 (와이파이 추천) · 화면을 켜 두세요."))
+        val st = Ui.text(this, 12.5f, Ui.TEXT, false, "")
+        c.addView(Ui.button(this, "모으기 시작", true) {
+            st.text = "시작…"
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Seats.tfCollect({ p -> runOnUiThread { st.text = p } }) { msg -> runOnUiThread { st.text = msg; toast(msg); window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) } }
         }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
         c.addView(st, Ui.lp(this, MATCH, WRAP, top = 6))
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))

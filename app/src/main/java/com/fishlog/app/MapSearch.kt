@@ -99,20 +99,41 @@ object MapSearch {
     }
 
     fun open(a: Activity, map: MapView) {
-        fun dp(v: Int) = Ui.dp(a, v)
-        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(6), dp(20), dp(4)) }
-        val et = EditText(a).apply {
-            hint = "지명 · 항구 · 해수욕장 (예: 한하계, 제부도, 오천항)"; setSingleLine(); imeOptions = EditorInfo.IME_ACTION_SEARCH
-        }
-        box.addView(et)
-        val info = Ui.text(a, 12f, Ui.SUB, false, "")
-        box.addView(info, Ui.lp(a, MATCH, WRAP, top = 4))
-        val list = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(list, Ui.lp(a, MATCH, WRAP, top = 4))
         var dlg: AlertDialog? = null
+        val (box, et) = content(a, map, inBox = false) { dlg?.dismiss() }
+        dlg = AlertDialog.Builder(a, R.style.FlAlert)
+            .setTitle("🔍 장소 찾기")
+            .setView(ScrollView(a).apply { addView(box) })
+            .setNegativeButton("닫기", null).show()
+        et.requestFocus()
+    }
+
+    /** v6.85 (392): 검색 칸 + [찾기] + 최근 검색 · 결과 (지도 왼쪽 버튼 상자 · 예전 창 둘 다 씀) · 고르면 close() */
+    fun content(a: Activity, map: MapView, inBox: Boolean, close: () -> Unit): Pair<LinearLayout, EditText> {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; if (!inBox) setPadding(dp(20), dp(6), dp(20), dp(4)) }
+        val et = EditText(a).apply {
+            hint = "지명 · 항구 · 해수욕장"; setSingleLine(); imeOptions = EditorInfo.IME_ACTION_SEARCH
+            textSize = 14.5f; setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB)
+            background = Ui.bg(a, Color.parseColor("#0F2231"), 12, Color.parseColor("#7FD6FF")); setPadding(dp(10), dp(9), dp(10), dp(9))
+        }
+        val inRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+        inRow.addView(et, LinearLayout.LayoutParams(0, WRAP, 1f))
+        val goBtn = Ui.text(a, 14f, Color.WHITE, true, "찾기").apply {
+            gravity = Gravity.CENTER; setPadding(dp(13), dp(9), dp(13), dp(9))
+            background = Ui.bg(a, Color.parseColor("#2E8FB8"), 12)
+        }
+        inRow.addView(goBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+        box.addView(inRow)
+        val info = Ui.text(a, 12f, Ui.SUB, false, "")
+        box.addView(info, Ui.lp(a, MATCH, WRAP, top = 8))
+        val list = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(list, Ui.lp(a, MATCH, WRAP, top = 2))
+        val dlg = object { fun dismiss() { (a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(et.windowToken, 0); close() } }
 
         fun row(label: String, sub: String, onClick: () -> Unit, onDel: (() -> Unit)? = null) {
-            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
+            if (list.childCount > 0) list.addView(android.view.View(a).apply { setBackgroundColor(Color.parseColor("#24415A")) }, LinearLayout.LayoutParams(MATCH, dp(1)))
+            val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(4), dp(8), 0, dp(8)) }
             val tb = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; isClickable = true; setOnClickListener { onClick() } }
             tb.addView(Ui.text(a, 15f, Ui.TEXT, true, label))
             if (sub.isNotBlank()) tb.addView(Ui.text(a, 11.5f, Ui.SUB, false, sub))
@@ -125,7 +146,7 @@ object MapSearch {
             val rec = recent(a)
             info.text = if (rec.isEmpty()) "검색하면 그곳으로 지도가 옮겨가요" else "최근 검색 (누르면 이동)"
             rec.forEach { p ->
-                row("🕘 ${p.name}", "", { dlg?.dismiss(); go(a, map, p) }) {
+                row("🕘 ${p.name}", "", { dlg.dismiss(); go(a, map, p) }) {
                     val l = recent(a); l.removeAll { it.name == p.name }; saveRecent(a, l); showRecent()
                 }
             }
@@ -185,8 +206,8 @@ object MapSearch {
                 main.post {
                     if (my != seq) return@post
                     list.removeAllViews()
-                    stations.forEach { st -> rowHl("🌊 ${st.name}", q, "물때 지점", { dlg?.dismiss(); go(a, map, Place(st.name, st.lat, st.lon)) }) }
-                    uniq.take(10).forEach { (p, full) -> rowHl("📍 ${p.name}", q, full, { dlg?.dismiss(); go(a, map, Place(p.name.take(30), p.lat, p.lon)) }) }
+                    stations.forEach { st -> rowHl("🌊 ${st.name}", q, "물때 지점", { dlg.dismiss(); go(a, map, Place(st.name, st.lat, st.lon)) }) }
+                    uniq.take(10).forEach { (p, full) -> rowHl("📍 ${p.name}", q, full, { dlg.dismiss(); go(a, map, Place(p.name.take(30), p.lat, p.lon)) }) }
                     val n = stations.size + uniq.take(10).size
                     info.text = when {
                         n > 0 -> "비슷한 곳 ${n}곳 · 골라 주세요"
@@ -207,14 +228,8 @@ object MapSearch {
             }
         })
         et.setOnEditorActionListener { _, id, _ -> if (id == EditorInfo.IME_ACTION_SEARCH) { search(); true } else false }
+        goBtn.setOnClickListener { search() }
         showRecent()
-        dlg = AlertDialog.Builder(a, R.style.FlAlert)
-            .setTitle("🔍 장소 찾기")
-            .setView(ScrollView(a).apply { addView(box) })
-            .setPositiveButton("찾기", null)
-            .setNegativeButton("닫기", null).show()
-        // '찾기'를 눌러도 창이 닫히지 않게 (결과를 골라야 닫힘)
-        dlg?.getButton(AlertDialog.BUTTON_POSITIVE)?.setOnClickListener { search() }
-        et.requestFocus()
+        return box to et
     }
 }

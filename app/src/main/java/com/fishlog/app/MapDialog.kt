@@ -1173,8 +1173,10 @@ object MapDialog {
             tab(groupBtn, open)
             if (open) { flyScroll.translationY = groupBtn.top.toFloat(); cover(groupBtn) } else if (pinFly.visibility != android.view.View.VISIBLE) cover(null)
         }
+        var closeSearch: () -> Unit = {}
         openPinBox = { toggle ->
             val open = toggle && pinFly.visibility != android.view.View.VISIBLE
+            if (open) closeSearch()
             pinFly.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
             if (!pinOv.placing) tab(pinBtn, open)
             if (open) { showGroupFly(false); pinFly.translationY = pinBtn.top.toFloat(); cover(pinBtn) } else if (flyout.visibility != android.view.View.VISIBLE) cover(null)
@@ -1184,9 +1186,40 @@ object MapDialog {
             if (on) { g?.cornerRadius = dp(a, 16).toFloat(); g?.setColor(Ui.MINE); g?.setStroke(dp(a, 2), Color.parseColor("#FFD2A0")); pinBtn.text = "📌\n꽂는 중"; pinBtn.setTextColor(Color.WHITE) }
             else { pinBtn.text = "📌\n포인트"; tab(pinBtn, false) }
         }
+        // v6.85 (392): 🔍 장소 찾기도 같은 상자 (버튼과 이어짐 · 결과를 고르면 닫힘)
+        val searchFly = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(a, 12), dp(a, 8), dp(a, 12), dp(a, 12)); visibility = android.view.View.GONE
+            background = GradientDrawable().apply { setColor(BOX); cornerRadius = dp(a, 16).toFloat(); setStroke(dp(a, 2), SKY) }
+            isClickable = true
+        }
+        lateinit var showSearch: (Boolean) -> Unit
+        val sHead = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+        sHead.addView(TextView(a).apply { text = "🔍 장소 찾기"; textSize = 14f; typeface = Typeface.DEFAULT_BOLD; setTextColor(SKY) }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        sHead.addView(TextView(a).apply {
+            text = "✕"; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.parseColor("#CDE"))
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setStroke(dp(a, 1), Color.parseColor("#3A5A70")) }
+            setOnClickListener { showSearch(false) }
+        }, LinearLayout.LayoutParams(dp(a, 30), dp(a, 30)))
+        searchFly.addView(sHead, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(a, 8) })
+        val (sBox, sEt) = MapSearch.content(a, map, inBox = true) { showSearch(false) }
+        searchFly.addView(sBox)
+        showSearch = { open ->
+            searchFly.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            tab(searchPill, open)
+            val imm = a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            if (open) {
+                showGroupFly(false); openPinBox(false); cover(searchPill)
+                sEt.requestFocus(); sEt.post { imm.showSoftInput(sEt, 0) }
+            } else {
+                imm.hideSoftInputFromWindow(sEt.windowToken, 0)
+                if (flyout.visibility != android.view.View.VISIBLE && pinFly.visibility != android.view.View.VISIBLE) cover(null)
+            }
+        }
+        searchPill.setOnClickListener { showSearch(searchFly.visibility != android.view.View.VISIBLE) }
+        closeSearch = { if (searchFly.visibility == android.view.View.VISIBLE) showSearch(false) }
         groupBtn.setOnClickListener {
             val open = flyout.visibility != android.view.View.VISIBLE
-            if (open) openPinBox(false)
+            if (open) { openPinBox(false); if (searchFly.visibility == android.view.View.VISIBLE) showSearch(false) }
             showGroupFly(open)
         }
         // v3.9.2 (161) 해루질 참고용 커튼 (버튼 줄 바로 아래)
@@ -1220,6 +1253,8 @@ object MapDialog {
         frame.addView(flyScroll,
             FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         frame.addView(pinFly, FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
+        frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(searchFly) },
+            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); rightMargin = dp(a, 10); topMargin = dp(a, 8) })
         // 버튼과 상자 사이 테두리를 가려 한 덩어리로 (B안)
         frame.addView(tabCover, FrameLayout.LayoutParams(dp(a, 4), dp(a, 40), Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)
