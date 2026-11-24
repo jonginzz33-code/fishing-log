@@ -37,7 +37,7 @@
 - ⚠ 물때 계산(Tide.kt · TideDialog.kt) · 물세기 % · 물흐름 막대는 절대 건드리지 말 것.
 
 ## 남은 메모
-- **규칙 게시 상태 (2026-11-23):** ⚠ v6.68 firestore.rules(크기 제한 · 포인트 핀 · rules-test 184개) **콘솔 게시 필요** (그 전엔 핀 저장이 안 됨).
+- **규칙 게시 상태:** ✅ 2026-11-24 v6.68 firestore.rules 전체(크기 제한 · 포인트 핀 · rules-test 184개) 사용자 콘솔 게시 완료 — 그 전 모든 '게시 필요'(310 · 327 · 343 · 353 · 356 · 360 포함) 끝.
 - **칩 · 탭 버튼 (v6.68 · 359):** 새 칩/탭은 `Ui.pill(…, small)` (40dp / 32dp) · 같은 줄은 같은 높이 · 그룹 그림은 칩 안 16dp · 큰 줄 24dp.
 - **규칙 게시 상태:** ✅ 2026-11-18 v6.43 firestore.rules 전체(rules-test 108개) 콘솔 게시 완료 — 그 전 모든 '게시 필요' 포함.
 - ~~242-4 업로드 키 + AAB~~ — v6.2에서 함. 키는 `keystore/play-upload.p12.enc` (AES-256 · pbkdf2 200000), 비밀값 `PLAY_KEY_PASS` 로 풀어서 GitHub 빌드가 `bundlePlayRelease` → Releases `latest` 에 `jogwa-play-<versionCode>.aab`. 업로드 키 SHA-1 `D0:EA:F0:08:08:4B:DA:5F:27:06:0C:5D:24:12:BD:58:0A:30:4F:50` (Play 앱 서명 키 SHA-1은 플레이 콘솔에서 따로 → 둘 다 Firebase에 등록해야 스토어판 구글 로그인 됨)
