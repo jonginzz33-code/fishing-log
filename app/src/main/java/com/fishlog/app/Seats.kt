@@ -323,6 +323,9 @@ object Seats {
         prefs(c).edit().putString("seat_site_$shipNo", "${host ?: ""}|${band ?: ""}|${tel ?: ""}|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())).apply()
         return ShipSite(host, band, tel)
     }
+    /** 선상24 카드라도 선단 사이트를 찾았으면 그 선단 예약 화면 (못 찾았으면 선상24 예약 창) */
+    fun bookUrlOf(c: Context, s: Sch): String =
+        if (s.host == S24) siteOf(c, s.shipNo)?.host?.let { siteUrl(it, s.date) } ?: bookUrl(s) else bookUrl(s)
     fun siteUrl(host: String, date: String) = "https://$host/ship/schedule_fleet/" + (date.replace("-", "").take(6).ifBlank { ymF.format(Date()) })
 
     // ─────────────── 🔔 자리 나면 알림 (15분마다 · 내 폰) ───────────────
@@ -396,7 +399,7 @@ object Seats {
     private fun notify(c: Context, w: Watch, s: Sch) {
         channel(c)
         val req = 7700 + (w.host + w.shipNo + w.date).hashCode().and(0xFFF)
-        val pi = PendingIntent.getActivity(c, req, Intent(Intent.ACTION_VIEW, Uri.parse(if (w.host == S24) bookUrl(s) else bookUrl(w)))
+        val pi = PendingIntent.getActivity(c, req, Intent(Intent.ACTION_VIEW, Uri.parse(if (w.host == S24) bookUrlOf(c, s) else bookUrl(w)))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val d = dayLabel(w.date)
         val title = "🚤 $d ${w.ship} 자리 났어요!"
@@ -605,8 +608,10 @@ object Seats {
                 sb.append(tail); text = sb; textSize = 12.5f; setTextColor(Ui.TEXT)
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val canBook = s.open && s.remain >= need
+            val ss = if (s.host == S24 || isS24Fleet(s.host)) siteOf(a, s.shipNo) else null
             if (canBook) {
-                bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrl(s)) })
+                // v6.84: 선단 사이트를 찾은 배는 '예약 ›' = 그 선단 예약 화면 (내 선단에 넣은 배처럼 · 선상24 창은 꾹 메뉴)
+                bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrlOf(a, s)) })
             } else if ((s.status == "ING" || s.status == "END") && allowed(a)) {
                 val label = if (w != null) "🔔 알림 켜짐 · ${w.need}자리" else "🔔 자리 나면 알림"
                 bot.addView(Ui.pill(a, label, w != null, Color.parseColor("#F2C14E"), small = true) {
@@ -619,12 +624,11 @@ object Seats {
             }
             box.addView(bot)
             // v6.82 (390): 🌐 배 사이트 · 📞 전화 · 밴드 (선상24 배 번호가 있는 카드)
-            val ss = if (s.host == S24 || isS24Fleet(s.host)) siteOf(a, s.shipNo) else null
             if (ss != null && (ss.host != null || ss.tel != null || ss.band != null)) {
                 val links = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
                 fun link(t: String, f: () -> Unit) = links.addView(Ui.pill(a, t, false, Ui.TEXT, small = true) { f() }.apply { setTextColor(Color.parseColor("#7FD6FF")) },
                     LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
-                if (ss.host != null && s.host == S24) link("🌐 배 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
+                if (ss.host != null && s.host == S24 && !canBook) link("🌐 배 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
                 if (ss.tel != null) link("📞 전화") { dial(a, ss.tel) }
                 if (ss.band != null) link("밴드") { Boats.openUrl(a, ss.band) }
                 box.addView(links, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
@@ -694,7 +698,7 @@ object Seats {
                 }.start()
             }
             if (useS24 && s24Total > s24.size) list.addView(Ui.button(a, if (s24Busy) "⏳ 읽는 중…" else "🌐 선상24 더 보기 (${s24.size} / ${s24Total}척)") { if (!s24Busy) loadS24(false) }.apply { minHeight = dp(46); textSize = 14f }, Ui.lp(a, MATCH, WRAP, top = 10))
-            list.addView(Ui.text(a, 11f, Ui.SUB, false, "선상24 목록 · 선단 페이지를 내 폰이 읽어 와요 · 정렬은 읽어 온 배 안에서 · 🌐 배 사이트 = 조황 글에서 찾은 선단 홈페이지 · 카드 꾹 = 메뉴(내 선단에 넣기 · 주소 직접 넣기 · 검색)").apply { setPadding(dp(4), dp(14), dp(4), 0) })
+            list.addView(Ui.text(a, 11f, Ui.SUB, false, "선상24 목록 · 선단 페이지를 내 폰이 읽어 와요 · 정렬은 읽어 온 배 안에서 · 예약 › = 그 배 선단 홈페이지(조황 글에서 찾음 · 못 찾으면 선상24) · 카드 꾹 = 메뉴(선상24 예약 창 · 내 선단에 넣기 · 주소 직접 넣기 · 검색)").apply { setPadding(dp(4), dp(14), dp(4), 0) })
         }
 
         loadS24 = { reset ->
@@ -970,7 +974,7 @@ object Seats {
         }
         ss?.tel?.let { t -> item("📞 전화 걸기", t) { dial(a, t) } }
         ss?.band?.let { b -> item("밴드 열기", b) { Boats.openUrl(a, b) } }
-        item("🧾 예약 화면", if (s.host == S24) "선상24 예약 창 (로그인이 필요할 수 있어요)" else "선단 예약 화면") { Boats.openUrl(a, bookUrl(s)) }
+        item(if (s.host == S24) "🧾 선상24 예약 창" else "🧾 예약 화면", if (s.host == S24) "선상24 앱 · 사이트 예약 (로그인이 필요할 수 있어요)" else "선단 예약 화면") { Boats.openUrl(a, bookUrl(s)) }
         if (s.host == S24) item("✎ 배 사이트 주소 직접 넣기", "못 찾았거나 틀렸을 때 · 예) oceanleader.sunsang24.com") {
             val ed = EditText(a).apply { setText(prefs(a).getString("seat_site_m_${s.shipNo}", "") ?: ""); hint = "○○.sunsang24.com"; inputType = InputType.TYPE_TEXT_VARIATION_URI; setSingleLine() }
             android.app.AlertDialog.Builder(a).setTitle("🌐 ${s.ship} 사이트 주소").setView(LinearLayout(a).apply { setPadding(dp(20), dp(8), dp(20), 0); addView(ed, LinearLayout.LayoutParams(MATCH, WRAP)) })
