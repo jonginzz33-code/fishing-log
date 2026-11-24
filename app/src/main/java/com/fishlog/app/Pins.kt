@@ -334,19 +334,67 @@ object Pins {
         // 어종 (선택 · 여러 개)
         sh.body.addView(label("어종 (골라도 되고 안 골라도 돼요)"), Ui.lp(a, -1, -2, top = 10))
         val spWrap = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
-        val spNames = (Store.history.flatMap { t -> t.slots().filter { t.count(it) > 0 }.map { t.name(it) } } + sp)
-            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }.distinct().take(12)
-            .ifEmpty { listOf("주꾸미", "갑오징어", "우럭", "광어", "농어", "낙지") }
+        var openSpecies: () -> Unit = {}
+        // v6.73: 자주 잡은 어종 + 고른 것 줄 · '＋ 어종 더' = 전체 목록(찾기 · 직접 입력)
+        val mine = Store.history.flatMap { t -> t.slots().filter { t.count(it) > 0 }.map { t.name(it) } }
+            .groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+        fun allNames(): List<String> = (mine + Store.CATS.flatMap { Store.species(it) } + SpeciesFix.COMMON + sp)
+            .map { it.trim() }.filter { it.isNotBlank() && !it.endsWith("번") }.distinct()
         fun paintSp() {
             spWrap.removeAllViews()
-            spNames.forEach { n ->
+            val quick = (sp + mine.take(8)).ifEmpty { listOf("주꾸미", "갑오징어", "우럭", "광어", "농어", "낙지") }.distinct()
+            quick.forEach { n ->
                 val on = n in sp
-                spWrap.addView(Ui.pill(a, n, on, Ui.GREEN, small = true) {
+                spWrap.addView(Ui.pill(a, (if (on) "✓ " else "") + n, on, Ui.GREEN, small = true) {
                     if (n in sp) sp.remove(n) else if (sp.size < 10) sp.add(n); paintSp()
                 }, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(6) })
             }
+            spWrap.addView(Ui.pill(a, "＋ 어종 더 ▾", false, Ui.GREEN, small = true) { openSpecies() },
+                LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(6) })
         }
-        paintSp()
+        openSpecies = {
+            val ss = Sheet(a, 0.75f)
+            ss.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "🐟 어종 고르기 (10개까지)"), LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            val q = EditText(a).apply {
+                hint = "찾기 · 없으면 그대로 직접 추가"; isSingleLine = true; textSize = 15f
+                setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); filters = arrayOf(android.text.InputFilter.LengthFilter(12))
+                background = Ui.bg(a, Color.parseColor("#0F2231"), 12, Ui.LINE); setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+            ss.body.addView(q, Ui.lp(a, -1, -2))
+            val grid = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            ss.body.addView(grid, Ui.lp(a, -1, -2, top = 6))
+            fun paintGrid() {
+                grid.removeAllViews()
+                val key = q.text.toString().trim()
+                val names = allNames().filter { key.isEmpty() || it.contains(key) }
+                val views = mutableListOf<android.view.View>()
+                if (key.isNotEmpty() && key !in names) views += Ui.pill(a, "＋ '$key' 추가", false, Ui.GREEN, small = true) {
+                    SpeciesFix.check(a, key) { n -> if (n !in sp && sp.size < 10) sp.add(n); q.setText(""); paintSp(); paintGrid() }
+                }
+                names.forEach { n ->
+                    val on = n in sp
+                    views += Ui.pill(a, (if (on) "✓ " else "") + n, on, Ui.GREEN, small = true) {
+                        if (n in sp) sp.remove(n) else if (sp.size < 10) sp.add(n) else Ui.toast(a, "10개까지 고를 수 있어요")
+                        paintSp(); paintGrid()
+                    }
+                }
+                var row: LinearLayout? = null; var k = 0
+                views.forEach { v ->
+                    if (row == null || k == 3) { row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }; grid.addView(row, Ui.lp(a, -1, -2, top = 6)); k = 0 }
+                    row!!.addView(v, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(6) }); k++
+                }
+                while (k in 1..2) { row!!.addView(android.view.View(a), LinearLayout.LayoutParams(0, 1, 1f).apply { rightMargin = dp(6) }); k++ }
+                if (views.isEmpty()) grid.addView(Ui.text(a, 13f, Ui.SUB, false, "어종 이름을 적어 보세요"))
+            }
+            q.addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(e: android.text.Editable?) { paintGrid() }
+                override fun beforeTextChanged(x: CharSequence?, st: Int, c: Int, af: Int) {}
+                override fun onTextChanged(x: CharSequence?, st: Int, b: Int, c: Int) {}
+            })
+            paintGrid()
+            ss.body.addView(Ui.pill(a, "✓ 다 골랐어요", true, Ui.GREEN) { ss.close() }, Ui.lp(a, -1, -2, top = 14))
+            ss.show()
+        }
         sh.body.addView(Ui.hscroll(a, spWrap), Ui.lp(a, -1, -2, top = 4))
         // 누구에게
         sh.body.addView(label("누구에게 보일까요?"), Ui.lp(a, -1, -2, top = 12))
