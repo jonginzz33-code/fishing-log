@@ -259,9 +259,15 @@ object Seats {
         head.addView(Ui.pill(a, "닫기", false, Ui.TEXT, small = true) { dlg.dismiss() })
         root.addView(head)
 
-        // 날짜 줄 (오늘부터 30일)
-        val dateRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(10), dp(4), dp(10), dp(6)) }
-        root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(dateRow) })
+        // v6.77: 날짜 = ‹ [📅 11월 24일 (화) ▾] › · 가운데 누르면 달력 시트
+        val dateRow = Ui.row(a).apply { setPadding(dp(12), dp(4), dp(12), dp(8)) }
+        val prevBtn = Ui.pill(a, "‹", false, Ui.TEXT)
+        val dayBtn = Ui.pill(a, "", true, Ui.GROUP).apply { textSize = 15.5f }
+        val nextBtn = Ui.pill(a, "›", false, Ui.TEXT)
+        dateRow.addView(prevBtn, LinearLayout.LayoutParams(dp(52), WRAP))
+        dateRow.addView(dayBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8); rightMargin = dp(8) })
+        dateRow.addView(nextBtn, LinearLayout.LayoutParams(dp(52), WRAP))
+        root.addView(dateRow)
         // 고르기 줄
         val pick = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; setPadding(dp(10), 0, dp(10), dp(6)) }
         root.addView(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(pick) })
@@ -283,28 +289,73 @@ object Seats {
         fun fishMatch(s: Sch) = fishSel.isEmpty() || fishSel.any { f -> s.fish.split(',', '/', '·', ' ').any { it.trim() == f } || s.fish.contains(f) }
         fun fishList(s: Sch) = s.fish.split(',', '/', '·').map { it.trim() }.filter { it.isNotBlank() }
 
+        fun countOn(d: String) = all.count { x -> x.date == d && x.open && x.remain >= need && fishMatch(x) }
+        fun setDay(d: String) { day = d; savePrefs(); render(); load(false) }
+        fun shift(n: Int) {
+            val c = Calendar.getInstance().apply { time = ymd.parse(day) ?: Date(); add(Calendar.DAY_OF_MONTH, n) }
+            val d = ymd.format(c.time); if (d >= ymd.format(Date())) setDay(d)
+        }
         fun paintDates() {
-            dateRow.removeAllViews()
-            val cal = Calendar.getInstance()
-            repeat(30) {
-                val d = ymd.format(cal.time)
-                val dow = cal.get(Calendar.DAY_OF_WEEK)
-                val n = all.count { s -> s.date == d && s.open && s.remain >= need && fishMatch(s) }
-                val on = d == day
-                val cell = LinearLayout(a).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(0, dp(3), 0, dp(3))
-                    background = if (on) Ui.bg(a, Ui.GROUP, 12, Color.parseColor("#7FD6FF")) else Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66"))
-                    isClickable = true
-                    setOnClickListener { day = d; savePrefs(); render(); load(false) }
+            val dd = try { ymd.parse(day)!! } catch (_: Exception) { Date() }
+            val n = countOn(day)
+            dayBtn.text = "📅 " + SimpleDateFormat("M월 d일 (E)", Locale.KOREA).format(dd) + (if (all.isNotEmpty()) " · 빈 배 ${n}척" else "") + " ▾"
+            prevBtn.alpha = if (day > ymd.format(Date())) 1f else 0.35f
+        }
+        fun openCalendar() {
+            val sh = Sheet(a, 0.72f)
+            val today = ymd.format(Date())
+            val cur = Calendar.getInstance().apply { time = ymd.parse(day) ?: Date(); set(Calendar.DAY_OF_MONTH, 1) }
+            val title = Ui.text(a, 17f, Ui.TEXT, true, "")
+            val prevM = Ui.pill(a, "‹", false, Ui.TEXT, small = true); val nextM = Ui.pill(a, "›", false, Ui.TEXT, small = true)
+            sh.head.addView(prevM); sh.head.addView(title, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
+            title.gravity = Gravity.CENTER
+            sh.head.addView(nextM, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(10) })
+            fun draw() {
+                sh.body.removeAllViews()
+                title.text = SimpleDateFormat("yyyy년 M월", Locale.KOREA).format(cur.time)
+                val thisM = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+                prevM.alpha = if (cur.after(thisM)) 1f else 0.35f
+                val wk = Ui.row(a)
+                arrayOf("일", "월", "화", "수", "목", "금", "토").forEachIndexed { i, t ->
+                    wk.addView(Ui.text(a, 12.5f, when (i) { 0 -> Color.parseColor("#FF8A8A"); 6 -> Color.parseColor("#7FB8FF"); else -> Ui.SUB }, true, t).apply { gravity = Gravity.CENTER },
+                        LinearLayout.LayoutParams(0, WRAP, 1f))
                 }
-                cell.addView(Ui.text(a, 10.5f, if (on) Color.WHITE else Ui.SUB, false, SimpleDateFormat("E", Locale.KOREA).format(cal.time)).apply { gravity = Gravity.CENTER })
-                cell.addView(Ui.text(a, 16f, when { on -> Color.WHITE; dow == Calendar.SUNDAY -> Color.parseColor("#FF8A8A"); dow == Calendar.SATURDAY -> Color.parseColor("#7FB8FF"); else -> Ui.TEXT },
-                    true, "${cal.get(Calendar.DAY_OF_MONTH)}").apply { gravity = Gravity.CENTER; includeFontPadding = false })
-                cell.addView(Ui.text(a, 9.5f, if (on) Color.WHITE else if (n > 0) Color.parseColor("#2FBF8F") else Color.parseColor("#4A5966"), false,
-                    if (all.isEmpty()) "·" else if (n > 0) "${n}척" else "-").apply { gravity = Gravity.CENTER })
-                dateRow.addView(cell, LinearLayout.LayoutParams(dp(48), WRAP).apply { rightMargin = dp(5) })
-                cal.add(Calendar.DAY_OF_MONTH, 1)
+                sh.body.addView(wk, Ui.lp(a, MATCH, WRAP, top = 2))
+                val c = cur.clone() as Calendar
+                val lead = c.get(Calendar.DAY_OF_WEEK) - 1
+                val days = c.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val loadedMonth = all.any { it.date.take(7) == ymd.format(c.time).take(7) }
+                var cell = 0
+                var row = Ui.row(a)
+                fun flush() { sh.body.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)); row = Ui.row(a) }
+                repeat(lead) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(54), 1f)); cell++ }
+                for (dn in 1..days) {
+                    c.set(Calendar.DAY_OF_MONTH, dn)
+                    val d = ymd.format(c.time)
+                    val past = d < today
+                    val on = d == day
+                    val n = countOn(d)
+                    val dow = c.get(Calendar.DAY_OF_WEEK)
+                    val box = LinearLayout(a).apply {
+                        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                        background = when { on -> Ui.bg(a, Ui.GROUP, 14, Color.parseColor("#7FD6FF")); d == today -> Ui.bg(a, Color.TRANSPARENT, 14, Color.parseColor("#F2C14E")); else -> null }
+                        alpha = if (past) 0.3f else 1f
+                        if (!past) { isClickable = true; setOnClickListener { sh.close(); setDay(d) } }
+                    }
+                    box.addView(Ui.text(a, 16f, when { on -> Color.WHITE; dow == Calendar.SUNDAY -> Color.parseColor("#FF8A8A"); dow == Calendar.SATURDAY -> Color.parseColor("#7FB8FF"); else -> Ui.TEXT },
+                        true, "$dn").apply { gravity = Gravity.CENTER; includeFontPadding = false })
+                    box.addView(Ui.text(a, 10f, when { on -> Color.WHITE; n > 0 -> Color.parseColor("#2FBF8F"); else -> Color.parseColor("#4A5966") }, n > 0,
+                        when { past -> ""; !loadedMonth -> "·"; n > 0 -> "${n}척"; else -> "-" }).apply { gravity = Gravity.CENTER })
+                    row.addView(box, LinearLayout.LayoutParams(0, dp(54), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+                    if (++cell % 7 == 0) flush()
+                }
+                if (cell % 7 != 0) { repeat(7 - cell % 7) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(54), 1f)) }; flush() }
+                sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false,
+                    if (loadedMonth) "초록 숫자 = 고른 어종 · ${need}자리 이상 빈 배 수 · 노란 테두리 = 오늘" else "이 달은 아직 안 읽었어요 · 날짜를 누르면 읽어 와요").apply { setPadding(dp(4), dp(10), 0, 0) })
             }
+            prevM.setOnClickListener { val t = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }; if (cur.after(t)) { cur.add(Calendar.MONTH, -1); draw() } }
+            nextM.setOnClickListener { cur.add(Calendar.MONTH, 1); draw() }
+            draw(); sh.show()
         }
 
         fun card(s: Sch, fav: Boolean): View {
@@ -494,6 +545,9 @@ object Seats {
             sh.show()
         }
         fleetBtn.setOnClickListener { openFleets(a) { load(true) } }
+        dayBtn.setOnClickListener { openCalendar() }
+        prevBtn.setOnClickListener { shift(-1) }
+        nextBtn.setOnClickListener { shift(1) }
         alarmBtn.setOnClickListener { openWatches(a) { render() } }
 
         dlg.setContentView(root)
