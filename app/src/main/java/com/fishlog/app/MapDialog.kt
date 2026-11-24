@@ -574,10 +574,10 @@ object MapDialog {
             val clearBtn = pill("🗑 지우기")
             fun paintTest() {
                 testLine.setPoints(TestTrack.points.map { GeoPoint(it.lat, it.lon) })
-                if (TestTrack.on) {
-                    val min = (System.currentTimeMillis() - TestTrack.startedAt) / 60_000L
+                if (TestTrack.on || Store.practice) {
+                    val min = (System.currentTimeMillis() - (if (TestTrack.on) TestTrack.startedAt else (Store.current?.start ?: System.currentTimeMillis()))) / 60_000L
                     val m = TestTrack.meters()
-                    testBtn.text = "■ 기록 끄기 · ${min}분 · " + (if (m >= 1000) String.format(Locale.KOREA, "%.1fkm", m / 1000) else "${m.toInt()}m")
+                    testBtn.text = (if (Store.practice) "■ 🧪 연습 끝내기 · " else "■ 기록 끄기 · ") + "${min}분 · " + (if (m >= 1000) String.format(Locale.KOREA, "%.1fkm", m / 1000) else "${m.toInt()}m")
                     (testBtn.background as GradientDrawable).setColor(Color.parseColor("#1E5E7A"))
                 } else {
                     testBtn.text = "📍 내 기록"
@@ -587,9 +587,26 @@ object MapDialog {
                 map.invalidate()
             }
             testBtn.setOnClickListener {
-                if (TestTrack.on) TestTrack.stop()
-                else TestTrack.start(a)?.let { msg -> android.widget.Toast.makeText(a, msg, android.widget.Toast.LENGTH_LONG).show() }
-                    ?: android.widget.Toast.makeText(a, "지금부터 움직인 길을 그려요 (앱을 닫으면 자동으로 꺼지고 지워져요)", android.widget.Toast.LENGTH_LONG).show()
+                // v6.86 (386): 🧪 연습 출조 — 길 그리기 + 출조 시작(리모컨 · 워치 · 소리 진짜처럼) · 끄면 전부 버림
+                if (TestTrack.on || Store.practice) {
+                    val m = TestTrack.meters(); val min = (System.currentTimeMillis() - (if (TestTrack.on) TestTrack.startedAt else (Store.current?.start ?: System.currentTimeMillis()))) / 60_000L
+                    TestTrack.stop()
+                    if (Store.practice) {
+                        val t = Store.endPractice()
+                        RemoteService.stop(a)
+                        val counts = t?.let { tr -> (1..tr.names.size).filter { tr.count(it) > 0 }.joinToString(" · ") { "${tr.name(it)} ${tr.count(it)}" } }.orEmpty()
+                        android.app.AlertDialog.Builder(a, R.style.FlAlert).setTitle("🧪 연습 결과 (저장 안 됨)")
+                            .setMessage((counts.ifBlank { "센 조과 없음" }) + "\n" + (if (m >= 1000) String.format(Locale.KOREA, "%.1fkm", m / 1000) else "${m.toInt()}m") + " · ${min}분\n\n기록 · 서버 · 게시판 · 지금 출조 중 어디에도 안 올라갔어요")
+                            .setPositiveButton("확인", null).show()
+                    }
+                } else {
+                    val msg = TestTrack.start(a)
+                    if (msg != null) android.widget.Toast.makeText(a, msg, android.widget.Toast.LENGTH_LONG).show()
+                    else if (Store.current == null && Store.startPractice()) {
+                        RemoteService.start(a)
+                        android.widget.Toast.makeText(a, "🧪 연습 출조 시작 · 리모컨 · 워치 · 소리 그대로 시험해요 (끄면 전부 버려요 · 어디에도 안 올라가요)", android.widget.Toast.LENGTH_LONG).show()
+                    } else android.widget.Toast.makeText(a, "진짜 출조 중이라 길만 그려요 (연습 출조는 출조 중이 아닐 때만)", android.widget.Toast.LENGTH_LONG).show()
+                }
                 paintTest()
             }
             clearBtn.setOnClickListener { TestTrack.clear(); paintTest() }

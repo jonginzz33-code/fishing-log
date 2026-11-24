@@ -512,7 +512,28 @@ object Store {
         changed()
     }
 
+    // v6.86 (386): 🧪 연습 출조 (관리자 '📍 내 기록') — 리모컨 · 워치 · 소리 다 진짜처럼 · 끝내면 전부 버림 (기록 · 서버 · 게시판 · 지금 출조 중 어디에도 안 올림)
+    var practice: Boolean
+        get() = ::prefs.isInitialized && prefs.getBoolean("practice", false)
+        set(v) { if (::prefs.isInitialized) prefs.edit().putBoolean("practice", v).apply() }
+    fun startPractice(): Boolean {
+        if (current != null) return false
+        practice = true
+        startTrip("🧪 연습", "")
+        return true
+    }
+    /** 연습 끝: 요약만 돌려주고 버림 */
+    fun endPractice(): Trip? {
+        val t = current ?: run { practice = false; return null }
+        if (!practice) return null
+        t.end = System.currentTimeMillis()
+        current = null; practice = false
+        changed()
+        return t
+    }
+
     fun endTrip(): Trip? {
+        if (practice) { endPractice(); return null }   // 연습은 기록에 안 남김
         val t = current ?: return null
         try { Live.flushNow() } catch (_: Exception) {}   // 배터리 절약으로 기다리던 마릿수 먼저 올림
         t.end = System.currentTimeMillis()

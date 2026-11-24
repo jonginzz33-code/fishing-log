@@ -428,7 +428,7 @@ class RemoteService : Service() {
             .setSmallIcon(R.drawable.ic_stat_octo)          // AOD·상태바: 주꾸미 아이콘
             .setColor(Ui.ORANGE)
             .setSubText("조과일지")
-            .setContentTitle(counts)                        // 마릿수를 크게
+            .setContentTitle(if (Store.practice) "🧪 연습 · $counts" else counts)   // 마릿수를 크게 (연습이면 앞에 🧪)
             .setContentText(sub)
             .setContentIntent(open)
             .setOngoing(true)

@@ -48,6 +48,16 @@ object Seats {
         val stName get() = when (status) { "CHECK" -> "점검일"; "BAD_WEATHER" -> "기상악화"; "ING", "END" -> "마감"; else -> "예약 안 받음" }
         val cap get() = remain + reserved
         val key get() = "$host|$shipNo"
+        // v6.86 (395 · 396): 배 사진 · 조황 글 수 · 그날 공지 · 예약 오픈 시각 · 선상24 물때
+        var img = ""; var boards = -1; var notice = ""; var openAt = ""; var tideW = ""
+        /** 운항 시간(시간 · 소수) · 출항 시각(분) — 모르면 -1 */
+        val startMin: Int get() = Regex("^(\\d{1,2}):(\\d{2})").find(time)?.let { it.groupValues[1].toInt() * 60 + it.groupValues[2].toInt() } ?: -1
+        val hours: Double get() {
+            val m = Regex("(\\d{1,2}):(\\d{2})\\s*~\\s*(\\d{1,2}):(\\d{2})").find(time) ?: return -1.0
+            val a = m.groupValues[1].toInt() * 60 + m.groupValues[2].toInt(); var b = m.groupValues[3].toInt() * 60 + m.groupValues[4].toInt()
+            if (b <= a) b += 24 * 60
+            return (b - a) / 60.0
+        }
     }
     class Watch(val host: String, val shipNo: String, val ship: String, val date: String, var need: Int,
                 var hit: Boolean = false, var last: Int = -1, var at: Long = 0, val via: String = "phone")
@@ -223,7 +233,94 @@ object Seats {
         val t = if ((st0 == "00:00" || st0.isBlank()) && (et0 == "00:00" || et0.isBlank())) "" else listOf(st0, et0).filter { it.isNotBlank() }.joinToString(" ~ ")
         return Sch(S24, sh.optInt("no").toString(), o.optString("schedule_no"), sh.optString("name").trim(), o.optString("sdate", date0),
             js("fish_type"), js("fishing_method"), t, remain, maxOf(0, cap - remain),
-            if (st == "ING" && remain <= 0) "END" else st, "", place, o.optInt("price"))
+            if (st == "ING" && remain <= 0) "END" else st, "", place, o.optInt("price")).apply {
+            img = sh.optString("image").let { if (it == "null") "" else it }
+            boards = sh.optInt("board_count", o.optInt("board_write_num", -1))
+            notice = noticeText(js("notice"))
+            openAt = if (o.optInt("is_reservation_possible", 1) == 0) js("schedule_open_dt") else ""
+            tideW = js("tide_water")
+        }
+    }
+    private fun noticeText(h: String): String = if (h.isBlank()) "" else
+        android.text.Html.fromHtml(h.replace(Regex("<br\\s*/?>|</p>|</div>", RegexOption.IGNORE_CASE), " · "), 0).toString()
+            .replace(Regex("[\\s\\u00a0]+"), " ").replace(Regex("( · )+"), " · ").trim().trim('·', ' ').take(160)
+
+    // v6.86 (395 · 396): 보이는 선상24 배만 한 달 일정에서 공지 · 오픈 시각 · 물때 채우기 + 조황 마지막 글 날짜
+    private val extraMem = HashMap<String, Pair<Long, List<Sch>>>()
+    fun s24Extra(shipNo: String, ym: String): List<Sch>? {
+        val k = "${shipNo}_$ym"
+        synchronized(extraMem) { extraMem[k]?.let { if (System.currentTimeMillis() - it.first < 60 * 60_000L) return it.second } }
+        val l = try { s24Month(shipNo, ym) } catch (_: Exception) { return null }
+        synchronized(extraMem) { extraMem[k] = System.currentTimeMillis() to l }
+        return l
+    }
+    fun extraCached(shipNo: String, ym: String) = synchronized(extraMem) { extraMem["${shipNo}_$ym"]?.second }
+    /** 조황 마지막 글 날짜 (yyyy-MM-dd) · 하루 기억 */
+    fun lastBoard(c: Context, shipNo: String, fetch: Boolean): String? {
+        val p = prefs(c); val today = ymd.format(Date())
+        p.getString("seat_lb_$shipNo", null)?.let { v -> if (v.substringAfter('|') == today) return v.substringBefore('|') }
+        if (!fetch) return null
+        val d = try { JSONObject(get("$API/ship/fish_board_list?ship_no=$shipNo&page=1")).optJSONArray("list")?.optJSONObject(0)?.optString("insert_dt")?.take(10) ?: "" } catch (_: Exception) { return null }
+        p.edit().putString("seat_lb_$shipNo", "$d|$today").apply()
+        return d
+    }
+
+    // v6.86 (395): 배 사진 (작은 사진 · 메모리 + 폰 파일)
+    private val imgMem = android.util.LruCache<String, android.graphics.Bitmap>(60)
+    private val imgBusy = HashSet<String>()
+    fun shipImg(c: Context, url: String, view: android.widget.ImageView) {
+        if (url.isBlank()) return
+        view.tag = url
+        imgMem.get(url)?.let { view.setImageBitmap(it); return }
+        if (!synchronized(imgBusy) { imgBusy.add(url) }) return
+        Thread {
+            val f = java.io.File(c.cacheDir, "shipimg/" + Integer.toHexString(url.hashCode()) + ".jpg")
+            val bm = try {
+                if (f.exists() && System.currentTimeMillis() - f.lastModified() < 14 * 86400_000L) android.graphics.BitmapFactory.decodeFile(f.path)
+                else {
+                    val cn = URL(url).openConnection() as HttpURLConnection
+                    cn.connectTimeout = 8000; cn.readTimeout = 10000
+                    val bytes = cn.inputStream.use { it.readBytes() }; cn.disconnect()
+                    f.parentFile?.mkdirs(); f.writeBytes(bytes)
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+            } catch (_: Exception) { null }
+            synchronized(imgBusy) { imgBusy.remove(url) }
+            if (bm != null) { imgMem.put(url, bm); view.post { if (view.tag == url) view.setImageBitmap(bm) } }
+        }.start()
+    }
+
+    // v6.86 (395): 👍👎 인기도 (우리 앱 사용자 · 1인 1배 1표) — shipVotes/{배키}/v/{uid} {v: 1|-1, t}
+    class Votes(val up: Int, val dn: Int, val mine: Int)
+    private val voteMem = HashMap<String, Pair<Long, Votes>>()
+    fun voteKey(s: Sch) = if (s.host == S24 || isS24Fleet(s.host)) "s24_${s.shipNo}" else (s.host.replace('.', '_') + "_" + s.shipNo).take(120)
+    fun votesCached(k: String) = synchronized(voteMem) { voteMem[k]?.takeIf { System.currentTimeMillis() - it.first < 10 * 60_000L }?.second }
+    fun loadVotes(k: String, done: (Votes) -> Unit) {
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val col = db.collection("shipVotes").document(k).collection("v")
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val src = com.google.firebase.firestore.AggregateSource.SERVER
+        col.whereEqualTo("v", 1).count().get(src).addOnSuccessListener { u ->
+            col.whereEqualTo("v", -1).count().get(src).addOnSuccessListener { d ->
+                fun fin(m: Int) { val v = Votes(u.count.toInt(), d.count.toInt(), m); synchronized(voteMem) { voteMem[k] = System.currentTimeMillis() to v }; done(v) }
+                if (uid == null) fin(0) else col.document(uid).get().addOnSuccessListener { fin(it.getLong("v")?.toInt() ?: 0) }.addOnFailureListener { fin(0) }
+            }
+        }
+    }
+    fun vote(k: String, v: Int, done: (Boolean) -> Unit) {
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return done(false)
+        val ref = com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("shipVotes").document(k).collection("v").document(uid)
+        val old = votesCached(k)
+        val task = if (v == 0) ref.delete() else ref.set(mapOf("v" to v, "t" to System.currentTimeMillis()))
+        task.addOnSuccessListener {
+            if (old != null) synchronized(voteMem) {
+                var up = old.up; var dn = old.dn
+                if (old.mine == 1) up--; if (old.mine == -1) dn--
+                if (v == 1) up++; if (v == -1) dn++
+                voteMem[k] = System.currentTimeMillis() to Votes(maxOf(0, up), maxOf(0, dn), v)
+            }
+            done(true)
+        }.addOnFailureListener { done(false) }
     }
 
     /** 날짜 · 지역(권역 이름) · 어종으로 한 쪽(30척) */
@@ -554,6 +651,11 @@ object Seats {
         val fails = ArrayList<String>()
         var loading = false
         var siteBusy = false
+        val extraBusy = HashSet<String>(); val voteAsked = HashSet<String>()
+        val pool = java.util.concurrent.ThreadPoolExecutor(3, 3, 20, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue()).apply { allowCoreThreadTimeOut(true) }
+        var rerender = false
+        lateinit var laterFn: () -> Unit
+        fun later() = laterFn()
 
         // 제목 줄
         val head = Ui.row(a).apply { setPadding(dp(16), dp(8), dp(12), dp(4)) }
@@ -605,12 +707,23 @@ object Seats {
         lateinit var render: () -> Unit
         lateinit var load: (Boolean) -> Unit
         lateinit var loadS24: (Boolean) -> Unit
+        laterFn = { if (!rerender) { rerender = true; list.postDelayed({ rerender = false; if (dlg.isShowing) render() }, 500) } }
         refreshSites(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
 
         fun savePrefs() = p.edit().putBoolean("seat_s24", useS24).putStringSet("seat_area", HashSet(areaSel)).putString("seat_day", day).putInt("seat_need", need).putInt("seat_sort", sort)
             .putBoolean("seat_open", openOnly).putBoolean("seat_favtop", favTop).putStringSet("seat_fish", HashSet(fishSel)).apply()
 
-        fun fishMatch(s: Sch) = fishSel.isEmpty() || fishSel.any { f -> s.fish.split(',', '/', '·', ' ').any { it.trim() == f } || s.fish.contains(f) }
+        // v6.86 (395): 출항 시간대 · 운항 시간 (시간 모르는 배는 숨기지 않음)
+        val todSel = HashSet(p.getStringSet("seat_tod", emptySet()) ?: emptySet())   // dawn · am · pm · night
+        var durSel = p.getInt("seat_dur", 0)                                          // 0 전체 · 1 ~5h · 2 5~9h · 3 9h~
+        fun todOf(m: Int) = when { m < 0 -> ""; m < 6 * 60 -> "dawn"; m < 12 * 60 -> "am"; m < 18 * 60 -> "pm"; else -> "night" }
+        fun timeMatch(s: Sch): Boolean {
+            val m = s.startMin; val h = s.hours
+            if (todSel.isNotEmpty() && m >= 0 && todOf(m) !in todSel) return false
+            if (durSel != 0 && h > 0 && when (durSel) { 1 -> h > 5.0; 2 -> h < 5.0 || h > 9.0; else -> h < 9.0 }) return false
+            return true
+        }
+        fun fishMatch(s: Sch) = timeMatch(s) && (fishSel.isEmpty() || fishSel.any { f -> s.fish.split(',', '/', '·', ' ').any { it.trim() == f } || s.fish.contains(f) })
         fun fishList(s: Sch) = s.fish.split(',', '/', '·').map { it.trim() }.filter { it.isNotBlank() }
 
         // v6.85 (393): 날짜 버튼 숫자에 선상24 배도 (아래 '빈 배 N척'과 같게)
@@ -627,7 +740,8 @@ object Seats {
         fun paintDates() {
             val dd = try { ymd.parse(day)!! } catch (_: Exception) { Date() }
             val n = countOn(day)
-            dayBtn.text = "📅 " + SimpleDateFormat("M월 d일 (E)", Locale.KOREA).format(dd) + (if (all.isNotEmpty()) " · 빈 배 ${n}척" else "") + " ▾"
+            val t0 = Calendar.getInstance().apply { time = dd; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+            dayBtn.text = "📅 " + SimpleDateFormat("M월 d일 (E)", Locale.KOREA).format(dd) + " · " + DatePick.mulShort(t0) + (if (all.isNotEmpty() || s24.isNotEmpty()) " · 빈 배 ${n}척" else "") + " ▾"
             prevBtn.alpha = if (day > ymd.format(Date())) 1f else 0.35f
         }
         fun openCalendar() {
@@ -657,7 +771,7 @@ object Seats {
                 var cell = 0
                 var row = Ui.row(a)
                 fun flush() { sh.body.addView(row, Ui.lp(a, MATCH, WRAP, top = 4)); row = Ui.row(a) }
-                repeat(lead) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(54), 1f)); cell++ }
+                repeat(lead) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(62), 1f)); cell++ }
                 for (dn in 1..days) {
                     c.set(Calendar.DAY_OF_MONTH, dn)
                     val d = ymd.format(c.time)
@@ -675,10 +789,13 @@ object Seats {
                         true, "$dn").apply { gravity = Gravity.CENTER; includeFontPadding = false })
                     box.addView(Ui.text(a, 10f, when { on -> Color.WHITE; n > 0 -> Color.parseColor("#2FBF8F"); else -> Color.parseColor("#4A5966") }, n > 0,
                         when { past -> ""; !loadedMonth -> "·"; n > 0 -> "${n}척"; else -> "-" }).apply { gravity = Gravity.CENTER })
-                    row.addView(box, LinearLayout.LayoutParams(0, dp(54), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
+                    // v6.86 (396): 날짜마다 물때 (사리 주황 · 조금 무렵 보라)
+                    val t0 = (c.clone() as Calendar).apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
+                    box.addView(Ui.text(a, 9.5f, if (on) Color.WHITE else DatePick.mulCol(t0), false, DatePick.mulShort(t0)).apply { gravity = Gravity.CENTER; includeFontPadding = false })
+                    row.addView(box, LinearLayout.LayoutParams(0, dp(62), 1f).apply { leftMargin = dp(2); rightMargin = dp(2) })
                     if (++cell % 7 == 0) flush()
                 }
-                if (cell % 7 != 0) { repeat(7 - cell % 7) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(54), 1f)) }; flush() }
+                if (cell % 7 != 0) { repeat(7 - cell % 7) { row.addView(View(a), LinearLayout.LayoutParams(0, dp(62), 1f)) }; flush() }
                 sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false,
                     if (loadedMonth) "초록 숫자 = 고른 어종 · ${need}자리 이상 빈 배 수 · 노란 테두리 = 오늘" else "이 달은 아직 안 읽었어요 · 날짜를 누르면 읽어 와요").apply { setPadding(dp(4), dp(10), 0, 0) })
             }
@@ -694,11 +811,38 @@ object Seats {
                 background = Ui.bg(a, Color.parseColor("#12283A"), 14, if (fav) Color.parseColor("#F2C14E") else Color.parseColor("#2C4F66"))
                 alpha = if (s.open) 1f else 0.6f
             }
-            val top = Ui.row(a)
+            // v6.86 (395 · 396): 선상24 배는 한 달 일정에서 공지 · 오픈 시각 · 물때 채우기 (보이는 카드만 · 한 시간 기억)
+            val ym0 = s.date.replace("-", "").take(6)
+            if (s.host == S24) {
+                val ex = extraCached(s.shipNo, ym0)
+                if (ex == null) { if (synchronized(extraBusy) { extraBusy.add(s.shipNo + ym0) }) pool.execute {
+                    s24Extra(s.shipNo, ym0); lastBoard(a, s.shipNo, true); a.runOnUiThread { later() } } }
+                else ex.firstOrNull { it.schNo == s.schNo }?.let { e ->
+                    if (s.notice.isBlank()) s.notice = e.notice; if (s.openAt.isBlank()) s.openAt = e.openAt; if (s.tideW.isBlank()) s.tideW = e.tideW
+                    if (s.img.isBlank()) s.img = e.img
+                }
+            }
+            val ss = if (s.host == S24 || isS24Fleet(s.host)) siteOf(a, s.shipNo) else null
             val fleetName = if (s.host == S24) s.place.ifBlank { "선상24" } else fleets(a).firstOrNull { it.host == s.host }?.name ?: s.host.substringBefore('.')
+            val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+            // 배 사진 (선상24 작은 사진 · 없으면 🚤)
+            val picBox = android.widget.FrameLayout(a).apply { background = Ui.bg(a, Color.parseColor("#1B3A52"), 12, Color.parseColor("#2C4F66")); clipToOutline = true }
+            picBox.addView(Ui.text(a, 26f, Color.WHITE, false, "🚤").apply { gravity = Gravity.CENTER }, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+            if (s.img.isNotBlank()) {
+                val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
+                picBox.addView(iv, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
+                shipImg(a, s.img, iv)
+                picBox.setOnClickListener { showPhoto(a, s.img.replace("_smini.", "_mini."), s.ship) }
+            }
+            head.addView(picBox, LinearLayout.LayoutParams(dp(62), dp(62)).apply { rightMargin = dp(10) })
+            val info = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            val top = Ui.row(a)
+            val vk = voteKey(s); val vv = votesCached(vk)
+            val hot = vv != null && vv.up >= 5 && vv.up >= vv.dn * 3
             top.addView(TextView(a).apply {
                 val sb = android.text.SpannableStringBuilder(s.ship)
                 sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, sb.length, 0)
+                if (hot) { val h = sb.length; sb.append(" 🔥"); sb.setSpan(android.text.style.RelativeSizeSpan(0.8f), h, sb.length, 0) }
                 sb.append("  ")
                 val st = sb.length; sb.append(fleetName)
                 sb.setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), st, sb.length, 0)
@@ -713,16 +857,50 @@ object Seats {
                     render()
                 }
             })
-            box.addView(top)
-            box.addView(Ui.text(a, 12f, Color.parseColor("#B8CAD6"), false,
-                listOf(s.fish, s.way, s.time, s.tide, if (s.price > 0) "%,d원".format(s.price) else "").filter { it.isNotBlank() }.joinToString(" · ")).apply { maxLines = 2 })
+            info.addView(top)
+            val h = s.hours
+            val timeTxt = if (s.time.isBlank()) "" else s.time + (if (h > 0) " (${if (h % 1.0 == 0.0) h.toInt().toString() else "%.1f".format(h)}시간)" else "")
+            val tideTxt = listOf(s.tide, s.tideW).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+            info.addView(Ui.text(a, 12f, Color.parseColor("#B8CAD6"), false,
+                listOf(s.fish, s.way, timeTxt, if (tideTxt.isNotBlank()) "🌊 $tideTxt" else "").filter { it.isNotBlank() }.joinToString(" · ")).apply { maxLines = 2 })
+            // 금액 (노랑 굵게) · 📝 조황 N · 최근
+            val l3 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+            if (s.price > 0) l3.addView(Ui.text(a, 15f, Color.parseColor("#FFD36E"), true, "%,d원".format(s.price)), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+            if (s.host == S24 && s.boards >= 0) {
+                val lb = lastBoard(a, s.shipNo, false)
+                val ago = lb?.takeIf { it.length == 10 }?.let { d ->
+                    val n = try { ((ymd.parse(ymd.format(Date()))!!.time - ymd.parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { -1 }
+                    when { n < 0 -> ""; n == 0 -> " · 오늘"; n == 1 -> " · 어제"; n < 30 -> " · ${n}일 전"; else -> " · ${n / 30}달 전" }
+                } ?: ""
+                val (bc, tc) = when { s.boards >= 100 -> Color.parseColor("#3A2410") to Color.parseColor("#FFB27A"); s.boards < 10 -> Color.TRANSPARENT to Ui.SUB; else -> Color.parseColor("#10324A") to Color.parseColor("#7FD6FF") }
+                l3.addView(Ui.text(a, 11.5f, tc, true, "📝 조황 ${s.boards}$ago").apply {
+                    setPadding(dp(8), dp(2), dp(8), dp(2))
+                    background = Ui.bg(a, bc, 99, if (s.boards >= 100) Ui.MINE else Color.parseColor("#3A6A88"))
+                    setOnClickListener { openBoards(a, s) }
+                })
+            }
+            if (l3.childCount > 0) info.addView(l3, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) })
+            head.addView(info, LinearLayout.LayoutParams(0, WRAP, 1f))
+            box.addView(head)
+            // 📢 그날 공지 (노란 한 줄 · 누르면 전체)
+            if (s.notice.isNotBlank()) box.addView(Ui.text(a, 12f, Color.parseColor("#F2C14E"), false, "📢 " + s.notice).apply {
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(6), 0, 0)
+                setOnClickListener { android.app.AlertDialog.Builder(a, R.style.FlAlert).setTitle("📢 ${s.ship} · ${dayLabel(s.date)}").setMessage(s.notice).setPositiveButton("닫기", null).show() }
+            })
+            // 🕙 예약 오픈 시각
+            if (s.openAt.isNotBlank()) {
+                val r = Ui.row(a).apply { setPadding(0, dp(6), 0, 0) }
+                r.addView(Ui.text(a, 12.5f, Color.parseColor("#7FD6FF"), true, "🕙 " + openLabel(s.openAt) + " 예약 오픈"), LinearLayout.LayoutParams(0, WRAP, 1f))
+                if (allowed(a)) r.addView(Ui.pill(a, if (openSet(a, s)) "🔔 알림 걸림" else "🔔 열리면 알림", openSet(a, s), Color.parseColor("#F2C14E"), small = true) { toggleOpen(a, s); render() })
+                box.addView(r)
+            }
             // 막대
             val bar = LinearLayout(a).apply { background = Ui.bg(a, Color.parseColor("#22384A"), 99) }
             val frac = if (s.cap > 0) s.remain.toFloat() / s.cap else 0f
             val col = when { !s.open -> Color.parseColor("#4A5966"); s.remain <= 3 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#2FBF8F") }
             bar.addView(View(a).apply { background = Ui.bg(a, col, 99) }, LinearLayout.LayoutParams(0, MATCH, frac.coerceIn(0f, 1f)))
             bar.addView(View(a), LinearLayout.LayoutParams(0, MATCH, (1f - frac).coerceIn(0f, 1f) + 0.0001f))
-            box.addView(bar, LinearLayout.LayoutParams(MATCH, dp(7)).apply { topMargin = dp(7); bottomMargin = dp(5) })
+            box.addView(bar, LinearLayout.LayoutParams(MATCH, dp(7)).apply { topMargin = dp(8); bottomMargin = dp(5) })
             val bot = Ui.row(a)
             bot.addView(TextView(a).apply {
                 val sb = android.text.SpannableStringBuilder()
@@ -741,7 +919,6 @@ object Seats {
                 sb.append(tail); text = sb; textSize = 12.5f; setTextColor(Ui.TEXT)
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val canBook = s.open && s.remain >= need
-            val ss = if (s.host == S24 || isS24Fleet(s.host)) siteOf(a, s.shipNo) else null
             if (canBook) {
                 // v6.84: 선단 사이트를 찾은 배는 '예약 ›' = 그 선단 예약 화면 (내 선단에 넣은 배처럼 · 선상24 창은 꾹 메뉴)
                 bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrlOf(a, s)) })
@@ -756,16 +933,34 @@ object Seats {
                 }.apply { alpha = 0.7f })
             }
             box.addView(bot)
-            // v6.82 (390): 🌐 배 사이트 · 📞 전화 · 밴드 (선상24 배 번호가 있는 카드)
-            if (ss != null && (ss.host != null || ss.tel != null || ss.band != null)) {
-                val links = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
-                fun link(t: String, f: () -> Unit) = links.addView(Ui.pill(a, t, false, Ui.TEXT, small = true) { f() }.apply { setTextColor(Color.parseColor("#7FD6FF")) },
-                    LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
-                if (ss.host != null && s.host == S24 && !canBook) link("🌐 배 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
-                if (ss.tel != null) link("📞 전화") { dial(a, ss.tel) }
-                if (ss.band != null) link("밴드") { Boats.openUrl(a, ss.band) }
-                box.addView(links, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
+            // v6.86 (395): 버튼 줄 — 📞 전화 · 밴드 · 📝 조황 · 🌐 배 사이트 ··· 👍 👎
+            val links = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+            val left = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
+            fun link(t: String, f: () -> Unit) = left.addView(Ui.pill(a, t, false, Ui.TEXT, small = true) { f() }.apply { setTextColor(Color.parseColor("#7FD6FF")); setPadding(dp(9), 0, dp(9), 0) },
+                LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(5) })
+            ss?.tel?.let { t -> link("📞 전화") { dial(a, t) } }
+            ss?.band?.let { b -> link("밴드") { Boats.openUrl(a, b) } }
+            if (s.host == S24) link("📝 조황") { openBoards(a, s) }
+            if (ss?.host != null && s.host == S24 && !canBook) link("🌐 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
+            links.addView(android.widget.HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(left) }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            if (vv == null && synchronized(voteAsked) { voteAsked.add(vk) }) loadVotes(vk) { a.runOnUiThread { later() } }
+            fun thumb(up: Boolean): TextView {
+                val n = if (vv == null) "" else " " + (if (up) vv.up else vv.dn)
+                val on = vv != null && vv.mine == (if (up) 1 else -1)
+                val c0 = if (up) Color.parseColor("#2FBF8F") else Color.parseColor("#FF8A8A")
+                return Ui.text(a, 13f, if (on) Color.WHITE else c0, true, (if (up) "👍" else "👎") + n).apply {
+                    gravity = Gravity.CENTER; setPadding(dp(9), dp(4), dp(9), dp(4))
+                    background = if (on) Ui.bg(a, c0, 99) else Ui.bg(a, Color.TRANSPARENT, 99, c0)
+                    setOnClickListener {
+                        if (Cloud.uid == null) { Ui.toast(a, "로그인하면 누를 수 있어요"); return@setOnClickListener }
+                        val want = if (on) 0 else if (up) 1 else -1
+                        vote(vk, want) { ok -> a.runOnUiThread { if (!ok) Ui.toast(a, "저장하지 못했어요 (잠시 뒤 다시)"); render() } }
+                    }
+                }
             }
+            links.addView(thumb(true), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+            links.addView(thumb(false), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(5) })
+            box.addView(links, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(8) })
             box.setOnLongClickListener { shipMenu(a, s, { render() }) { load(true) }; true }
             return box
         }
@@ -779,7 +974,11 @@ object Seats {
             areaBtn.visibility = if (useS24) View.VISIBLE else View.GONE
             needBtn.text = "👥 ${need}자리 이상 ▾"
             needBtn.setTextColor(if (need > 1) Color.parseColor("#7FD6FF") else Ui.TEXT)
-            filtBtn.text = "⚙ " + arrayOf("자리 많은 순", "출항 빠른 순", "이름 순")[sort] + (if (openOnly) " · 빈자리만" else "")
+            val todTxt = listOf("dawn" to "새벽", "am" to "오전", "pm" to "오후", "night" to "야간").filter { it.first in todSel }.joinToString("·") { it.second }
+            val durTxt = arrayOf("", "~5시간", "5~9시간", "9시간~")[durSel]
+            filtBtn.text = "⚙ " + arrayOf("자리 많은 순", "출항 빠른 순", "이름 순")[sort] + (if (openOnly) " · 빈자리만" else "") +
+                (if (todTxt.isNotBlank() || durTxt.isNotBlank()) " · 🕐 " + listOf(todTxt, durTxt).filter { it.isNotBlank() }.joinToString(" · ") else "")
+            filtBtn.setTextColor(if (todSel.isNotEmpty() || durSel != 0) Color.parseColor("#7FD6FF") else Ui.TEXT)
             alarmBtn.visibility = if (allowed(a)) View.VISIBLE else View.GONE
             val ws = watches(a)
             alarmBtn.text = if (ws.any { it.hit }) "🔔 ${ws.size} · 자리 남!" else "🔔 ${ws.size}"
@@ -1051,6 +1250,29 @@ object Seats {
             }
             sw("빈자리 있는 배만", "마감 · 필요한 자리보다 적은 배는 숨겨요", openOnly) { openOnly = it; savePrefs() }
             sw("⭐ 즐겨찾기 배 맨 위", "☆ 를 눌러 넣은 배를 먼저 보여 줘요", favTop) { favTop = it; savePrefs() }
+            // v6.86 (395): 출항 시간대(여러 개) · 운항 시간
+            sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "🕐 출항 시간대 (여러 개)").apply { setPadding(0, dp(12), 0, dp(6)) })
+            val tw = FlowLayout(a)
+            fun paintTod() {
+                tw.removeAllViews()
+                tw.addView(Ui.pill(a, "전체", todSel.isEmpty(), Ui.MINE, small = true) { todSel.clear(); p.edit().putStringSet("seat_tod", HashSet(todSel)).apply(); paintTod(); render() })
+                listOf("dawn" to "🌅 새벽 (~6시)", "am" to "☀ 오전 (6~12시)", "pm" to "🌇 오후 (12~18시)", "night" to "🌙 야간 (18시~)").forEach { (k, t) ->
+                    tw.addView(Ui.pill(a, t, k in todSel, Ui.MINE, small = true) {
+                        if (k in todSel) todSel.remove(k) else todSel.add(k); p.edit().putStringSet("seat_tod", HashSet(todSel)).apply(); paintTod(); render()
+                    })
+                }
+            }
+            paintTod(); sh.body.addView(tw)
+            sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "⏱ 운항 시간").apply { setPadding(0, dp(12), 0, dp(6)) })
+            val dw = FlowLayout(a)
+            fun paintDur() {
+                dw.removeAllViews()
+                arrayOf("전체", "짧게 (~5시간)", "보통 (5~9시간)", "종일 (9시간~)").forEachIndexed { i, t ->
+                    dw.addView(Ui.pill(a, t, i == durSel, Ui.MINE, small = true) { durSel = i; p.edit().putInt("seat_dur", i).apply(); paintDur(); render() })
+                }
+            }
+            paintDur(); sh.body.addView(dw)
+            sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "출항 시각을 안 적은 배(시간 모름)는 거르지 않고 보여 줘요").apply { setPadding(0, dp(6), 0, 0) })
             sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "정렬").apply { setPadding(0, dp(12), 0, dp(6)) })
             val wrap = FlowLayout(a)
             arrayOf("자리 많은 순", "출항 빠른 순", "이름 순").forEachIndexed { i, t -> wrap.addView(Ui.pill(a, t, i == sort, Ui.MINE, small = true) { sort = i; savePrefs(); sh.close(); render() }) }
@@ -1157,6 +1379,83 @@ object Seats {
             sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "앱이 선단 일정 페이지를 직접 읽어요 (선상24 공식 기능이 아니라 사이트가 바뀌면 안 될 수 있어요) · 열 때 · 🔔 알림 걸어 둔 동안 15분마다만 읽어요").apply { setPadding(0, dp(12), 0, 0) })
         }
         draw(); sh.show()
+    }
+
+    // ─────────────── v6.86 (395 · 396): 사진 크게 · 조황 글 · 예약 오픈 알림 ───────────────
+    private fun showPhoto(a: Activity, url: String, title: String) {
+        val iv = android.widget.ImageView(a).apply { adjustViewBounds = true; scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; minimumHeight = Ui.dp(a, 200) }
+        shipImg(a, url, iv)
+        android.app.AlertDialog.Builder(a, R.style.FlAlert).setTitle("🚤 $title").setView(iv).setPositiveButton("닫기", null).show()
+    }
+    /** 📝 그 배 조황 글 목록 (선상24) — 누르면 원래 글 */
+    private fun openBoards(a: Activity, s: Sch) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val sh = Sheet(a, 0.75f)
+        sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "📝 ${s.ship} 조황"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        sh.head.addView(Ui.pill(a, "닫기", false, Ui.TEXT, small = true) { sh.close() })
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        sh.body.addView(box)
+        box.addView(Ui.text(a, 13f, Ui.SUB, false, "불러오는 중…"))
+        Thread {
+            val r = try { JSONObject(get("$API/ship/fish_board_list?ship_no=${s.shipNo}&page=1")) } catch (_: Exception) { null }
+            a.runOnUiThread {
+                box.removeAllViews()
+                val l = r?.optJSONArray("list")
+                if (l == null || l.length() == 0) { box.addView(Ui.text(a, 13f, Ui.SUB, false, if (r == null) "못 불러왔어요 · 인터넷을 확인해 주세요" else "아직 조황 글이 없어요")); return@runOnUiThread }
+                box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "선상24 조황 글 ${r.optInt("total")}개 중 최근 ${l.length()}개 · 누르면 선상24 조황 화면"))
+                for (i in 0 until l.length()) {
+                    val o = l.getJSONObject(i)
+                    val row = LinearLayout(a).apply {
+                        orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(10), dp(8), dp(10), dp(8)); background = Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66"))
+                        isClickable = true; setOnClickListener { Boats.openUrl(a, "https://www.sunsang24.com/ship/board/?ship_no=" + s.shipNo) }
+                    }
+                    val img = o.optString("image").let { if (it == "null") "" else it }
+                    if (img.isNotBlank()) {
+                        val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; background = Ui.bg(a, Color.parseColor("#1B3A52"), 10); clipToOutline = true }
+                        shipImg(a, img, iv)
+                        row.addView(iv, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(10) })
+                    }
+                    val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    col.addView(Ui.text(a, 14f, Ui.TEXT, true, o.optString("title")).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    col.addView(Ui.text(a, 11.5f, Ui.SUB, false, listOf(o.optString("insert_dt").take(10), o.optString("fish_type")).filter { it.isNotBlank() && it != "null" }.joinToString(" · ")))
+                    col.addView(Ui.text(a, 12f, Color.parseColor("#B8CAD6"), false, o.optString("contents")).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    row.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    box.addView(row, Ui.lp(a, MATCH, WRAP, top = 6))
+                }
+            }
+        }.start()
+        sh.show()
+    }
+    private fun openTime(at: String): Long = try { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREA).parse(at.take(16))!!.time } catch (_: Exception) { 0L }
+    fun openLabel(at: String): String { val t = openTime(at); return if (t == 0L) at else SimpleDateFormat("M/d(E) HH:mm", Locale.KOREA).format(Date(t)) }
+    private fun openKey(s: Sch) = "${s.shipNo}_${s.date}"
+    fun openSet(c: Context, s: Sch) = (prefs(c).getStringSet("seat_open_al", emptySet()) ?: emptySet()).any { it.startsWith(openKey(s) + "|") }
+    /** 🔔 예약 열리면 알림 — 열리는 시각에 한 번 (AlarmManager) */
+    fun toggleOpen(c: Context, s: Sch) {
+        val p = prefs(c); val set = HashSet(p.getStringSet("seat_open_al", emptySet()) ?: emptySet())
+        val k = openKey(s); val on = set.any { it.startsWith("$k|") }
+        set.removeAll { it.startsWith("$k|") }
+        val t = openTime(s.openAt)
+        val am = c.getSystemService(AlarmManager::class.java)
+        val pi = PendingIntent.getBroadcast(c, 7900 + k.hashCode().and(0xFFF), Intent(c, SeatAlarmReceiver::class.java).setAction("fishlog.seat.open.$k")
+            .putExtra("open", k).putExtra("ship", s.ship).putExtra("date", s.date).putExtra("url", bookUrlOf(c, s)), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        if (on || t <= System.currentTimeMillis()) { am.cancel(pi); if (!on && t > 0) Ui.toast(c, "이미 열린 시각이에요"); p.edit().putStringSet("seat_open_al", set).apply(); return }
+        set.add("$k|$t"); p.edit().putStringSet("seat_open_al", set).apply()
+        try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t, pi) } catch (_: Exception) {}
+        Ui.toast(c, "🔔 ${openLabel(s.openAt)}에 알려 드릴게요 (몇 분 늦을 수 있어요)")
+    }
+    fun notifyOpen(c: Context, i: Intent) {
+        channel(c)
+        val k = i.getStringExtra("open") ?: return
+        val p = prefs(c); val set = HashSet(p.getStringSet("seat_open_al", emptySet()) ?: emptySet()); set.removeAll { it.startsWith("$k|") }; p.edit().putStringSet("seat_open_al", set).apply()
+        val req = 7900 + k.hashCode().and(0xFFF)
+        val pi = PendingIntent.getActivity(c, req, Intent(Intent.ACTION_VIEW, Uri.parse(i.getStringExtra("url") ?: "https://www.sunsang24.com")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val text = "${dayLabel(i.getStringExtra("date") ?: "")} ${i.getStringExtra("ship") ?: ""} 예약이 열렸어요 · 눌러서 바로 예약"
+        val b = Notification.Builder(c, CH).setSmallIcon(R.drawable.ic_stat_octo).setContentTitle("🕙 예약 열림!").setContentText(text)
+            .setContentIntent(pi).setAutoCancel(true).setShowWhen(true).setCategory(Notification.CATEGORY_REMINDER)
+        try { c.getSystemService(NotificationManager::class.java).notify(req, b.build()) } catch (_: SecurityException) {}
     }
 
     private fun dial(a: Activity, tel: String) {
@@ -1350,6 +1649,7 @@ class FlowLayout(c: Context) : ViewGroup(c) {
 class SeatAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
         val app = c.applicationContext
+        if (i.getStringExtra("open") != null) { try { Seats.notifyOpen(app, i) } catch (_: Exception) {}; return }
         val pr = goAsync()
         Thread {
             try { Seats.check(app) } catch (_: Exception) {}

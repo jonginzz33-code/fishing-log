@@ -2367,7 +2367,10 @@ class MainActivity : Activity() {
     /** v6.36 (295): 밑에서 올라오는 창에 내 그룹 목록 → 누르면 바로 그 그룹으로 */
     private var groupSortMode = false
     private fun openGroupSwitch(reuse: Sheet? = null) {
-        val gs = if (Cloud.user == null) emptyList() else Cloud.groups
+        // v6.86 (371): [🕘 최근 활동 순 | ↕ 내 순서] 고르기 (기억) · 활동 없는 그룹은 아래(그 안은 내 순서)
+        val recentMode = getSharedPreferences("fishlog", MODE_PRIVATE).getBoolean("gs_recent", true)
+        val mine = if (Cloud.user == null) emptyList() else Cloud.groups
+        val gs = if (recentMode && !groupSortMode) mine.withIndex().sortedWith(compareByDescending<IndexedValue<Cloud.Group>> { GroupNews.lastActivity(it.value.id).first }.thenBy { it.index }).map { it.value } else mine
         if (gs.isEmpty()) { account.openGroups(); return }
         val sh = reuse ?: Sheet(this, 0.62f)
         if (reuse == null) groupSortMode = false
@@ -2384,6 +2387,13 @@ class MainActivity : Activity() {
                 setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), 0, length, 0)
             })
         }, LinearLayout.LayoutParams(0, WRAP, 1f))
+        if (mine.size >= 2 && !groupSortMode) {
+            val mr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+            fun mb(t: String, on: Boolean, v: Boolean) = mr.addView(Ui.pill(this, t, on, Ui.GROUP, small = true) {
+                getSharedPreferences("fishlog", MODE_PRIVATE).edit().putBoolean("gs_recent", v).apply(); openGroupSwitch(sh) }, LinearLayout.LayoutParams(0, WRAP, 1f).apply { rightMargin = dp(6) })
+            mb("🕘 최근 활동 순", recentMode, true); mb("↕ 내 순서", !recentMode, false)
+            sh.body.addView(mr, Ui.lp(this, MATCH, WRAP, top = 2))
+        }
         val activeId = Cloud.active?.id
         gs.forEachIndexed { gi, gr ->
             val on = gr.id == activeId
@@ -2392,10 +2402,14 @@ class MainActivity : Activity() {
                 background = Ui.bg(this@MainActivity, Ui.CARD, 14, if (on) Ui.GREEN else Color.TRANSPARENT)
             }
             r.addView(GroupIcon.view(this, gr, 38, GroupBand.catIcon(GroupBand.currentCat(gr))), LinearLayout.LayoutParams(dp(38), dp(38)))
-            r.addView(Ui.text(this, 15.5f, Ui.TEXT, true).apply {
+            val nameCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+            nameCol.addView(Ui.text(this, 15.5f, Ui.TEXT, true).apply {
                 text = android.text.SpannableStringBuilder(gr.styled()).append(if (gr.owner == Cloud.uid) " 👑" else "")
-                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(dp(10), 0, 0, 0)
-            }, LinearLayout.LayoutParams(0, WRAP, 1f))
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            val (la, lk) = GroupNews.lastActivity(gr.id)
+            if (la > 0) nameCol.addView(Ui.text(this, 11.5f, Ui.SUB, false, "$lk · " + agoText(la)))
+            r.addView(nameCol, LinearLayout.LayoutParams(0, WRAP, 1f))
             val n = GroupNews.count(gr.id)
             if (n > 0 && !on) r.addView(redDot(n), LinearLayout.LayoutParams(WRAP, dp(20)).apply { rightMargin = dp(6) })
             if (on && !groupSortMode) r.addView(Ui.text(this, 12.5f, Ui.GREEN, true, "✓ 지금"))
@@ -2439,6 +2453,11 @@ class MainActivity : Activity() {
             setOnClickListener { sh.close(); account.openGroups() }
         }, Ui.lp(this, MATCH, WRAP, top = 8))
         if (reuse == null) sh.show()
+    }
+
+    private fun agoText(t: Long): String {
+        val m = (System.currentTimeMillis() - t) / 60000L
+        return when { m < 1 -> "방금"; m < 60 -> "${m}분 전"; m < 24 * 60 -> "${m / 60}시간 전"; m < 2 * 24 * 60 -> "어제"; m < 30 * 24 * 60 -> "${m / 1440}일 전"; else -> "${m / 43200}달 전" }
     }
 
     private fun openGroupDialog() {

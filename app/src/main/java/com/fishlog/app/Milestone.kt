@@ -67,6 +67,7 @@ object Milestone {
 
     /** 마릿수가 늘 때마다 (Store.addCatch) — 딱 기준 마릿수가 된 순간만 */
     fun onCount(slot: Int, count: Int) {
+        if (Store.practice) return   // v6.86 (386): 연습 출조는 칭호 · 알림 없음
         val i = STEPS.indexOf(count)
         if (i < 0) return
         listeners.toList().forEach { it(slot, count, i) }

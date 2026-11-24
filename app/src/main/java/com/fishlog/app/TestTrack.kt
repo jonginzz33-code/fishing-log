@@ -88,7 +88,7 @@ object TestTrack {
             override fun onActivityStarted(a: Activity) { started++ }
             override fun onActivityStopped(a: Activity) {
                 started--
-                if (started <= 0 && !a.isChangingConfigurations) { started = 0; stop(); points.clear() }
+                if (started <= 0 && !a.isChangingConfigurations) { started = 0; if (!Store.practice) { stop(); points.clear() } }   // v6.86: 연습 출조 중엔 화면 꺼도 계속
             }
             override fun onActivityCreated(a: Activity, b: Bundle?) {}
             override fun onActivityResumed(a: Activity) {}

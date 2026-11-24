@@ -150,6 +150,7 @@ class AdminActivity : Activity() {
         renderMinVersion()
         renderGroupFill()
         renderTfCollect()
+        renderUsage()
         renderCatAdmin()
         renderLimit()
         renderReports()
@@ -194,6 +195,51 @@ class AdminActivity : Activity() {
             GroupNames.backfill({ p -> runOnUiThread { st.text = "찾는 중… $p" } }) { msg -> runOnUiThread { st.text = msg; toast(msg); PublicBoard.clearCache() } }
         }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
         c.addView(st, Ui.lp(this, MATCH, WRAP, top = 6))
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    // ---------------- v6.86 (387): 📊 인터넷 많이 쓴 사람 (앱이 센 대략값) ----------------
+    private fun renderUsage() {
+        section("📊 인터넷 많이 쓴 사람", "오늘 · 7일")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 12.5f, Ui.SUB, false, "각 사람 폰이 이 앱으로 쓴 인터넷 양(받기 + 보내기 · 지도 · 날씨 · 사진 포함)을 날마다 세서 올려요. 서버 읽기 횟수 그 자체는 아니고 대략값이에요 · v6.86 이전 앱 · 안 켠 사람은 안 나와요."))
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        var week = false
+        fun draw(l: List<Cloud.AppUser>) {
+            box.removeAllViews()
+            val df = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.KOREA)
+            val today = df.format(java.util.Date())
+            val days = (0 until 7).map { df.format(java.util.Date(System.currentTimeMillis() - it * 86400_000L)) }.toSet()
+            fun v(u: Cloud.AppUser) = if (week) u.usage.filterKeys { it in days }.values.sum() else u.usage[today] ?: 0L
+            val rows = l.filter { v(it) > 0 }.sortedByDescending { v(it) }
+            val tot = rows.sumOf { v(it) }
+            box.addView(Ui.text(this, 13f, Ui.TEXT, true, (if (week) "최근 7일" else "오늘") + " · ${rows.size}명 · 합계 ${Usage.mb(tot)}"), Ui.lp(this, MATCH, WRAP, top = 6))
+            rows.take(40).forEachIndexed { i, u ->
+                val r = Ui.row(this).apply { setPadding(0, dp(6), 0, dp(6)) }
+                r.addView(Ui.text(this, 13.5f, Ui.TEXT, i < 3, "${i + 1}. " + (u.nick ?: u.name)), LinearLayout.LayoutParams(0, WRAP, 1f))
+                r.addView(Ui.text(this, 13.5f, if (i < 3) android.graphics.Color.parseColor("#FFB27A") else Ui.TEXT, true, Usage.mb(v(u))))
+                r.setOnClickListener {
+                    val lines = u.usage.toSortedMap(compareByDescending { it }).entries.joinToString("\n") { (d, kb) -> "${d.substring(4, 6)}/${d.substring(6)}  ${Usage.mb(kb)}" }
+                    android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("📊 ${u.nick ?: u.name}").setMessage(lines.ifBlank { "기록 없음" }).setPositiveButton("닫기", null).show()
+                }
+                box.addView(r)
+            }
+            if (rows.isEmpty()) box.addView(Ui.text(this, 12.5f, Ui.SUB, false, "아직 기록이 없어요 (v6.86 이상으로 앱을 켠 사람부터 쌓여요)"))
+        }
+        var cache: List<Cloud.AppUser>? = null
+        val tg = Ui.row(this)
+        lateinit var tToday: android.widget.TextView; lateinit var tWeek: android.widget.TextView
+        fun load() {
+            if (cache != null) { draw(cache!!); return }
+            box.removeAllViews(); box.addView(Ui.text(this, 12.5f, Ui.SUB, false, "불러오는 중…"))
+            Cloud.adminUsers { l, err -> runOnUiThread { if (l == null) { box.removeAllViews(); box.addView(Ui.text(this, 12.5f, Ui.SUB, false, err ?: "실패")) } else { cache = l; draw(l) } } }
+        }
+        tToday = Ui.pill(this, "오늘", true, Ui.GROUP, small = true) { week = false; tToday.background = Ui.bg(this, Ui.GROUP, 99); tWeek.background = Ui.bg(this, android.graphics.Color.TRANSPARENT, 99, Ui.LINE); load() }
+        tWeek = Ui.pill(this, "최근 7일", false, Ui.GROUP, small = true) { week = true; tWeek.background = Ui.bg(this, Ui.GROUP, 99); tToday.background = Ui.bg(this, android.graphics.Color.TRANSPARENT, 99, Ui.LINE); load() }
+        tg.addView(tToday, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }); tg.addView(tWeek)
+        c.addView(tg, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(Ui.button(this, "불러오기", true) { cache = null; load() }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(box)
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }
 

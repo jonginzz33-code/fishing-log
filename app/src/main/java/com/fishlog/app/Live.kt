@@ -182,6 +182,7 @@ object Live {
 
     /** 올리고 받아오기. force=false 면 5분이 안 지났을 땐 건너뜀 */
     fun sync(force: Boolean = false) {
+        if (Store.practice) return   // v6.86 (386): 연습 출조는 안 올림
         val me = Cloud.uid ?: return
         if (Cloud.isInitialized() && !Consent.shareLive(Cloud.appContext)) return
         val t = Store.current ?: return
@@ -346,7 +347,7 @@ object Live {
     /** v3.8 배터리 절약 켬: 서버 올리기를 5분마다 묶어서 (조과는 누른 순간 폰에 저장 그대로) */
     const val SAVER_PUSH_MS = 5 * 60_000L
     fun pushSoon() {
-        if (Cloud.uid == null || Store.current == null) return
+        if (Cloud.uid == null || Store.current == null || Store.practice) return
         val long = Store.saver
         if (pushPending) {
             // 5분 기다리던 중에 배터리 절약을 껐으면 → 3초 뒤로 당김
@@ -369,6 +370,7 @@ object Live {
     }
 
     private fun pushCounts() {
+        if (Store.practice) return
         val me = Cloud.uid ?: return
         if (Cloud.isInitialized() && !Consent.shareLive(Cloud.appContext)) return
         val t = Store.current ?: return

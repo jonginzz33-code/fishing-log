@@ -21,8 +21,8 @@ object DatePick {
     private val JOGUM = Color.parseColor("#B58CF0")
 
     private fun dayStart(t: Long) = Calendar.getInstance().apply { timeInMillis = t; set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
-    private fun mulShort(t: Long): String { val i = Tide.mulIndex(t + 12 * 3_600_000L); return when (i) { 0 -> "무시"; 14 -> "조금"; else -> "${i}물" } }
-    private fun mulCol(t: Long): Int { val i = Tide.mulIndex(t + 12 * 3_600_000L); return when (i) { in 5..9 -> SARI; 0, 12, 13, 14 -> JOGUM; else -> Ui.SUB } }
+    fun mulShort(t: Long): String { val i = Tide.mulIndex(t + 12 * 3_600_000L); return when (i) { 0 -> "무시"; 14 -> "조금"; else -> "${i}물" } }
+    fun mulCol(t: Long): Int { val i = Tide.mulIndex(t + 12 * 3_600_000L); return when (i) { in 5..9 -> SARI; 0, 12, 13, 14 -> JOGUM; else -> Ui.SUB } }
 
     fun show(a: Activity, cur: Long, onPick: (Long) -> Unit) {
         fun dp(v: Int) = Ui.dp(a, v)

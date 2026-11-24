@@ -237,6 +237,15 @@ console.log('[v6.68 크기 제한 · 포인트 핀]');
   await no('남의 전체 핀 지우기', deleteDoc(doc(D, 'pins/p1')));
   await no('핀 사칭 이름', setDoc(doc(B, 'pins/p2'), { ...pin, ownerName: '관리자' }));
   await ok('관리자가 전체 핀 지우기', deleteDoc(doc(ADM, 'pins/p1')));
+  // v6.86 (395): 배 인기도
+  await ok('배 좋아요', setDoc(doc(B, 'shipVotes/s24_2685/v/B'), { v: 1, t: now }));
+  await ok('배 나빠요로 바꾸기', setDoc(doc(B, 'shipVotes/s24_2685/v/B'), { v: -1, t: now }));
+  await no('배 표 2점', setDoc(doc(B, 'shipVotes/s24_2685/v/B'), { v: 2, t: now }));
+  await no('남 이름으로 배 표', setDoc(doc(B, 'shipVotes/s24_2685/v/A'), { v: 1, t: now }));
+  await no('배 표 이상한 칸', setDoc(doc(B, 'shipVotes/s24_2685/v/B'), { v: 1, t: now, x: 1 }));
+  await ok('누구나 배 표 보기', getDoc(doc(D, 'shipVotes/s24_2685/v/B')));
+  await no('남의 배 표 지우기', deleteDoc(doc(A, 'shipVotes/s24_2685/v/B')));
+  await ok('내 배 표 지우기', deleteDoc(doc(B, 'shipVotes/s24_2685/v/B')));
 }
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();

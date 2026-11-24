@@ -165,6 +165,15 @@ service cloud.firestore {
       allow update: if notBanned() && resource.data.owner == request.auth.uid && okPin(request.resource.data);
       allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
     }
+    // v6.86 (395): 🚤 배 인기도 👍👎 — 1인 1배 1표 (내 표만 쓰기 · 숫자는 앱이 count 로 셈)
+    match /shipVotes/{ship}/v/{uid} {
+      allow read: if signedIn();
+      allow create, update: if notBanned() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['v', 't'])
+        && (request.resource.data.v == 1 || request.resource.data.v == -1) && request.resource.data.t is int
+        && ship.size() <= 120;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
     // v6.68 (356): 게시판 글 칸 이름 · 크기 제한
     function okPub(d) {
       return d.keys().hasOnly(['owner', 'nick', 'start', 'end', 'cat', 'names', 'catches', 'total', 'photoCount', 'prec',

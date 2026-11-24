@@ -943,6 +943,12 @@ object Cloud {
             "lastSeen" to now, "app" to BuildConfigInfo.VERSION,
             "device" to (if (::appContext.isInitialized) Moderation.deviceId(appContext) else ""),
             "model" to phoneName(), "modelCode" to android.os.Build.MODEL, "os" to android.os.Build.VERSION.RELEASE), SetOptions.merge())
+        // v6.86 (387): 인터넷 사용량 (날짜별 KB · 최근 14일 · 통째로 바꿈)
+        if (::appContext.isInitialized) {
+            Usage.tick(appContext)
+            val u = Usage.days(appContext)
+            if (u.isNotEmpty()) db.collection("users").document(id).update("usage", u)
+        }
     }
 
     /** 폰 이름: 삼성은 설정에 적힌 이름(예: Galaxy S24 Ultra), 없으면 제조사 + 모델 */
@@ -956,7 +962,7 @@ object Cloud {
 
     class AppUser(val uid: String, val name: String, val email: String, val lastSeen: Long, val groups: Int, val version: String,
                   val device: String = "", val model: String = "", val modelCode: String = "", val os: String = "",
-                  val realName: String = "", val nick: String? = null)
+                  val realName: String = "", val nick: String? = null, val usage: Map<String, Long> = emptyMap())
 
     fun adminUsers(done: (List<AppUser>?, String?) -> Unit) {
         db.collection("users").get()
@@ -965,7 +971,8 @@ object Cloud {
                     AppUser(d.id, d.getString("name") ?: "?", d.getString("email") ?: "",
                         d.getLong("lastSeen") ?: 0L, (d.get("groups") as? List<*>)?.size ?: 0, d.getString("app") ?: "",
                         d.getString("device") ?: "", d.getString("model") ?: "", d.getString("modelCode") ?: "", d.getString("os") ?: "",
-                        d.getString("realName") ?: "", d.getString("nick"))
+                        d.getString("realName") ?: "", d.getString("nick"),
+                        ((d.get("usage") as? Map<*, *>) ?: emptyMap<String, Any>()).entries.associate { (k, v) -> k.toString() to ((v as? Number)?.toLong() ?: 0L) })
                 }.sortedByDescending { it.lastSeen }, null)
             }
             .addOnFailureListener { done(null, it.message ?: "불러오기 실패 (보안 규칙 확인)") }

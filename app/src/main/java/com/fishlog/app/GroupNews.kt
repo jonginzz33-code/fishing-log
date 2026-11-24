@@ -38,6 +38,17 @@ object GroupNews {
 
     private fun prefs() = Cloud.appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
 
+    /** v6.86 (371): 그룹 마지막 활동 (시각 · '💬 채팅' 같은 이름) — 채팅 · 공지 · 일정 · 출조 기록 · 포인트 중 가장 늦은 것 */
+    fun lastActivity(gid: String): Pair<Long, String> {
+        val c = listOf(
+            Chat.lastTime(gid) to "💬 채팅",
+            (rawNotices[gid]?.maxOfOrNull { maxOf(it.created, it.edited) } ?: 0L) to "📢 공지",
+            (rawEvents[gid]?.maxOfOrNull { it.created } ?: 0L) to "⏰ 일정",
+            (rawTrips[gid]?.maxOfOrNull { if (it.end > 0) it.end else it.start } ?: 0L) to "📒 출조",
+            (rawPins[gid]?.maxOfOrNull { it.t } ?: 0L) to "📌 포인트")
+        return c.maxByOrNull { it.first } ?: (0L to "")
+    }
+
     fun items(gid: String?): List<Item> = gid?.let { unseen[it] }.orEmpty()
     fun count(gid: String?): Int = items(gid).size
     fun total(): Int = Cloud.groups.sumOf { count(it.id) }
