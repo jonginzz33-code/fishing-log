@@ -85,9 +85,18 @@ object Seats {
 
     /** 'sungbin.sunsang24.com' · 'https://sungbin.sunsang24.com/ship/...' → 'sungbin.sunsang24.com' (선상24 아니면 null) */
     fun hostOf(raw: String): String? {
-        val h = raw.trim().lowercase().removePrefix("https://").removePrefix("http://").substringBefore('/').substringBefore('?').trim()
+        val h = raw.trim().lowercase().removePrefix("https://").removePrefix("http://").substringBefore('/').substringBefore('?').substringBefore('#').trim()
         return if (h.endsWith(".sunsang24.com") && h != "www.sunsang24.com" && h != "api.sunsang24.com" && h.count { it == '.' } == 2) h else null
     }
+    /** v6.80 (385): 선상24 선단 또는 개인 배 사이트 주소 → 호스트 */
+    fun anyHostOf(raw: String): String? {
+        hostOf(raw)?.let { return it }
+        val h = raw.trim().lowercase().removePrefix("https://").removePrefix("http://").substringBefore('/').substringBefore('?').substringBefore('#').trim()
+        return if (h.contains('.') && h.matches(Regex("[a-z0-9.-]+")) && !h.endsWith("sunsang24.com")) h else null
+    }
+    fun isS24Fleet(host: String) = host.endsWith(".sunsang24.com")
+    /** 개인 사이트 미리 넣어 둔 것 (사용자가 알려 준 곳) */
+    val PRESETS = listOf("hunter-booking.onrender.com" to "거북섬 헌터호")
 
     // ─────────────── 읽기 · 풀기 ───────────────
     private val mem = HashMap<String, Pair<Long, List<Sch>>>()
@@ -95,7 +104,9 @@ object Seats {
 
     private fun get(url: String): String {
         val cn = URL(url).openConnection() as HttpURLConnection
-        cn.connectTimeout = 8000; cn.readTimeout = 12000; cn.instanceFollowRedirects = true
+        // 개인 사이트(무료 서버)는 처음 깨어나는 데 오래 걸려서 넉넉히
+        val slow = !url.contains("sunsang24.com")
+        cn.connectTimeout = if (slow) 20000 else 8000; cn.readTimeout = if (slow) 40000 else 12000; cn.instanceFollowRedirects = true
         cn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile")
         cn.setRequestProperty("Accept-Language", "ko-KR,ko")
         try {
@@ -108,9 +119,42 @@ object Seats {
     fun month(host: String, ym: String, fresh: Boolean = false): List<Sch> {
         val k = "${host}_$ym"
         if (!fresh) synchronized(mem) { mem[k]?.let { if (System.currentTimeMillis() - it.first < KEEP) return it.second } }
-        val l = parse(host, get("https://$host/ship/schedule_fleet/$ym"))
+        val l = if (isS24Fleet(host)) parse(host, get("https://$host/ship/schedule_fleet/$ym")) else calSite(host, ym)
         synchronized(mem) { mem[k] = System.currentTimeMillis() to l }
         return l
+    }
+
+    // ─────────────── v6.80 (385): 개인 배 사이트 (달력 주소형 · 예: 헌터호 /api/calendar?program=&month=yyyy-MM) ───────────────
+    private val siteMem = HashMap<String, Pair<Long, Pair<String, List<Pair<String, String>>>>>()
+    /** 사이트 첫 화면에서 이름 · 프로그램(체험) 목록 */
+    private fun siteInfo(host: String): Pair<String, List<Pair<String, String>>> {
+        synchronized(siteMem) { siteMem[host]?.let { if (System.currentTimeMillis() - it.first < 86400000L) return it.second } }
+        val html = get("https://$host/")
+        val title = Regex("<title>([^<]*)</title>").find(html)?.groupValues?.get(1)?.replace("예약", "")?.trim()?.ifBlank { null } ?: host.substringBefore('.')
+        val progs = Regex("""<option value="([^"]+)">([^<]+)""").findAll(html).map { it.groupValues[1] to it.groupValues[2].trim() }
+            .filter { !it.first.contains("30분") }.distinctBy { it.first }.toList()
+        val r = title to progs
+        synchronized(siteMem) { siteMem[host] = System.currentTimeMillis() to r }
+        return r
+    }
+    private fun calSite(host: String, ym: String): List<Sch> {
+        val (title, progs) = siteInfo(host)
+        if (progs.isEmpty()) throw Exception("이 사이트는 아직 못 읽어요")
+        val month = ym.take(4) + "-" + ym.drop(4)
+        val out = ArrayList<Sch>()
+        progs.forEach { (v, label) ->
+            val o = try { JSONObject(get("https://$host/api/calendar?program=${Uri.encode(v)}&month=$month")) } catch (_: Exception) { return@forEach }
+            val days = o.optJSONArray("days") ?: return@forEach
+            for (i in 0 until days.length()) {
+                val d = days.getJSONObject(i)
+                val st = d.optString("state")
+                if (st == "지난날짜") continue
+                val rem = d.optInt("remaining")
+                val code = when (st) { "예약가능" -> if (rem > 0) "ING" else "END"; "예약마감" -> "END"; else -> "CLOSED" }
+                out.add(Sch(host, v, "", title, d.optString("date"), label, "체험", "", if (code == "ING") rem else 0, 0, code, "", "개인 사이트"))
+            }
+        }
+        return out
     }
 
     private val rxTide = Regex("""id="d(\d{4}-\d{2}-\d{2})"[\s\S]{0,600}?class="swell">([^<]*)<""")
@@ -151,8 +195,10 @@ object Seats {
     }
 
     fun bookUrl(s: Sch) = if (s.host == S24) "https://www.sunsang24.com/mypage/reservation_ready/${s.shipNo}/${s.schNo}/${s.date}"
+        else if (!isS24Fleet(s.host)) "https://${s.host}/#reserve"
         else "https://${s.host}/ship/schedule_fleet/${s.date.replace("-", "").take(6)}"
     fun bookUrl(w: Watch) = if (w.host == S24) "https://www.sunsang24.com/ship/list"
+        else if (!isS24Fleet(w.host)) "https://${w.host}/#reserve"
         else "https://${w.host}/ship/schedule_fleet/${w.date.replace("-", "").take(6)}"
 
     // ─────────────── v6.78: 🌐 선상24 전체 (선상24 목록 주소 api.sunsang24.com · 공개 문서 없는 주소라 바뀌면 멈출 수 있음) ───────────────
@@ -476,6 +522,7 @@ object Seats {
                 val tail = when {
                     s.status != "ING" && s.status != "END" -> ""
                     !s.open -> " · 예약 ${s.reserved}/${s.cap}"
+                    s.cap <= s.remain -> " 남음"
                     s.remain <= 3 -> " 남음 · 곧 마감"
                     else -> " 남음 · 예약 ${s.reserved}/${s.cap}"
                 }
@@ -737,14 +784,20 @@ object Seats {
                 sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, true, "🌐 자주 가는 사이트에 있는 선상24 주소").apply { setPadding(0, dp(14), 0, dp(6)) })
                 sug.forEach { (h, n) -> sh.body.addView(Ui.button(a, "＋ $n ($h)") { addFleet(a, h, n) { dirty = true; draw() } }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 6)) }
             }
+            // v6.80 (385): 개인 배 사이트 (선상24에 없는 곳)
+            val pre = PRESETS.filter { it.first !in have }
+            if (pre.isNotEmpty()) {
+                sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, true, "🛥 개인 배 사이트").apply { setPadding(0, dp(14), 0, dp(6)) })
+                pre.forEach { (h, n) -> sh.body.addView(Ui.button(a, "＋ $n ($h)") { addFleet(a, h, n) { dirty = true; draw() } }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 6)) }
+            }
             sh.body.addView(Ui.button(a, "＋ 선단 추가 (주소 붙여 넣기)", true) {
                 val et = EditText(a).apply { hint = "sungbin.sunsang24.com"; inputType = InputType.TYPE_TEXT_VARIATION_URI; setSingleLine() }
                 android.app.AlertDialog.Builder(a, R.style.FlAlert).setTitle("🚤 선단 추가")
-                    .setMessage("선상24 선단 홈페이지 주소 (○○.sunsang24.com)")
+                    .setMessage("선상24 선단 홈페이지 주소 (○○.sunsang24.com) 또는 개인 배 사이트 주소")
                     .setView(LinearLayout(a).apply { setPadding(dp(20), 0, dp(20), 0); addView(et, LinearLayout.LayoutParams(MATCH, WRAP)) })
                     .setPositiveButton("추가") { _, _ ->
-                        val h = hostOf(et.text.toString())
-                        if (h == null) Ui.toast(a, "선상24 선단 주소가 아니에요 (예: sungbin.sunsang24.com)")
+                        val h = anyHostOf(et.text.toString())
+                        if (h == null) Ui.toast(a, "주소를 확인해 주세요 (예: sungbin.sunsang24.com · 개인 배 사이트 주소)")
                         else addFleet(a, h, "") { dirty = true; draw() }
                     }.setNegativeButton("취소", null).show()
             }, Ui.lp(a, MATCH, WRAP, top = 14))
@@ -755,11 +808,11 @@ object Seats {
 
     /** 선단 추가: 한 번 읽어 보고 배 이름으로 이름 짓기 */
     private fun addFleet(a: Activity, host: String, name0: String, done: () -> Unit) {
-        Ui.toast(a, "선단 페이지 확인 중…")
+        Ui.toast(a, if (isS24Fleet(host)) "선단 페이지 확인 중…" else "사이트 확인 중… (처음엔 30초쯤 걸릴 수 있어요)")
         Thread {
             val r = try { month(host, ymF.format(Date()), true) } catch (_: Exception) { null }
             a.runOnUiThread {
-                if (r == null) { Ui.toast(a, "읽지 못했어요 · 주소를 확인해 주세요 ($host)"); return@runOnUiThread }
+                if (r == null) { Ui.toast(a, if (isS24Fleet(host)) "읽지 못했어요 · 주소를 확인해 주세요 ($host)" else "이 개인 사이트는 아직 앱이 못 읽어요 · ✉ 1:1 문의로 주소를 알려 주시면 맞춰 넣을게요"); return@runOnUiThread }
                 val ships = r.map { it.ship }.distinct()
                 val name = name0.ifBlank { ships.take(2).joinToString(" · ").ifBlank { host.substringBefore('.') } + if (ships.size > 2) " 외 ${ships.size - 2}" else "" }
                 val l = fleets(a); if (l.none { it.host == host }) l.add(Fleet(host, name)); saveFleets(a, l)

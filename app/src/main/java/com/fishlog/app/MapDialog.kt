@@ -1492,6 +1492,44 @@ object MapDialog {
         }
     }
 
+    /**
+     * v6.80 (383): 그룹 지도용 — 그 그룹 출조 기록(나 포함)의 잡은 자리 점 (지난 기록과 같은 모양 · 출조마다 색)
+     *  done(출조 수, 점 수, 점 위치들) · days = 며칠 안 (0 = 전체) · species = 고른 어종만 (빈 것 = 전체)
+     */
+    fun groupCatches(a: Activity, g: Cloud.Group, days: Int, species: Set<String>, ov: org.osmdroid.views.overlay.Overlay?,
+                     done: (org.osmdroid.views.overlay.Overlay, Int, Int, List<GeoPoint>, Map<String, Int>) -> Unit) {
+        val dov = (ov as? DotsOverlay) ?: DotsOverlay(a, emptyList(), false) { showCluster(a, it) }.apply { icons = true; mergeDp = 34f }
+        val df = SimpleDateFormat("yy.M.d", Locale.KOREA)
+        Cloud.recentTripsOf(g) { list, _ ->
+            if (a.isFinishing) return@recentTripsOf
+            val since = if (days > 0) System.currentTimeMillis() - days * 86_400_000L else 0L
+            val ts = list.orEmpty().filter { it.start >= since && !Moderation.isBlocked(it.owner) }.distinctBy { it.id }.sortedByDescending { it.start }
+            val spCount = HashMap<String, Int>()
+            val trips = ArrayList<PastTrip>(); val dots = ArrayList<MapDot>()
+            ts.forEach { t ->
+                val key = "g:${t.id}"
+                val cs = t.catches.filter { it.lat != null && it.lon != null }
+                cs.forEach { c -> val n = t.name(c.slot); spCount[n] = (spCount[n] ?: 0) + 1 }
+                val cs2 = if (species.isEmpty()) cs else cs.filter { t.name(it.slot) in species }
+                if (cs2.isEmpty()) return@forEach
+                val mul = Tide.mulName(t.start).substringBefore(" (")
+                trips.add(PastTrip(key, "${mdFmt.format(Date(t.start))} ${t.ownerName}", t.start, t.end, 1,
+                    t.track.map { GeoPoint(it.lat, it.lon) }, cs2.map { GeoPoint(it.lat!!, it.lon!!) to it.time }) { aa ->
+                    TripActivity.remoteView = t
+                    aa.startActivity(android.content.Intent(aa, TripActivity::class.java).putExtra("remote", true).putExtra("gid", g.id)) })
+                cs2.forEach {
+                    dots.add(MapDot(GeoPoint(it.lat!!, it.lon!!), slotCol(it.slot),
+                        "${t.ownerName} · ${df.format(Date(it.time))} · ${t.name(it.slot)} · $mul", "${t.ownerName} ${t.name(it.slot)}",
+                        it.time, t.ownerName, t.name(it.slot), paidMark(t.cat, t.paid), 1, 0.0, false, key))
+                }
+            }
+            trips.forEachIndexed { i, p -> p.color = if (i < TRIP_COLORS.size) TRIP_COLORS[i] else GREY_TRIP }
+            trips.forEach { pastTrips[it.key] = it }
+            dov.dots = dots.map { d -> pastTrips[d.trip]?.let { d.withColor(it.color) } ?: d }
+            done(dov, trips.size, dots.size, dots.map { it.point }, spCount)
+        }
+    }
+
     /** 지도 아래쪽에 "위치가 꺼져 있어요" 같은 안내 (누르면 켜기) */
     private fun addStatus(a: Activity, frame: FrameLayout, liveMe: LiveMe) {
         val tv = TextView(a).apply {

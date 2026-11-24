@@ -61,9 +61,11 @@ object Region {
         Reg("yy", "양양속초", "양양 · 속초 · 고성", "속초 앞바다", 38.2, 128.65, 1),
         Reg("jj", "제주", "제주 · 서귀포", "제주 앞바다", 33.58, 126.5, 1))
 
-    val NAMES = listOf("매우나쁨", "나쁨", "보통", "좋음", "매우좋음")
+    val NAMES = listOf("매우나쁨", "나쁨", "보통", "좋음", "매우좋음", "⛔ 출조 어려움")
     val COLORS = intArrayOf(Color.parseColor("#E5484D"), Color.parseColor("#F08A4B"), Color.parseColor("#E8C14A"),
-        Color.parseColor("#7FD6A0"), Color.parseColor("#2FBF8F"))
+        Color.parseColor("#7FD6A0"), Color.parseColor("#2FBF8F"), Color.parseColor("#5B6873"))
+    /** v6.80 (376): 예상조과 '⛔ 출조 어려움' (출조환경 매우나쁨 · 특보) */
+    const val HARD = 5
     val SPECIES = listOf("전체", "주꾸미", "갑오징어", "우럭", "광어", "참돔", "삼치")
     /** 어종별 좋은 수온(℃) · 좋은 물세기(%) — 대충 기준 */
     private class Pref(val tLo: Double, val tHi: Double, val fLo: Int, val fHi: Int)
@@ -311,8 +313,12 @@ object Region {
                 else why.add("최근 7일 ${rc.trips}건 · 평균 ${"%.0f".format(per)}마리")
             } else why.add("최근 7일 ${rc.trips}건 · ${rc.fish}마리")
         }
-        if (env <= 1) { sc -= 0.5; why.add("바다가 거칠어 낚시가 어려움") }
-        val catch = Math.round(2 + sc).toInt().coerceIn(0, 4)
+        val raw = Math.round(2 + sc).toInt().coerceIn(0, 4)
+        val catch = when {
+            env == 0 -> { why.add(0, "물때 · 수온만 보면: ${NAMES[raw]}"); why.add("바람 · 파도가 세서 출조가 어려워요"); HARD }
+            env == 1 -> { if (raw > 0) { why.add(0, "물때 · 수온만 보면: ${NAMES[raw]}"); why.add("바다가 거칠어 한 단계 낮췄어요") }; maxOf(0, raw - 1) }
+            else -> raw
+        }
         return Score(env, catch, envWhy.joinToString(" · "), why.joinToString(" · "), pct, rc?.trips ?: 0, rc?.fish ?: 0)
     }
 
@@ -524,15 +530,16 @@ object Region {
                 body.addView(mapView, LinearLayout.LayoutParams(MATCH, WRAP))
                 // 범례
                 val leg = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER; setPadding(0, dp(6), 0, dp(8)) }
-                NAMES.forEachIndexed { i, n ->
-                    leg.addView(View(a).apply { background = Ui.bg(a, COLORS[i], 99) }, LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = if (i > 0) dp(9) else 0 })
-                    leg.addView(Ui.text(a, 11f, Ui.SUB, false, " $n"))
+                val legIdx = if (mode == 1) listOf(HARD, 0, 1, 2, 3, 4) else listOf(0, 1, 2, 3, 4)
+                legIdx.forEachIndexed { k, i ->
+                    leg.addView(View(a).apply { background = Ui.bg(a, COLORS[i], 99) }, LinearLayout.LayoutParams(dp(9), dp(9)).apply { leftMargin = if (k > 0) dp(9) else 0 })
+                    leg.addView(Ui.text(a, 11f, Ui.SUB, false, " " + (if (i == HARD) "출조 어려움" else NAMES[i])))
                 }
                 body.addView(leg)
                 sel?.let { body.addView(card(it), LinearLayout.LayoutParams(MATCH, WRAP).apply { setMargins(dp(10), 0, dp(10), dp(14)) }) }
                     ?: body.addView(Ui.text(a, 12f, Ui.SUB, false, "점을 누르면 그 권역 자세히 · 위 ☰ 목록 = 좋은 순").apply { gravity = Gravity.CENTER; setPadding(0, 0, 0, dp(16)) }, Ui.lp(a, MATCH, WRAP))
             } else {
-                val order = LIST.sortedWith(compareByDescending<Reg> { it.id in favs }.thenByDescending { (scores[it.id]?.env ?: -1) + (scores[it.id]?.catch ?: -1) })
+                val order = LIST.sortedWith(compareByDescending<Reg> { it.id in favs }.thenByDescending { (scores[it.id]?.env ?: -1) + (scores[it.id]?.catch?.let { c -> if (c == HARD) -1 else c } ?: -1) })
                 val lb = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(14)) }
                 order.forEachIndexed { i, r -> lb.addView(listRow(r), Ui.lp(a, MATCH, WRAP, top = if (i == 0) 0 else 6)) }
                 lb.addView(Ui.text(a, 11f, Ui.SUB, false, "★ 즐겨찾기 권역은 맨 위 · 줄을 누르면 지도에서 자세히 (카드의 ☆ 로 즐겨찾기)").apply { gravity = Gravity.CENTER }, Ui.lp(a, MATCH, WRAP, top = 10))
@@ -668,7 +675,7 @@ object Region {
                 val lvl = levels[r.id] ?: -1
                 val c = if (lvl < 0) Color.parseColor("#5A7A90") else COLORS[lvl]
                 val sel = r.id == selected
-                val label = r.name
+                val label = if (lvl == HARD) "⛔ " + r.name else r.name
                 p.textSize = 11.5f * dens; p.isFakeBoldText = true
                 val tw = p.measureText(label) + 14 * dens
                 val lh = 20 * dens

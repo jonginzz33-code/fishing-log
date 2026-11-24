@@ -55,7 +55,8 @@ object GroupAlert {
             }
             override fun onActivityStopped(a: android.app.Activity) { if (started > 0) started-- }
             override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
-            override fun onActivityResumed(a: android.app.Activity) {}
+            // v6.80 (377): 화면을 열 때마다 마지막 접속 기록 (5분에 한 번까지 · 로그인했을 때만)
+            override fun onActivityResumed(a: android.app.Activity) { try { if (Cloud.uid != null) Cloud.touchUser() } catch (_: Exception) {} }
             override fun onActivityPaused(a: android.app.Activity) {}
             override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
             override fun onActivityDestroyed(a: android.app.Activity) {}

@@ -86,7 +86,8 @@ object Pins {
                 out[k] = s.documents.mapNotNull { parse(it, scope, gid) }.filter { !Moderation.isBlocked(it.owner) }
             }.addOnCompleteListener {
                 left--
-                if (left == 0) done(jobs.flatMap { out[it.first].orEmpty() })
+                // v6.80 (384): 여러 그룹에 같이 올린 핀은 한 번만
+                if (left == 0) done(jobs.flatMap { out[it.first].orEmpty() }.distinctBy { if (it.scope == GROUP) "g:" + it.id else "${it.scope}:${it.id}" })
             }
         }
     }
@@ -97,6 +98,42 @@ object Pins {
         db.collection("groups").document(gid).collection("pins").limit(300).get()
             .addOnSuccessListener { s -> done(s.documents.mapNotNull { parse(it, GROUP, gid) }.filter { !Moderation.isBlocked(it.owner) }) }
             .addOnFailureListener { done(null) }
+    }
+
+    /**
+     * v6.80 (384): 그룹 여러 개 — 고른 그룹마다 같은 id 로 한 장씩 (규칙 안 바꿈) · 고칠 때 빠진 그룹 것은 지움
+     *  gids 가 비어 있으면 예전처럼 p.gid 하나
+     */
+    fun saveMulti(p: Pin, old: Pin?, gids: Set<String>, done: (String?) -> Unit) {
+        val me = Cloud.uid ?: return done("로그인이 필요해요")
+        if (p.scope != GROUP || gids.size <= 1 && (old == null || old.scope != GROUP)) {
+            return save(Pin(p.id, p.scope, if (p.scope == GROUP) (gids.firstOrNull() ?: p.gid) else "", p.name, p.memo, p.lat, p.lon, p.r, p.sp, p.owner, p.ownerName, p.t), old, done)
+        }
+        if (old != null && old.owner != me && (gids.size > 1 || old.scope != GROUP)) return done("남의 핀은 공유 범위를 못 바꿔요")
+        val m = hashMapOf<String, Any>("name" to p.name.take(30), "memo" to p.memo.take(200), "lat" to p.lat, "lon" to p.lon,
+            "r" to p.r.coerceIn(50.0, 3000.0), "sp" to p.sp.take(10), "owner" to (old?.owner ?: me),
+            "ownerName" to (old?.ownerName ?: Cloud.displayName.take(30)), "t" to (old?.t ?: System.currentTimeMillis()))
+        if (old != null) m["edited"] = System.currentTimeMillis()
+        val id = old?.id ?: db.collection("pins").document().id
+        val tasks = ArrayList<com.google.android.gms.tasks.Task<Void>>()
+        gids.forEach { g -> tasks.add(ref(GROUP, g).document(id).set(m)) }
+        com.google.android.gms.tasks.Tasks.whenAllComplete(tasks).addOnCompleteListener {
+            val okN = tasks.count { it.isSuccessful }
+            if (okN == 0) { done("저장 못 했어요"); return@addOnCompleteListener }
+            if (old != null) {
+                // 예전 범위가 나만 · 전체였으면 지움 · 그룹이었으면 빠진 그룹 것 지움 (없으면 그냥 실패)
+                if (old.scope != GROUP) ref(old.scope, old.gid).document(old.id).delete()
+                else if (old.owner == me) Cloud.groups.filter { it.id !in gids }.forEach { g -> ref(GROUP, g.id).document(id).delete() }
+            }
+            done(if (okN < tasks.size) "일부 그룹엔 못 올렸어요 (${okN}/${tasks.size})" else null)
+        }
+    }
+    /** v6.80 (384): 이 핀(같은 id)이 올라가 있는 내 그룹들 */
+    fun groupsHaving(id: String, done: (Set<String>) -> Unit) {
+        val gs = Cloud.groups; if (gs.isEmpty() || id.isBlank()) return done(emptySet())
+        val out = java.util.Collections.synchronizedSet(HashSet<String>()); var left = gs.size
+        gs.forEach { g -> ref(GROUP, g.id).document(id).get().addOnSuccessListener { if (it.exists()) out.add(g.id) }
+            .addOnCompleteListener { if (--left == 0) done(HashSet(out)) } }
     }
 
     fun save(p: Pin, old: Pin?, done: (String?) -> Unit) {
@@ -115,6 +152,8 @@ object Pins {
     }
 
     fun delete(p: Pin, done: (String?) -> Unit) {
+        // v6.80 (384): 내 그룹 포인트는 다른 그룹에 같이 올린 것도 같이 지움
+        if (p.scope == GROUP && p.owner == Cloud.uid) Cloud.groups.filter { it.id != p.gid }.forEach { g -> ref(GROUP, g.id).document(p.id).delete() }
         ref(p.scope, p.gid).document(p.id).delete().addOnSuccessListener { done(null) }.addOnFailureListener { done(it.message ?: "못 지웠어요") }
     }
 
@@ -306,6 +345,7 @@ object Pins {
         val dp = { v: Int -> Ui.dp(a, v) }
         var scope = from?.scope ?: old?.scope ?: MINE
         var gid = (from?.gid ?: old?.gid)?.ifBlank { null } ?: Cloud.active?.id ?: ""
+        val gids = LinkedHashSet<String>().apply { if (gid.isNotBlank()) add(gid) }   // v6.80 (384) 여러 그룹
         var r = from?.r ?: old?.r ?: 300.0
         val sp = (from?.sp ?: old?.sp ?: emptyList()).toMutableList()
         fun draftNow(name: String) = Pin(old?.id ?: "_draft", scope, gid, name.ifBlank { "새 포인트" }, "", at.latitude, at.longitude, r, sp, "", "", 0L)
@@ -413,20 +453,33 @@ object Pins {
             scWrap.removeAllViews()
             scWrap.addView(Ui.pill(a, "🔒 나만", scope == MINE, Ui.MINE, small = true) { scope = MINE; paintScope(); ov.draft = draftNow(nameE.text.toString()); map.invalidate() }, scLp())
             if (Cloud.groups.isNotEmpty()) {
-                val gt = Cloud.groups.firstOrNull { it.id == gid }?.title ?: Cloud.groups.first().title
+                gids.retainAll(Cloud.groups.map { it.id }.toSet())
+                val first = Cloud.groups.firstOrNull { it.id in gids }?.title ?: Cloud.groups.first().title
+                val gt = if (gids.size > 1) "$first 외 ${gids.size - 1}" else first
                 scWrap.addView(Ui.pill(a, "👥 $gt ▾", scope == GROUP, Ui.GROUP, small = true) {
                     if (scope == GROUP && Cloud.groups.size > 1) {
-                        AlertDialog.Builder(a, R.style.FlAlert).setTitle("어느 그룹에 보일까요?")
-                            .setItems(Cloud.groups.map { it.title }.toTypedArray()) { _, w -> gid = Cloud.groups[w].id; paintScope() }
+                        val dupe = Cloud.groups.groupingBy { it.title }.eachCount()
+                        val names = Cloud.groups.map { g -> if ((dupe[g.title] ?: 0) > 1) g.label() else g.title }.toTypedArray()
+                        val checked = Cloud.groups.map { it.id in gids }.toBooleanArray()
+                        AlertDialog.Builder(a, R.style.FlAlert).setTitle("어느 그룹에 보일까요? (여러 개)")
+                            .setMultiChoiceItems(names, checked) { _, w, on -> checked[w] = on }
+                            .setPositiveButton("확인") { _, _ ->
+                                val pick = Cloud.groups.filterIndexed { i, _ -> checked[i] }.map { it.id }
+                                if (pick.isEmpty()) Ui.toast(a, "그룹을 하나 이상 골라 주세요")
+                                else { gids.clear(); gids.addAll(pick); gid = pick.first(); paintScope() }
+                            }
                             .setNegativeButton("닫기", null).show()
                     }
                     scope = GROUP; if (Cloud.groups.none { it.id == gid }) gid = Cloud.groups.first().id
+                    if (gids.isEmpty()) gids.add(gid)
                     paintScope(); ov.draft = draftNow(nameE.text.toString()); map.invalidate()
                 }, scLp())
             }
             scWrap.addView(Ui.pill(a, "🌐 전체 게시판", scope == ALL, Ui.ALL, small = true) { scope = ALL; paintScope(); ov.draft = draftNow(nameE.text.toString()); map.invalidate() }, scLp())
         }
         paintScope()
+        // 고칠 때: 이 핀이 올라가 있는 그룹들을 미리 체크
+        if (old != null && old.scope == GROUP) groupsHaving(old.id) { have -> if (have.isNotEmpty()) a.runOnUiThread { gids.clear(); gids.addAll(have); gid = have.first(); paintScope() } }
         sh.body.addView(Ui.hscroll(a, scWrap), Ui.lp(a, -1, -2, top = 4))
         sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "그룹 · 전체 포인트는 다른 사람도 봐요. 전체 게시판 포인트는 누구나 볼 수 있으니 개인 정보는 적지 마세요."), Ui.lp(a, -1, -2, top = 6))
         var saved = false
@@ -440,8 +493,8 @@ object Pins {
                 isEnabled = false; text = "저장 중…"
                 val p = Pin(old?.id ?: "", scope, if (scope == GROUP) gid else "", Profanity.mask(nm), Profanity.mask(memoE.text.toString().trim()),
                     at.latitude, at.longitude, r, sp.toList(), "", "", 0L)
-                save(p, old) { err ->
-                    if (err != null) { Ui.toast(a, err); isEnabled = true; text = "💾 저장"; return@save }
+                saveMulti(p, old, if (scope == GROUP) gids else emptySet()) { err ->
+                    if (err != null) { Ui.toast(a, err); isEnabled = true; text = "💾 저장"; return@saveMulti }
                     saved = true; Ui.toast(a, "📌 포인트를 저장했어요"); sh.close()
                 }
             }
