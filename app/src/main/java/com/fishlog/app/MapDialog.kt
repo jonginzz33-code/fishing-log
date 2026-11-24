@@ -79,6 +79,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
     }
     /**
@@ -314,7 +315,14 @@ object MapDialog {
         } catch (_: Exception) { null }
     }
 
+    /** v6.73: 지도 크기가 0이면 첫 배치 뒤에 실행 */
+    fun whenSized(map: MapView, f: () -> Unit) {
+        if (map.width > 0 && map.height > 0) map.post(f)
+        else map.addOnFirstLayoutListener { _, _, _, _, _ -> map.post(f) }
+    }
+
     private fun fit(map: MapView, all: List<GeoPoint>) {
+        if (map.width == 0 || map.height == 0) { whenSized(map) { fit(map, all) }; return }
         when {
             // 위치 기록이 없으면 한국 전체 말고 내 현재 위치로 (모르면 한국 전체)
             all.isEmpty() -> {
@@ -381,6 +389,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
 
         // 🦀 해루질 참고 구역 (맨 아래 · ☑ 일 때만)
@@ -1236,7 +1245,8 @@ object MapDialog {
         dialog.show()
         map.onResume()
 
-        map.post {
+        // v6.73: 지도 크기가 정해진 뒤에 처음 자리 잡기 (전엔 크기 0일 때 잡혀 세계 전체로 열릴 때가 있었음)
+        fun firstView() {
             val loc = Tracker.last
             if (live != null && loc != null) {
                 map.controller.setZoom(16.0)
@@ -1245,6 +1255,7 @@ object MapDialog {
                 fit(map, all)
             }
         }
+        whenSized(map) { firstView(); map.postDelayed({ if (map.zoomLevelDouble < 5.0) firstView() }, 400) }
         if (live != null) {
             Tracker.live = true
             sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)?.let { sm.registerListener(sensorListener, it, SensorManager.SENSOR_DELAY_UI) }
@@ -1459,6 +1470,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
         // v3.9.3: 포인트 지도에도 🦀 해루질 참고 구역 (맨 아래)
         map.overlays.add(Zones.ZoneOverlay(a) { Zones.on(a) }.apply { onTapZones = { Zones.showInfo(a, it, map) } })
@@ -1532,6 +1544,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)   // v5.2 (237): 앱 ＋/－ 버튼을 따로 씀
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
         // 그 사람의 경로 + 잡은 자리 (관리자가 권한 준 사람만 받을 수 있음)
         fun route(w: Int, c: Int) = Polyline(map).apply {
@@ -1740,6 +1753,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
         // 팝업을 스크롤하지 않고 지도를 움직이게
         map.setOnTouchListener { v, _ -> v.parent?.requestDisallowInterceptTouchEvent(true); false }
@@ -1800,6 +1814,7 @@ object MapDialog {
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             setTileSource(if (Store.satellite) satelliteSource else TileSourceFactory.MAPNIK)
             isTilesScaledToDpi = true
+            isVerticalMapRepetitionEnabled = false; minZoomLevel = 4.0   // v6.73: 세계가 위아래로 겹쳐 보이지 않게
         }
         val layer = layerOf(t)
         val all = mutableListOf<GeoPoint>()
