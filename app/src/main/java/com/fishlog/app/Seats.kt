@@ -742,10 +742,11 @@ object Seats {
         }
 
         // v6.82 (389): 여러 개 고르기 — 눌러도 창은 그대로 · [✓ 보기] 또는 창 닫을 때 한 번에 적용
-        fun multiSheet(title: String, cur: HashSet<String>, apply: (Set<String>) -> Unit): Triple<Sheet, (LinearLayout, List<String>, Map<String, Int>) -> Unit, () -> Unit> {
+        fun multiSheet(title: String, cur: HashSet<String>, apply: (Set<String>) -> Unit): Triple<Sheet, (LinearLayout, String, List<String>, Map<String, Int>) -> Unit, () -> Unit> {
             val sh = Sheet(a, 0.7f)
             val sel = HashSet(cur)
             val tvs = HashMap<String, MutableList<TextView>>()
+            val grpBtns = ArrayList<Pair<TextView, List<String>>>()   // 무리마다 '전체' (서해안 전체 등)
             val cnt = Ui.text(a, 12.5f, Ui.SUB, false, "")
             sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, title), LinearLayout.LayoutParams(WRAP, WRAP))
             sh.head.addView(cnt, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
@@ -760,6 +761,11 @@ object Seats {
                     tv.background = if (on) Ui.bg(a, Ui.MINE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
                     tv.setTextColor(if (on) Ui.BG else Ui.TEXT)
                 } }
+                grpBtns.forEach { (b, l) ->
+                    val on = l.isNotEmpty() && sel.containsAll(l)
+                    b.background = if (on) Ui.bg(a, Ui.MINE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
+                    b.setTextColor(if (on) Ui.BG else Color.parseColor("#7FD6FF"))
+                }
                 allBtn.background = if (sel.isEmpty()) Ui.bg(a, Ui.MINE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
                 allBtn.setTextColor(if (sel.isEmpty()) Ui.BG else Ui.TEXT)
                 cnt.text = if (sel.isEmpty()) "전체" else "${sel.size}개 고름"
@@ -770,7 +776,16 @@ object Seats {
             sh.onClose = { finish() }
             sh.dlg.setOnDismissListener { finish() }
             sh.body.addView(allBtn, LinearLayout.LayoutParams(WRAP, WRAP))
-            val chips: (LinearLayout, List<String>, Map<String, Int>) -> Unit = { box, l, nums ->
+            val chips: (LinearLayout, String, List<String>, Map<String, Int>) -> Unit = { box, t, l, nums ->
+                val hr = Ui.row(a).apply { setPadding(0, dp(14), 0, dp(6)) }
+                hr.addView(Ui.text(a, 13.5f, Ui.TEXT, true, t), LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(8) })
+                if (l.size > 1) {
+                    val gb = Ui.pill(a, "$t 전체", false, Ui.MINE, small = true) {
+                        if (sel.containsAll(l)) sel.removeAll(l.toSet()) else sel.addAll(l); paint()
+                    }
+                    grpBtns.add(gb to l); hr.addView(gb)
+                }
+                box.addView(hr)
                 val wrap = FlowLayout(a)
                 l.forEach { f ->
                     val tv = Ui.pill(a, f + (nums[f]?.let { " $it" } ?: ""), false, Ui.MINE, small = true) { if (f in sel) sel.remove(f) else sel.add(f); paint() }
@@ -785,21 +800,21 @@ object Seats {
         fishBtn.setOnClickListener {
             val names = all.filter { it.date >= ymd.format(Date()) }.flatMap { fishList(it) }.groupingBy { it }.eachCount()
             val (sh, chipsF, paint) = multiSheet("🐟 어종", fishSel) { v -> fishSel.clear(); fishSel.addAll(v); savePrefs(); render(); loadS24(true) }
-            fun chips(box: LinearLayout, l: List<String>) = chipsF(box, l, names)
+            fun chips(t: String, l: List<String>) = chipsF(sh.body, t, l, names)
             val sf = if (useS24) filterMem?.second else null
             if (sf != null && sf.fish.isNotEmpty()) {
                 val shown = HashSet<String>()
-                sf.fish.forEach { (t, l) -> if (l.isNotEmpty()) { sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, t).apply { setPadding(0, dp(14), 0, dp(6)) }); chips(sh.body, l); shown.addAll(l) } }
+                sf.fish.forEach { (t, l) -> if (l.isNotEmpty()) { chips(t, l); shown.addAll(l) } }
                 val extra = names.keys.filter { it !in shown }
-                if (extra.isNotEmpty()) { sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "내 선단에 있는 어종").apply { setPadding(0, dp(14), 0, dp(6)) }); chips(sh.body, extra) }
+                if (extra.isNotEmpty()) chips("내 선단에 있는 어종", extra)
                 sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "여러 개 눌러 고르고 [✓ 보기] · 창을 닫아도 고른 대로 보여요").apply { setPadding(0, dp(12), 0, 0) })
                 paint(); sh.show(); return@setOnClickListener
             }
             val ceph = names.keys.filter { n -> CEPH.split(' ').any { n.contains(it) } }.sortedByDescending { names[it] }
             val fish = names.keys.filter { it !in ceph }.sortedByDescending { names[it] }
             if (names.isEmpty()) sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "선단 일정을 다 읽으면 어종이 나와요").apply { setPadding(0, dp(12), 0, 0) })
-            if (ceph.isNotEmpty()) { sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "두족류").apply { setPadding(0, dp(14), 0, dp(6)) }); chips(sh.body, ceph) }
-            if (fish.isNotEmpty()) { sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "물고기 · 그 밖").apply { setPadding(0, dp(14), 0, dp(6)) }); chips(sh.body, fish) }
+            if (ceph.isNotEmpty()) chips("두족류", ceph)
+            if (fish.isNotEmpty()) chips("물고기 · 그 밖", fish)
             sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "여러 개 눌러 고르고 [✓ 보기] · 숫자 = 앞으로 나가는 날 수").apply { setPadding(0, dp(12), 0, 0) })
             paint(); sh.show()
         }
@@ -809,8 +824,7 @@ object Seats {
             if (sf == null || sf.area.isEmpty()) sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "선상24 지역 목록을 아직 못 받았어요 · 잠시 뒤 다시 열어 주세요").apply { setPadding(0, dp(12), 0, 0) })
             sf?.area?.forEach { (t, l) ->
                 if (l.isEmpty()) return@forEach
-                sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, t).apply { setPadding(0, dp(14), 0, dp(6)) })
-                chips(sh.body, l, emptyMap())
+                chips(sh.body, t, l, emptyMap())
             }
             sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "여러 개 눌러 고르고 [✓ 보기] · 내가 넣은 선단(⚙)은 지역과 상관없이 늘 보여요").apply { setPadding(0, dp(12), 0, 0) })
             paint(); sh.show()
