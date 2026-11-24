@@ -12,7 +12,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 API = "https://api.sunsang24.com"
 OUT = os.path.join(os.path.dirname(__file__), "..", "site", "data", "seat_sites.json")
-REFRESH = int(os.environ.get("REFRESH", "300"))
+REFRESH = int(os.environ.get("REFRESH", "400"))
+SLEEP = float(os.environ.get("SLEEP", "0.6"))
+THREADS = int(os.environ.get("THREADS", "3"))
 KEEP_DAYS = 7
 SKIP = {"imga", "imgb", "img", "assets", "www", "api", "service", "serviceback", "m", "cdn", "static", "admin", "partner", "pay"}
 HOST_RE = re.compile(r"([a-z0-9][a-z0-9-]{1,40})\.sunsang24\.com", re.I)
@@ -54,12 +56,14 @@ def scan(no):
     except Exception:
         pass
     hosts, bands = Counter(), Counter()
+    failed = False
     try:
         bl = get(f"{API}/ship/fish_board_list?ship_no={no}&page=1")
         for it in (bl.get("list") or [])[:3]:
             try:
                 det = get(f"{API}/ship/fish_board_detail/{it.get('no')}")
             except Exception:
+                failed = True
                 continue
             txt = json.dumps(det, ensure_ascii=False).replace("\\/", "/")
             for h in HOST_RE.findall(txt):
@@ -67,12 +71,13 @@ def scan(no):
                 if h not in SKIP: hosts[h] += 1
             for b in BAND_RE.findall(txt):
                 bands[b] += 1
-            time.sleep(0.15)
+            time.sleep(SLEEP)
     except Exception:
-        pass
+        failed = True
     if hosts: r["h"] = hosts.most_common(1)[0][0] + ".sunsang24.com"
     if bands: r["b"] = "band.us/" + bands.most_common(1)[0][0]
-    r["at"] = datetime.date.today().strftime("%Y%m%d")
+    # 조황 글을 못 읽었으면(선상24가 잠깐 막음 등) 다음 번에 먼저 다시
+    r["at"] = "20000101" if (failed and not hosts) else datetime.date.today().strftime("%Y%m%d")
     return no, r
 
 
@@ -93,11 +98,15 @@ def main():
         try: return (today - datetime.datetime.strptime(o.get("at", "20000101"), "%Y%m%d").date()).days
         except Exception: return 10 ** 6
     new = [n for n in nos if str(n) not in old]
-    stale = sorted([n for n in nos if str(n) in old and age(n) >= KEEP_DAYS], key=age, reverse=True)[:REFRESH]
-    todo = new + stale
+    # 사이트를 못 찾은 배는 하루 뒤 다시 · 찾은 배는 7일마다
+    def due(n):
+        o = old[str(n)]
+        return age(n) >= (1 if "h" not in o else KEEP_DAYS)
+    stale = sorted([n for n in nos if str(n) in old and due(n)], key=lambda n: ("h" in old[str(n)], -age(n)))[:REFRESH]
+    todo = (new + stale)[:max(REFRESH, 1)]
     print(f"ships {len(nos)} · new {len(new)} · refresh {len(stale)}")
     ships = dict(old)
-    with ThreadPoolExecutor(6) as ex:
+    with ThreadPoolExecutor(THREADS) as ex:
         for i, (no, r) in enumerate(ex.map(scan, todo)):
             prev = ships.get(str(no), {})
             # 이번에 못 찾은 칸은 예전 값 그대로

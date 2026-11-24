@@ -2,7 +2,7 @@ name: Seat sites
 # 390: 선상24 배마다 선단 사이트 · 밴드 · 전화 모으기 → talla.co.kr/data/seat_sites.json
 on:
   schedule:
-    - cron: '17 19 * * *'   # 한국 새벽 4:17
+    - cron: '17 19,1,7 * * *'   # 한국 4:17 · 10:17 · 16:17 (한 번에 400척까지)
   workflow_dispatch:
 permissions:
   contents: write
