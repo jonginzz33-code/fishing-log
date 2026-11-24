@@ -209,7 +209,10 @@ object Seats {
     fun bookUrl(s: Sch) = if (s.host == S24) "https://www.sunsang24.com/mypage/reservation_ready/${s.shipNo}/${s.schNo}/${s.date}"
         else if (isTf(s.host)) tfBook(s.host, s.date)
         else if (!isS24Fleet(s.host)) "https://${s.host}/#reserve"
-        else "https://${s.host}/ship/schedule_fleet/${s.date.replace("-", "").take(6)}"
+        else fleetDay(s.host, s.schNo, s.date)
+    /** 397: 선단 사이트는 그 날 일정 예약 화면으로 바로 (일정 번호 없으면 달 페이지 · 열리면 1일로 감) */
+    fun fleetDay(host: String, schNo: String, date: String) =
+        if (schNo.toLongOrNull()?.let { it > 0 } == true) "https://$host/mypage/reservation_ready/$schNo" else siteUrl(host, date)
     fun bookUrl(w: Watch) = if (w.host == S24) "https://www.sunsang24.com/ship/list"
         else if (isTf(w.host)) tfBook(w.host, w.date)
         else if (!isS24Fleet(w.host)) "https://${w.host}/#reserve"
@@ -535,7 +538,7 @@ object Seats {
     }
     /** 선상24 카드라도 선단 사이트를 찾았으면 그 선단 예약 화면 (못 찾았으면 선상24 예약 창) */
     fun bookUrlOf(c: Context, s: Sch): String =
-        if (s.host == S24) siteOf(c, s.shipNo)?.host?.let { siteUrl(it, s.date) } ?: bookUrl(s) else bookUrl(s)
+        if (s.host == S24) siteOf(c, s.shipNo)?.host?.let { fleetDay(it, s.schNo, s.date) } ?: bookUrl(s) else bookUrl(s)
     fun siteUrl(host: String, date: String) = "https://$host/ship/schedule_fleet/" + (date.replace("-", "").take(6).ifBlank { ymF.format(Date()) })
 
     // ─────────────── 🔔 자리 나면 알림 (15분마다 · 내 폰) ───────────────
