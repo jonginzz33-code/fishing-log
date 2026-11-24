@@ -34,6 +34,16 @@ nav .links a{color:var(--sub);margin-left:18px;font-size:15px}
 .soon{margin:10px 0 30px;border:1.5px dashed #3A6A88;border-radius:16px;padding:16px 18px;color:var(--sub);font-size:14px}
 footer{border-top:1px solid #1E3446;padding:20px 0 40px;color:#7E8B95;font-size:13px}
 footer a{text-decoration:underline;margin-right:12px}
+.tester{margin:22px 0 6px;background:linear-gradient(135deg,#1B4D3E,#163A5C);border:2px solid #2FBF8F;border-radius:22px;padding:22px}
+.tester h2{margin:0 0 6px;font-size:clamp(22px,5vw,28px)}
+.tester .lead{color:#CFE3EE;font-size:15px;margin:0 0 14px}
+.step{display:flex;gap:12px;align-items:flex-start;background:rgba(10,22,32,.45);border-radius:16px;padding:14px;margin-top:10px}
+.step .n{flex:0 0 34px;height:34px;border-radius:50%;background:#2FBF8F;color:#04222A;font-weight:900;display:flex;align-items:center;justify-content:center;font-size:17px}
+.step b{font-size:16px}.step div.t{color:#B8CAD6;font-size:14px;margin:2px 0 10px}
+.big{display:block;text-align:center;border-radius:14px;padding:14px;font-weight:900;font-size:16.5px;margin-top:8px}
+.big.g{background:#2FBF8F;color:#04222A}.big.b{background:#7FD6FF;color:#06222F}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:560px){.two{grid-template-columns:1fr}}
 @media (max-width:560px){nav .links{display:none}}
 </style>
 </head>
@@ -44,6 +54,25 @@ footer a{text-decoration:underline;margin-right:12px}
   <div class="links"><a href="#apps">앱</a><a href="#legal">개인정보처리방침</a></div>
 </nav>
 
+
+<section class="tester" id="tester">
+  <h2>🧪 테스터 참여하기</h2>
+  <p class="lead">조과일지 · 급할 때 두 앱 모두 같은 테스터 그룹이에요. 아래 순서대로 한 번만 하면 돼요.</p>
+  <div class="step"><div class="n">1</div><div style="flex:1">
+    <b>테스터 그룹 가입</b><div class="t">구글 계정으로 그룹에 '가입'을 눌러요 (두 앱 같이 쓰는 그룹)</div>
+    <a class="big g" href="https://groups.google.com/g/mytoilet-testers">👥 테스터 그룹 가입하기</a>
+  </div></div>
+  <div class="step"><div class="n">2</div><div style="flex:1">
+    <b>앱 테스트 참여</b><div class="t">쓰고 싶은 앱의 버튼을 눌러 '테스터 되기' → 플레이 스토어에서 설치</div>
+    <div class="two">
+      <a class="big b" href="https://play.google.com/apps/testing/kr.jogwailji.app">🎣 조과일지 테스트 참여</a>
+      <a class="big b" href="https://play.google.com/apps/testing/kr.mytoilet.app">🚻 급할 때 테스트 참여</a>
+    </div>
+  </div></div>
+  <div class="step"><div class="n">3</div><div style="flex:1">
+    <b>설치</b><div class="t">참여 후 몇 분 뒤 플레이 스토어에서 설치돼요. '항목을 찾을 수 없음'이 나오면 1번 그룹 가입을 먼저 확인해 주세요.</div>
+  </div></div>
+</section>
 <section class="hero">
   <h1>탈랄랄라의 앱 모음</h1>
   <p>바다에서도, 길 위에서도 — 직접 쓰려고 만든 앱들이에요</p>
