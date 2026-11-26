@@ -115,7 +115,7 @@ details summary{cursor:pointer;font-weight:800}
   <div class="card">
     <h2>📋 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
     <div class="filter" id="filter">
-      <button data-f="all" class="on">전체</button><button data-f="in">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
+      <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
     <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
     <table class="list" id="list"></table>
@@ -142,7 +142,7 @@ details summary{cursor:pointer;font-weight:800}
   var $ = function (id) { return document.getElementById(id); };
   var show = function (id) { ['login', 'deny', 'app'].forEach(function (x) { $(x).classList.toggle('hide', x !== id); }); };
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-  var data = { watch: [], items: {} }, filt = 'all';
+  var data = { watch: [], items: {} }, filt = 'in';
 
   if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
     $('setup').classList.remove('hide');
