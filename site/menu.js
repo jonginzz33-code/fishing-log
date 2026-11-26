@@ -36,13 +36,16 @@
     } else { adm.textContent = '🔐 관리자 로그인'; adm.href = '/admin'; adm.onclick = null; }
   }
   ready().then(function () {
+    var firstCall = true;
     firebase.auth().onAuthStateChanged(function (u) {
+      var first = firstCall; firstCall = false;
       if (u) {
-        // 마지막으로 쓴 지 20분 넘었으면 열자마자 로그아웃
+        // 페이지를 열었을 때 이미 로그인돼 있었고 마지막으로 쓴 지 20분 넘었으면 로그아웃
+        // (방금 로그인한 경우는 예전 기록을 보지 않고 지금부터 셈)
         var a = 0; try { a = +localStorage.getItem('talla_act') || 0; } catch (e) {}
-        if (a && Date.now() - a > IDLE) { firebase.auth().signOut(); return; }
-        idleOn();
-      }
+        if (first && a && Date.now() - a > IDLE) { firebase.auth().signOut(); return; }
+        touch(); idleOn();
+      } else { try { localStorage.removeItem('talla_act'); } catch (e) {} }
       outBtn(u);
       var ok = !!u && (u.email || '').toLowerCase() === ADMIN;
       window.tallaAdmin = ok;
