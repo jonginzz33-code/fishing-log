@@ -166,8 +166,9 @@ object Seats {
     private fun get0(url: String): String {
         val cn = URL(url).openConnection() as HttpURLConnection
         // 개인 사이트(무료 서버)는 처음 깨어나는 데 오래 걸려서 넉넉히
-        val slow = !url.contains("sunsang24.com")
-        cn.connectTimeout = if (slow) 20000 else 8000; cn.readTimeout = if (slow) 40000 else 12000; cn.instanceFollowRedirects = true
+        val slow = !url.contains("sunsang24.com") && !isTfUrl(url)
+        val tf = isTfUrl(url)
+        cn.connectTimeout = if (slow) 20000 else if (tf) 10000 else 8000; cn.readTimeout = if (slow) 40000 else if (tf) 20000 else 12000; cn.instanceFollowRedirects = true
         // 더피싱은 PC 화면 모양으로 읽어요 (폰 모양은 다를 수 있어서 · 저장해 본 화면이 PC 크롬)
         cn.setRequestProperty("User-Agent", if (isTfUrl(url)) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
             else "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile")
@@ -863,6 +864,7 @@ object Seats {
         if (canS24(a)) Thread { try { s24Filter(a) } catch (_: Exception) {} }.start()
         val fails = ArrayList<String>()
         var loading = false
+        var loadGen = 0; var loadDone = 0; var loadTotal = 0
         var siteBusy = false
         val extraBusy = HashSet<String>(); val voteAsked = HashSet<String>()
         val pool = java.util.concurrent.ThreadPoolExecutor(3, 3, 20, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue()).apply { allowCoreThreadTimeOut(true) }
@@ -1410,7 +1412,7 @@ object Seats {
             if (openOnly) day0 = day0.filter { it.open && it.remain >= need }
             day0 = sortList(day0)
             val fv = favs(a)
-            sum.text = (if (loading || s24Busy || tfBusy) "⏳ 읽는 중 · " else "") + "${dayLabel(day)} · 배 ${total}척" +
+            sum.text = (if (loading) "⏳ 선단 ${loadTotal}곳 중 ${loadDone}곳 읽음 · " else if (s24Busy || tfBusy) "⏳ 읽는 중 · " else "") + "${dayLabel(day)} · 배 ${total}척" +
                 (if (useS24 && s24Total > s24.size) " (선상24 ${s24Total}척 중 ${s24.size}척 읽음)" else "") + " · ${need}자리 이상 빈 배 ${openN}척" +
                 (if (fails.isNotEmpty()) " · ⚠ 못 읽은 선단 ${fails.size}곳" else "") + (if (s24Err) " · ⚠ 선상24 목록을 못 읽었어요" else "") + (if (useTf && tfHosts > 0) " · 🎣 더피싱 선단 ${tfHosts}곳" else "")
             if (useTf && areaSel.isEmpty()) list.addView(Ui.text(a, 12f, Color.parseColor("#2FBF8F"), false, "🎣 더피싱 전체: 📍 지역을 고르면 그 지역 더피싱 선단 배를 같이 보여 줘요 (선단 10곳까지)").apply { setPadding(dp(4), dp(4), dp(4), dp(4)) })
@@ -1490,23 +1492,35 @@ object Seats {
                 }.start()
             }
         }
+        // v6.94: 선단마다 읽히는 대로 바로 보여 주기 (느린 선단 하나 때문에 전체가 '읽는 중'에 묶이지 않게)
+        //        더피싱 선단 = 고른 날 8일 화면 한 번만 (한 달 치는 🔔 알림 · 달력에서)
         load = { fresh ->
             loadS24(fresh)
             loadTf()
             val fl = activeFleets(a)
             val months = linkedSetOf(day.replace("-", "").take(6), ymF.format(Date()))
             if (fl.isNotEmpty()) {
-                loading = true; render()
-                Thread {
-                    val got = ArrayList<Sch>(); val bad = ArrayList<String>()
-                    val ths = fl.flatMap { f -> months.map { m -> Thread { try { val l = month(f.host, m, fresh); synchronized(got) { got.addAll(l) } } catch (_: Exception) { synchronized(bad) { if (f.name !in bad) bad.add(f.name) } } } } }
-                    ths.forEach { it.start() }; ths.forEach { try { it.join(20000) } catch (_: Exception) {} }
-                    a.runOnUiThread {
-                        if (!dlg.isShowing) return@runOnUiThread
-                        all.removeAll { s -> got.any { it.host == s.host && it.date.take(7) == s.date.take(7) } }
-                        all.addAll(got); fails.clear(); fails.addAll(bad); loading = false; render()
-                    }
-                }.start()
+                val gen = ++loadGen
+                loading = true; loadDone = 0; loadTotal = fl.size; fails.clear(); render()
+                val d0 = day
+                fl.forEach { f ->
+                    Thread {
+                        val got = ArrayList<Sch>(); var bad = false
+                        try {
+                            if (isTf(f.host)) got.addAll(tfDay(f.host, d0))
+                            else months.forEach { m -> got.addAll(month(f.host, m, fresh)) }
+                        } catch (_: Exception) { bad = got.isEmpty() }
+                        a.runOnUiThread {
+                            if (!dlg.isShowing || gen != loadGen) return@runOnUiThread
+                            val tf0 = isTf(f.host); val ms = got.map { it.date.take(7) }.toSet()
+                            if (got.isNotEmpty() || tf0) all.removeAll { s -> s.host == f.host && (if (tf0) s.date == d0 else s.date.take(7) in ms) }
+                            all.addAll(got)
+                            if (bad && f.name !in fails) fails.add(f.name)
+                            if (++loadDone >= loadTotal) loading = false
+                            render()
+                        }
+                    }.start()
+                }
             }
         }
 
