@@ -9,7 +9,7 @@ def get(u):
 os.makedirs('out/u', exist_ok=True)
 F = json.load(open('site/data/fleets.json'))['f']
 s24 = [f[0] for f in F if f[4] == '선상24']; tf = [f[0] for f in F if f[4] == '더피싱']
-random.seed(11); random.shuffle(s24); random.shuffle(tf)
+random.seed(23); random.shuffle(s24); random.shuffle(tf)
 DATES = ['2026-12-03', '2026-12-05', '2026-12-06', '2026-12-10', '2026-12-13']
 KNOWN = {"ship_schedule_no", "petc_data", "person_count", "coupon_no", "phone", "price_option", "name", "deposit_name", "phone1", "phone2", "phone3",
          "memo", "all_check", "agree_rule[]", "pay_method", "reservation_method", "select_seat_nos[]", "cash_receipt_type", "cash_receipt_no", "default_schedule_no"}
@@ -51,10 +51,14 @@ def tfone(h):
         mod, d8, uid = m.groups(); base = f"https://{h}/_core/module/{mod}"
         p1 = get(f"{base}/popup.step1.php?date={d8}&PA_N_UID={uid}")
         if 'insert_form' not in p1: return {'h': h, 'mod': mod, 'd': 'noform:' + (re.search(r"alert\(['\"](.*?)['\"]", p1) or [None, ''])[1][:40]}
-        radios = re.findall(r'<input[^>]*class="PS_N_UID"[^>]*id="([^"]+)"[^>]*value="([^"]+)"', p1)
-        page = p1
+        page = p1; ph = '0'
+        phs = re.findall(r'<input type="radio"[^>]*name="PH_N_UID"[^>]*value="(\d+)"', p1)
+        if phs and 'class="PS_N_UID"' not in p1:
+            ph = phs[0]; page = get(f"{base}/popup.step1.php?date={d8}&PA_N_UID={uid}&PH_N_UID={ph}")
+        radios = re.findall(r'<input[^>]*class="PS_N_UID"[^>]*id="([^"]+)"[^>]*value="([^"]+)"', page)
         if radios:
-            page = get(f"{base}/popup.step1.php?date={d8}&PA_N_UID={uid}&PH_N_UID=0&PS_N_UID={urllib.parse.quote(radios[0][1])}")
+            page = get(f"{base}/popup.step1.php?date={d8}&PA_N_UID={uid}&PH_N_UID={ph}&PS_N_UID={urllib.parse.quote(radios[0][1])}")
+        elif 'name="BI_NAME"' not in page: return {'h': h, 'mod': mod, 'd': 'nops'}
         fi = page.find('id="insert_form"'); fj = page.find('</form>', fi); form = page[fi:fj]
         tag = page[page.rfind('<form', 0, fi):fi + 200]
         act = re.search(r'action="([^"]+)"', tag)
@@ -63,9 +67,11 @@ def tfone(h):
              'pre': bool(re.search(r"var data = '(date=[^']*?)&BI_IN=", page)), 'naun': bool(re.search(r'naun=(\d+)', page)),
              'ajax': bool(re.search(r'url:\s*"(/_core/module/[^"]+popup\.step1\.ajax\.php)"', page)),
              'bus': 'onclick="ticket_seat_bus_click(' in form,
-             'seatimg': 'id="seat_img"' in page, 'seatv': len(re.findall(r"onclick=\"ticket_seat_click\('\d+',\s*'\d+',\s*'(\d+)'\);?\"", form)),
+             'seatimg': 'id="seat_img"' in page, 'seatv': len(re.findall(r'<input id="s' + d8 + uid + r'([^"]+)"[^>]*name="seat\[\]"', form)), 'seatopen': len(re.findall(r"onclick=\"ticket_seat(?:_ps)?_click\('\d+',\s*'\d+',\s*'([^']+)'\);?\"", form)),
+             'card': 'name="site_cd"' in form or 'name="enc_data"' in form or 'action=""' in tag,
              'seati': len(re.findall(r'name="seat\[\]"', form)), 'paym': 'id="pay_method"' in page, 'ps': len(radios),
              'extra': sorted(set(re.findall(r'name="([^"]+)"', form)) - {'BI_3JA', 'BI_AD', 'BI_BANK', 'BI_IN', 'BI_MEMO', 'BI_NAME', 'BI_TEL1', 'BI_TEL2', 'BI_TEL3', 'PA_N_UID', 'PS_N_UID', 'action', 'agree', 'all_agree', 'insert_form', 'link', 'temp_bi_stat', 'BIP_NAME[]', 'BIP_TEL1[]', 'BIP_TEL2[]', 'BIP_TEL3[]', 'dong_check', 'seat[]', 'select_ud_uid', 'BI_SO_IN', 'PH_N_UID'})}
+        if r['card']: r['d'] = 'card'; return r
         ok = r['act'] and r['name'] and r['tel'] and r['pre'] and r['naun'] and not r['bus'] and (not r['seatimg'] or r['seati'] == 0 or r['seatv'] == r['seati'])
         r['d'] = 'OK' if ok else 'NG'
         if r['extra']: open(f"out/u/tf_{h.split('.')[0]}.html", 'w').write(page)
@@ -73,7 +79,7 @@ def tfone(h):
         return r
     return {'h': h, 'd': 'nosched'}
 with cf.ThreadPoolExecutor(10) as ex:
-    A = list(ex.map(s24one, s24[:200])); B = list(ex.map(tfone, tf[:120]))
+    A = list(ex.map(s24one, s24[200:500])); B = list(ex.map(tfone, tf))
 json.dump({'s24': A, 'tf': B}, open('out/survey3.json', 'w'), ensure_ascii=False, indent=1)
 print('S24', collections.Counter(a['d'] for a in A).most_common())
 print('TF', collections.Counter(b['d'] for b in B).most_common())
