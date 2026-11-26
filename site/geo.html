@@ -144,9 +144,13 @@ details summary{cursor:pointer;font-weight:800}
 
   <div class="card">
     <details id="pBox">
-      <summary>📒 저장해 둔 거래처 <span class="cN"></span> · 제품 <span class="pN"></span> 목록 고치기 <button class="btn ok sm" id="cRefresh" style="margin-left:6px;vertical-align:middle">🔄 거래처 새로고침</button></summary>
+      <summary>📒 저장해 둔 거래처 <span class="cN"></span> · 제품 <span class="pN"></span> 목록 고치기 <button class="btn ok sm" id="cRefresh" style="margin-left:6px;vertical-align:middle">🔄 거래처 새로고침</button> <button class="btn ghost sm" id="pAddBtn" style="vertical-align:middle">➕ 제품 추가</button></summary>
       <div class="msg" id="cMsg"></div>
-      <p class="lead" style="margin:10px 0 6px">거래처 <b class="cN"></b> — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
+      <div id="pAdd" class="hide" style="margin-top:10px">
+        <p class="lead" style="margin:0 0 6px">➕ 제품 목록에 따로 추가 — 지오팜에서 찾아서 고르면 자동완성 목록에 들어가요</p>
+        <div class="row"><input id="pQ" placeholder="제품명 두 글자 이상 (예: 리바로)" enterkeyhint="search"><button class="btn ok" id="pQbtn">검색</button></div>
+        <div class="sr" id="pSr"></div>
+      </div> — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
       <textarea id="cBulk" style="min-height:140px"></textarea>
       <div class="row" style="margin:6px 0 14px"><button class="btn ok sm" onclick="saveList('customers', 'cBulk', this)">거래처 저장</button></div>
       <p class="lead" style="margin:0 0 6px">제품 <b class="pN"></b> — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (지오팜에서 찾아 추가한 제품은 자동으로 여기 들어가요)</p>
@@ -555,6 +559,44 @@ details summary{cursor:pointer;font-weight:800}
     if (!n || !confirm('기다리는 목록에서 뺄까요?\n[' + n.pn + '] ' + n.name)) return;
     saveNeeds(data.needs.filter(function (x) { return x.id !== d; })).then(function (j) { $('nMsg').textContent = j.msg || j.error || ''; renderNeeds(); });
   };
+  // 제품 따로 추가: 지오팜 검색 → 고른 제품을 제품 목록(자동완성)에 넣기
+  $('pAddBtn').onclick = function (e) {
+    e.preventDefault(); e.stopPropagation();
+    $('pBox').open = true; $('pAdd').classList.remove('hide'); $('pQ').focus();
+  };
+  function pFind() {
+    var q = $('pQ').value.trim(), box = $('pSr');
+    if (q.length < 2) { box.textContent = '두 글자 이상 입력해 주세요.'; return; }
+    $('pQbtn').disabled = true; box.textContent = '지오팜에서 검색 중…';
+    call('search?q=' + encodeURIComponent(q), { wait: 45000 }).then(function (j) {
+      $('pQbtn').disabled = false; box.innerHTML = '';
+      if (j.error || j.msg) { box.textContent = j.error || j.msg; if (!(j.rows || []).length) return; }
+      if (!j.rows.length) { box.textContent = '검색 결과가 없어요.'; return; }
+      var have = {};
+      prods.forEach(function (p) { p[1].split(',').forEach(function (c) { have[c] = 1; }); });
+      j.rows.forEach(function (x) {
+        var key = x.code + ':' + x.sup, d = document.createElement('div'), s = document.createElement('span'), b = document.createElement('button');
+        s.innerHTML = esc(x.text) + '<br><small>' + key + (x.stock != null ? ' · 지금 재고 ' + x.stock : '') + '</small>';
+        b.className = 'btn sm ' + (have[key] ? 'ghost' : 'ok'); b.textContent = have[key] ? '목록에 있음' : '추가'; b.disabled = !!have[key];
+        b.onclick = function () {
+          var name = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
+          b.disabled = true;
+          call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function (r) {
+            if (r.error) { b.disabled = false; $('cMsg').textContent = r.error; return; }
+            setProds(prods.concat([[name, key]]));
+            try { localStorage.setItem('geoProducts', JSON.stringify({ v: 'local', products: prods })); } catch (e) {}
+            prodsV = null;
+            b.textContent = '추가됨'; b.className = 'btn sm ghost';
+            $('cMsg').textContent = '“' + name + '” 를 제품 목록에 넣었어요.';
+          });
+        };
+        d.append(s, b); box.append(d);
+      });
+    });
+  }
+  $('pQbtn').onclick = pFind;
+  $('pQ').onkeydown = function (e) { if (e.key === 'Enter') pFind(); };
+
   // 지오팜에서 거래처 목록 다시 받기 (거래처가 늘었을 때)
   $('cRefresh').onclick = function (e) {
     e.preventDefault(); e.stopPropagation(); // 펼침/접힘 안 되게
