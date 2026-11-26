@@ -511,9 +511,16 @@ details summary{cursor:pointer;font-weight:800}
           picked = [name, key];
           $('nN').value = name; box.innerHTML = ''; hint();
           // 제품 목록에도 저장 (다음부터 자동완성)
-          if (!prods.some(function (p) { return p[1] === key; })) {
-            setProds(prods.concat([[name, key]]));
-            call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function () { prodsV = null; load(); });
+          var known = prods.filter(function (p) { return p[1] === key; })[0];
+          if (known) { picked = known; $('nN').value = known[0]; hint(); }
+          else {
+            $('nHint').textContent = '지오팜 제품상세에서 정확한 이름 받는 중…';
+            call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function (r) {
+              var nm = r.name || name;
+              setProds(prods.concat([[nm, key]]));
+              if (picked && picked[1] === key) { picked = [nm, key]; $('nN').value = nm; }
+              hint(); prodsV = null; load();
+            });
           }
         };
         d.append(s, b); box.append(d);
@@ -659,6 +666,7 @@ details summary{cursor:pointer;font-weight:800}
           b.disabled = true;
           call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function (r) {
             if (r.error) { b.disabled = false; $('cMsg').textContent = r.error; return; }
+            name = r.name || name; // 제품상세 화면의 정확한 이름
             setProds(prods.concat([[name, key]]));
             try { localStorage.setItem('geoProducts', JSON.stringify({ v: 'local', products: prods })); } catch (e) {}
             prodsV = null;
