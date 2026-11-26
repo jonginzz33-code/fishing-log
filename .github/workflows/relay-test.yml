@@ -11,7 +11,7 @@ jobs:
           set +e
           git fetch -q origin relay-dump && git archive FETCH_HEAD out | tar -x && mv out out0
           mkdir -p out
-          python3 tools/book_survey2.py
-          cp out0/survey.json out/
+          python3 tools/book_survey3.py
+          cp -r out0/survey.json out0/s out/ 2>/dev/null; true
           git config user.name dump; git config user.email d@x
           git checkout -q --orphan relay-dump; git rm -rq --cached . ; git add out; git commit -qm dump; git push -qf origin HEAD:relay-dump
