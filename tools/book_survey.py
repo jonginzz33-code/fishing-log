@@ -3,7 +3,7 @@ import json, re, urllib.parse, urllib.request, concurrent.futures as cf, random,
 R = "https://talla-relay.jonginzz33.workers.dev/?u="
 def get(u):
     try:
-        with urllib.request.urlopen(R + urllib.parse.quote(u, safe=''), timeout=40) as r: return r.read().decode('utf-8', 'ignore')
+        with urllib.request.urlopen(urllib.request.Request(R + urllib.parse.quote(u, safe=''), headers={'User-Agent': 'Mozilla/5.0 (Linux; Android 14) Mobile'}), timeout=40) as r: return r.read().decode('utf-8', 'ignore')
     except Exception as e: return ''
 F = json.load(open('site/data/fleets.json'))['f']
 s24 = [f[0] for f in F if f[4] == '선상24']; tf = [f[0] for f in F if f[4] == '더피싱']
