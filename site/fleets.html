@@ -164,6 +164,9 @@ h1{font-size:21px;margin:14px 0 8px}
   function fleetsOn() {
     if (!DIR) return [];
     var ql = q.toLowerCase().replace(/\s/g, '');
+    // 주소를 붙여 넣으면 그 선단 (https://○○.sunsang24.com/… · ○○.thefishing.kr)
+    var hm0 = /([a-z0-9][a-z0-9-]{1,40}\.(?:sunsang24\.com|thefishing\.kr))/.exec(ql);
+    if (hm0) { var hh = hm0[1]; var f0 = DIR.filter(function (f) { return f[0] === hh; }); return f0.length ? f0 : [[hh, hh.split('.')[0], '', '', /thefishing/.test(hh) ? '더피싱' : '선상24']]; }
     if (ql) return DIR.filter(function (f) { return (f[0] + f[1] + f[2] + f[3]).toLowerCase().replace(/\s/g, '').indexOf(ql) >= 0; }).slice(0, 60);
     // 한 달 일정 없는 선단(쉬는 곳)은 빼고 · 즐겨찾기 선단 먼저 · 40곳씩 (아래 [⬇ 선단 더 읽기])
     var favH = {}; Object.keys(favs).forEach(function (k) { favH[k.split('|')[0]] = 1; });

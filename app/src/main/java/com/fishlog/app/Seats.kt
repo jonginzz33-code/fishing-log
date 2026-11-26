@@ -1596,6 +1596,14 @@ object Seats {
                     (notes.last()).setOnLongClickListener { addFleet(a, host, fleetNm) { load(true) }; true }
                     if (f == null && !err) qFetch(k) { month(host, ym) }
                 }
+                // v7.04 (429): 🔎 에 선단 주소(○○.sunsang24.com · ○○.thefishing.kr · https://…)를 붙여 넣으면 그 선단을 바로 읽어 카드로 (40곳 제한 · 지역 상관없이)
+                val hostQ = Regex("([a-z0-9][a-z0-9-]{1,40}\\.(?:sunsang24\\.com|thefishing\\.kr))", RegexOption.IGNORE_CASE).find(q)?.groupValues?.get(1)?.lowercase()
+                    ?.takeIf { it.substringBefore('.') !in setOf("www", "api", "m") } ?: TF_DOMAINS.firstOrNull { q.lowercase().contains(it) }
+                if (hostQ != null) {
+                    val nm = fleets(a).firstOrNull { it.host == hostQ }?.name?.ifBlank { null } ?: dirName(hostQ) ?: dirFleets(a).firstOrNull { it.host == hostQ }?.name ?: hostQ.substringBefore('.')
+                    readHost(hostQ, "$nm  · $hostQ", if (isTf(hostQ)) "🎣" else "🚤", { true }, nm)
+                    if (hostQ !in have) note("⭐ 이 선단을 내 선단에 넣기", "넣어 두면 지역과 상관없이 늘 보여요 · $hostQ", Color.parseColor("#F2C14E")) { addFleet(a, hostQ, nm) { load(true) } }
+                }
                 // 선상24 배 (talla.co.kr 배 목록에서 이름 · 항구) — 선상24 전체를 켠 사람은 선상24 일정 · 아니면 그 배 선단 홈페이지만
                 val more = sites(a).filter { (no, v) -> no !in shown && ((v.name.isNotBlank() && norm(v.name).contains(nq)) || portHit(v.port)) }.entries.take(if (byPort) 40 else 16)
                 var hidden = 0
