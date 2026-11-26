@@ -58,6 +58,8 @@ object Seats {
         val key get() = "$host|$shipNo"
         // v6.86 (395 · 396): 배 사진 · 조황 글 수 · 그날 공지 · 예약 오픈 시각 · 선상24 물때
         var img = ""; var boards = -1; var notice = ""; var openAt = ""; var tideW = ""
+        /** v7.08 (433): 우리 서버(중계기)가 선상24 목록에서 미리 받아 둔 값 — 선단 홈페이지를 읽으면 그 값으로 바뀜 */
+        var pre = false
         /** v6.90 (399): 다른 곳(선상24 · 더피싱 · 개인 사이트)에 같이 올라온 같은 배 · 같은 날 */
         var also: List<Sch> = emptyList()
         /** 운항 시간(시간 · 소수) · 출항 시각(분) — 모르면 -1 */
@@ -606,6 +608,22 @@ object Seats {
         }
         return out
     }
+    /** v7.08 (433): 우리 서버(중계기 /s24 · 5분 같이 기억)가 선상24 목록에서 받아 둔 지역 · 날짜 배와 남은 자리
+     *  → 선단 주소를 아는 배만 그 선단 카드로 (앱은 선상24에 직접 안 감) · 실패하면 null (예전처럼 선단만 읽기) */
+    fun areaPre(c: Context, date: String, areas: Set<String>): List<Sch>? {
+        if (areas.isEmpty() || System.currentTimeMillis() < relayBadUntil) return null
+        val t = try { get0(RELAY.removeSuffix("/?u=") + "/s24?d=$date&area=" + Uri.encode(areas.sorted().joinToString(",")), 15000) } catch (_: Exception) { return null }
+        val arr = try { JSONObject(t).optJSONArray("list") } catch (_: Exception) { null } ?: return null
+        val out = ArrayList<Sch>()
+        for (i in 0 until arr.length()) {
+            val s = try { fromApi(arr.getJSONObject(i), date) } catch (_: Exception) { continue }
+            if (s.date != date) continue
+            val h = siteOf(c, s.shipNo)?.host?.lowercase()?.takeIf { isS24Fleet(it) } ?: continue
+            out.add(Sch(h, s.shipNo, s.schNo, s.ship, s.date, s.fish, s.way, s.time, s.remain, s.reserved, s.status, s.tide, s.place, s.price).apply {
+                img = s.img; boards = s.boards; tideW = s.tideW; pre = true })
+        }
+        return out
+    }
     class AreaC(val name: String, val lat: Double, val lon: Double, val group: String)
     val AREAS = listOf(
         AreaC("인천인근", 37.45, 126.55, "서해안"), AreaC("평택인근", 36.98, 126.80, "서해안"), AreaC("태안인근", 36.70, 126.25, "서해안"),
@@ -1102,6 +1120,7 @@ object Seats {
         val tfAll = ArrayList<Sch>(); var tfKey = ""; var tfBusy = false; var tfHosts = 0
         // v6.95: 📍 지역의 선단 전부 (모두에게 · 하루치만 · 6곳씩)
         val areaAll = ArrayList<Sch>(); var areaKey = ""; var areaLeft = 0; var areaTotal = 0; var areaGen = 0
+        val areaPreL = ArrayList<Sch>(); val areaDone = HashSet<String>()   // v7.08 (433): 미리 값 · 다 읽은 선단
         val areaRest = ArrayList<DirF>(); var areaSkip = 0; var areaReadFn: (List<DirF>) -> Unit = {}
         var areaEx: java.util.concurrent.ExecutorService? = null
         if (areaSel.isEmpty() && !p.getBoolean("seat_area_auto", false)) {
@@ -1480,7 +1499,9 @@ object Seats {
                     s.remain <= 3 -> " 남음 · 곧 마감"
                     else -> " 남음 · 예약 ${s.reserved}/${s.cap}"
                 }
-                sb.append(tail); text = sb; textSize = 12.5f; setTextColor(Ui.TEXT)
+                sb.append(tail)
+                if (s.pre) { val st0 = sb.length; sb.append(" · ⏳ 미리 값"); sb.setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), st0, sb.length, 0) }
+                text = sb; textSize = 12.5f; setTextColor(Ui.TEXT)
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val canBook = s.open && s.remain >= need
             // v6.96: 🏠 홈피 = 그 배 선단 홈페이지 첫 화면 (예약 › 옆)
@@ -1723,7 +1744,8 @@ object Seats {
             val mineNos = mineDay.map { it.shipNo }.toSet()
             val flHosts = fl.map { it.host }.toSet()
             var day0 = dedupe(a, mineDay + (if (useS24) s24.filter { it.date == day && it.shipNo !in mineNos } else emptyList()) +
-                (if (useTf) tfAll.filter { it.date == day && it.host !in flHosts } else emptyList()) + areaAll.filter { it.date == day && it.host !in flHosts })
+                (if (useTf) tfAll.filter { it.date == day && it.host !in flHosts } else emptyList()) + areaAll.filter { it.date == day && it.host !in flHosts } +
+                areaPreL.filter { it.date == day && it.host !in flHosts && it.host !in areaDone && it.shipNo !in mineNos })
             val total = day0.size
             day0 = day0.filter { fishMatch(it) }
             val openN = day0.count { it.open && it.remain >= need }
@@ -1830,7 +1852,7 @@ object Seats {
             fun run(r: () -> Unit) { try { ex.execute(r) } catch (_: java.util.concurrent.RejectedExecutionException) {} }
             fun one(f: DirF) = run {
                 val r = try { if (isTf(f.host)) tfDay(f.host, d0) else s24Day(f.host, d0) } catch (_: Exception) { emptyList() }
-                a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) render() else later() }
+                a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaDone.add(f.host); areaLeft--; if (areaLeft <= 0) render() else later() }
             }
             part.chunked(40).forEach { ch -> run {
                 val got = dayBatch(ch.map { it.host }, d0)
@@ -1838,7 +1860,7 @@ object Seats {
                 val miss = ch.filter { it.host !in got }
                 a.runOnUiThread {
                     if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
-                    got.values.forEach { areaAll.addAll(it) }; areaLeft -= got.size
+                    got.values.forEach { areaAll.addAll(it) }; areaDone.addAll(got.keys); areaLeft -= got.size
                     if (areaLeft <= 0) render() else later()
                 }
                 if (gen == areaGen) miss.forEach { one(it) }
@@ -1848,10 +1870,16 @@ object Seats {
         fun loadArea() {
             val key = "$day|${areaSel.sorted()}"
             if (key == areaKey) return
-            areaKey = key; areaAll.clear(); ++areaGen
+            areaKey = key; areaAll.clear(); areaPreL.clear(); areaDone.clear(); ++areaGen
             areaEx?.shutdownNow(); areaEx = null; areaLeft = 0; areaTotal = 0; areaRest.clear()
             if (areaSel.isEmpty()) { render(); return }
             val gen = areaGen
+            // v7.08 (433): 우리 서버에 미리 받아 둔 선상24 값으로 먼저 보여 주기 → 선단 홈페이지 지금 값이 오면 바뀜
+            val d1 = day; val ar1 = HashSet(areaSel)
+            Thread {
+                val pre = try { areaPre(a, d1, ar1) } catch (_: Exception) { null } ?: return@Thread
+                a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaPreL.addAll(pre); later() }
+            }.start()
             tfShips(a) { _ -> a.runOnUiThread {
                 if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
                 val have = activeFleets(a).map { it.host }.toSet()

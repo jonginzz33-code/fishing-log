@@ -95,6 +95,8 @@ h1{font-size:21px;margin:14px 0 8px}
   var SORTS = ['자리 많은 순', '출항 빠른 순', '이름 순'];
   var DIR = null, AREAS = [], OFF = {}, LIMIT = 40, extra = 0;
   var schs = {}, loaded = {}, loading = {}, gen = 0, shown = 20, q = '';
+  // 433: 우리 서버(중계기 /s24)가 선상24 목록에서 미리 받아 둔 값 → 먼저 보여 주고 선단 홈페이지 지금 값으로 바뀜
+  var pre = {}, preBusy = {}, SHIPH = null;
 
   // ── 선단 페이지 읽기 (앱 Seats.parse · parseTfFleet 와 같은 규칙) ──
   function txt(h) { var d = document.createElement('div'); d.innerHTML = String(h).replace(/<br\s*\/?>/gi, ' '); return (d.textContent || '').replace(/\s+/g, ' ').trim(); }
@@ -201,6 +203,31 @@ h1{font-size:21px;margin:14px 0 8px}
         return Promise.all(fs.map(function (f) { return loadFleet(f, d, g); }));
       });
   }
+  function loadPre(g) {
+    if (!areaSel.length || q) return;
+    var k = day + '|' + areaSel.slice().sort().join(',');
+    if (pre[k] || preBusy[k]) return;
+    preBusy[k] = 1;
+    var hp = SHIPH ? Promise.resolve(SHIPH) : fetch('/data/seat_sites.json').then(function (r) { return r.json(); }).then(function (j) {
+      SHIPH = {}; Object.keys(j.ships || {}).forEach(function (n) { if (j.ships[n].h) SHIPH[n] = j.ships[n].h.toLowerCase(); }); return SHIPH; });
+    hp.then(function (H) {
+      return fetch(RELAY.replace('/?u=', '/s24?d=') + day + '&area=' + encodeURIComponent(areaSel.slice().sort().join(','))).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (j) {
+        var l = [];
+        (j.list || []).forEach(function (o) {
+          var sh = o.ship || {}, h = H[String(sh.no)];
+          if (!h || o.sdate !== day) return;
+          var cap = +(o.embarkation_num || sh.embarkation_num || 0), rm = +(o.remain_embarkation_num || 0);
+          var st = o.schedule_status_code || o.status_code || 'ING'; if (st === 'ING' && rm <= 0) st = 'END';
+          var hm = function (t) { var m = /(\d{1,2}):?(\d{2})/.exec(String(t || '')); return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : ''; };
+          var t1 = hm(o.stime), t2 = hm(o.etime), tm = (t1 === '00:00' || !t1) && (t2 === '00:00' || !t2) ? '' : [t1, t2].filter(Boolean).join(' ~ ');
+          var nn = function (x) { return x == null || x === 'null' ? '' : String(x).trim(); };
+          l.push({ host: h, shipNo: String(sh.no), schNo: String(o.schedule_no || ''), ship: String(sh.name || '배').trim(), date: day, fish: nn(o.fish_type), way: nn(o.fishing_method),
+            time: tm, remain: rm, reserved: Math.max(0, cap - rm), status: st, tide: nn(o.tide_water), pre: 1 });
+        });
+        pre[k] = l;
+      });
+    }).catch(function () {}).then(function () { delete preBusy[k]; if (g === gen) later(); });
+  }
   function loadAll() {
     var g = ++gen, l = fleetsOn().filter(function (f) { var k = f[0] + '|' + day; return !loaded[k] && !loading[k]; });
     // 즐겨찾기 배가 있는 선단 먼저
@@ -214,6 +241,7 @@ h1{font-size:21px;margin:14px 0 8px}
       var bi = 0, brun = 0;
       (function nextB() { while (brun < 4 && bi < bs.length) { brun++; loadBatch(bs[bi++], day, g).then(function () { brun--; if (g === gen) nextB(); }); } })();
     }
+    loadPre(g);
     render();
   }
 
@@ -244,7 +272,13 @@ h1{font-size:21px;margin:14px 0 8px}
   }
   function all() {
     var l = [];
-    fleetsOn().forEach(function (f) { (schs[f[0] + '|' + day] || []).forEach(function (s) { l.push(s); }); });
+    var pl = pre[day + '|' + areaSel.slice().sort().join(',')] || [], byH = {};
+    pl.forEach(function (s) { (byH[s.host] = byH[s.host] || []).push(s); });
+    fleetsOn().forEach(function (f) {
+      var k = f[0] + '|' + day;
+      if (loaded[k]) (schs[k] || []).forEach(function (s) { l.push(s); });
+      else (byH[f[0]] || []).forEach(function (s) { s.f = f; l.push(s); });   // 아직 못 읽은 선단 = 미리 값
+    });
     // 같은 날 · 같은 배 이름 · 같은 항구를 다른 선단이 같이 올리면 한 카드로 (앞에 온 것 + '다른 곳')
     var out = [], idx = {};
     l.forEach(function (s) {
@@ -306,7 +340,7 @@ h1{font-size:21px;margin:14px 0 8px}
       '<div class="ln">' + esc(line) + '</div>' +
       '<div class="tags">' + esc(s.f[3]) + '</div>' +
       '<a class="site" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🌐 ' + esc(s.host.replace(/^www\./, '')) + '</a>' +
-      '<div class="bot"><div class="rm"><b style="color:' + col + '">' + (op ? s.remain + '자리' : stName(s)) + '</b>' + tail + '</div>' +
+      '<div class="bot"><div class="rm"><b style="color:' + col + '">' + (op ? s.remain + '자리' : stName(s)) + '</b>' + tail + (s.pre ? ' <span style="color:#8FA3B2">· ⏳ 미리 값</span>' : '') + '</div>' +
       (op && s.remain >= need ? '<a class="btn go" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">예약 ›</a>' : '<a class="btn" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">일정 ›</a>') + '</div>' +
       '<div class="links"><a class="btn" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🏠 홈피</a>' +
       '<a class="btn" href="https://' + esc(s.host) + (s.f[4] === '더피싱' ? '/index.php?mid=gall' : '/ship/board') + '" target="_blank" rel="noopener">📝 조과</a>' +
@@ -360,7 +394,7 @@ h1{font-size:21px;margin:14px 0 8px}
   $('prev').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - 1); setDay(ymd(d)); };
   $('next').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + 1); setDay(ymd(d)); };
   // 432: 🔄 = 읽은 것 비우고 다시 (중계기는 5분 기억이라 그 안이면 같은 값일 수 있어요)
-  $('refresh').onclick = function () { schs = {}; loaded = {}; loading = {}; shown = 20; loadAll(); };
+  $('refresh').onclick = function () { schs = {}; loaded = {}; loading = {}; pre = {}; shown = 20; loadAll(); };
   $('day').value = day;
   render();
   fetch('/data/fleets_off.json').then(function (r) { return r.json(); }).then(function (j) { (j.off || []).forEach(function (h) { OFF[h] = 1; }); }).catch(function () {});

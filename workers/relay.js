@@ -2,6 +2,7 @@
 // 홈피(브라우저) · 앱이 선단 홈페이지를 대신 읽어 오는 곳. 허용한 사이트만 · 5분 기억.
 //   GET /?u=https://sungbin.sunsang24.com/ship/schedule_fleet/2026-12-03/0/simple_day1
 //   GET /ping → ok
+//   GET /s24?d=2026-12-03&area=보령인근,… → 선상24 목록(지역 · 날짜 배와 남은 자리)을 우리 서버가 받아 둠 (433 · 5분 같이 기억 · 앱은 선상24에 직접 안 감)
 //   GET /day?d=2026-12-03&h=a.sunsang24.com,b.thefishing.kr,… → 여러 선단 그 날 일정을 한 번에 읽어 정리한 JSON (선단 40곳까지 · 5분 기억)
 // 선상24 · 더피싱 원 홈페이지(www · api 등)는 막아요 (410).
 const SKIP = ['www', 'api', 'm', 'img', 'imga', 'imgb', 'assets', 'static', 'cdn', 'admin', 'pay', 'partner', 'service', 'serviceback', 'js', 'css', 'image', 'theimage'];
@@ -98,12 +99,44 @@ async function day(url, ctx) {
   return new Response(JSON.stringify(out), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=120' } });
 }
 
+// v7.08 (433): 선상24 목록 — 한 쪽 30척 · 6쪽(180척)까지 · 가까운 날 5분 · 먼 날 15분 같이 기억
+const S24_KEEP = ['schedule_no', 'sdate', 'stime', 'etime', 'fish_type', 'fishing_method', 'price', 'tide_water', 'port_name', 'embarkation_num', 'remain_embarkation_num', 'schedule_status_code', 'status_code', 'is_reservation_possible'];
+const SHIP_KEEP = ['no', 'name', 'image', 'board_count', 'embarkation_num', 'area_main', 'area_sub', 'port_name'];
+function pick(o, keys) { const r = {}; if (o) for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; }
+async function s24(url) {
+  const d = url.searchParams.get('d') || '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return new Response('bad date', { status: 400, headers: CORS });
+  const area = (url.searchParams.get('area') || '').slice(0, 300), fish = (url.searchParams.get('fish') || '').slice(0, 300);
+  const days = (Date.parse(d) - Date.now()) / 86400000;
+  const ttl = days < 2 ? 300 : 900;
+  const one = async (page) => {
+    let q = 'https://api.sunsang24.com/ship/list?type=general&page=' + page + '&sdate=' + d + ',' + d;
+    if (area) q += '&area=' + encodeURIComponent(area);
+    if (fish) q += '&fish=' + encodeURIComponent(fish);
+    const r = await fetch(q, { headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile', 'Accept-Language': 'ko-KR,ko', 'Accept': 'application/json' },
+      cf: { cacheTtl: ttl, cacheEverything: true } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  };
+  try {
+    const first = await one(1);
+    const total = +first.total || 0;
+    const pages = Math.min(6, Math.ceil(total / 30));
+    const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => one(i + 2).catch(() => ({ list: [] }))));
+    const list = [first, ...rest].flatMap((o) => o.list || []).map((x) => ({ ...pick(x, S24_KEEP), ship: pick(x.ship, SHIP_KEEP) }));
+    return new Response(JSON.stringify({ t: Date.now(), total, list }), { headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=' + Math.min(ttl, 120) } });
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 502, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  }
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
-    if (url.pathname === '/ping') return new Response('ok2', { headers: CORS });
+    if (url.pathname === '/ping') return new Response('ok3', { headers: CORS });
     if (url.pathname === '/day') return day(url, ctx);
+    if (url.pathname === '/s24') return s24(url);
     const u = url.searchParams.get('u');
     let target;
     try { target = new URL(u); } catch (e) { return new Response('bad url', { status: 400, headers: CORS }); }
