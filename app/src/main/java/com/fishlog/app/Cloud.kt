@@ -101,12 +101,7 @@ object Cloud {
     const val ADMIN_EMAIL = "jonginzz33@gmail.com"
     /** 진짜 관리자 계정 (일반 화면으로 바꿔도 그대로) */
     val realAdmin: Boolean get() = auth.currentUser?.email.equals(ADMIN_EMAIL, ignoreCase = true)
-    /** v7.12 (439): '👤 일반으로 보기' — 켜면 관리자 · 받은 권한을 다 끄고 일반 사용자 화면으로 (화면만 · 서버 규칙은 그대로) */
-    val asUser: Boolean get() = ::appContext.isInitialized && appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE).getBoolean("as_user", false)
-    val isAdmin: Boolean get() = realAdmin && !asUser
-    /** 전환 버튼이 보이는 사람: 관리자 · '일반 전환' 권한 받은 사람 */
-    val canSwitch: Boolean get() = realAdmin || "asUser" in myPerms
-    fun setAsUser(v: Boolean) { if (::appContext.isInitialized) appContext.getSharedPreferences("fishlog", Context.MODE_PRIVATE).edit().putBoolean("as_user", v).apply() }
+    val isAdmin: Boolean get() = realAdmin
 
     var groups: List<Group> = emptyList()
         private set
@@ -766,9 +761,9 @@ object Cloud {
 
     // ---------------- 사용자 권한 (관리자가 체크박스로 켜고 끔, 기본 모두 꺼짐) ----------------
     /** 권한 이름 → 설명 */
-    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)", "wx" to "날씨 새로고침 (물때 창)", "liveMap" to "실시간 조과 지도 보기 (공유한 사람 경로·포인트)", "windy" to "🌬 윈디 바람 지도 보기 (물때 창)", "seat" to "🚤 예약 (선상 빈자리) 쓰기 · 앱 · 홈피", "seatAlarm" to "🚤 예약 · 자리 나면 알림", "s24" to "🚤 예약 · 선상24 전체 보기", "tf" to "🎣 예약 · 더피싱 전체 보기", "seatAuto" to "🤖 예약 · 자리 나면 자동 예약 신청", "asUser" to "👤 일반 화면으로 전환 버튼 (시험용)")
+    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)", "wx" to "날씨 새로고침 (물때 창)", "liveMap" to "실시간 조과 지도 보기 (공유한 사람 경로·포인트)", "windy" to "🌬 윈디 바람 지도 보기 (물때 창)", "seat" to "🚤 예약 (선상 빈자리) 쓰기 · 앱 · 홈피", "seatAlarm" to "🚤 예약 · 자리 나면 알림", "s24" to "🚤 예약 · 선상24 전체 보기", "tf" to "🎣 예약 · 더피싱 전체 보기", "seatAuto" to "🤖 예약 · 자리 나면 자동 예약 신청")
     @Volatile var myPerms: Set<String> = emptySet()
-    fun can(p: String) = isAdmin || (!asUser && p in myPerms)
+    fun can(p: String) = isAdmin || p in myPerms
     fun loadMyPerms(done: (() -> Unit)? = null) {
         val me = uid ?: return
         db.collection("users").document(me).get().addOnSuccessListener { d ->

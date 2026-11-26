@@ -128,17 +128,8 @@ class MainActivity : Activity() {
     /** 관리자가 막은 옛날 버전인지 (출조 중엔 막지 않고, 끝난 뒤에) */
     private var forceUpdate = false
     private lateinit var chatBtn: TextView
-    private lateinit var asUserBtn: TextView
     private var seatMenuBtn: View? = null
     private var permsAsked = false
-    private fun paintAsUser() {
-        if (!::asUserBtn.isInitialized) return
-        asUserBtn.visibility = if (Cloud.canSwitch) View.VISIBLE else View.GONE
-        val on = Cloud.asUser
-        asUserBtn.text = if (on) "👤 일반 중\n누르면 관리자" else "👤 일반\n으로 보기"
-        asUserBtn.setTextColor(if (on) Color.WHITE else Ui.TEXT)
-        asUserBtn.background = Ui.bg(this, if (on) Color.parseColor("#E8892A") else Ui.CARD, 14, Color.parseColor("#E8892A"))
-    }
     private lateinit var chatBadge: TextView
     private var chatOnline = 0L
     private var stationsSynced = false
@@ -356,7 +347,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        paintAsUser(); if (!permsAsked) { permsAsked = true; Seats.syncPerm(this) { runOnUiThread { paintAsUser(); seatMenuBtn?.visibility = if (Seats.canUse(this)) View.VISIBLE else View.GONE; paintQuick() } } }
+        if (!permsAsked) { permsAsked = true; Seats.syncPerm(this) { runOnUiThread { seatMenuBtn?.visibility = if (Seats.canUse(this)) View.VISIBLE else View.GONE; paintQuick() } } }
         // 처음 한 번: 위치·개인정보 동의 (동의해야 사용)
         if (!Consent.ok(this)) {
             if (!consentOpen) { consentOpen = true; Consent.show(this) { consentOpen = false; recreate() } }
@@ -543,17 +534,6 @@ class MainActivity : Activity() {
         header.addView(quickInline, LinearLayout.LayoutParams(WRAP, WRAP))
         // v6.65 (352): 💬 채팅은 아래 탭에서 맨 위 오른쪽 작은 버튼으로 (빨간 숫자 = 안 읽은 글 · 아래 '접속N')
         header.clipChildren = false; header.clipToPadding = false
-        // v7.12 (439): 👤 일반으로 보기 (관리자 · 권한 받은 사람만 보임) — 누르면 관리자/권한 화면을 끄고 일반 사용자처럼
-        asUserBtn = Ui.text(this, 11f, Ui.TEXT, true, "").apply {
-            gravity = Gravity.CENTER; setPadding(dp(6), 0, dp(6), 0); visibility = View.GONE
-            setOnClickListener {
-                val to = !Cloud.asUser
-                Cloud.setAsUser(to)
-                Ui.toast(this@MainActivity, if (to) "👤 일반 사용자 화면으로 바꿨어요 (화면만 · 다시 누르면 관리자)" else "🛠 관리자 화면으로 돌아왔어요")
-                recreate()
-            }
-        }
-        header.addView(asUserBtn, LinearLayout.LayoutParams(WRAP, dp(40)).apply { leftMargin = dp(4) })
         val chatTop = android.widget.FrameLayout(this).apply { clipChildren = false; clipToPadding = false }
         chatTop.addView(Ui.text(this, 17f, Color.parseColor("#F2C14E"), true, "💬").apply {
             gravity = Gravity.CENTER
