@@ -1,9 +1,0 @@
-name: Usage test
-on:
-  workflow_dispatch:
-jobs:
-  t:
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "INIT $(curl -s https://talla.co.kr/__/firebase/init.json | tr -d '\n' | sed 's/AIza[A-Za-z0-9_-]*/KEY/' | head -c 300)"
