@@ -2,7 +2,7 @@ name: Seat sites
 # 390: 선상24 배마다 선단 사이트 · 밴드 · 전화 모으기 → talla.co.kr/data/seat_sites.json
 on:
   schedule:
-    - cron: '17 19,1,7 * * *'   # 한국 4:17 · 10:17 · 16:17 (한 번에 400척까지)
+    - cron: '17 19 1 * *'   # 434: 한 달에 한 번 (한국 2일 새벽 4:17) · 전부 새로
   workflow_dispatch:
 permissions:
   contents: write
@@ -17,9 +17,9 @@ jobs:
         with: { python-version: '3.12' }
       - name: Collect
         run: |
-          python tools/seat_sites.py && python tools/fleets_build.py
-          # 426: 쉬는 선단 찾기는 하루 한 번 (새벽 4:17 · 손으로 실행할 때도)
-          if [ "$(date -u +%H)" = "19" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then python tools/fleets_active.py || true; fi
+          REFRESH=3000 python tools/seat_sites.py && python tools/fleets_build.py
+          # 426: 쉬는 선단 찾기도 같이
+          python tools/fleets_active.py || true
       - name: Commit
         id: c
         run: |

@@ -94,7 +94,7 @@ h1{font-size:21px;margin:14px 0 8px}
   var areaSel = ls('area', []), fishSel = ls('fish', []), need = ls('need', 1), sortI = ls('sort', 0), openOnly = ls('open', true), favs = ls('fav', {});
   var SORTS = ['자리 많은 순', '출항 빠른 순', '이름 순'];
   var DIR = null, AREAS = [], OFF = {}, LIMIT = 40, extra = 0;
-  var schs = {}, loaded = {}, loading = {}, gen = 0, shown = 20, q = '';
+  var schs = {}, loaded = {}, loading = {}, gen = 0, shown = 10, q = '';
   // 433: 우리 서버(중계기 /s24)가 선상24 목록에서 미리 받아 둔 값 → 먼저 보여 주고 선단 홈페이지 지금 값으로 바뀜
   var pre = {}, preBusy = {}, SHIPH = null;
 
@@ -241,7 +241,6 @@ h1{font-size:21px;margin:14px 0 8px}
       var bi = 0, brun = 0;
       (function nextB() { while (brun < 4 && bi < bs.length) { brun++; loadBatch(bs[bi++], day, g).then(function () { brun--; if (g === gen) nextB(); }); } })();
     }
-    loadPre(g);
     render();
   }
 
@@ -324,7 +323,7 @@ h1{font-size:21px;margin:14px 0 8px}
     var restF = q ? 0 : areaAllN() - fl.length;
     L.innerHTML = l.slice(0, shown).map(card).join('') + (l.length > shown ? '<button class="btn more" id="more">⬇ 더 보기 (' + shown + ' / ' + l.length + '척)</button>' : '') +
       (l.length <= shown && restF > 0 ? '<button class="btn more" id="moreF">' + (done < fl.length ? '⏳ 선단 읽는 중…' : '⬇ 선단 ' + Math.min(40, restF) + '곳 더 읽기 (남은 ' + restF + '곳)') + '</button>' : '');
-    if ($('more')) $('more').onclick = function () { shown += 20; render(); };
+    if ($('more')) $('more').onclick = function () { shown += 10; render(); };
     if ($('moreF')) $('moreF').onclick = function () { if (done < fl.length) return; extra += 40; loadAll(); };
     L.querySelectorAll('.star').forEach(function (b) { b.onclick = function () { var k = b.dataset.k; if (favs[k]) delete favs[k]; else favs[k] = 1; lsSet('fav', favs); render(); }; });
   }
@@ -367,34 +366,34 @@ h1{font-size:21px;margin:14px 0 8px}
   }
   $('areaBtn').onclick = function () {
     var before = areaSel.join();
-    var d = sheet('📍 지역 (여러 개)', '<p class="note">숫자 = 그 지역 선단 수 · 많이 고를수록 오래 걸려요</p>' + areaChips(), function () { lsSet('area', areaSel); if (areaSel.join() !== before) { shown = 20; extra = 0; loadAll(); } else render(); });
+    var d = sheet('📍 지역 (여러 개)', '<p class="note">숫자 = 그 지역 선단 수 · 많이 고를수록 오래 걸려요</p>' + areaChips(), function () { lsSet('area', areaSel); if (areaSel.join() !== before) { shown = 10; extra = 0; loadAll(); } else render(); });
     d.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { var a = b.dataset.a, i = areaSel.indexOf(a); if (i >= 0) areaSel.splice(i, 1); else areaSel.push(a); b.classList.toggle('on'); }; });
   };
   $('fishBtn').onclick = function () {
-    var d = sheet('🐟 어종 (여러 개)', FISH.length ? '<div class="chips" style="margin-top:8px"><button class="chip' + (fishSel.length ? '' : ' on') + '" data-x="">전체</button>' + FISH.map(function (f) { return '<button class="chip' + (fishSel.indexOf(f) >= 0 ? ' on' : '') + '" data-f="' + esc(f) + '">' + esc(f) + '</button>'; }).join('') + '</div>' : '<p class="note">먼저 지역을 골라 일정을 읽어 주세요</p>', function () { lsSet('fish', fishSel); shown = 20; render(); });
+    var d = sheet('🐟 어종 (여러 개)', FISH.length ? '<div class="chips" style="margin-top:8px"><button class="chip' + (fishSel.length ? '' : ' on') + '" data-x="">전체</button>' + FISH.map(function (f) { return '<button class="chip' + (fishSel.indexOf(f) >= 0 ? ' on' : '') + '" data-f="' + esc(f) + '">' + esc(f) + '</button>'; }).join('') + '</div>' : '<p class="note">먼저 지역을 골라 일정을 읽어 주세요</p>', function () { lsSet('fish', fishSel); shown = 10; render(); });
     d.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { var f = b.dataset.f, i = fishSel.indexOf(f); if (i >= 0) fishSel.splice(i, 1); else fishSel.push(f); b.classList.toggle('on'); d.querySelector('[data-x]').classList.toggle('on', !fishSel.length); }; });
     var x = d.querySelector('[data-x]'); if (x) x.onclick = function () { fishSel = []; d.querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', c === x); }); };
   };
   $('needBtn').onclick = function () {
     var d = sheet('👥 같이 가는 사람', '<div class="chips" style="margin-top:8px">' + [1, 2, 3, 4, 5, 6, 8, 10].map(function (n) { return '<button class="chip' + (n === need ? ' on' : '') + '" data-n="' + n + '">' + n + '자리 이상</button>'; }).join('') + '</div>');
-    d.querySelectorAll('[data-n]').forEach(function (b) { b.onclick = function () { need = +b.dataset.n; lsSet('need', need); d.remove(); shown = 20; render(); }; });
+    d.querySelectorAll('[data-n]').forEach(function (b) { b.onclick = function () { need = +b.dataset.n; lsSet('need', need); d.remove(); shown = 10; render(); }; });
   };
   $('sortBtn').onclick = function () {
     var d = sheet('↕ 정렬', '<div class="chips" style="margin-top:8px">' + SORTS.map(function (s, i) { return '<button class="chip' + (i === sortI ? ' on' : '') + '" data-i="' + i + '">' + s + '</button>'; }).join('') + '</div>');
     d.querySelectorAll('[data-i]').forEach(function (b) { b.onclick = function () { sortI = +b.dataset.i; lsSet('sort', sortI); d.remove(); render(); }; });
   };
-  $('openBtn').onclick = function () { openOnly = !openOnly; lsSet('open', openOnly); shown = 20; render(); };
+  $('openBtn').onclick = function () { openOnly = !openOnly; lsSet('open', openOnly); shown = 10; render(); };
   $('qBtn').onclick = function () { var v = $('qBox').style.display === 'none'; $('qBox').style.display = v ? 'flex' : 'none'; if (v) $('q').focus(); else if (q) { q = ''; $('q').value = ''; loadAll(); } };
   // 428: 한 글자마다 찾지 않고 Enter(검색) 또는 🔍 찾기 누를 때만
-  function doQ() { q = $('q').value.trim(); shown = 20; $('q').blur(); loadAll(); }
+  function doQ() { q = $('q').value.trim(); shown = 10; $('q').blur(); loadAll(); }
   $('q').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); doQ(); } };
   $('qGo').onclick = doQ;
-  function setDay(d) { day = d; shown = 20; extra = 0; $('day').value = d; loadAll(); }
+  function setDay(d) { day = d; shown = 10; extra = 0; $('day').value = d; loadAll(); }
   $('day').onchange = function () { if ($('day').value) setDay($('day').value); };
   $('prev').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - 1); setDay(ymd(d)); };
   $('next').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + 1); setDay(ymd(d)); };
   // 432: 🔄 = 읽은 것 비우고 다시 (중계기는 5분 기억이라 그 안이면 같은 값일 수 있어요)
-  $('refresh').onclick = function () { schs = {}; loaded = {}; loading = {}; pre = {}; shown = 20; loadAll(); };
+  $('refresh').onclick = function () { schs = {}; loaded = {}; loading = {}; pre = {}; shown = 10; loadAll(); };
   $('day').value = day;
   render();
   fetch('/data/fleets_off.json').then(function (r) { return r.json(); }).then(function (j) { (j.off || []).forEach(function (h) { OFF[h] = 1; }); }).catch(function () {});
