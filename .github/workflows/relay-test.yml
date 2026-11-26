@@ -9,27 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: |
           set +e
-          mkdir -p out; cd out
-          R="https://talla-relay.jonginzz33.workers.dev/?u="
-          enc() { python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$1"; }
-          get() { curl -s -m 60 "${R}$(enc "$1")" -o "$2"; echo "$2 $(wc -c < $2)"; }
-          for d in 2026-12-03 2026-12-05 2026-12-10; do get "https://gull.sunsang24.com/ship/schedule_fleet/$d/0/simple_day1" gull_$d.html; done
-          get "https://gull.sunsang24.com/" gull_home.html
-          SCH=$(grep -oh 'data-schedule_no="[0-9]*"' gull_*.html | head -1 | grep -o '[0-9]*')
-          echo "SCH=$SCH"
-          get "https://gull.sunsang24.com/mypage/reservation_ready/$SCH" gull_ready.html
-          grep -oh 'src="[^"]*\.js[^"]*"' gull_ready.html | sort -u > gull_js.txt; cat gull_js.txt
-          for j in $(grep -o '"[^"]*"' gull_js.txt | tr -d '"' | grep -v 'http' | head -8); do n=$(echo $j | tr '/?=&' '____'); get "https://gull.sunsang24.com$j" js_$n; done
-          get "https://yamujin.thefishing.kr/index.php?mid=bk&year=2026&month=12&day=05" yam_bk.html
-          P=$(grep -o "popup.step1.php?[^']*" yam_bk.html | head -1); echo "P=$P"
-          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/$P" yam_step1.html
-          grep -oh 'action="[^"]*"\|src="[^"]*\.js[^"]*"' yam_step1.html | sort -u
-          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/js/reservation.js" yam_reservation.js
-          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=3007&PH_N_UID=0&PS_N_UID=14317" yam_step1b.html
-          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/popu2.step2.php" yam_step2.html
-          for h in ssfish 52fish redlight; do get "https://$h.thefishing.kr/index.php?mid=bk&year=2026&month=12&day=05" ${h}_bk.html; P2=$(grep -o "popup.step1.php?[^']*" ${h}_bk.html | head -1); echo "$h P=$P2"; [ -n "$P2" ] && get "https://$h.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/$P2" ${h}_step1.html; grep -o "reservation_boat_[^/]*" ${h}_bk.html | sort | uniq -c; done
-          for h in dongmun sungbin poseidon; do get "https://$h.sunsang24.com/ship/schedule_fleet/2026-12-05/0/simple_day1" ${h}_day.html; S2=$(grep -oh 'data-schedule_no="[0-9]*"' ${h}_day.html | head -1 | grep -o '[0-9]*'); [ -n "$S2" ] && get "https://$h.sunsang24.com/mypage/reservation_ready/$S2" ${h}_ready.html; done
-          get "https://assets.sunsang24.com/real/hosting/resources/js/service_type.js" s24_service_type.js
-          cd ..
+          mkdir -p out
+          python3 tools/book_survey.py
           git config user.name dump; git config user.email d@x
           git checkout -q --orphan relay-dump; git rm -rq --cached . ; git add out; git commit -qm dump; git push -qf origin HEAD:relay-dump
