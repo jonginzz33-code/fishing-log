@@ -58,6 +58,7 @@ footer a{text-decoration:underline;margin-right:12px}
 @media (max-width:560px){.two{grid-template-columns:1fr}}
 @media (max-width:560px){nav .links{display:none}}
 .sec{font-size:19px;margin:26px 0 10px}.sec small{font-size:12.5px;color:var(--sub);font-weight:500;margin-left:6px}
+.me-only{display:none!important}html.talla-me h2.me-only{display:block!important}html.talla-me .tools.me-only{display:grid!important}
 .tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .tool{display:block;background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px}
 .tool .i{font-size:28px}.tool b{display:block;font-size:16px;margin:6px 0 2px}.tool p{margin:0;font-size:13px;color:#B8CAD6}
@@ -136,8 +137,8 @@ footer a{text-decoration:underline;margin-right:12px}
   </div>
 </section>
 
-<h2 class="sec">🧰 도구 <small>talla.co.kr 에서 쓰는 것 · 오른쪽 위 ☰ 메뉴에도 있어요</small></h2>
-<section class="tools">
+<h2 class="sec me-only">🧰 도구 <small>talla.co.kr 에서 쓰는 것 · 오른쪽 위 ☰ 메뉴에도 있어요</small></h2>
+<section class="tools me-only">
   <a class="tool" href="/fleets"><div class="i">🚤</div><b>배 선단 보기</b><p>선상24 · 더피싱 선단 1,000곳 찾기 · 그 날 일정 · 조과 · 전화</p><span class="k t">시험 중</span></a>
   <a class="tool" href="/admin"><div class="i">🔐</div><b>관리자</b><p>배 추가 · 배 검색 · 나만 보는 메모 (구글 로그인)</p><span class="k a">관리자만</span></a>
   <a class="tool" href="/rules"><div class="i">📋</div><b>서버 규칙 복사</b><p>Firebase 규칙 게시할 때 한 번에 복사</p><span class="k a">관리자만</span></a>

@@ -1,6 +1,17 @@
 /* talla.co.kr 공용 ☰ 메뉴 — 오른쪽 위 버튼 · 누르면 오른쪽에서 메뉴가 나와요.
    칸을 더하려면 아래 MENU 에 한 줄 넣기: [아이콘, 이름, 주소, 꼬리표(없으면 '')] · 묶음 = {t: '제목', items: [...]} */
 (function () {
+  // 일반 방문자에겐 ☰ 메뉴 · 도구 칸이 안 보여요. 관리자 폰 · PC 에서 한 번만 talla.co.kr/?k=KEY 로 열면 그 브라우저에 기억 (숨기기만 · 보안은 각 페이지 로그인 · 서버 규칙)
+  var KEY = 'me-371e7a', me = false;
+  try {
+    var q = new URLSearchParams(location.search).get('k');
+    if (q === KEY) localStorage.setItem('talla_me', '1');
+    if (q === 'off') localStorage.removeItem('talla_me');
+    if (q) history.replaceState(null, '', location.pathname + location.hash);
+    me = localStorage.getItem('talla_me') === '1';
+  } catch (e) {}
+  if (!me) return;
+  document.documentElement.classList.add('talla-me');
   var MENU = [
     { t: '', items: [['🏠', '홈', '/', '']] },
     { t: '📱 앱', items: [
@@ -45,6 +56,7 @@
         (x[3] ? '<span class="k' + (x[3] === '시험 중' ? ' t' : '') + '">' + x[3] + '</span>' : '') + '</a>';
     });
   });
+  h += '<div class="tm-t">⚙</div><a class="tm-a" href="/?k=off"><span class="i">🚪</span>이 브라우저에서 메뉴 숨기기</a>';
   pan.innerHTML = h + '<div style="height:24px"></div>';
   function open(v) { dim.classList.toggle('on', v); pan.classList.toggle('on', v); }
   btn.onclick = function () { open(true); }; dim.onclick = function () { open(false); };
