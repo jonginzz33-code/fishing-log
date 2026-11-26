@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>지오팜 재고조회 · talla</title>
+<link rel="icon" href="img/jogwa.png">
+<style>
+/* 지오팜 재고조회 — 구글 로그인(허락된 계정만) · 재입고 알림 서버 설정 */
+:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--ok:#2FBF8F;--bad:#FF8A8A;--warn:#F2C14E}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.55}
+a{color:inherit}
+.wrap{max-width:860px;margin:0 auto;padding:0 16px 40px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 58px 16px 0;border-bottom:1px solid #1E3446}
+.logo{font-size:20px;font-weight:900;text-decoration:none}.logo span{color:var(--sky)}
+.who{font-size:13px;color:var(--sub);text-align:right;word-break:break-all}
+h1{font-size:22px;margin:22px 0 4px}
+h2{font-size:17px;margin:0 0 10px}
+.lead{color:var(--sub);font-size:14px;margin:0 0 14px}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px}
+.btn{display:inline-block;border:0;border-radius:20px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+.btn.ok{background:var(--ok);color:#04222A}.btn.ghost{background:transparent;color:#DDEAF2;border:1.5px solid #3A6A88}
+.btn.sm{padding:5px 11px;font-size:12.5px}.btn.bad{background:transparent;color:var(--bad);border:1.5px solid #6A3A3A}
+.btn:disabled{opacity:.5;cursor:default}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:340px;margin:8px auto 0;background:#fff;color:#1F1F1F;border-radius:24px;padding:12px 18px;font-weight:800;font-size:15px;border:0;cursor:pointer;font-family:inherit}
+input,textarea{width:100%;background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit}
+textarea{min-height:200px;resize:vertical;font:13px/1.45 ui-monospace,Consolas,monospace}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.row>input{flex:1;min-width:160px}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px;text-align:center;font-size:13px;color:var(--sub)}
+.tile b{display:block;font-size:24px;color:var(--text)}
+.tile.g b{color:var(--ok)}.tile.f b{color:var(--bad)}
+.msg{font-size:13.5px;color:var(--sky);min-height:20px;margin-top:8px}
+.warn{background:rgba(242,193,78,.12);border:1.5px solid var(--warn);border-radius:14px;padding:12px 14px;font-size:14px;color:#FDEBC0}
+.list{width:100%;border-collapse:collapse;font-size:13.5px}
+.list td{border-top:1px solid #1E3446;padding:7px 4px;vertical-align:middle}
+.list td.c{color:var(--sub);font:12px ui-monospace,Consolas,monospace;word-break:break-all}
+.list td.x{text-align:right;white-space:nowrap}
+.b{display:inline-block;padding:1px 8px;border-radius:8px;font-size:12px;font-weight:800;white-space:nowrap}
+.b.g{background:#1E4F3E;color:#9FF0CF}.b.s{background:#26343F;color:#B8CAD6}.b.f{background:#4A2020;color:#FFB4B4}.b.u{background:#16324A;color:#7FD6FF}
+.sr{margin-top:10px}
+.sr div{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid #1E3446;font-size:13.5px}
+.sr div span{flex:1;min-width:0}
+.sr small{color:var(--sub);font-family:ui-monospace,Consolas,monospace}
+.filter{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+.filter button{background:transparent;border:1.5px solid #3A6A88;color:#DDEAF2;border-radius:14px;padding:4px 10px;font-size:12.5px;cursor:pointer;font-family:inherit}
+.filter button.on{background:#3A6A88}
+details summary{cursor:pointer;font-weight:800}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="logo" href="/"><span>talla</span>.co.kr</a>
+  <div class="who" id="who"></div>
+</nav>
+
+<h1>💊 지오팜 재고조회</h1>
+<p class="lead">품절된 제품을 서버가 몇 분마다 지오팜에서 확인하고, 재고가 생기면 휴대폰(ntfy)으로 알려줘요.</p>
+
+<div id="setup" class="warn hide"></div>
+
+<div id="login" class="card hide" style="text-align:center">
+  <h2>구글 계정으로 로그인</h2>
+  <p class="lead" style="margin:0">허락된 계정만 설정 화면이 열려요.</p>
+  <button class="gbtn" id="gbtn"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Google 계정으로 로그인</button>
+  <div class="msg" id="loginMsg"></div>
+</div>
+
+<div id="deny" class="card hide" style="text-align:center">
+  <h2>🚫 이 계정은 권한이 없어요</h2>
+  <p class="lead">허락된 구글 계정으로 다시 로그인해 주세요.</p>
+  <button class="btn ghost" onclick="logout()">로그아웃</button>
+</div>
+
+<div id="app" class="hide">
+  <div class="card">
+    <h2>📊 지금 상태</h2>
+    <div class="lead" id="cycle" style="margin:0">불러오는 중…</div>
+    <div id="problem" class="warn hide" style="margin-top:10px"></div>
+    <div class="tiles">
+      <div class="tile">품절<b id="tSold">-</b></div>
+      <div class="tile g">재고 있음<b id="tIn">-</b></div>
+      <div class="tile f">실패<b id="tFail">-</b></div>
+      <div class="tile">확인 전<b id="tNew">-</b></div>
+    </div>
+    <div class="row">
+      <button class="btn ok" onclick="act('run', this)">🔄 지금 한 묶음 확인</button>
+      <button class="btn ghost" onclick="act('test', this)">🔔 테스트 알림</button>
+      <button class="btn ghost" onclick="load()">새로고침</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card">
+    <h2>➕ 제품 찾아서 추가</h2>
+    <div class="row"><input id="q" placeholder="제품명 두 글자 이상 (예: 리바로)" enterkeyhint="search"><button class="btn ok" id="qbtn" onclick="doFind()">검색</button></div>
+    <div class="sr" id="sr"></div>
+  </div>
+
+  <div class="card">
+    <h2>📋 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
+    <div class="filter" id="filter">
+      <button data-f="all" class="on">전체</button><button data-f="in">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
+    </div>
+    <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
+    <table class="list" id="list"></table>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>✏️ 목록 통째로 고치기 (엑셀 붙여넣기)</summary>
+      <p class="lead" style="margin:8px 0">한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (공급처가 여러 개면 쉼표로)</p>
+      <textarea id="bulk"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn ok" onclick="saveBulk(this)">이대로 저장</button></div>
+    </details>
+  </div>
+</div>
+</div>
+
+<script src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
+<script src="/__/firebase/10.14.1/firebase-auth-compat.js"></script>
+<script src="/__/firebase/init.js"></script>
+<script>
+(function () {
+  var API = 'https://geo-restock.jonginzz33.workers.dev/api/';
+  var ALLOW = ['choseong505@gmail.com'];
+  var $ = function (id) { return document.getElementById(id); };
+  var show = function (id) { ['login', 'deny', 'app'].forEach(function (x) { $(x).classList.toggle('hide', x !== id); }); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var data = { watch: [], items: {} }, filt = 'all';
+
+  if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
+    $('setup').classList.remove('hide');
+    $('setup').textContent = '⚠ 로그인 설정을 불러오지 못했어요. 잠시 뒤 새로고침해 주세요.';
+    return;
+  }
+  var auth = firebase.auth();
+
+  $('gbtn').onclick = function () {
+    var p = new firebase.auth.GoogleAuthProvider();
+    p.setCustomParameters({ prompt: 'select_account' });
+    auth.signInWithPopup(p).catch(function (e) {
+      if (/popup|cancel/i.test(e.code || '')) return auth.signInWithRedirect(p);
+      $('loginMsg').textContent = '로그인 실패 · ' + (e.code || e.message);
+    });
+  };
+  window.logout = function () { auth.signOut(); };
+
+  auth.onAuthStateChanged(function (u) {
+    if (!u) { $('who').textContent = ''; show('login'); return; }
+    $('who').innerHTML = esc(u.email) + ' · <a href="javascript:logout()">로그아웃</a>';
+    if (ALLOW.indexOf((u.email || '').toLowerCase()) < 0) { show('deny'); return; }
+    show('app');
+    load();
+  });
+
+  function call(path, opt) {
+    opt = opt || {};
+    return auth.currentUser.getIdToken().then(function (t) {
+      var h = { Authorization: 'Bearer ' + t };
+      if (opt.body) h['Content-Type'] = 'application/json';
+      return fetch(API + path, { method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined });
+    }).then(function (r) {
+      return r.json().catch(function () { return { error: '서버 응답을 읽지 못했어요 (' + r.status + ')' }; });
+    }).catch(function () { return { error: '서버에 연결하지 못했어요. 서버가 아직 안 올라갔을 수 있어요.' }; });
+  }
+
+  function state(name) {
+    var s = data.items[name];
+    if (!s) return 'new';
+    return s.lv === 1 ? 'in' : s.lv === 0 ? 'sold' : 'fail';
+  }
+  var BADGE = { in: '<span class="b g">재고 있음</span>', sold: '<span class="b s">품절</span>', fail: '<span class="b f">실패</span>', new: '<span class="b u">확인 전</span>' };
+
+  window.load = function () {
+    $('cycle').textContent = '불러오는 중…';
+    call('status').then(function (j) {
+      if (j.error) { $('cycle').textContent = j.error; return; }
+      data = j;
+      var c = { in: 0, sold: 0, fail: 0, new: 0 };
+      j.watch.forEach(function (w) { c[state(w[0])]++; });
+      $('tSold').textContent = c.sold; $('tIn').textContent = c.in; $('tFail').textContent = c.fail; $('tNew').textContent = c.new;
+      var last = j.lastCycle ? new Date(j.lastCycle.t).toLocaleString('ko-KR') : '아직 없음';
+      $('cycle').textContent = '감시 ' + j.watch.length + '개 · ' + j.groups + '묶음을 1분마다 한 묶음씩 확인 (한 바퀴 약 ' + j.groups + '분) · 마지막 한 바퀴 시작 ' + last;
+      $('problem').classList.toggle('hide', !j.problem);
+      if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
+      $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
+      render();
+    });
+  };
+
+  function render() {
+    var q = $('lq').value.trim().toLowerCase();
+    var rows = data.watch.map(function (w, i) { return { w: w, i: i, s: state(w[0]) }; })
+      .filter(function (r) { return (filt === 'all' || r.s === filt) && (!q || r.w[0].toLowerCase().indexOf(q) >= 0 || r.w[1].indexOf(q) >= 0); });
+    rows.sort(function (a, b) { var o = { in: 0, fail: 1, new: 2, sold: 3 }; return o[a.s] - o[b.s] || a.i - b.i; });
+    $('cnt').textContent = '(' + data.watch.length + '개)';
+    $('list').innerHTML = rows.map(function (r) {
+      var it = data.items[r.w[0]], n = it && it.lv === 1 ? ' ' + it.n + '개' : '';
+      return '<tr><td>' + BADGE[r.s] + '<small style="color:var(--sub)">' + n + '</small></td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
+        '</td><td class="x"><button class="btn bad sm" data-del="' + r.i + '">삭제</button></td></tr>';
+    }).join('') || '<tr><td style="color:var(--sub)">해당하는 제품이 없어요</td></tr>';
+  }
+  $('lq').oninput = render;
+  $('filter').onclick = function (e) {
+    var f = e.target.getAttribute('data-f'); if (!f) return;
+    filt = f;
+    [].forEach.call($('filter').children, function (b) { b.classList.toggle('on', b === e.target); });
+    render();
+  };
+  $('list').onclick = function (e) {
+    var i = e.target.getAttribute('data-del'); if (i == null) return;
+    var w = data.watch[+i];
+    if (!confirm('감시 목록에서 뺄까요?\n' + w[0])) return;
+    var next = data.watch.filter(function (_, k) { return k !== +i; });
+    save(next, e.target);
+  };
+
+  function save(list, btn) {
+    if (btn) btn.disabled = true;
+    return call('save', { method: 'POST', body: { watch: list } }).then(function (j) {
+      if (btn) btn.disabled = false;
+      $('msg').textContent = j.msg || j.error || '';
+      if (!j.error && j.count) load();
+      return j;
+    });
+  }
+  window.saveBulk = function (btn) {
+    btn.disabled = true;
+    call('save', { method: 'POST', body: { text: $('bulk').value } }).then(function (j) {
+      btn.disabled = false; $('msg').textContent = j.msg || j.error || ''; if (j.count) load();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  };
+
+  window.act = function (a, btn) {
+    btn.disabled = true; $('msg').textContent = a === 'run' ? '지오팜에서 확인 중… (10초쯤)' : '보내는 중…';
+    call(a, { method: 'POST' }).then(function (j) {
+      btn.disabled = false; $('msg').textContent = j.msg || j.error || '';
+      if (a === 'run') load();
+    });
+  };
+
+  window.doFind = function () {
+    var q = $('q').value.trim();
+    if (q.length < 2) { $('sr').textContent = '두 글자 이상 입력해 주세요.'; return; }
+    $('qbtn').disabled = true; $('sr').textContent = '지오팜에서 검색 중…';
+    call('search?q=' + encodeURIComponent(q)).then(function (j) {
+      $('qbtn').disabled = false;
+      var box = $('sr'); box.innerHTML = '';
+      if (j.error || j.msg) { box.textContent = j.error || j.msg; if (!(j.rows || []).length) return; }
+      if (!j.rows.length) { box.textContent = '검색 결과가 없어요.'; return; }
+      var have = {};
+      data.watch.forEach(function (w) { w[1].split(',').forEach(function (c) { have[c] = 1; }); });
+      j.rows.forEach(function (x) {
+        var key = x.code + ':' + x.sup;
+        var d = document.createElement('div');
+        var s = document.createElement('span');
+        s.innerHTML = esc(x.text) + '<br><small>' + key + (x.stock != null ? ' · 재고 ' + x.stock : '') + '</small>';
+        var b = document.createElement('button');
+        b.className = 'btn sm ' + (have[key] ? 'ghost' : 'ok');
+        b.textContent = have[key] ? '감시 중' : '추가';
+        b.disabled = !!have[key];
+        b.onclick = function () {
+          var name = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
+          save(data.watch.concat([[name, key]]), b).then(function (r) { if (!r.error) { b.textContent = '감시 중'; b.className = 'btn sm ghost'; b.disabled = true; } });
+        };
+        d.append(s, b); box.append(d);
+      });
+    });
+  };
+  $('q').onkeydown = function (e) { if (e.key === 'Enter') doFind(); };
+})();
+</script>
+<script src="/menu.js"></script>
+</body>
+</html>
