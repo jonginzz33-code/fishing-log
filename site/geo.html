@@ -114,7 +114,8 @@ details summary{cursor:pointer;font-weight:800}
     <div class="row quiet" style="margin-bottom:12px">
       <label><input type="checkbox" id="qOn"> 🌙 조회 안 하는 시간</label>
       <select id="qFrom"></select><span>시 ~</span><select id="qTo"></select><span>시</span>
-      <label style="margin-left:8px"><input type="checkbox" id="qWk"> 토 · 일 쉬기</label>
+      <label style="margin-left:8px"><input type="checkbox" id="qSat"> 토요일 쉬기</label>
+      <label><input type="checkbox" id="qSun"> 일요일 쉬기</label>
     </div>
     <div class="row">
       <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
@@ -305,14 +306,14 @@ details summary{cursor:pointer;font-weight:800}
   // 조회 안 하는 시간 (퇴근 뒤 · 주말)
   for (var hh = 0; hh < 24; hh++) { $('qFrom').add(new Option(hh, hh)); $('qTo').add(new Option(hh, hh)); }
   function showQuiet(q) {
-    q = q || { on: false, from: 19, to: 8, weekend: false };
-    $('qOn').checked = q.on; $('qFrom').value = q.from; $('qTo').value = q.to; $('qWk').checked = q.weekend;
+    q = q || { on: false, from: 19, to: 8, sat: false, sun: false };
+    $('qOn').checked = q.on; $('qFrom').value = q.from; $('qTo').value = q.to; $('qSat').checked = !!q.sat; $('qSun').checked = !!q.sun;
     $('qFrom').disabled = $('qTo').disabled = !q.on;
   }
-  ['qOn', 'qFrom', 'qTo', 'qWk'].forEach(function (id) {
+  ['qOn', 'qFrom', 'qTo', 'qSat', 'qSun'].forEach(function (id) {
     $(id).onchange = function () {
       $('qFrom').disabled = $('qTo').disabled = !$('qOn').checked;
-      setCfg({ quiet: { on: $('qOn').checked, from: +$('qFrom').value, to: +$('qTo').value, weekend: $('qWk').checked } });
+      setCfg({ quiet: { on: $('qOn').checked, from: +$('qFrom').value, to: +$('qTo').value, sat: $('qSat').checked, sun: $('qSun').checked } });
     };
   });
   // 전체 목록을 지금 바로 한 바퀴 확인 (묶음마다 따로 요청)
