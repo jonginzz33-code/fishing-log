@@ -1154,7 +1154,8 @@ object Seats {
         val foundErr = HashSet<String>()
         fun qFetch(k: String, f: () -> List<Sch>) {
             if (found.containsKey(k) || k in foundErr || !synchronized(foundBusy) { foundBusy.add(k) }) return
-            qPool.execute {
+            if (qPool.isShutdown) return
+            try { qPool.execute {
                 val ft = java.util.concurrent.FutureTask(f)
                 Thread(ft).start()
                 val r = try { ft.get(15, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { ft.cancel(true); null }
@@ -1163,7 +1164,7 @@ object Seats {
                     synchronized(foundBusy) { foundBusy.remove(k) }
                     if (dlg.isShowing) later()
                 }
-            }
+            } } catch (_: java.util.concurrent.RejectedExecutionException) {}
         }
         val sum = Ui.text(a, 12f, Ui.SUB, false, "").apply { setPadding(dp(16), 0, dp(16), dp(4)) }
         root.addView(sum)
@@ -1794,20 +1795,22 @@ object Seats {
             val gen = areaGen; val d0 = day
             areaTotal += part.size; areaLeft += part.size; render()
             val ex = areaEx ?: java.util.concurrent.Executors.newFixedThreadPool(6).also { areaEx = it }
-            fun one(f: DirF) = ex.execute {
+            // v7.05: 지역을 바꾸면 읽기 작업을 멈추는데, 그 뒤에 들어오는 일은 그냥 버림 (예전엔 앱이 꺼짐)
+            fun run(r: () -> Unit) { try { ex.execute(r) } catch (_: java.util.concurrent.RejectedExecutionException) {} }
+            fun one(f: DirF) = run {
                 val r = try { if (isTf(f.host)) tfDay(f.host, d0) else s24Day(f.host, d0) } catch (_: Exception) { emptyList() }
                 a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) render() else later() }
             }
-            part.chunked(40).forEach { ch -> ex.execute {
+            part.chunked(40).forEach { ch -> run {
                 val got = dayBatch(ch.map { it.host }, d0)
-                if (got == null) { ch.forEach { one(it) }; return@execute }
+                if (got == null || gen != areaGen) { if (gen == areaGen) ch.forEach { one(it) }; return@run }
                 val miss = ch.filter { it.host !in got }
                 a.runOnUiThread {
                     if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
                     got.values.forEach { areaAll.addAll(it) }; areaLeft -= got.size
                     if (areaLeft <= 0) render() else later()
                 }
-                miss.forEach { one(it) }
+                if (gen == areaGen) miss.forEach { one(it) }
             } }
         }
         areaReadFn = { areaRead(it) }
