@@ -1,0 +1,573 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() { return signedIn() && request.auth.token.email == 'jonginzz33@gmail.com'; }
+    // 관리자가 이용 정지한 계정은 글쓰기·그룹 활동 불가
+    function notBanned() {
+      return signedIn() && !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+    }
+    function isGroupOwner(gid) {
+      return signedIn() &&
+        get(/databases/$(database)/documents/groups/$(gid)).data.owner == request.auth.uid;
+    }
+    function isMember(gid) {
+      return signedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(gid)).data.members;
+    }
+    // 관리자가 켜 준 권한 (users/{uid}.perms.이름 == true)
+    function hasPerm(p) {
+      return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('perms', {}).get(p, false) == true;
+    }
+    // v6.19 보안: 폰 시계가 조금 틀려도 되게 앞뒤 6시간
+    function nearNow(ms) { return ms is int && ms > request.time.toMillis() - 21600000 && ms < request.time.toMillis() + 21600000; }
+    function trashDoc(tid) { return get(/databases/$(database)/documents/trash/$(tid)).data; }
+    function reportDoc(target) { return /databases/$(database)/documents/reports/$(target); }
+    // v6.43 (306): 사칭 이름 ('관리자 · 운영자 · 운영진 · 관리팀 · admin · 운영' · 띄어쓰기 · 대소문자 · 특수문자 섞어도) — 관리자 계정은 예외
+    function fakeAdmin(n) { return n is string && n.lower().replace('[^0-9a-z가-힣]', '').matches('.*(관리자|관리팀|운영|admin).*'); }
+    function okName(n) { return isAdmin() || !fakeAdmin(n); }
+    // v6.44 (310): 일정 공지(eid 있음)의 그 일정을 올린 사람인지
+    function evOwner(gid, nd) {
+      return nd.get('eid', '') is string && nd.get('eid', '') != ''
+        && exists(/databases/$(database)/documents/groups/$(gid)/events/$(nd.eid))
+        && get(/databases/$(database)/documents/groups/$(gid)/events/$(nd.eid)).data.owner == request.auth.uid;
+    }
+    function reportBy(target) { return /databases/$(database)/documents/reports/$(target)/by/$(request.auth.uid); }
+
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    // v6.91 (402): 관리자가 홈피(talla.co.kr/admin)에서 넣는 배 · 모든 앱이 읽어 선상 빈자리에
+    match /extraShips/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() && (request.resource == null || (
+        request.resource.data.keys().hasOnly(['name', 'url', 'port', 'tel', 'memo', 't'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 40
+        && request.resource.data.url is string && request.resource.data.url.size() >= 4 && request.resource.data.url.size() <= 200
+        && (!('port' in request.resource.data) || (request.resource.data.port is string && request.resource.data.port.size() <= 30))
+        && (!('tel' in request.resource.data) || (request.resource.data.tel is string && request.resource.data.tel.size() <= 30))
+        && (!('memo' in request.resource.data) || (request.resource.data.memo is string && request.resource.data.memo.size() <= 200))));
+    }
+    // v6.91 (388): 관리자만 보는 메모 (홈피)
+    match /adminNotes/{id} {
+      allow read, write: if isAdmin();
+    }
+    // v3.7 🦀 해루질 참고 구역 (모두 읽기 · 관리자만 쓰기)
+    match /haeruZones/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /haeruMeta/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    // v4.2.5 🏆 미니게임 랭킹 (로그인하면 모두 읽기 · 내 기록만 쓰기)
+    match /gameRank/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // 권한(perms)은 관리자만 바꿈
+      allow create: if signedIn() && request.auth.uid == uid && !('perms' in request.resource.data)
+        && (!('nick' in request.resource.data) || okName(request.resource.data.nick));
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['perms'])
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['nick']) || okName(request.resource.data.nick)));
+      allow delete: if signedIn() && request.auth.uid == uid;
+      match /trips/{tid} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+      // v6.68 (360): 나만 보는 포인트 핀
+      match /pins/{pid} {
+        allow read, delete: if signedIn() && request.auth.uid == uid;
+        allow create, update: if signedIn() && request.auth.uid == uid && okPin(request.resource.data);
+      }
+    }
+
+    // ---- 닉네임 (중복 금지, 언제든 바꾸기) ----
+    match /nicknames/{k} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && okName(k);
+      allow update, delete: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    // ---- 이용 정지 (관리자만 정지·해제) ----
+    match /bans/{uid} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /bannedDevices/{dev} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---- 신고 누적 (차단한 사람 수) ----
+    match /reports/{target} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['n', 'updated'])
+        && request.resource.data.n == 1
+        && existsAfter(reportBy(target)) && !exists(reportBy(target));
+      allow update: if isAdmin() || (signedIn()
+        && request.resource.data.keys().hasOnly(['n', 'updated'])
+        && (
+          (request.resource.data.n == resource.data.n + 1 && existsAfter(reportBy(target)) && !exists(reportBy(target)))
+          ||
+          (request.resource.data.n == resource.data.n - 1 && !existsAfter(reportBy(target)) && exists(reportBy(target)))
+        ));
+      allow delete: if isAdmin();
+      match /by/{u} {
+        allow read: if signedIn() && (request.auth.uid == u || isAdmin());
+        allow create: if signedIn() && request.auth.uid == u && (
+          (!exists(reportDoc(target)) && getAfter(reportDoc(target)).data.n == 1)
+          ||
+          (exists(reportDoc(target)) && getAfter(reportDoc(target)).data.n == get(reportDoc(target)).data.n + 1)
+        );
+        allow delete: if isAdmin() || (signedIn() && request.auth.uid == u
+          && exists(reportDoc(target))
+          && getAfter(reportDoc(target)).data.n == get(reportDoc(target)).data.n - 1);
+      }
+    }
+
+    // ---- 채팅 (전체방) · 채팅 금지 · 접속 중 ----
+    function chatOk() {
+      return notBanned() && !exists(/databases/$(database)/documents/chatMute/$(request.auth.uid));
+    }
+    function chatMsg() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string && request.resource.data.text.size() <= 500
+        && request.resource.data.name is string && request.resource.data.name.size() <= 20 && okName(request.resource.data.name)
+        && request.resource.data.t is int
+        // v6.68 (356): 칸 이름 · 크기 제한 (큰 글로 다른 사람 데이터 · 배터리 낭비 막기)
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 't', 'th', 'imgId', 'lp', 'edited'])
+        && (!('th' in request.resource.data) || (request.resource.data.th is string && request.resource.data.th.size() <= 160000))
+        && (!('imgId' in request.resource.data) || (request.resource.data.imgId is string && request.resource.data.imgId.size() <= 40))
+        && (!('lp' in request.resource.data) || okLp(request.resource.data.lp));
+    }
+    function okLp(lp) {
+      return lp is map && lp.keys().hasOnly(['u', 't', 'd', 'img'])
+        && lp.get('u', '') is string && lp.get('u', '').size() <= 2000
+        && lp.get('t', '') is string && lp.get('t', '').size() <= 200
+        && lp.get('d', '') is string && lp.get('d', '').size() <= 300
+        && lp.get('img', '') is string && lp.get('img', '').size() <= 45000;
+    }
+    // v6.68 (360): 포인트 핀 (이름 · 설명 · 자리 · 반경 50m~3km · 어종)
+    function okPin(d) {
+      return d.keys().hasOnly(['name', 'memo', 'lat', 'lon', 'r', 'sp', 'owner', 'ownerName', 't', 'edited'])
+        && d.owner == request.auth.uid
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
+        && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
+        && d.lat is number && d.lat >= -90 && d.lat <= 90 && d.lon is number && d.lon >= -180 && d.lon <= 180
+        && d.r is number && d.r >= 50 && d.r <= 5000
+        && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10))
+        && (!('ownerName' in d) || (d.ownerName is string && d.ownerName.size() <= 30 && okName(d.ownerName)))
+        && d.t is int;
+    }
+    // 그룹장이 남의 핀을 고칠 때 (owner 는 그대로)
+    function okPinBy(d) {
+      return d.keys().hasOnly(['name', 'memo', 'lat', 'lon', 'r', 'sp', 'owner', 'ownerName', 't', 'edited'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
+        && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
+        && d.lat is number && d.lon is number && d.r is number && d.r >= 50 && d.r <= 5000
+        && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10)) && d.t is int;
+    }
+    match /pins/{pid} {
+      allow read: if signedIn();
+      allow create: if notBanned() && okPin(request.resource.data);
+      allow update: if notBanned() && resource.data.owner == request.auth.uid && okPin(request.resource.data);
+      allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+    }
+    // v6.86 (395): 🚤 배 인기도 👍👎 — 1인 1배 1표 (내 표만 쓰기 · 숫자는 앱이 count 로 셈)
+    match /shipVotes/{ship}/v/{uid} {
+      allow read: if signedIn();
+      allow create, update: if notBanned() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['v', 't'])
+        && (request.resource.data.v == 1 || request.resource.data.v == -1) && request.resource.data.t is int
+        && ship.size() <= 120;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+    // v6.68 (356): 게시판 글 칸 이름 · 크기 제한
+    function okPub(d) {
+      return d.keys().hasOnly(['owner', 'nick', 'start', 'end', 'cat', 'names', 'catches', 'total', 'photoCount', 'prec',
+          'created', 'upd', 'updated', 'paid', 'mthumb', 'mainId', 'wx', 'hasTrack', 'gname', 'gid', 'gimg'])
+        && (!('nick' in d) || (d.nick is string && d.nick.size() <= 30))
+        && (!('cat' in d) || (d.cat is string && d.cat.size() <= 40))
+        && (!('names' in d) || (d.names is list && d.names.size() <= 60))
+        && (!('catches' in d) || (d.catches is list && d.catches.size() <= 3000))
+        && (!('mthumb' in d) || (d.mthumb is string && d.mthumb.size() <= 200000))
+        && (!('mainId' in d) || (d.mainId is string && d.mainId.size() <= 200))
+        && (!('wx' in d) || (d.wx is string && d.wx.size() <= 8000))
+        && (!('gname' in d) || (d.gname is string && d.gname.size() <= 60))
+        && (!('gid' in d) || (d.gid is string && d.gid.size() <= 60))
+        && (!('gimg' in d) || (d.gimg is string && d.gimg.size() <= 16000));
+    }
+    // v6.68 (356): 지금 출조 중 · 접속 표시 크기 제한
+    function okLive(d) {
+      return d.keys().size() <= 40
+        && (!('name' in d) || (d.name is string && d.name.size() <= 40))
+        && (!('line' in d) || (d.line is string && d.line.size() <= 400))
+        && (!('area' in d) || (d.area is string && d.area.size() <= 80))
+        && (!('cat' in d) || (d.cat is string && d.cat.size() <= 40));
+    }
+    match /chat/{mid} {
+      allow read: if signedIn();
+      allow create: if chatOk() && chatMsg();
+      allow update: if chatOk() && resource.data.uid == request.auth.uid && chatMsg();
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || hasPerm('chatMod'));
+    }
+    // v6.25 (274): 채팅 큰 사진 (누를 때만 받음) — 채팅 쓸 수 있는 사람이 자기 것만 · 400KB 아래
+    function chatImg() {
+      return request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'd', 't'])
+        && request.resource.data.d is string && request.resource.data.d.size() < 400000
+        && request.resource.data.t is int;
+    }
+    match /chatImg/{id} {
+      allow read: if signedIn();
+      allow create: if chatOk() && chatImg();
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || hasPerm('chatMod'));
+    }
+    match /chatMute/{uid} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['t', 'name']) && okLive(request.resource.data);
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---- 1:1 문의 (문의한 사람과 운영자만) ----
+    match /inquiries/{uid} {
+      allow read, write: if signedIn() && (request.auth.uid == uid || isAdmin());
+      match /msgs/{mid} {
+        allow read, create: if signedIn() && (request.auth.uid == uid || isAdmin());
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ---- 휴지통 (남이 지운 내 조과 30일 보관) · 알림 ----
+    match /trash/{tid} {
+      allow create: if signedIn() && request.resource.data.by == request.auth.uid
+        && (isAdmin() || (request.resource.data.kind == 'group' && isGroupOwner(request.resource.data.gid)));
+      allow read: if signedIn() && (resource.data.owner == request.auth.uid || resource.data.by == request.auth.uid || isAdmin());
+      allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      match /items/{iid} {
+        allow read, write: if signedIn() && (trashDoc(tid).owner == request.auth.uid || trashDoc(tid).by == request.auth.uid || isAdmin());
+      }
+    }
+    match /notify/{nid} {
+      // 휴지통에 넣은 사람만, 그 글 주인에게만 알림
+      allow create: if signedIn() && request.resource.data.trash is string
+        && trashDoc(request.resource.data.trash).by == request.auth.uid
+        && request.resource.data.to == trashDoc(request.resource.data.trash).owner;
+      allow read, delete: if signedIn() && resource.data.to == request.auth.uid;
+    }
+
+    // ---- 날씨 저장 (최신 값을 못 받을 때 대비) ----
+    match /wx/{id} {
+      allow read: if signedIn();
+      allow create, update: if notBanned()
+        && request.resource.data.keys().hasOnly(['h', 't'])
+        && request.resource.data.h is string && request.resource.data.h.size() < 60000
+        && nearNow(request.resource.data.t);
+      allow delete: if isAdmin();
+    }
+    // ---- 지운 글 번호 (다른 폰이 새 글 받을 때 같이 받아서 바로 지움) ----
+    match /deleted/{k}/items/{id} {
+      allow read: if signedIn();
+      // 내 글 번호 · 관리자 · 그 그룹의 그룹장만 (k = 'public' 또는 'g_그룹번호', id = '주인uid_출조번호')
+      allow create, update: if signedIn() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['t', 'by'])
+        && (id.matches(request.auth.uid + '_.*') || isAdmin()
+            || (k.matches('g_.+') && isGroupOwner(k.split('_')[1])));
+      allow delete: if isAdmin();
+    }
+    // ---- 물때 저장 (관측소_날짜, 하루 두 번 정도 새로 받아 모두 같이 씀) ----
+    match /tide/{id} {
+      allow read: if signedIn();
+      allow create: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ext', 'at', 'by'])
+        && request.resource.data.ext is string && request.resource.data.ext.size() < 8000
+        && nearNow(request.resource.data.at);
+      // 새로 고치기는 저장된 지 30분 지난 것만 (아무나 계속 덮어쓰지 못하게)
+      allow update: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ext', 'at', 'by'])
+        && request.resource.data.ext is string && request.resource.data.ext.size() < 8000
+        && nearNow(request.resource.data.at)
+        && (!(resource.data.at is int) || resource.data.at < request.time.toMillis() - 1800000);
+      allow delete: if isAdmin();
+    }
+
+    // ---- v6.31 (284): 실측 수온 저장 (관측소_날짜 · 오늘·어제 받은 실측을 모두 같이 씀) ----
+    match /wtemp/{id} {
+      allow read: if signedIn();
+      allow create: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['n', 's', 'at', 'by'])
+        && request.resource.data.s is string && request.resource.data.s.size() < 2000
+        && request.resource.data.n is string && request.resource.data.n.size() <= 40
+        && nearNow(request.resource.data.at);
+      // 새로 고치기는 저장된 지 30분 지난 것만
+      allow update: if notBanned() && request.resource.data.by == request.auth.uid
+        && request.resource.data.keys().hasOnly(['n', 's', 'at', 'by'])
+        && request.resource.data.s is string && request.resource.data.s.size() < 2000
+        && request.resource.data.n is string && request.resource.data.n.size() <= 40
+        && nearNow(request.resource.data.at)
+        && (!(resource.data.at is int) || resource.data.at < request.time.toMillis() - 1800000);
+      allow delete: if isAdmin();
+    }
+
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.owner == request.auth.uid;
+      allow update: if signedIn() && resource.data.owner == request.auth.uid
+        && request.resource.data.gid == resource.data.gid;
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+    }
+    // ---- 전체 사용자에게 '지금 출조 중' 공유 (본인만 쓰기, 정확한 위치 없음) ----
+    // ---- 실시간 조과 지도 (전체 공유 + '정확한 위치 공유' 켠 사람) — 보는 건 관리자가 권한(liveMap) 준 사람만 ----
+    match /publicLiveMap/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPerm('liveMap'));
+      allow create, update: if notBanned() && request.auth.uid == uid;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+    match /publicLive/{uid} {
+      allow read: if signedIn();
+      allow create, update: if notBanned() && request.auth.uid == uid && request.resource.data.owner == uid
+        && request.resource.data.keys().hasOnly(['owner', 'name', 't', 'start', 'cat', 'line', 'area', 'lat', 'lon']) && okLive(request.resource.data);
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+    match /public/{pid} {
+      allow read: if signedIn();
+      allow create: if notBanned() && request.resource.data.owner == request.auth.uid && okPub(request.resource.data);
+      allow update: if (notBanned() && resource.data.owner == request.auth.uid
+        && request.resource.data.owner == request.auth.uid && okPub(request.resource.data))
+        // v6.28 (279): 관리자가 예전 글에 그룹 번호 채우기 (그룹 번호 · 이름 · 그림 · 바뀐 시각만)
+        || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['gid', 'gname', 'gimg', 'upd']));
+      allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      match /photos/{ph} {
+        allow read: if signedIn();
+        // 글 주인만 (남의 글에 사진 · 경로 넣기 / 덮어쓰기 막기)
+        allow create: if notBanned() && request.resource.data.owner == request.auth.uid
+          && get(/databases/$(database)/documents/public/$(pid)).data.owner == request.auth.uid;
+        allow update: if notBanned() && request.resource.data.owner == request.auth.uid
+          && resource.data.owner == request.auth.uid;
+        allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isAdmin());
+      }
+    }
+    // v6.28 (279): 게시판에 보일 그룹 이름표 (그룹 고유 번호 → 지금 이름 · 작은 그림) — 읽기 모두 · 쓰기 그 그룹 그룹장 · 관리자
+    match /groupNames/{gid} {
+      allow read: if signedIn();
+      allow create, update: if (isAdmin() || isGroupOwner(gid))
+        && request.resource.data.keys().hasOnly(['name', 'img', 't'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.img is string && request.resource.data.img.size() <= 20000;
+      allow delete: if isAdmin() || isGroupOwner(gid);
+    }
+    match /groups/{gid} {
+      // v6.28 (279): 관리자도 그룹 이름 읽기 (게시판 그룹 번호 채우기)
+      allow read: if signedIn() && (request.auth.uid in resource.data.members || isAdmin());
+      // 그룹 만들기: 운영자 또는 '그룹 만들기' 권한을 받은 사람만
+      allow create: if notBanned() && (isAdmin() || hasPerm('group'))
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.members == [request.auth.uid];
+      allow update: if signedIn() && (
+        resource.data.owner == request.auth.uid ||
+        (
+          // v6.42 (305): 그룹 가입 = 맞는 초대 코드를 낸 사람만 (같이 쓰는 joins/{내 uid} 문서에 코드 · 그 코드가 이 그룹 것인지 서버가 확인)
+          notBanned()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.resource.data.members.hasAll(resource.data.members)
+          && request.resource.data.members.size() == resource.data.members.size() + 1
+          && request.auth.uid in request.resource.data.members
+          && existsAfter(/databases/$(database)/documents/groups/$(gid)/joins/$(request.auth.uid))
+          && get(/databases/$(database)/documents/invites/$(getAfter(/databases/$(database)/documents/groups/$(gid)/joins/$(request.auth.uid)).data.code)).data.gid == gid
+        )
+        ||
+        (
+          // 그룹 탈퇴: 나만 빠짐
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.auth.uid in resource.data.members
+          && !(request.auth.uid in request.resource.data.members)
+          && resource.data.members.hasAll(request.resource.data.members)
+          && request.resource.data.members.size() == resource.data.members.size() - 1
+        )
+      );
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+      // v6.42 (305): 가입할 때 낸 초대 코드 (나만 쓰기 · 코드가 이 그룹 초대 코드여야 함 · 그룹장 · 나만 읽기)
+      match /joins/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isGroupOwner(gid));
+        allow create, update: if notBanned() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['code', 't'])
+          && request.resource.data.code is string && request.resource.data.code.size() <= 20
+          && get(/databases/$(database)/documents/invites/$(request.resource.data.code)).data.gid == gid;
+        allow delete: if signedIn() && (request.auth.uid == uid || isGroupOwner(gid));
+      }
+      match /members/{mid} {
+        allow read: if isMember(gid);
+        allow create, update: if isMember(gid) && request.auth.uid == mid
+          && (!('name' in request.resource.data) || okName(request.resource.data.name));
+        allow delete: if isGroupOwner(gid) || request.auth.uid == mid;
+      }
+      // 실시간 조과 지도 (그룹) — 그룹원 중 관리자가 권한(liveMap) 준 사람만 보기
+      match /liveMap/{mid} {
+        allow read: if isMember(gid) && (request.auth.uid == mid || isAdmin() || hasPerm('liveMap'));
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid && okLive(request.resource.data);
+        allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid) || isAdmin());
+      }
+      match /live/{mid} {
+        allow read: if isMember(gid);
+        allow create, update: if isMember(gid) && notBanned() && request.auth.uid == mid && okLive(request.resource.data);
+        allow delete: if signedIn() && (request.auth.uid == mid || isGroupOwner(gid));
+      }
+      // v6.68 (360): 그룹 포인트 핀 — 그룹원 누구나 · 고치기/지우기 = 올린 사람 · 그룹장
+      match /pins/{pid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && notBanned() && okPin(request.resource.data);
+        allow update: if isMember(gid) && notBanned() && (resource.data.owner == request.auth.uid || isGroupOwner(gid))
+          && request.resource.data.owner == resource.data.owner && okPinBy(request.resource.data);
+        allow delete: if signedIn() && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+      }
+      match /meta/{mid} {
+        allow read: if isMember(gid);
+        allow write: if isGroupOwner(gid);
+      }
+      match /chat/{mid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && chatOk() && chatMsg();
+        allow update: if isMember(gid) && chatOk() && resource.data.uid == request.auth.uid && chatMsg();
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGroupOwner(gid) || isAdmin());
+      }
+      match /chatImg/{iid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && chatOk() && chatImg();
+        allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isGroupOwner(gid) || isAdmin());
+      }
+      match /notices/{nid} {
+        allow read: if isMember(gid);
+        // v6.36 (296): 그룹장은 지금처럼 · 그룹원은 일정에서 '공지에 올리기'(eid 있는 공지 · 내 이름으로)만
+        allow create: if isGroupOwner(gid) || (isMember(gid) && notBanned()
+          && request.resource.data.owner == request.auth.uid
+          && request.resource.data.eid is string && request.resource.data.eid.size() > 0
+          && request.resource.data.title is string && request.resource.data.title.size() <= 100
+          && request.resource.data.body is string && request.resource.data.body.size() <= 1000);
+        // v6.44 (310): 일정 공지는 그 일정을 올린 사람도 제목 · 내용만 고치기 (일정 고칠 때 같이)
+        allow update: if isGroupOwner(gid) || (isMember(gid) && evOwner(gid, resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'body', 'edited'])
+          && request.resource.data.title is string && request.resource.data.title.size() <= 100
+          && request.resource.data.body is string && request.resource.data.body.size() <= 1000);
+        // 내리기: 올린 사람 · 그룹장 · (v6.44) 그 일정을 올린 사람
+        allow delete: if isGroupOwner(gid) || (isMember(gid) && (resource.data.owner == request.auth.uid || evOwner(gid, resource.data)));
+      }
+      // v6.36 (294): 🔖 그룹 사이트 메모 — 그룹원 누구나 추가 · 올린 사람 · 그룹장 고치기/지우기
+      match /sites/{sid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order', 'folder'])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 40
+          && request.resource.data.url is string && request.resource.data.url.size() <= 300
+          && request.resource.data.memo is string && request.resource.data.memo.size() <= 200
+          && (!('folder' in request.resource.data) || (request.resource.data.folder is string && request.resource.data.folder.size() <= 40));
+        allow update: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid))
+          && request.resource.data.owner == resource.data.owner
+          && request.resource.data.keys().hasOnly(['name', 'url', 'memo', 'owner', 'ownerName', 't', 'order', 'folder'])
+          && request.resource.data.name.size() <= 40 && request.resource.data.url.size() <= 300 && request.resource.data.memo.size() <= 200
+          && (!('folder' in request.resource.data) || (request.resource.data.folder is string && request.resource.data.folder.size() <= 40));
+        allow delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+      }
+      // v6.66 (353): 그룹 사이트 묶음 — 읽기 그룹원 · 만들기 · 고치기 · 지우기 그룹장
+      match /siteFolders/{fid} {
+        allow read: if isMember(gid);
+        allow create, update: if isGroupOwner(gid)
+          && request.resource.data.keys().hasOnly(['name', 'icon', 'order'])
+          && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 30
+          && request.resource.data.icon is string && request.resource.data.icon.size() <= 8
+          && request.resource.data.order is int;
+        allow delete: if isGroupOwner(gid);
+      }
+      match /events/{eid} {
+        allow read: if isMember(gid);
+        allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+        allow update, delete: if isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid));
+        // v6.39 (301): 참석 확인 — 그룹원이 자기 답만 (참석 · 미정 · 불참 · 한마디 60자) · 그룹장은 지우기 가능
+        match /rsvp/{uid} {
+          allow read: if isMember(gid);
+          allow create, update: if isMember(gid) && notBanned() && uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['name', 's', 'note', 't'])
+            && request.resource.data.s in ['yes', 'maybe', 'no']
+            && request.resource.data.name is string && request.resource.data.name.size() <= 30
+            && request.resource.data.note is string && request.resource.data.note.size() <= 60
+            && request.resource.data.t is int;
+          allow delete: if isMember(gid) && (uid == request.auth.uid || isGroupOwner(gid));
+        }
+      }
+      // v6.51 (327): 출조 댓글 수 · 마지막 댓글 시각 (출조 문서를 다시 올려도 안 지워지게 따로)
+      // v6.62 (343): 그룹 채팅 읽음 (카톡처럼 안 읽은 사람 수) · 쓰기 = 나만 · t(어디까지 읽음) · at
+      match /chatRead/{uid} {
+        allow read: if isMember(gid) || isAdmin();
+        allow create, update: if isMember(gid) && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['t', 'at'])
+          && request.resource.data.t is int && request.resource.data.at is int;
+        allow delete: if request.auth.uid == uid || isAdmin() || isGroupOwner(gid);
+      }
+      match /cmtMeta/{tid} {
+        allow read: if isMember(gid) || isAdmin();
+        allow create, update: if ((isMember(gid) && notBanned()) || isAdmin())
+          && request.resource.data.by == request.auth.uid
+          && request.resource.data.keys().hasOnly(['n', 'at', 'by'])
+          && request.resource.data.n is int && request.resource.data.at is int;
+        allow delete: if isAdmin() || isGroupOwner(gid);
+      }
+      match /trips/{tripId} {
+        // v6.51 (327): 💬 출조 댓글 — 그룹원만 보고 쓰기 · 고치기 = 쓴 사람 · 지우기 = 쓴 사람 · 그룹장 · 관리자
+        match /comments/{cid} {
+          allow read: if isMember(gid) || isAdmin();
+          allow create: if isMember(gid) && notBanned()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 't'])
+            && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300
+            && request.resource.data.name is string && request.resource.data.name.size() <= 30 && okName(request.resource.data.name)
+            && request.resource.data.t is int;
+          allow update: if isMember(gid) && notBanned() && resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited'])
+            && request.resource.data.text is string && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 300;
+          allow delete: if isAdmin() || (isMember(gid) && (resource.data.uid == request.auth.uid || isGroupOwner(gid)));
+        }
+        allow read: if isMember(gid) || isAdmin();
+        allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid;
+        // v5.2 (240): 올린 사람 + 관리자(조과 고치기 · 올린 사람은 그대로)
+        allow update: if (isMember(gid) && notBanned() && resource.data.owner == request.auth.uid)
+                      || (isAdmin() && request.resource.data.owner == resource.data.owner);
+        allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
+        match /photos/{pid} {
+          allow read: if isMember(gid);
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
+          allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
+        }
+        match /photosBig/{pid} {
+          allow read: if isMember(gid);
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
+          allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
+        }
+        match /detail/{did} {
+          allow read: if isMember(gid);
+          allow create: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && get(/databases/$(database)/documents/groups/$(gid)/trips/$(tripId)).data.owner == request.auth.uid;
+          allow update: if isMember(gid) && notBanned() && request.resource.data.owner == request.auth.uid
+            && resource.data.owner == request.auth.uid;
+          allow delete: if isAdmin() || (isMember(gid) && (resource.data.owner == request.auth.uid || isGroupOwner(gid)));
+        }
+      }
+    }
+  }
+}
