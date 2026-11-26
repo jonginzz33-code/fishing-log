@@ -13,8 +13,8 @@ android {
         applicationId = "com.fishlog.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 195
-        versionName = "7.14"
+        versionCode = 196
+        versionName = "7.15"
         // 국립해양조사원 인증키: GitHub 비밀값(KHOA_KEY)에서 빌드할 때만 넣음
         buildConfigField("String", "KHOA_KEY", "\"" + (System.getenv("KHOA_KEY") ?: "") + "\"")
         // v5.1 (232): 카카오 장소 검색 REST API 키: GitHub 비밀값(KAKAO_REST_KEY)에서 빌드할 때만 넣음
@@ -67,6 +67,8 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     // 서버 (Firebase)
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
     implementation("com.google.firebase:firebase-auth")
@@ -86,3 +88,6 @@ dependencies {
     // 지도 (키 없이 쓰는 오픈 지도)
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 }
+
+// v7.15: 자동 예약 단위 시험 (저장해 둔 선단 화면 폴더 · -Dbook.dir=...)
+tasks.withType<Test>().configureEach { systemProperty("book.dir", System.getProperty("book.dir") ?: "") }
