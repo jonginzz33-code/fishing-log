@@ -95,6 +95,7 @@ details summary{cursor:pointer;font-weight:800}
         <option value="1">1분마다</option><option value="2">2분마다</option><option value="3">3분마다</option><option value="5">5분마다</option>
         <option value="10">10분마다</option><option value="15">15분마다</option><option value="30">30분마다</option><option value="60">1시간마다</option>
       </select>
+      <button class="btn ok sm" id="refreshAll">🔄 지금 새로고침</button>
       <button class="btn ghost sm" id="pause">⏸ 잠시 멈춤</button>
     </div>
     <div class="row">
@@ -227,6 +228,26 @@ details summary{cursor:pointer;font-weight:800}
     call('settings', { method: 'POST', body: body }).then(function (j) { $('msg').textContent = j.msg || j.error || ''; load(); });
   }
   $('every').onchange = function () { setCfg({ every: +$('every').value }); };
+  // 전체 목록을 지금 바로 한 바퀴 확인 (묶음마다 따로 요청)
+  $('refreshAll').onclick = function () {
+    var btn = $('refreshAll'), n = data.groups || 1, i = 0, ok = 0, fail = 0, re = 0;
+    btn.disabled = true;
+    (function next() {
+      if (i >= n) {
+        btn.disabled = false;
+        $('msg').textContent = '전체 확인 끝 · 성공 ' + ok + ' · 실패 ' + fail + (re ? ' · 재입고 ' + re + '건 (휴대폰 알림 보냄)' : '');
+        load();
+        return;
+      }
+      $('msg').textContent = '전체 확인 중… ' + (i + 1) + '/' + n + '묶음';
+      call('run?slot=' + i, { method: 'POST' }).then(function (j) {
+        var m = /성공 (\d+) · 실패 (\d+)(?: · 재입고 (\d+))?/.exec(j.msg || '');
+        if (m) { ok += +m[1]; fail += +m[2]; re += +(m[3] || 0); }
+        else if (j.msg || j.error) { btn.disabled = false; $('msg').textContent = j.msg || j.error; return; }
+        i++; next();
+      });
+    })();
+  };
   $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }); };
   $('lq').oninput = render;
   $('filter').onclick = function (e) {
