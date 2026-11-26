@@ -6,8 +6,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
+          set +e
           R=https://talla-relay.jonginzz33.workers.dev
-          echo "PING $(curl -s -m 20 $R/ping | head -c 80)"
+          echo "PING $(curl -sS -m 20 $R/ping 2>&1 | head -c 120)"; echo "ROOT $(curl -sS -m 20 $R/ 2>&1 | head -c 120)"
           for u in "https://sungbin.sunsang24.com/ship/schedule_fleet/2026-12-03/0/simple_day1" "https://ssfish.thefishing.kr/index.php?mid=bk&year=2026&month=12&day=03" "https://www.sunsang24.com/"; do
             o=$(curl -s -m 40 -o /tmp/b -w "%{http_code} %{size_download} %{time_total}" "$R/?u=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$u")")
             echo "TEST $u -> $o · $(grep -c 'ship_unit_ship_no_\|new-div-' /tmp/b) blocks"
