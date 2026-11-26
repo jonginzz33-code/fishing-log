@@ -33,6 +33,9 @@ textarea{min-height:140px;resize:vertical}
 .note{font-size:13px;color:var(--sub)}
 .msg{font-size:14px;margin-top:8px;min-height:20px}
 .hide{display:none}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.tile{display:block;background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;text-decoration:none}
+.tile:hover{border-color:#7FD6FF}.tile i{font-style:normal;font-size:24px}.tile b{display:block;font-size:15px;margin-top:4px}.tile small{color:var(--sub);font-size:12px}
 .warn{background:#3A2410;border:1.5px solid #E8892A;border-radius:14px;padding:12px 14px;font-size:14px}
 </style>
 </head>
@@ -57,6 +60,17 @@ textarea{min-height:140px;resize:vertical}
 </div>
 
 <div id="main" class="hide">
+  <h2>🧰 홈페이지 정리</h2>
+  <div class="tiles">
+    <a class="tile" href="/links"><i>🔗</i><b>자주 가는 링크</b><small>플레이 콘솔 · Firebase · GitHub · API 키</small></a>
+    <a class="tile" href="/app"><i>🌐</i><b>조과일지 웹</b><small>내 조과 · 그룹 · 게시판 보기</small></a>
+    <a class="tile" href="/fleets"><i>🚤</i><b>배 선단 보기</b><small>선단 1,000곳 찾기 (시험 중)</small></a>
+    <a class="tile" href="/rules"><i>📋</i><b>서버 규칙 복사</b><small>Firebase 규칙 게시할 때</small></a>
+    <a class="tile" href="/#tester"><i>🧪</i><b>테스터 안내</b><small>비공개 테스트 참여 순서</small></a>
+    <a class="tile" href="/jogwa/privacy.html"><i>📄</i><b>개인정보 · 계정 삭제</b><small>조과일지 · 급할 때</small></a>
+  </div>
+  <p class="note">오른쪽 위 ☰ 메뉴에도 같은 것이 있어요 (이 브라우저에서 관리자로 로그인해 있는 동안)</p>
+
   <h2>🚤 배 추가 — 모든 앱 '선상 빈자리'에 기본으로 나와요</h2>
   <div class="card">
     <div class="grid">
@@ -115,11 +129,13 @@ textarea{min-height:140px;resize:vertical}
       $('loginMsg').textContent = (/unauthorized-domain/.test(e.code || '') ? '⚠ Firebase 승인된 도메인에 이 주소가 없어요 (talla.co.kr 추가 필요) · ' : '로그인 실패 · ') + (e.code || e.message);
     });
   };
-  $('outBtn').onclick = $('outBtn2').onclick = function () { auth.signOut(); };
+  $('outBtn').onclick = $('outBtn2').onclick = function () { try { localStorage.removeItem('talla_me'); } catch (e) {} auth.signOut().then(function () { location.reload(); }); };
   auth.onAuthStateChanged(function (u) {
     if (!u) { $('who').textContent = ''; show('login'); return; }
     $('who').textContent = u.email;
     if ((u.email || '').toLowerCase() !== ADMIN) { show('deny'); return; }
+    // 관리자로 로그인하면 이 브라우저에 ☰ 메뉴 켜기 (로그아웃하면 끔)
+    try { if (localStorage.getItem('talla_me') !== '1') { localStorage.setItem('talla_me', '1'); var sc = document.createElement('script'); sc.src = '/menu.js?v=' + Date.now(); document.body.appendChild(sc); } } catch (e) {}
     show('main'); loadShips(); loadMemo(); loadSeen();
   });
 
