@@ -10,7 +10,14 @@ jobs:
           R=https://talla-relay.jonginzz33.workers.dev/?u=
           enc() { python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$1"; }
           for h in ssfish.thefishing.kr yamujin.thefishing.kr; do
-            curl -s -m 40 "$R$(enc https://$h/)" -o /tmp/home.html
-            echo "HOME $h $(wc -c < /tmp/home.html)"
-            grep -oE 'href="[^"]*mid=[^"&]*[^"]*"[^>]*>[^<]{0,30}' /tmp/home.html | sed 's/&amp;/\&/g' | sort -u | head -40 | sed "s/^/LINK $h /"
+            curl -s -m 40 "$R$(enc "https://$h/index.php?mid=gall")" -o /tmp/g.html
+            echo "GALL $h $(wc -c < /tmp/g.html)"
+            python3 - "$h" <<'Q'
+          import re,sys
+          s=open('/tmp/g.html',encoding='utf-8',errors='ignore').read()
+          i=s.find('wr_uid=')
+          seg=s[max(0,i-1500):i+2500]
+          print("SEG", sys.argv[1], re.sub(r'\s+',' ',seg)[:3800])
+          print("CNT", len(set(re.findall(r'mid=gall[^"]*wr_uid=(\d+)',s))))
+          Q
           done
