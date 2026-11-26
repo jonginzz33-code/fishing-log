@@ -13,9 +13,9 @@ jobs:
           import re
           s=open('/tmp/p.html',encoding='utf-8',errors='ignore').read()
           print("SIZE",len(s),"secs",len(re.findall(r'id="new-div-\d{8}"',s)),"rows",len(re.findall(r'admin-right-\d{8}-\d+-\d+',s)))
-          i=s.find('id="new-div-20261202"')
-          j=s.find('id="new-div-',i+20)
-          seg=s[i:j if j>0 else i+12000]
-          k=seg.find('admin-right-')
-          print("SEG",re.sub(r'\s+',' ',seg[max(0,k-3500):k+600]))
+          for m in re.finditer(r'admin-right-(\d{8})-(\d+)-\d+"[^>]*>(.{0,200})',s):
+              if m.group(1)!='20261202': continue
+              pre=s[max(0,m.start()-6000):m.start()]
+              nm=re.findall(r'<span style="font-size:15px; font-weight:bold;[^"]*">(.*?)</span>',pre,re.S)
+              print("ROW",m.group(2),"|",(nm[-1] if nm else '?')[:60].replace('\n',' '),"|",re.sub(r'\s+',' ',m.group(3))[:160])
           Q
