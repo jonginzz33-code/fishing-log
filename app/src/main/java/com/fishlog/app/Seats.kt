@@ -1269,6 +1269,10 @@ object Seats {
                 sb.append(tail); text = sb; textSize = 12.5f; setTextColor(Ui.TEXT)
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val canBook = s.open && s.remain >= need
+            // v6.96: 🏠 홈피 = 그 배 선단 홈페이지 첫 화면 (예약 › 옆)
+            val homeHost = if (s.host == S24) ss?.host else s.host
+            if (homeHost != null) bot.addView(Ui.pill(a, "🏠 홈피", false, Ui.TEXT, small = true) { Boats.openUrl(a, "https://$homeHost") }.apply { setTextColor(Color.parseColor("#7FD6FF")) },
+                LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             if (canBook) {
                 // v6.84: 선단 사이트를 찾은 배는 '예약 ›' = 그 선단 예약 화면 (내 선단에 넣은 배처럼 · 선상24 창은 꾹 메뉴)
                 bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrlOf(a, s)) })
