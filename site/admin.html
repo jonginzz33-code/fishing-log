@@ -129,13 +129,12 @@ textarea{min-height:140px;resize:vertical}
       $('loginMsg').textContent = (/unauthorized-domain/.test(e.code || '') ? '⚠ Firebase 승인된 도메인에 이 주소가 없어요 (talla.co.kr 추가 필요) · ' : '로그인 실패 · ') + (e.code || e.message);
     });
   };
-  $('outBtn').onclick = $('outBtn2').onclick = function () { try { localStorage.removeItem('talla_me'); } catch (e) {} auth.signOut().then(function () { location.reload(); }); };
+  $('outBtn').onclick = $('outBtn2').onclick = function () { auth.signOut().then(function () { location.reload(); }); };
   auth.onAuthStateChanged(function (u) {
     if (!u) { $('who').textContent = ''; show('login'); return; }
     $('who').textContent = u.email;
     if ((u.email || '').toLowerCase() !== ADMIN) { show('deny'); return; }
     // 관리자로 로그인하면 이 브라우저에 ☰ 메뉴 켜기 (로그아웃하면 끔)
-    try { if (localStorage.getItem('talla_me') !== '1') { localStorage.setItem('talla_me', '1'); var sc = document.createElement('script'); sc.src = '/menu.js?v=' + Date.now(); document.body.appendChild(sc); } } catch (e) {}
     show('main'); loadShips(); loadMemo(); loadSeen();
   });
 

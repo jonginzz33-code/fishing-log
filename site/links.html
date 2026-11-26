@@ -66,11 +66,15 @@ var LINKS = [
     ['🚤', '배 선단 보기 (시험)', '/fleets', ''],
     ['📄', '조과일지 개인정보처리방침', '/jogwa/privacy.html', ''],
     ['🚪', '조과일지 계정 삭제 안내', '/jogwa/delete-account.html', '']] },
+  { t: '☁ Cloudflare (중계기)', items: [
+    ['🔁', 'talla-relay 중계기 (코드 편집 · 배포)', 'https://dash.cloudflare.com/?to=/:account/workers/services/view/talla-relay/production', '선단 홈페이지 대신 읽기'],
+    ['📈', '중계기 사용량 (하루 10만 번 무료)', 'https://dash.cloudflare.com/?to=/:account/workers-and-pages', ''],
+    ['🩺', '중계기 살아 있나 (ping)', 'https://talla-relay.jonginzz33.workers.dev/ping', 'ok2 = 정상']] },
   { t: '🧑‍💻 작업', items: [
     ['🤖', 'Claude Code', 'https://claude.ai/code', ''],
     ['🌍', '가비아 (도메인)', 'https://www.gabia.com', '']] }
 ];
-var me = false; try { me = localStorage.getItem('talla_me') === '1'; } catch (e) {}
+// 관리자 구글 로그인일 때만 (menu.js 가 확인해서 talla-admin / talla-guest 알림)
 var box = document.getElementById('box');
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function full(u) { return /^https?:/.test(u) ? u : location.origin + u; }
@@ -89,8 +93,10 @@ function draw(q) {
   });
   document.getElementById('list').innerHTML = h || '<p class="note">찾는 링크가 없어요</p>';
 }
-if (!me) { box.innerHTML = '<p class="no">🔒 이 페이지는 관리자만 볼 수 있어요</p>'; }
-else {
+box.innerHTML = '<p class="no">확인 중…</p>';
+document.addEventListener('talla-guest', function () { box.innerHTML = '<p class="no">🔒 이 페이지는 관리자만 볼 수 있어요 · <a href="/admin" style="color:#7FD6FF">관리자 로그인</a></p>'; });
+document.addEventListener('talla-admin', show);
+function show() {
   box.innerHTML = '<h1>🔗 자주 가는 링크</h1><p class="note">누르면 새 창으로 열려요 · [복사] = 주소 복사</p><input id="q" placeholder="🔍 찾기 (예: 규칙 · 테스트 · 키)"><div id="list"></div>';
   draw('');
   document.getElementById('q').addEventListener('input', function (e) { draw(e.target.value.trim().toLowerCase()); });

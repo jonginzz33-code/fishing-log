@@ -290,7 +290,7 @@ h1{font-size:21px;margin:14px 0 8px}
       '<div class="bot"><div class="rm"><b style="color:' + col + '">' + (op ? s.remain + '자리' : stName(s)) + '</b>' + tail + '</div>' +
       (op && s.remain >= need ? '<a class="btn go" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">예약 ›</a>' : '<a class="btn" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">일정 ›</a>') + '</div>' +
       '<div class="links"><a class="btn" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🏠 홈피</a>' +
-      (s.f[4] === '선상24' ? '<a class="btn" href="https://' + esc(s.host) + '/ship/board" target="_blank" rel="noopener">📝 조과</a>' : '') +
+      '<a class="btn" href="https://' + esc(s.host) + (s.f[4] === '더피싱' ? '/index.php?mid=gall' : '/ship/board') + '" target="_blank" rel="noopener">📝 조과</a>' +
       (s.also || []).map(function (o) { return '<a class="btn" href="' + esc(bookUrl(o)) + '" target="_blank" rel="noopener">' + esc(o.f[1].split(' · ')[0] || o.host) + ' ' + (isOpen(o) ? o.remain + '자리' : stName(o)) + ' ›</a>'; }).join('') +
       '</div></div>';
   }

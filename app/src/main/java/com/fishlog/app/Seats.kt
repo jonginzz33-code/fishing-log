@@ -870,13 +870,85 @@ object Seats {
 
     // ─────────────── 🔔 자리 나면 알림 (15분마다 · 내 폰) ───────────────
     /** v6.76: 알림은 관리자가 체크한 사람만 (Cloud.PERMS 'seatAlarm') · 뒤에서 확인할 땐 마지막으로 본 권한(prefs seat_perm) */
+    // ─────────────── v7.01 (382): 🤖 자동 예약 (관리자 허락 · 지금은 헌터호처럼 로그인 없는 개인 사이트 · 무통장) ───────────────
+    const val PERM_AUTO = "seatAuto"
+    fun canAuto(c: Context): Boolean = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM_AUTO) else prefs(c).getBoolean("seat_p_auto", false)
+    /** 자동 예약 되는 사이트 (예약 칸을 맞춰 둔 곳) */
+    fun autoSite(host: String) = host == "hunter-booking.onrender.com"
+    private fun autoKey(w: Watch) = "${w.host}|${w.shipNo}|${w.date}"
+    fun autoOn(c: Context, w: Watch) = autoKey(w) in (prefs(c).getStringSet("seat_auto", emptySet()) ?: emptySet())
+    fun setAuto(c: Context, w: Watch, on: Boolean) {
+        val set = HashSet(prefs(c).getStringSet("seat_auto", emptySet()) ?: emptySet())
+        if (on) set.add(autoKey(w)) else set.remove(autoKey(w))
+        prefs(c).edit().putStringSet("seat_auto", set).apply()
+    }
+    /** 예약자 정보 (폰에만 · 서버에 안 올림) */
+    fun autoInfo(c: Context): Triple<String, String, String> = prefs(c).let { Triple(it.getString("seat_auto_name", "") ?: "", it.getString("seat_auto_tel", "") ?: "", it.getString("seat_auto_payer", "") ?: "") }
+    private fun night() = Calendar.getInstance().get(Calendar.HOUR_OF_DAY).let { it >= 23 || it < 7 }
+    /** 실제 예약 신청 (헌터호 /reserve · 무통장) → 성공하면 받은 글 한 줄 · 실패면 null */
+    private fun autoBook(c: Context, w: Watch, s: Sch): String? {
+        val (name, tel, _) = autoInfo(c)
+        if (name.isBlank() || tel.length < 10) return null
+        if (w.host != "hunter-booking.onrender.com") return null
+        val body = listOf("program" to w.shipNo, "date" to w.date, "people" to w.need.toString(), "name" to name, "phone" to tel.filter { it.isDigit() },
+            "captain_request" to "yes", "refund_agree" to "on").joinToString("&") { (k, v) -> k + "=" + java.net.URLEncoder.encode(v, "UTF-8") }
+        return try {
+            val cn = URL("https://${w.host}/reserve").openConnection() as HttpURLConnection
+            cn.requestMethod = "POST"; cn.doOutput = true; cn.instanceFollowRedirects = true
+            cn.connectTimeout = 20000; cn.readTimeout = 40000
+            cn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+            cn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile")
+            cn.outputStream.use { it.write(body.toByteArray()) }
+            val code = cn.responseCode
+            val txt = try { (if (code < 400) cn.inputStream else cn.errorStream)?.bufferedReader()?.readText() ?: "" } catch (_: Exception) { "" }
+            cn.disconnect()
+            if (code !in 200..399) return null
+            val plain = android.text.Html.fromHtml(txt, 0).toString().replace(Regex("\\s+"), " ")
+            if (Regex("마감|실패|오류|부족|초과|error", RegexOption.IGNORE_CASE).containsMatchIn(plain.take(400)) && !plain.contains("완료")) return null
+            Regex("[^.!?\n]{0,60}(완료|접수|신청)[^.!?\n]{0,60}").find(plain)?.value?.trim() ?: "예약 신청을 보냈어요"
+        } catch (_: Exception) { null }
+    }
+    private fun notifyBooked(c: Context, w: Watch, s: Sch, msg: String?) {
+        channel(c)
+        val req = 7900 + (w.host + w.shipNo + w.date).hashCode().and(0xFFF)
+        val pi = PendingIntent.getActivity(c, req, Intent(Intent.ACTION_VIEW, Uri.parse(bookUrl(w))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val ok = msg != null
+        val title = if (ok) "✅ ${dayLabel(w.date)} ${w.ship} ${w.need}명 예약 신청 완료" else "⚠ ${dayLabel(w.date)} ${w.ship} 자동 예약 실패"
+        val text = if (ok) "${msg} · 사이트 안내대로 입금하세요 (입금해야 확정) · 눌러서 사이트 열기" else "자리는 났는데 자동 신청이 안 됐어요 · 눌러서 직접 예약해 주세요"
+        val b = Notification.Builder(c, CH).setSmallIcon(R.drawable.ic_stat_octo)
+            .setContentTitle(title).setContentText(text).setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(pi).setAutoCancel(true).setShowWhen(true).setCategory(Notification.CATEGORY_REMINDER)
+        try { c.getSystemService(NotificationManager::class.java).notify(req, b.build()) } catch (_: SecurityException) {}
+    }
+    /** 예약자 정보 입력 창 */
+    fun openAutoInfo(a: Activity, done: () -> Unit) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val sh = Sheet(a, 0.7f)
+        sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "🤖 자동 예약 정보"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val (n0, t0, p0) = autoInfo(a)
+        fun ed(hint: String, v: String, num: Boolean = false) = android.widget.EditText(a).apply {
+            this.hint = hint; setText(v); setSingleLine(); setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); textSize = 15f
+            if (num) inputType = android.text.InputType.TYPE_CLASS_PHONE
+        }
+        val eN = ed("예약자 이름", n0); val eT = ed("휴대전화 (01012345678)", t0, true); val eP = ed("입금자명 (비우면 예약자 이름)", p0)
+        sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, false, "자리 나면 알림을 건 배 중 [🤖 자동]을 켠 것은 자리가 나면 이 정보로 예약 신청까지 해요 (무통장 · 카드 결제 없음 · 입금해야 확정).\n• 지금 되는 곳: 거북섬 헌터호 (다른 사이트는 맞춰 넣으면 추가)\n• 밤 11시 ~ 아침 7시는 신청하지 않고 알림만 (입금 기한 놓침 방지)\n• 같은 날 · 같은 배는 한 번만 · 정보는 이 폰에만 저장"))
+        listOf(eN, eT, eP).forEach { sh.body.addView(it, Ui.lp(a, MATCH, WRAP, top = 8)) }
+        sh.body.addView(Ui.button(a, "💾 저장", true) {
+            prefs(a).edit().putString("seat_auto_name", eN.text.toString().trim()).putString("seat_auto_tel", eT.text.toString().filter { it.isDigit() })
+                .putString("seat_auto_payer", eP.text.toString().trim()).apply()
+            Ui.toast(a, "저장했어요"); sh.close(); done()
+        }.apply { minHeight = dp(46) }, Ui.lp(a, MATCH, WRAP, top = 12))
+        sh.show()
+    }
+
     const val PERM = "seatAlarm"
     fun allowed(c: Context): Boolean = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM) else prefs(c).getBoolean("seat_perm", false)
     /** 권한 다시 받아 기억 · 없어졌으면 걸어 둔 알림 지움 */
     fun syncPerm(c: Context, done: () -> Unit) {
         fun apply() {
             val ok = Cloud.can(PERM)
-            prefs(c).edit().putBoolean("seat_perm", ok).putBoolean("seat_p_s24", Cloud.can(PERM_S24)).putBoolean("seat_p_tf", Cloud.can(PERM_TF)).apply()
+            prefs(c).edit().putBoolean("seat_perm", ok).putBoolean("seat_p_s24", Cloud.can(PERM_S24)).putBoolean("seat_p_tf", Cloud.can(PERM_TF)).putBoolean("seat_p_auto", Cloud.can(PERM_AUTO)).apply()
             if (!ok && watches(c).isNotEmpty()) { saveWatches(c, emptyList()); schedule(c) }
             done()
         }
@@ -931,7 +1003,11 @@ object Seats {
             for (w in list) {
                 val s = sch.firstOrNull { it.shipNo == w.shipNo && it.date == w.date } ?: continue
                 val ok = s.open && s.remain >= w.need
-                if (ok && !w.hit) { notify(c, w, s); fired++ }
+                // v7.01 (382): 🤖 자동 예약 켠 배 = 자리 나면 신청까지 (허락 · 밤 아님 · 한 번만)
+                if (ok && !w.hit && autoSite(w.host) && autoOn(c, w) && prefs(c).getBoolean("seat_p_auto", false) && !night()) {
+                    val msg = autoBook(c, w, s)
+                    notifyBooked(c, w, s, msg); setAuto(c, w, false); fired++
+                } else if (ok && !w.hit) { notify(c, w, s); fired++ }
                 w.hit = ok; w.last = s.remain; w.at = System.currentTimeMillis(); rememberSch(c, w, s)
             }
         }
@@ -1297,7 +1373,7 @@ object Seats {
             }
             // v6.97 (416): 선단 홈페이지 조과 글 (이 배 글 · 없으면 선단 글) → 아래 '📝 조과 N · +N일' 버튼 · 🧭 탐사 꼬리표
             var fpMine: List<Post> = emptyList(); var fpAll: List<Post>? = null
-            if (isS24Fleet(s.host)) {
+            if (isS24Fleet(s.host) || isTf(s.host)) {
                 fpAll = postsCached(s.host)
                 if (fpAll == null) { if (synchronized(extraBusy) { extraBusy.add("p:" + s.host) }) pool.execute { fleetPosts(s.host); a.runOnUiThread { later() } } }
                 else fpMine = postsOf(fpAll, s.ship)
@@ -1363,9 +1439,9 @@ object Seats {
             ss?.tel?.let { t -> link("📞 전화") { dial(a, t) } }
             ss?.band?.let { b -> link("밴드") { Boats.openUrl(a, b) } }
             if (s.host == S24) link("📝 조황") { openBoards(a, s) }
-            if (isS24Fleet(s.host)) {
-                // v6.97 (416): [📝 조과 1,204 · +3일] (글 수 = talla.co.kr 매일 · 날짜 = 선단 홈페이지 첫 글 · 초록 3일 · 노랑 14일 · 회색)
-                val cnt = sites(a)[s.shipNo]?.posts ?: -1
+            if (isS24Fleet(s.host) || isTf(s.host)) {
+                // v6.97 (416): [📝 조과 1,204 · +3일] · v7.01 (422) 더피싱 = 게시판 맨 위 번호 (글 수 = talla.co.kr 매일 · 날짜 = 선단 홈페이지 첫 글 · 초록 3일 · 노랑 14일 · 회색)
+                val cnt = if (isTf(s.host)) tfPostCount(s.host) else sites(a)[s.shipNo]?.posts ?: -1
                 val last = fpUse.firstOrNull()?.date ?: ""
                 val dn = daysAgo(last)
                 val t = "📝 조과" + (if (cnt > 0) " %,d".format(cnt) else "") + (if (last.isNotBlank() && dn >= 0) " · " + plusDays(last) else "")
@@ -2004,11 +2080,27 @@ object Seats {
     /** 선단 조과 글 첫 쪽 (한 시간 기억 · 못 읽으면 null) */
     fun fleetPosts(host: String): List<Post>? {
         postsCached(host)?.let { return it }
-        if (!isS24Fleet(host)) return null
-        val l = try { parsePosts(get("https://$host/ship/board")) } catch (_: Exception) { return null }
+        if (!isS24Fleet(host) && !isTf(host)) return null
+        val l = try { if (isTf(host)) parseTfPosts(host, get("https://$host/index.php?mid=gall")) else parsePosts(get("https://$host/ship/board")) } catch (_: Exception) { return null }
         synchronized(postMem) { postMem[host] = System.currentTimeMillis() to l }
         return l
     }
+    // v7.01 (422): 더피싱 선단 조황 게시판 (index.php?mid=gall · 줄 = <tr class="bg…"> · 배명 [배] · 분류 · 제목 · 앞부분 · 날짜 td.datetime · 맨 위 번호 = 글 수 대략)
+    private val tfPostN = HashMap<String, Int>()
+    fun tfPostCount(host: String) = synchronized(tfPostN) { tfPostN[host] ?: -1 }
+    fun parseTfPosts(host: String, html: String): List<Post> {
+        val rows = html.split("<tr class=\"bg").drop(1)
+        fun g(seg: String, rx: String) = Regex(rx, RegexOption.DOT_MATCHES_ALL).find(seg)?.groupValues?.get(1)?.let { tfText(it) } ?: ""
+        rows.firstOrNull()?.let { r -> Regex("class=\"num\"[^>]*>\\s*(\\d+)").find(r)?.groupValues?.get(1)?.toIntOrNull()?.let { n -> synchronized(tfPostN) { tfPostN[host] = n } } }
+        return rows.mapNotNull { r ->
+            val id = Regex("wr_uid=(\\d+)").find(r)?.groupValues?.get(1) ?: return@mapNotNull null
+            val ship = g(r, "<!--배명-->\\s*<span>\\[(.*?)\\]</span>")
+            val date = Regex("class=\"datetime\">\\s*(\\d{4}-\\d{2}-\\d{2})").find(r)?.groupValues?.get(1) ?: ""
+            Post(id, g(r, "class=\"list_title[^\"]*\"[^>]*>(.*?)</a>"), g(r, "class=\"list_content[^\"]*\">(.*?)</p>"), ship,
+                g(r, "ca_name=[^\"]*\"[^>]*>\\s*\\[(.*?)\\]"), date, Regex("<img src=\"(https?://[^\"]+/thumb/[^\"]+)\"").find(r)?.groupValues?.get(1) ?: "")
+        }.filter { it.title.isNotBlank() }.distinctBy { it.id }
+    }
+    fun postUrl(host: String, id: String) = if (isTf(host)) "https://$host/index.php?mid=gall&mode=view&wr_uid=$id" else "https://$host/ship/board_detail/$id"
     fun postsOf(l: List<Post>, ship: String): List<Post> {
         val n = normShip(ship); if (n.isBlank()) return emptyList()
         return l.filter { p -> val pn = normShip(p.ship); pn.isNotBlank() && (pn.contains(n) || n.contains(pn)) }
@@ -2045,7 +2137,7 @@ object Seats {
                     val r = LinearLayout(a).apply {
                         orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
                         setPadding(dp(10), dp(8), dp(10), dp(8)); background = Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66"))
-                        isClickable = true; setOnClickListener { Boats.openUrl(a, "https://$host/ship/board_detail/${o.id}") }
+                        isClickable = true; setOnClickListener { Boats.openUrl(a, postUrl(host, o.id)) }
                     }
                     if (o.img.isNotBlank()) {
                         val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; background = Ui.bg(a, Color.parseColor("#1B3A52"), 10); clipToOutline = true }
@@ -2063,7 +2155,7 @@ object Seats {
                 }
                 if (mine.isNotEmpty()) { box.addView(Ui.text(a, 12.5f, Color.parseColor("#7FD6FF"), true, "🚤 $ship").apply { setPadding(0, dp(10), 0, 0) }); mine.forEach { row(it) } }
                 if (rest.isNotEmpty()) { box.addView(Ui.text(a, 12.5f, Ui.SUB, true, if (mine.isEmpty()) "선단 조과 글" else "같은 선단 다른 배").apply { setPadding(0, dp(12), 0, 0) }); rest.forEach { row(it) } }
-                box.addView(Ui.button(a, "🌐 선단 조과 게시판 열기") { Boats.openUrl(a, "https://$host/ship/board") }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 12))
+                box.addView(Ui.button(a, "🌐 선단 조과 게시판 열기") { Boats.openUrl(a, if (isTf(host)) "https://$host/index.php?mid=gall" else "https://$host/ship/board") }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 12))
             }
         }.start()
         sh.show()
@@ -2286,11 +2378,20 @@ object Seats {
                     (if (w.hit) "● 자리 났어요! 남은 ${w.last}자리 · " else "남은 ${maxOf(0, w.last)}자리 · ") + "${w.need}자리 이상이면 알림"))
                 r.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
                 if (w.hit) r.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, watchUrl(a, w)) }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+                // v7.01 (382): 🤖 자동 예약 (허락받은 사람 · 맞춰 둔 사이트만)
+                if (autoSite(w.host) && canAuto(a)) {
+                    val on = autoOn(a, w)
+                    r.addView(Ui.pill(a, if (on) "🤖 자동 켬" else "🤖 자동", on, Color.parseColor("#2FBF8F"), small = true) {
+                        if (!on && autoInfo(a).let { it.first.isBlank() || it.second.length < 10 }) { openAutoInfo(a) { setAuto(a, w, true); draw() }; return@pill }
+                        setAuto(a, w, !on); Ui.toast(a, if (!on) "🤖 자리가 나면 ${w.need}명으로 예약 신청까지 해요 (밤 11시~아침 7시는 알림만)" else "자동 예약 끔"); draw()
+                    }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+                }
                 r.addView(Ui.pill(a, "끄기", false, Ui.TEXT, small = true) {
                     val m = watches(a); m.removeAll { it.host == w.host && it.shipNo == w.shipNo && it.date == w.date }; saveWatches(a, m); schedule(a); draw()
                 })
                 sh.body.addView(r, Ui.lp(a, MATCH, WRAP, top = 6))
             }
+            if (canAuto(a)) sh.body.addView(Ui.button(a, "🤖 자동 예약 정보 (이름 · 전화)") { openAutoInfo(a) { draw() } }.apply { minHeight = dp(42); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 10))
             if (l.isNotEmpty()) sh.body.addView(Ui.button(a, "🔄 지금 확인") {
                 Ui.toast(a, "확인 중…")
                 Thread { val n = try { check(a) } catch (_: Exception) { -1 }

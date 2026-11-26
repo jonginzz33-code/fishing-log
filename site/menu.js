@@ -1,16 +1,29 @@
 /* talla.co.kr 공용 ☰ 메뉴 — 오른쪽 위 버튼 · 누르면 오른쪽에서 메뉴가 나와요.
    칸을 더하려면 아래 MENU 에 한 줄 넣기: [아이콘, 이름, 주소, 꼬리표(없으면 '')] · 묶음 = {t: '제목', items: [...]} */
 (function () {
-  // 일반 방문자에겐 ☰ 메뉴 · 도구 칸이 안 보여요. 관리자 폰 · PC 에서 한 번만 talla.co.kr/?k=KEY 로 열면 그 브라우저에 기억 (숨기기만 · 보안은 각 페이지 로그인 · 서버 규칙)
-  var KEY = 'me-371e7a', me = false;
-  try {
-    var q = new URLSearchParams(location.search).get('k');
-    if (q === KEY) localStorage.setItem('talla_me', '1');
-    if (q === 'off') localStorage.removeItem('talla_me');
-    if (q) history.replaceState(null, '', location.pathname + location.hash);
-    me = localStorage.getItem('talla_me') === '1';
-  } catch (e) {}
-  if (!me) return;
+  // v7.01: ☰ 메뉴는 관리자 구글 계정으로 로그인했을 때만 (일반 방문자 · 다른 계정은 안 보임)
+  //   로그인은 /admin 에서 · 같은 브라우저면 다른 페이지에서도 로그인 유지 (Firebase)
+  var ADMIN = 'jonginzz33@gmail.com';
+  try { localStorage.removeItem('talla_me'); } catch (e) {}
+  function load(src) { return new Promise(function (ok, no) { var sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); }); }
+  function ready() {
+    if (window.firebase && firebase.apps && firebase.apps.length && firebase.auth) return Promise.resolve();
+    var p = window.firebase ? Promise.resolve() : load('/__/firebase/10.14.1/firebase-app-compat.js');
+    return p.then(function () { return firebase.auth ? null : load('/__/firebase/10.14.1/firebase-auth-compat.js'); })
+      .then(function () { return firebase.apps.length ? null : load('/__/firebase/init.js'); });
+  }
+  ready().then(function () {
+    firebase.auth().onAuthStateChanged(function (u) {
+      var ok = !!u && (u.email || '').toLowerCase() === ADMIN;
+      window.tallaAdmin = ok;
+      document.dispatchEvent(new Event(ok ? 'talla-admin' : 'talla-guest'));
+      if (ok) build(); else unbuild();
+    });
+  }).catch(function () { window.tallaAdmin = false; document.dispatchEvent(new Event('talla-guest')); });
+  var built = null;
+  function unbuild() { if (built) { built.forEach(function (e) { e.remove(); }); built = null; document.documentElement.classList.remove('talla-me'); } }
+  function build() {
+  if (built) return;
   document.documentElement.classList.add('talla-me');
   var MENU = [
     { t: '', items: [['🏠', '홈', '/', '']] },
@@ -59,7 +72,7 @@
         (x[3] ? '<span class="k' + (x[3] === '시험 중' ? ' t' : '') + '">' + x[3] + '</span>' : '') + '</a>';
     });
   });
-  h += '<div class="tm-t">⚙</div><a class="tm-a" href="/?k=off"><span class="i">🚪</span>이 브라우저에서 메뉴 숨기기</a>';
+  h += '<div class="tm-t">⚙</div><a class="tm-a" href="/admin"><span class="i">🔐</span>관리자 페이지 · 로그아웃</a>';
   pan.innerHTML = h + '<div style="height:24px"></div>';
   function open(v) { dim.classList.toggle('on', v); pan.classList.toggle('on', v); }
   btn.onclick = function () { open(true); }; dim.onclick = function () { open(false); };
@@ -74,4 +87,6 @@
   else { btn.classList.add('fx'); document.body.appendChild(btn); }
   document.body.appendChild(dim); document.body.appendChild(pan);
   if (location.hash === '#tester') { var t = document.getElementById('tester'); if (t) t.open = true; }
+  built = [btn, dim, pan];
+  }
 })();
