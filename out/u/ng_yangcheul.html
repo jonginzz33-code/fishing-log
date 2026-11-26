@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="-1"/>
+<title>양철호 &gt; 예약1단계</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<link rel="stylesheet" href="/_core/module/reservation_boat_v5.1/css/style.css"/>
+<script src="https://js.thefishing.kr/script_i.js"></script>
+<script src="https://js.thefishing.kr/jquery-1.7.1.min.js"></script>
+<script src="/_core/module/reservation_boat_v5.1/js/reservation.js"></script>
+</head>
+<body>
+
+
+
+<!--팝업에서 ajax처리 시작-->
+<table id="reservation-day-table">
+</table>
+<!--팝업에서 ajax처리 종료-->
+
+
+
+<script>
+function form_check(f)
+{
+        var obj = document.getElementsByName("PA_N_UID");
+    var obj_true = 0;
+    for(var j = 0; j < obj.length; j++)
+    {
+        if(obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if(obj_true != 1)
+    {
+        alert('배를 선택해 주십시오.');
+        return false;
+    }
+
+    
+
+    var obj = document.getElementsByName("PS_N_UID");
+    var obj_true = 0;
+    for (var j = 0; j < obj.length; j++)
+    {
+        if (obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if (obj_true != 1)
+    {
+		alert('낚시종류를 선택해 주십시오.');
+		return false;
+    }
+
+	if(!f.BI_IN.value)
+	{
+        		alert('인원을 선택해 주십시오.');
+                f.BI_IN.focus();
+		return false;
+	}
+
+    if($('#temp_bi_stat').val() == "확인")
+    {
+                //좌석선택불가, 예약시 좌석안내사진으로 사용합니다
+                if($('#seat_img').length > 0)
+        {
+                        var BI_IN = $('#BI_IN').val();
+            var total_in = Number(BI_IN);
+            
+            var obj = document.getElementsByName("seat[]");
+            var obj_seat_num = 0;
+            for (var j = 0; j < obj.length; j++)
+            {
+                if (obj[j].value != '')
+                {
+                    ++obj_seat_num;
+                }
+            }
+
+            if(BI_IN != '독배')
+            {
+                if (obj_seat_num != total_in)
+                {
+                    alert('좌석 '+total_in+'개를 선택해주십시오, 현재 '+obj_seat_num+'개 선택하셨습니다.');
+                    return false;
+                }
+            }
+        }
+            }
+
+	if(!f.BI_NAME.value)
+	{
+		alert('예약자 성함을 입력해 주십시오.      ');
+		f.BI_NAME.focus();
+		return false;
+	}
+	if(!f.BI_TEL1.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL1.focus();
+		return false;
+	}
+    if(!f.BI_TEL2.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL2.focus();
+		return false;
+	}
+	if(!f.BI_TEL3.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL3.focus();
+		return false;
+	}
+        if(f.agree[0].checked == false)
+    {
+		alert('개인정보 수집 및 이용 약관 동의 하셔야합니다.');
+		f.agree[0].focus();
+		return false;
+    }
+    if(f.BI_3JA[0].checked == false)
+    {
+		alert('제3자 정보제공 동의 하셔야합니다.');
+		f.BI_3JA[0].focus();
+		return false;
+    }
+    if(f.BI_AD[0].checked == false && f.BI_AD[1].checked == false)
+    {
+		alert('광고성 정보 수신 동의여부 체크 하셔야합니다.');
+		f.BI_AD[0].focus();
+		return false;
+    }
+    
+    var ye = $('#id_ye').html();
+    var buga_total = "";
+    if($('#id_buga_total').length > 0)
+    {
+        var buga_total = $('#id_buga_total').html();
+    }
+    var data = 'ye='+ye+'&buga_total='+buga_total;
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.1/action/popup.step1.price.php",
+        data:data,
+        success:function(html)
+        {
+            if(html != 1)
+            {
+
+            }
+        }
+    });
+
+        if($('#submit').html() == "대기자내용확인")
+    {
+        if(!confirm('대기자로 예약하실 내용을 확인하시겠습니까?'))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if(!confirm($('#submit').html()+' 하시겠습니까?'))
+        {
+            return false;
+        }
+    }
+    }
+function agree_check(str)
+{
+    var f = document.insert_form;
+
+    if(str == "Y")
+    {
+        f.agree[0].checked = true;
+        f.BI_3JA[0].checked = true;
+        f.BI_AD[0].checked = true;
+    }
+    else
+    {
+        f.agree[1].checked = true;
+        f.BI_3JA[1].checked = true;
+        f.BI_AD[1].checked = true;
+    }
+}
+</script>
+
+<form id="insert_form" name="insert_form" method="post" action="/_core/module/reservation_boat_v5.1/action/popup.step1.action.php" onsubmit="return form_check(this);">
+<input type="hidden" name="action" value="insert">
+<input type="hidden" name="link" value="%2F_core%2Fmodule%2Freservation_boat_v5.1%2Fpopup.step2.php">
+<input type="hidden" id="temp_bi_stat" name="temp_bi_stat">
+
+<div style="width: 900px; margin:auto;">
+    <ul class="over_f top_tab_menu">
+        <li class="on"><i><img src="/_core/module/reservation_boat_v5.1/image/step_ico1_on.png"></i><span>STEP 01.</span>예약1단계</li>
+        <li><i><img src="/_core/module/reservation_boat_v5.1/image/step_ico2.png"></i><span>STEP 02.</span>예약확인</li>
+        <li><i><img src="/_core/module/reservation_boat_v5.1/image/step_ico3.png"></i><span>STEP 03.</span>예약완료</li>
+    </ul>
+
+    <table class="mytable1" style="table-layout:fixed;">
+    <colgroup>
+    <col width="17%"></col>
+    <col width="33%"></col>
+    <col width="17%"></col>
+    <col width="33%"></col>
+    </colgroup>
+        <tr>
+        <th height="45" style="border-top:none;">출조일</th>
+        <td colspan="3" height="45" style="border-top:none;padding-left:33px;">
+            2026년 12월 05일 토요일(3물)
+
+                    </td>
+    </tr>
+
+
+        <tr>
+        <th height="45">배 선택<span class="f_cred"> (필수)</span></th>
+        <td colspan="3" style="padding:10px 33px;">
+                            <table class="mytable3">
+                <colgroup>
+                <col width="45"></col>
+                <col width="331"></col>
+                <col width="60"></col>
+                <col width="60"></col>
+                </colgroup>
+                <tr>
+                    <th height="20">선택</th>
+                    <th height="20">배명</th>
+                    <th height="20">총인원</th>
+                    <th height="20">남은자리</th>
+                </tr>
+                                <tr>
+                    <td height="20">
+                        
+                                                <input type="radio" id="PA_N_UID2784" name="PA_N_UID" value="2784" onclick="ps_url('20261205', '2784', '', '');" checked="checked">
+                        
+                    </td>
+                    <td height="20">
+                        <label for="PA_N_UID2784">
+                                                    <span style="font-weight:bold;font-size:14px;">양철호</span>
+                                                </label>
+                    </td>
+                    <td height="20">
+                        <label for="PA_N_UID2784">
+                                                    <span style="font-weight:bold;font-size:14px;">20명</span>
+                                                </label>
+                    </td>
+                    <td height="20">
+                        <label for="PA_N_UID2784">
+                                                                                                                        <span style="color:#1c8cff;font-weight:bold;font-size:14px;">12명</span>
+                                                                                                            </label>
+                    </td>
+                </tr>
+                                </table>
+                    </td>
+    </tr>    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+    <tr>
+        <th height="45">낚시종류 선택<span class="f_cred">(필수)</span></th>
+        <td colspan="3" style="padding:10px 33px;">
+                        <table>
+            <tr>
+                <td style="border:none;"><div style="width:15px;height:15px;background-color:#FFF265; border:1px solid #666;"></div></td>
+                <td style="border:none;">
+                    선택날짜에 적용된 가격입니다.
+                                    </td>
+            </tr>
+            </table>
+
+            <table class="mytable3">
+            <colgroup>
+            <col width="45"></col>
+            <col width=""></col>
+            <col width=""></col>
+            <col width="110"></col>
+            <col width="110"></col>
+            </colgroup>
+            <tr>
+                <th height="20">선택</th>
+                <th height="20">낚시종류(남은자리)</th>
+                <th>금액구분</th>
+                <th height="20">금액</th>
+                <th height="20">예약금</th>
+            </tr>
+                                    
+                        <tr>
+                <td rowspan="1">
+                    <input type="radio" class="PS_N_UID" id="PS_N_UID31563" name="PS_N_UID" value="31563" onclick="ps_url('20261205', '2784', '0', '31563');" checked="checked">
+                </td>
+                <td rowspan="1">
+                    <label for="PS_N_UID31563">
+                    <span class="ps_selis" id="PS131563">
+                        연말 감사 이벤트 어초 장애물 생 미끼 제공 (생 새우*또는 오징어 ) 단 5인 이상 출항 26년 우리 배 5회 이용 하신 분 선비 8만 12월 31일 까지(20명)
+                    </span>
+                    </label>
+                </td>
+                <td style="font-size:12px;" class="on">대인</td>
+                <td height="20" style="text-align:right; padding-right:3px;" class="on">
+                    <label for="PS_N_UID31563">
+                    <span class="ps_selis" id="PS231563">
+                        0원
+                                            </span>
+                    </label>
+                </td>
+                <td height="20" style="text-align:right; padding-right:3px;" class="on">
+                    <label for="PS_N_UID31563">
+                    <span class="ps_selis" id="PS331563">
+                        0원
+                                            </span>
+                    </label>
+                </td>
+            </tr>
+                                                                        
+
+            
+                        <tr>
+                <td rowspan="1">
+                    <input type="radio" class="PS_N_UID" id="PS_N_UID18088" name="PS_N_UID" value="18088" onclick="ps_url('20261205', '2784', '0', '18088');">
+                </td>
+                <td rowspan="1">
+                    <label for="PS_N_UID18088">
+                    <span class="ps_selis" id="PS118088">
+                        다잡아 어초 장애물(생미끼 제공)(20명)
+                    </span>
+                    </label>
+                </td>
+                <td style="font-size:12px;" class="on">대인</td>
+                <td height="20" style="text-align:right; padding-right:3px;" class="on">
+                    <label for="PS_N_UID18088">
+                    <span class="ps_selis" id="PS218088">
+                        100,000원
+                                            </span>
+                    </label>
+                </td>
+                <td height="20" style="text-align:right; padding-right:3px;" class="on">
+                    <label for="PS_N_UID18088">
+                    <span class="ps_selis" id="PS318088">
+                        50,000원
+                                            </span>
+                    </label>
+                </td>
+            </tr>
+                                                                        
+
+                                    </table>
+
+            
+                    </td>
+    </tr>
+
+    
+    
+
+    
+
+        <tr>
+        <th>인원 선택<span class="f_cred"> (필수)</span></th>
+        <td colspan="3" style="padding: 18px 33px; font-size:14px;">
+
+            <div id="select_bi_in">            
+                
+                <select id="BI_IN" name="BI_IN" onchange="popup_ajax_step1();" class="txt_box" style="height:30px; font-size:14px;">
+                <option style="height:30px; font-size:14px;" value="">인원 선택</option>
+
+                
+                
+                                                <option style="height:30px; font-size:14px;" value="1">1명</option>
+                                <option style="height:30px; font-size:14px;" value="2">2명</option>
+                                <option style="height:30px; font-size:14px;" value="3">3명</option>
+                                <option style="height:30px; font-size:14px;" value="4">4명</option>
+                                <option style="height:30px; font-size:14px;" value="5">5명</option>
+                                <option style="height:30px; font-size:14px;" value="6">6명</option>
+                                <option style="height:30px; font-size:14px;" value="7">7명</option>
+                                <option style="height:30px; font-size:14px;" value="8">8명</option>
+                                <option style="height:30px; font-size:14px;" value="9">9명</option>
+                                <option style="height:30px; font-size:14px;" value="10">10명</option>
+                                <option style="height:30px; font-size:14px;" value="11">11명</option>
+                                <option style="height:30px; font-size:14px;" value="12">12명</option>
+                                <option style="height:30px; font-size:14px;" value="13">13명</option>
+                                <option style="height:30px; font-size:14px;" value="14">14명</option>
+                                <option style="height:30px; font-size:14px;" value="15">15명</option>
+                                <option style="height:30px; font-size:14px;" value="16">16명</option>
+                                <option style="height:30px; font-size:14px;" value="17">17명</option>
+                                <option style="height:30px; font-size:14px;" value="18">18명</option>
+                                <option style="height:30px; font-size:14px;" value="19">19명</option>
+                                <option style="height:30px; font-size:14px;" value="20">20명</option>
+                                <option style="height:30px; font-size:14px;" value="21">21명</option>
+                                <option style="height:30px; font-size:14px;" value="22">22명</option>
+                                <option style="height:30px; font-size:14px;" value="23">23명</option>
+                                <option style="height:30px; font-size:14px;" value="24">24명</option>
+                                <option style="height:30px; font-size:14px;" value="25">25명</option>
+                                <option style="height:30px; font-size:14px;" value="26">26명</option>
+                                <option style="height:30px; font-size:14px;" value="27">27명</option>
+                                <option style="height:30px; font-size:14px;" value="28">28명</option>
+                                <option style="height:30px; font-size:14px;" value="29">29명</option>
+                                <option style="height:30px; font-size:14px;" value="30">30명</option>
+                                <option style="height:30px; font-size:14px;" value="31">31명</option>
+                                <option style="height:30px; font-size:14px;" value="32">32명</option>
+                                <option style="height:30px; font-size:14px;" value="33">33명</option>
+                                <option style="height:30px; font-size:14px;" value="34">34명</option>
+                                <option style="height:30px; font-size:14px;" value="35">35명</option>
+                                <option style="height:30px; font-size:14px;" value="36">36명</option>
+                                <option style="height:30px; font-size:14px;" value="37">37명</option>
+                                <option style="height:30px; font-size:14px;" value="38">38명</option>
+                                <option style="height:30px; font-size:14px;" value="39">39명</option>
+                                <option style="height:30px; font-size:14px;" value="40">40명</option>
+                                <option style="height:30px; font-size:14px;" value="41">41명</option>
+                                <option style="height:30px; font-size:14px;" value="42">42명</option>
+                                <option style="height:30px; font-size:14px;" value="43">43명</option>
+                                <option style="height:30px; font-size:14px;" value="44">44명</option>
+                                <option style="height:30px; font-size:14px;" value="45">45명</option>
+                                <option style="height:30px; font-size:14px;" value="46">46명</option>
+                                <option style="height:30px; font-size:14px;" value="47">47명</option>
+                                <option style="height:30px; font-size:14px;" value="48">48명</option>
+                                <option style="height:30px; font-size:14px;" value="49">49명</option>
+                                <option style="height:30px; font-size:14px;" value="50">50명</option>
+                                <option style="height:30px; font-size:14px;" value="51">51명</option>
+                                <option style="height:30px; font-size:14px;" value="52">52명</option>
+                                <option style="height:30px; font-size:14px;" value="53">53명</option>
+                                <option style="height:30px; font-size:14px;" value="54">54명</option>
+                                <option style="height:30px; font-size:14px;" value="55">55명</option>
+                                <option style="height:30px; font-size:14px;" value="56">56명</option>
+                                <option style="height:30px; font-size:14px;" value="57">57명</option>
+                                <option style="height:30px; font-size:14px;" value="58">58명</option>
+                                <option style="height:30px; font-size:14px;" value="59">59명</option>
+                                <option style="height:30px; font-size:14px;" value="60">60명</option>
+                                <option style="height:30px; font-size:14px;" value="61">61명</option>
+                                <option style="height:30px; font-size:14px;" value="62">62명</option>
+                                <option style="height:30px; font-size:14px;" value="63">63명</option>
+                                <option style="height:30px; font-size:14px;" value="64">64명</option>
+                                <option style="height:30px; font-size:14px;" value="65">65명</option>
+                                <option style="height:30px; font-size:14px;" value="66">66명</option>
+                                <option style="height:30px; font-size:14px;" value="67">67명</option>
+                                <option style="height:30px; font-size:14px;" value="68">68명</option>
+                                <option style="height:30px; font-size:14px;" value="69">69명</option>
+                                <option style="height:30px; font-size:14px;" value="70">70명</option>
+                                <option style="height:30px; font-size:14px;" value="71">71명</option>
+                                <option style="height:30px; font-size:14px;" value="72">72명</option>
+                                <option style="height:30px; font-size:14px;" value="73">73명</option>
+                                <option style="height:30px; font-size:14px;" value="74">74명</option>
+                                <option style="height:30px; font-size:14px;" value="75">75명</option>
+                                <option style="height:30px; font-size:14px;" value="76">76명</option>
+                                <option style="height:30px; font-size:14px;" value="77">77명</option>
+                                <option style="height:30px; font-size:14px;" value="78">78명</option>
+                                <option style="height:30px; font-size:14px;" value="79">79명</option>
+                                <option style="height:30px; font-size:14px;" value="80">80명</option>
+                                <option style="height:30px; font-size:14px;" value="81">81명</option>
+                                <option style="height:30px; font-size:14px;" value="82">82명</option>
+                                <option style="height:30px; font-size:14px;" value="83">83명</option>
+                                <option style="height:30px; font-size:14px;" value="84">84명</option>
+                                <option style="height:30px; font-size:14px;" value="85">85명</option>
+                                <option style="height:30px; font-size:14px;" value="86">86명</option>
+                                <option style="height:30px; font-size:14px;" value="87">87명</option>
+                                <option style="height:30px; font-size:14px;" value="88">88명</option>
+                                <option style="height:30px; font-size:14px;" value="89">89명</option>
+                                <option style="height:30px; font-size:14px;" value="90">90명</option>
+                                <option style="height:30px; font-size:14px;" value="91">91명</option>
+                                <option style="height:30px; font-size:14px;" value="92">92명</option>
+                                <option style="height:30px; font-size:14px;" value="93">93명</option>
+                                <option style="height:30px; font-size:14px;" value="94">94명</option>
+                                <option style="height:30px; font-size:14px;" value="95">95명</option>
+                                <option style="height:30px; font-size:14px;" value="96">96명</option>
+                                <option style="height:30px; font-size:14px;" value="97">97명</option>
+                                <option style="height:30px; font-size:14px;" value="98">98명</option>
+                                <option style="height:30px; font-size:14px;" value="99">99명</option>
+                                                </select>
+
+                
+                
+                                <div style="color:#999; margin-top: 8px;">
+                    <span style="color:#111;">남은좌석은 <span id="id_bi_in">12</span>개</span>
+                                                            (남은 좌석 이내로 선택해주세요<span class="select_bi_in_str" style="display:none;">, 대인 필수, 소인은 0.5명으로 계산됩니다</span>)
+                                    </div>
+                            </div>
+
+            <div id="select_no_bi_in" style="color:#ff0000;font-size:16px;font-weight:bold;display:none;">
+                낚시종류를 선택하세요.
+            </div>
+
+            <div id="seatid">
+
+            </div>
+
+                    </td>
+    </tr>            <tr>
+        <th>좌석 선택<span class="f_cred"> (필수)</span></th>
+        <td colspan="3">
+            <div id="seat_img" style="display:none;">좌석제스크립트사용</div>
+            <div class="ship_seat_guide" style="display: flex;align-items: center; font-size: 18px; padding: 10px 33px;" align="center">
+                선택완료&nbsp;<span class="ship_seat_guide_shape" style="background: #999; border: 2px solid #999;"></span>
+                &nbsp;&nbsp;
+                선택가능&nbsp;<span class="ship_seat_guide_shape" style="background: #ff4800; border: 2px solid #ff4800;"></span>
+                &nbsp;&nbsp;
+                흡연가능&nbsp;<span class="ship_seat_guide_shape" style="background: blue; border: 2px solid blue;"></span>
+                &nbsp;&nbsp;
+                흡연구역&nbsp;<span class="ship_seat_guide_shape" style="background: blue; border: 2px solid blue; border-radius: 0px;"></span>
+            </div>
+
+
+            
+
+                        <div class="ship_seat_view" style="width: 540px; left: 33px;">
+            
+                <div class="pa ship_name">양철호</div>
+                <div class="pa seat01">
+                   <span class="num_view_no"></span>                </div>
+
+                <div class="pa seat02">
+                    <span class="num_view_no"></span>                </div>
+
+                <div class="pa seat03">
+                    <span id="c202612052784선1" class="num_view" onclick="ticket_seat_click('20261205', '2784', '선1');">선1</span><input id="s202612052784선1" class="seats" type="hidden" name="seat[]">                </div>
+
+                <div class="pa seat04">
+                    <span id="c202612052784선2" class="num_view" onclick="ticket_seat_click('20261205', '2784', '선2');">선2</span><input id="s202612052784선2" class="seats" type="hidden" name="seat[]">                </div>
+
+                <div class="pa seat05">
+                    <span class="num_view_no"></span>                </div>
+
+                <ul class="pa seat06">
+                    <li><span id="c2026120527841" class="num_view" onclick="ticket_seat_click('20261205', '2784', '1');">1</span><input id="s2026120527841" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></span></li>
+                    <li><span id="c2026120527842" class="num_view" onclick="ticket_seat_click('20261205', '2784', '2');">2</span><input id="s2026120527842" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span class="num_view_end">미</span></li>
+
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527843" class="num_view" onclick="ticket_seat_click('20261205', '2784', '3');">3</span><input id="s2026120527843" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527844" class="num_view" onclick="ticket_seat_click('20261205', '2784', '4');">4</span><input id="s2026120527844" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+
+                    <li><span id="c2026120527845" class="num_view" onclick="ticket_seat_click('20261205', '2784', '5');">5</span><input id="s2026120527845" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527846" class="num_view" onclick="ticket_seat_click('20261205', '2784', '6');">6</span><input id="s2026120527846" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527847" class="num_view" onclick="ticket_seat_click('20261205', '2784', '7');">7</span><input id="s2026120527847" class="seats" type="hidden" name="seat[]"></li>
+
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527848" class="num_view" onclick="ticket_seat_click('20261205', '2784', '8');">8</span><input id="s2026120527848" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c2026120527849" class="num_view" onclick="ticket_seat_click('20261205', '2784', '9');">9</span><input id="s2026120527849" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                </ul>
+
+                <ul class="pa seat07">
+                    <li><span class="num_view_end">10</span></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c202612052784" class="num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2784', '');"></span><input id="s202612052784" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span id="c202612052784" class="num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2784', '');"></span><input id="s202612052784" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span class="num_view_end">21</span></li>
+                    <li><span class="num_view_no"></span></li>
+                </ul>
+
+                <div class="pa seat08">
+                    <span class="num_view_no"></span>                </div>
+                <div class="pa seat09">
+                    <span class="num_view_no"></span>                </div>
+                <div class="pa seat10">
+                    <span class="num_view_end">선3</span>                </div>
+                <div class="pa seat11">
+                    <span class="num_view_end">선4</span>                </div>
+                <div class="pa seat12">
+                    <span class="num_view_no"></span>                </div>
+
+                <ul class="pa seat13">
+                    <li><span class="num_view_end">11</span></li>
+                    <li><span class="num_view_no"></span></span></li>
+                    <li><span id="c20261205278412" class="num_view" onclick="ticket_seat_click('20261205', '2784', '12');">12</span><input id="s20261205278412" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span class="num_view_end">13</span></li>
+
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c20261205278414" class="num_view" onclick="ticket_seat_click('20261205', '2784', '14');">14</span><input id="s20261205278414" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c20261205278415" class="num_view" onclick="ticket_seat_click('20261205', '2784', '15');">15</span><input id="s20261205278415" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+
+                    <li><span id="c20261205278416" class="num_view" onclick="ticket_seat_click('20261205', '2784', '16');">16</span><input id="s20261205278416" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span class="num_view_end">17</span></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c20261205278418" class="num_view" onclick="ticket_seat_click('20261205', '2784', '18');">18</span><input id="s20261205278418" class="seats" type="hidden" name="seat[]"></li>
+
+                    <li><span class="num_view_no"></span></li>
+                    <li><span id="c20261205278419" class="num_view" onclick="ticket_seat_click('20261205', '2784', '19');">19</span><input id="s20261205278419" class="seats" type="hidden" name="seat[]"></li>
+                    <li><span class="num_view_no"></span></li>
+                    <li><span class="num_view_end">20</span></li>
+                    <li><span class="num_view_no"></span></li>
+                </ul>
+            </div>
+
+            <div style="padding: 10px 33px;">
+                                    </div>
+        </td>
+    </tr>        <tr>
+        <th height="45">총 금액</th>
+        <td height="45">
+            <div id="id_to" style="padding-left:33px;color:#000099;font-size:16px;font-weight:bold;">인원을 선택하세요.</div>
+        </td>
+        <th height="45">예약 금액</th>
+        <td height="45">
+            <div id="id_ye" style="padding-left:33px;color:#ff0000;font-size:16px;font-weight:bold;">인원을 선택하세요.</div>
+        </td>
+    </tr>
+
+    <tr>
+        <th height="45">입금 안내</th>
+        <td colspan="3" height="45" style="padding: 10px 33px;">
+                                </td>
+    </tr>
+    <tr>
+        <th height="45">예약자 성함<span class="cred">(필수)</span></th>
+        <td height="45" style="padding: 10px 33px;">
+            <input type="text" name="BI_NAME" value="" style="width:100px; height:25px; border:1px solid #a7a7a7; padding-left:5px;">
+        </td>
+        <th height="45">입금자 성함(선택)</th>
+        <td height="45" style="padding: 10px 33px;">
+            <input type="text" id="BI_BANK" name="BI_BANK" value="" style="width:100px; height:25px; border:1px solid #a7a7a7; padding-left:5px;">
+            <div style="color: #666;">예약자와 입금자가 다를 경우</div>
+        </td>
+    </tr>
+    <tr>
+        <th height="45">핸드폰 번호<span class="cred">(필수)</span></th>
+        <td colspan="3" height="45" style="padding: 10px 33px;">
+            <div>
+                <div style="float:left; width:72px;margin-right:12px;">
+                    <input type="text" id="BI_TEL1" name="BI_TEL1" value="010" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4||this.value=='010'){$('#BI_TEL2').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; padding-left:5px; text-align: center;">
+                </div>
+                <div style="float:left; width:72px;margin-right:12px;">
+                    <input type="text" id="BI_TEL2" name="BI_TEL2" value="" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4){$('#BI_TEL3').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; padding-left:5px; text-align: center;">
+                </div>
+                <div style="float:left; width:72px;">
+                    <input type="text" id="BI_TEL3" name="BI_TEL3" value="" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4){$('#BI_MEMO').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; padding-left:5px; text-align: center;">
+                </div>
+                <div style="clear:both;"></div>
+
+                            </div>
+        </td>
+    </tr>
+                <tr>
+        <th height="158">요청사항(선택)</th>
+        <td colspan="3" height="158" style="padding: 10px 33px;">
+            <textarea id="BI_MEMO" name="BI_MEMO" style="width: 98%; height:130px; border:1px solid #a7a7a7; padding: 5px;" placeholder="연말 감사 이벤트 어초 장애물 생 미끼 제공 (생 새우*또는 오징어 ) 단 5인 이상 출항 26년 우리 배 5회 이용 하신 분 선비 8만 12월 31일 까지"></textarea>
+        </td>
+    </tr>
+    
+    
+        </table>
+
+    <div style="width:100%; height:23px;"></div>
+
+            <div style="width:calc(100% - 50px); background-color:#f5f5f5;padding:10px 25px 15px 25px;border:1px solid #ccc;">
+        <!--동의1-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                <span style="width:200px;display:inline-block;">1. 개인정보 수집 및 이용 약관 동의</span>
+                <button type="button" id="ac1-b1" onclick="$('#ac1-c').show();$('#ac1-b1').hide();$('#ac1-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;cursor:pointer;">내용보기</button>
+                <button type="button" id="ac1-b2" onclick="$('#ac1-c').hide();$('#ac1-b1').show();$('#ac1-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="agree" value="Y" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="agree" value="N" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                 &nbsp;
+            </div>
+        </div>
+
+        <div id="ac1-c" style="display:none;">
+                <table class="mytable2" style="width:100%;font-size:0.9em;">
+            <tbody><tr>
+                <td height="3" colspan="3" style="background-color:#ccc;">
+                </td>
+            </tr>
+            <tr>
+                <th height="30" style="background:#efefef;">목적</th>
+                <th height="30" style="background:#efefef;">항목</th>
+                <th height="30" style="background:#efefef;">보유기간</th>
+            </tr>
+            <tr>
+                <td height="30">이용자 식별 및 본인여부 확인</td>
+                <td height="30">아이디, 이름, 생년월일, 비밀번호</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">고객서비스 이용에 관한 통지,<br>CS대응을 위한 이용자 식별</td>
+                <td height="30">연락처 (이메일, 휴대전화번호)</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">만 14세 미만 아동 확인</td>
+                <td height="30">법정 생년월일</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">맞춤형 서비스 제공을 위한 이용자 식별</td>
+                <td height="30">성별</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            </tbody>
+        </table>
+                </div>
+
+
+        <!--동의2-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                <span style="width:200px;display:inline-block;">2. 제3자 정보제공 동의</span>
+                <button type="button" id="ac2-b1" onclick="$('#ac2-c').show();$('#ac2-b1').hide();$('#ac2-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;">내용보기</button>
+                <button type="button" id="ac2-b2" onclick="$('#ac2-c').hide();$('#ac2-b1').show();$('#ac2-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="BI_3JA" value="1" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="BI_3JA" value="0" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                &nbsp;
+            </div>
+        </div>
+
+        <div id="ac2-c" style="display:none;">
+            <div style="border:1px solid #ccc;border-top:none;padding:10px;background:#fff;font-size:0.9em;">
+                이 사이트는 더피싱 예약시스템을 이용하기 때문에 예약데이타를 더피싱에 제공하여야 합니다. <br>
+                * 제공되는 예약데이타 : 이름, 전화번호, 예약정보<br>
+            </div>
+        </div>
+
+
+
+        <!--동의3-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                 <span style="width:200px;display:inline-block;">3. 광고성 정보 수신 동의</span>
+                 <button type="button" id="ac3-b1" onclick="$('#ac3-c').show();$('#ac3-b1').hide();$('#ac3-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;">내용보기</button>
+                 <button type="button" id="ac3-b2" onclick="$('#ac3-c').hide();$('#ac3-b1').show();$('#ac3-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="BI_AD" value="1" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="BI_AD" value="0" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                &nbsp;
+            </div>
+        </div>
+
+
+        <div id="ac3-c" style="display:none;">
+            <div style="border:1px solid #ccc;border-top:none;padding:10px;background:#fff;font-size:0.9em;">
+                서비스, 이벤트정보 제공을 위한 개인정보 수집 및 이용동의<span style="color:#999;">(선택)</span>
+            </div>
+        </div>
+
+
+
+        <div class="mtop7"></div>
+
+        <div style="margin:auto; padding:5px 0;font-size:13px;background:#0ea906;color:#fff; text-align:center;margin-top:3px;letter-spacing:-0.05em;">서비스 제공을 위해서 반드시 필요한 최소한의 개인정보이므로 동의를 해주셔야 이용하실 수 있습니다.</div>
+        <div style="margin:auto; font-size:13px; padding:10px 0;text-align:center;border:4px solid #0ea906">
+            <label><input type="radio" name="all_agree" value="Y" onclick="agree_check('Y');"><span style="font-weight:bold;font-size:17px;color:#0051f7;">전체동의합니다.</span></label>
+            &nbsp;&nbsp;&nbsp;
+            <label><input type="radio" name="all_agree" value="N" onclick="agree_check('N');"><span style="font-size:14px;color:#666;">전체동의하지 않습니다.</span></label>
+        </div>
+    </div>
+        </div>
+
+<div style="height:25px;"></div>
+
+<p style="width:100%; text-align:center;"><button id="submit" type="submit" style="width:263px; height:45px; line-height:45px; background-color:#FF0000; color:#fff; font-size:18px; font-weight:bold;cursor:pointer">예약내용확인</button></p>
+
+</form>
+
+<form name="ps_form" method="get" action="./popup.step1.php">
+<input type="hidden" name="date" value="20261205">
+<input type="hidden" name="PA_N_UID" value="2784">
+<input type="hidden" name="PH_N_UID" value="0">
+<input type="hidden" name="PS_N_UID" value="31563">
+<input type="hidden" name="scr">
+</form>
+
+<script>
+function ticket_seat_click(date8, PA_N_UID, val)
+{
+    var temp_c = 'c'+ date8 + PA_N_UID + val;
+    var temp_s = 's'+ date8 + PA_N_UID + val;
+
+    if($('#'+temp_s).length)
+    {
+        if($('#'+temp_s).val() == val)
+        {
+            $('#'+temp_s).val('');
+            $('#'+temp_c).removeClass('num_view_c');
+            $('#'+temp_c).addClass('num_view');
+        }
+        else
+        {
+            $('#'+temp_s).val(val);
+            $('#'+temp_c).removeClass('num_view');
+            $('#'+temp_c).addClass('num_view_c');
+        }
+    }
+
+    if(!$('#select_bi_so_in').length)
+    {
+        var obj = $('.seats');
+        var fnum = obj.length;
+        var j = 0;
+        var i;
+
+        for (i = 0; i < fnum; i++)
+        {
+            if (obj[i].value != "")
+            {
+                j++;
+            }
+        }
+        $('#BI_IN').val(j);
+        popup_ajax_step1();
+    }
+}
+function ticket_seat_bus_click(date8, PA_N_UID, val)
+{
+    var temp_c = 'c'+ date8 + PA_N_UID + val;
+    var temp_s = 's'+ date8 + PA_N_UID + val;
+
+    if($('#'+temp_s).length)
+    {
+        if($('#'+temp_s).val() == val)
+        {
+            $('#'+temp_s).val('');
+            $('#'+temp_c).removeClass('res_seatCheck');
+            $('#'+temp_c).addClass('res_seatBox');
+        }
+        else
+        {
+            $('#'+temp_s).val(val);
+            $('#'+temp_c).removeClass('res_seatBox');
+            $('#'+temp_c).addClass('res_seatCheck');
+        }
+    }
+}
+var buga_status = null;
+function buga_open(UD_UID)
+{
+    if(buga_status != null && !buga_status.closed)
+    {
+        buga_status.location.replace("./popup.buga.php?UD_UID="+UD_UID);
+        buga_status.focus();
+        return;
+    }
+    buga_status = window.open("./popup.buga.php?UD_UID="+UD_UID,"buga_pop","width=500,height=600,scrollbars=yes,resizable=yes");
+    buga_status.focus();
+}
+function popup_price()
+{
+    var ye = $('#id_ye').html();
+    var buga_total = "";
+
+    if($('#id_buga_total').length)
+    {
+        var buga_total = $('#id_buga_total').html();
+    }
+
+    var data = 'ye='+ye+'&buga_total='+buga_total;
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.1/action/popup.step1.price.php",
+        data:data,
+        success:function(html)
+        {
+                    }
+    });
+}
+function popup_ajax_step1()
+{
+    
+    var BI_IN = $('#BI_IN').val();
+    var BI_SO_IN = "N";
+
+    
+    if(BI_IN == '독배')
+    {
+        if($('#seat-ps-result').length) //어종별좌석제
+        {
+                    }
+        else //배별좌석제
+        {
+            $('.num_view').addClass('num_view_c');
+            $('.num_view_c').removeClass('num_view');
+
+            var obj = document.getElementsByName("seat[]");
+            for (var j = 0; j < obj.length; j++)
+            {
+                obj[j].value = (j + 1);
+            }
+        }
+    }
+
+    var pay_method = $('#pay_method').val(); 
+
+    var data = 'date=20261205&PA_N_UID=2784&PH_N_UID=0&PS_N_UID=31563&BI_IN='+BI_IN+'&BI_SO_IN='+BI_SO_IN+'&pay_method='+pay_method+'&naun=12';
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.1/action/popup.step1.ajax.php",
+        data:data,
+        success:function(html)
+        {
+            if(html)
+            {
+                var arrString = html.split("|^|");
+                $('#id_ye').html(arrString[0]);                 $('#id_to').html(arrString[1]);                 $('#temp_bi_stat').val(arrString[2]); 
+                if(arrString[2] == "최대인원초과")
+                {
+                                        $('#BI_IN').find('option:first').attr('selected', 'selected');
+                    
+                    $('#id_ye').html('인원을 선택하세요.');                     $('#id_to').html('인원을 선택하세요.');                     $('#temp_bi_stat').val('');                     alert('최대 예약인원 초과 입니다, 인원을 다시 선택해주십시오.');
+
+                    $('#seatid').hide();                 }
+                else if(arrString[2] == "대기자")
+                {
+                    if(confirm("선택하신 인원은 남은 좌석수보다 많아 대기자로 등록가능합니다.\n대기자로 예약 하시겠습니까?\n"))
+                    {
+                                                $('#submit').html('대기자 신청하기');                         
+                        $('#seatid').hide();                     }
+                    else
+                    {
+                                                $('#BI_IN').find('option:first').attr('selected', 'selected');
+                        
+                        $('#id_ye').html('인원을 선택하세요.');                         $('#id_to').html('인원을 선택하세요.');                         $('#temp_bi_stat').val('');                         alert('인원을 다시 선택해주십시오.');
+
+                        $('#seatid').hide();                     }
+                }
+                else if(arrString[2] == "인원초과")
+                {
+                                        $('#BI_IN').find('option:first').attr('selected', 'selected');
+                    
+                    $('#id_ye').html('인원을 선택하세요.');                     $('#id_to').html('인원을 선택하세요.');                     $('#temp_bi_stat').val('');                     alert('인원초과 입니다, 인원을 다시 선택해주십시오.');
+
+                    $('#seatid').hide();                 }
+                else
+                {
+                                        $('#submit').html('예약 신청하기');                     
+                    $('#seatid').show();                     $('#seatid').html(arrString[3]);                 }
+                popup_price();
+            }
+        }
+    });
+}
+function popup_buga_step1(types)
+{
+    if(types == 1)     {
+        var data = $("#insert_form").serialize();
+        var select_ud_uid = $("#select_ud_uid").val();
+        if(select_ud_uid == "")
+        {
+            return;
+        }
+        else
+        {
+            var obj = document.getElementsByName("UD_UID[]");
+            var obj_true = 0;
+            for (var j = 0; j < obj.length; j++)
+            {
+                if (obj[j].value == select_ud_uid)
+                {
+                    alert('이미 선택하신 부가상품 입니다.');
+                    return;
+                }
+            }
+        }
+    }
+    else if(types == 2)     {
+        var data = $("#insert_form :not(select[name='select_ud_uid'])").serialize();
+    }
+
+    $.ajax({
+        type: "POST",
+        url: "/_core/module/reservation_boat_v5.1/action/popup.step1.buga.php",
+        data: data,
+        contentType: 'application/x-www-form-urlencoded; charset=utf-8',
+        dataType: 'html',
+        success:function(html)
+        {
+            if(html == "-1")
+            {
+                alert('오류입니다, 관리자에게 문의하세요.');
+            }
+            else
+            {
+                $('#buga').html(html);
+                popup_price();
+            }
+        }
+    });
+    $('#buga').show();
+}
+function popup_buga_up(UD_UID)
+{
+	var num = parseInt($('#bb_num_input'+UD_UID).val());
+	if(num > 0)
+	{
+		$('#bb_num_input'+UD_UID).val(parseInt(num + 1));
+        popup_buga_step1(2);
+        popup_price();
+	}
+}
+function popup_buga_down(UD_UID)
+{
+	var num = parseInt($('#bb_num_input'+UD_UID).val());
+	if(num > 1)
+	{
+		$('#bb_num_input'+UD_UID).val(parseInt(num - 1));
+		popup_buga_step1(2);
+        popup_price();
+	}
+}
+function popup_buga_del(UD_UID)
+{
+    $('#ud_uid_div'+UD_UID).remove();
+    popup_buga_step1(2);
+    popup_price();
+}
+function ps_url(date, PA_N_UID, PH_N_UID, PS_N_UID)
+{
+    var f = document.ps_form;
+    f.date.value = date;
+    f.PA_N_UID.value = PA_N_UID;
+    f.PH_N_UID.value = PH_N_UID;
+    f.PS_N_UID.value = PS_N_UID;
+    f.scr.value = $(document).scrollTop();
+    f.submit();
+}
+/*
+function ps_n_uid_click(nam, PS_DOC, PS_N_UID, str)
+{
+    if(PS_DOC == "1")     {
+         insert_form.BI_IN.options.length = 1;
+         insert_form.BI_IN.options[0].value = "1";
+         insert_form.BI_IN.options[0].text = "독배";
+
+                $('#select_bi_in').show();
+        $('#select_bi_so_in').hide();
+        $('#select_no_bi_in').hide();
+    }
+    else     {
+         insert_form.BI_IN.options.length = 100;
+         insert_form.BI_IN.options[0].value = "";
+         insert_form.BI_IN.options[0].text = "인원 선택";
+                  insert_form.BI_IN.options[1].value = "1";
+         insert_form.BI_IN.options[1].text = "1명";
+                  insert_form.BI_IN.options[2].value = "2";
+         insert_form.BI_IN.options[2].text = "2명";
+                  insert_form.BI_IN.options[3].value = "3";
+         insert_form.BI_IN.options[3].text = "3명";
+                  insert_form.BI_IN.options[4].value = "4";
+         insert_form.BI_IN.options[4].text = "4명";
+                  insert_form.BI_IN.options[5].value = "5";
+         insert_form.BI_IN.options[5].text = "5명";
+                  insert_form.BI_IN.options[6].value = "6";
+         insert_form.BI_IN.options[6].text = "6명";
+                  insert_form.BI_IN.options[7].value = "7";
+         insert_form.BI_IN.options[7].text = "7명";
+                  insert_form.BI_IN.options[8].value = "8";
+         insert_form.BI_IN.options[8].text = "8명";
+                  insert_form.BI_IN.options[9].value = "9";
+         insert_form.BI_IN.options[9].text = "9명";
+                  insert_form.BI_IN.options[10].value = "10";
+         insert_form.BI_IN.options[10].text = "10명";
+                  insert_form.BI_IN.options[11].value = "11";
+         insert_form.BI_IN.options[11].text = "11명";
+                  insert_form.BI_IN.options[12].value = "12";
+         insert_form.BI_IN.options[12].text = "12명";
+                  insert_form.BI_IN.options[13].value = "13";
+         insert_form.BI_IN.options[13].text = "13명";
+                  insert_form.BI_IN.options[14].value = "14";
+         insert_form.BI_IN.options[14].text = "14명";
+                  insert_form.BI_IN.options[15].value = "15";
+         insert_form.BI_IN.options[15].text = "15명";
+                  insert_form.BI_IN.options[16].value = "16";
+         insert_form.BI_IN.options[16].text = "16명";
+                  insert_form.BI_IN.options[17].value = "17";
+         insert_form.BI_IN.options[17].text = "17명";
+                  insert_form.BI_IN.options[18].value = "18";
+         insert_form.BI_IN.options[18].text = "18명";
+                  insert_form.BI_IN.options[19].value = "19";
+         insert_form.BI_IN.options[19].text = "19명";
+                  insert_form.BI_IN.options[20].value = "20";
+         insert_form.BI_IN.options[20].text = "20명";
+                  insert_form.BI_IN.options[21].value = "21";
+         insert_form.BI_IN.options[21].text = "21명";
+                  insert_form.BI_IN.options[22].value = "22";
+         insert_form.BI_IN.options[22].text = "22명";
+                  insert_form.BI_IN.options[23].value = "23";
+         insert_form.BI_IN.options[23].text = "23명";
+                  insert_form.BI_IN.options[24].value = "24";
+         insert_form.BI_IN.options[24].text = "24명";
+                  insert_form.BI_IN.options[25].value = "25";
+         insert_form.BI_IN.options[25].text = "25명";
+                  insert_form.BI_IN.options[26].value = "26";
+         insert_form.BI_IN.options[26].text = "26명";
+                  insert_form.BI_IN.options[27].value = "27";
+         insert_form.BI_IN.options[27].text = "27명";
+                  insert_form.BI_IN.options[28].value = "28";
+         insert_form.BI_IN.options[28].text = "28명";
+                  insert_form.BI_IN.options[29].value = "29";
+         insert_form.BI_IN.options[29].text = "29명";
+                  insert_form.BI_IN.options[30].value = "30";
+         insert_form.BI_IN.options[30].text = "30명";
+                  insert_form.BI_IN.options[31].value = "31";
+         insert_form.BI_IN.options[31].text = "31명";
+                  insert_form.BI_IN.options[32].value = "32";
+         insert_form.BI_IN.options[32].text = "32명";
+                  insert_form.BI_IN.options[33].value = "33";
+         insert_form.BI_IN.options[33].text = "33명";
+                  insert_form.BI_IN.options[34].value = "34";
+         insert_form.BI_IN.options[34].text = "34명";
+                  insert_form.BI_IN.options[35].value = "35";
+         insert_form.BI_IN.options[35].text = "35명";
+                  insert_form.BI_IN.options[36].value = "36";
+         insert_form.BI_IN.options[36].text = "36명";
+                  insert_form.BI_IN.options[37].value = "37";
+         insert_form.BI_IN.options[37].text = "37명";
+                  insert_form.BI_IN.options[38].value = "38";
+         insert_form.BI_IN.options[38].text = "38명";
+                  insert_form.BI_IN.options[39].value = "39";
+         insert_form.BI_IN.options[39].text = "39명";
+                  insert_form.BI_IN.options[40].value = "40";
+         insert_form.BI_IN.options[40].text = "40명";
+                  insert_form.BI_IN.options[41].value = "41";
+         insert_form.BI_IN.options[41].text = "41명";
+                  insert_form.BI_IN.options[42].value = "42";
+         insert_form.BI_IN.options[42].text = "42명";
+                  insert_form.BI_IN.options[43].value = "43";
+         insert_form.BI_IN.options[43].text = "43명";
+                  insert_form.BI_IN.options[44].value = "44";
+         insert_form.BI_IN.options[44].text = "44명";
+                  insert_form.BI_IN.options[45].value = "45";
+         insert_form.BI_IN.options[45].text = "45명";
+                  insert_form.BI_IN.options[46].value = "46";
+         insert_form.BI_IN.options[46].text = "46명";
+                  insert_form.BI_IN.options[47].value = "47";
+         insert_form.BI_IN.options[47].text = "47명";
+                  insert_form.BI_IN.options[48].value = "48";
+         insert_form.BI_IN.options[48].text = "48명";
+                  insert_form.BI_IN.options[49].value = "49";
+         insert_form.BI_IN.options[49].text = "49명";
+                  insert_form.BI_IN.options[50].value = "50";
+         insert_form.BI_IN.options[50].text = "50명";
+                  insert_form.BI_IN.options[51].value = "51";
+         insert_form.BI_IN.options[51].text = "51명";
+                  insert_form.BI_IN.options[52].value = "52";
+         insert_form.BI_IN.options[52].text = "52명";
+                  insert_form.BI_IN.options[53].value = "53";
+         insert_form.BI_IN.options[53].text = "53명";
+                  insert_form.BI_IN.options[54].value = "54";
+         insert_form.BI_IN.options[54].text = "54명";
+                  insert_form.BI_IN.options[55].value = "55";
+         insert_form.BI_IN.options[55].text = "55명";
+                  insert_form.BI_IN.options[56].value = "56";
+         insert_form.BI_IN.options[56].text = "56명";
+                  insert_form.BI_IN.options[57].value = "57";
+         insert_form.BI_IN.options[57].text = "57명";
+                  insert_form.BI_IN.options[58].value = "58";
+         insert_form.BI_IN.options[58].text = "58명";
+                  insert_form.BI_IN.options[59].value = "59";
+         insert_form.BI_IN.options[59].text = "59명";
+                  insert_form.BI_IN.options[60].value = "60";
+         insert_form.BI_IN.options[60].text = "60명";
+                  insert_form.BI_IN.options[61].value = "61";
+         insert_form.BI_IN.options[61].text = "61명";
+                  insert_form.BI_IN.options[62].value = "62";
+         insert_form.BI_IN.options[62].text = "62명";
+                  insert_form.BI_IN.options[63].value = "63";
+         insert_form.BI_IN.options[63].text = "63명";
+                  insert_form.BI_IN.options[64].value = "64";
+         insert_form.BI_IN.options[64].text = "64명";
+                  insert_form.BI_IN.options[65].value = "65";
+         insert_form.BI_IN.options[65].text = "65명";
+                  insert_form.BI_IN.options[66].value = "66";
+         insert_form.BI_IN.options[66].text = "66명";
+                  insert_form.BI_IN.options[67].value = "67";
+         insert_form.BI_IN.options[67].text = "67명";
+                  insert_form.BI_IN.options[68].value = "68";
+         insert_form.BI_IN.options[68].text = "68명";
+                  insert_form.BI_IN.options[69].value = "69";
+         insert_form.BI_IN.options[69].text = "69명";
+                  insert_form.BI_IN.options[70].value = "70";
+         insert_form.BI_IN.options[70].text = "70명";
+                  insert_form.BI_IN.options[71].value = "71";
+         insert_form.BI_IN.options[71].text = "71명";
+                  insert_form.BI_IN.options[72].value = "72";
+         insert_form.BI_IN.options[72].text = "72명";
+                  insert_form.BI_IN.options[73].value = "73";
+         insert_form.BI_IN.options[73].text = "73명";
+                  insert_form.BI_IN.options[74].value = "74";
+         insert_form.BI_IN.options[74].text = "74명";
+                  insert_form.BI_IN.options[75].value = "75";
+         insert_form.BI_IN.options[75].text = "75명";
+                  insert_form.BI_IN.options[76].value = "76";
+         insert_form.BI_IN.options[76].text = "76명";
+                  insert_form.BI_IN.options[77].value = "77";
+         insert_form.BI_IN.options[77].text = "77명";
+                  insert_form.BI_IN.options[78].value = "78";
+         insert_form.BI_IN.options[78].text = "78명";
+                  insert_form.BI_IN.options[79].value = "79";
+         insert_form.BI_IN.options[79].text = "79명";
+                  insert_form.BI_IN.options[80].value = "80";
+         insert_form.BI_IN.options[80].text = "80명";
+                  insert_form.BI_IN.options[81].value = "81";
+         insert_form.BI_IN.options[81].text = "81명";
+                  insert_form.BI_IN.options[82].value = "82";
+         insert_form.BI_IN.options[82].text = "82명";
+                  insert_form.BI_IN.options[83].value = "83";
+         insert_form.BI_IN.options[83].text = "83명";
+                  insert_form.BI_IN.options[84].value = "84";
+         insert_form.BI_IN.options[84].text = "84명";
+                  insert_form.BI_IN.options[85].value = "85";
+         insert_form.BI_IN.options[85].text = "85명";
+                  insert_form.BI_IN.options[86].value = "86";
+         insert_form.BI_IN.options[86].text = "86명";
+                  insert_form.BI_IN.options[87].value = "87";
+         insert_form.BI_IN.options[87].text = "87명";
+                  insert_form.BI_IN.options[88].value = "88";
+         insert_form.BI_IN.options[88].text = "88명";
+                  insert_form.BI_IN.options[89].value = "89";
+         insert_form.BI_IN.options[89].text = "89명";
+                  insert_form.BI_IN.options[90].value = "90";
+         insert_form.BI_IN.options[90].text = "90명";
+                  insert_form.BI_IN.options[91].value = "91";
+         insert_form.BI_IN.options[91].text = "91명";
+                  insert_form.BI_IN.options[92].value = "92";
+         insert_form.BI_IN.options[92].text = "92명";
+                  insert_form.BI_IN.options[93].value = "93";
+         insert_form.BI_IN.options[93].text = "93명";
+                  insert_form.BI_IN.options[94].value = "94";
+         insert_form.BI_IN.options[94].text = "94명";
+                  insert_form.BI_IN.options[95].value = "95";
+         insert_form.BI_IN.options[95].text = "95명";
+                  insert_form.BI_IN.options[96].value = "96";
+         insert_form.BI_IN.options[96].text = "96명";
+                  insert_form.BI_IN.options[97].value = "97";
+         insert_form.BI_IN.options[97].text = "97명";
+                  insert_form.BI_IN.options[98].value = "98";
+         insert_form.BI_IN.options[98].text = "98명";
+                  insert_form.BI_IN.options[99].value = "99";
+         insert_form.BI_IN.options[99].text = "99명";
+         
+        if(str == "Y")         {
+            $('#select_bi_in').show();
+            $('.select_bi_in_str').show(); //대인
+            $('#select_bi_so_in').show();
+            $('#select_no_bi_in').hide();
+        }
+        else if(str == "N")         {
+            $('#select_bi_in').show();
+            $('.select_bi_in_str').hide(); //대인
+            $('#select_bi_so_in').hide();
+            $('#select_bi_so_in').find('option:first').attr('selected', 'selected');             $('#select_no_bi_in').hide();
+        }
+    }
+
+    $('.ps_selis').removeClass('ps_select');
+    $('#PS1'+PS_N_UID).addClass('ps_select');
+    $('#PS2'+PS_N_UID).addClass('ps_select');
+    $('#PS3'+PS_N_UID).addClass('ps_select');
+    $('#id_bi_in').html(nam);
+
+    popup_ajax_step1();
+}
+*/
+
+//var obj = document.getElementsByName("PS_N_UID");
+//var obj_num = obj.length;
+//if(obj_num == 1)
+//{
+//    $('.PS_N_UID').trigger('click');
+//}
+
+if($('.blinkEle').length)
+{
+    setInterval(function(){
+      $(".blinkEle").toggle();
+    }, 500);
+}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div style="height:150px;"></div>
+
+</body>
+</html>

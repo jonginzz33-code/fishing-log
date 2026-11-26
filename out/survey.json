@@ -1,0 +1,1782 @@
+{
+ "s24": [
+  {
+   "h": "grandmax.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "jiny.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "darae.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "heesung.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "fishinghunter.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "speedho.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "select_seat_nos[]",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "erae.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "homerun.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 120000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "tk.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 110000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "boyfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "wooah.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 160000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "parkpro.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": true,
+   "small": false,
+   "price": 140000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "victoryfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 90000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "champho.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 130000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "yejiqueen.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "select_seat_nos[]",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "choikang.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 110000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "newdaepoong.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "select_seat_nos[]",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "daeyangho.sunsang24.com",
+   "err": "no schedule"
+  },
+  {
+   "h": "ddabongho.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "dragonfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 0,
+   "opts": 4,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "select_seat_nos[]",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "nicefishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "ysblackpearl.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "brotherfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "jeongdoros.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 0,
+   "opts": 2,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "hyundaemarine.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 120000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "sinpoong.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "blessfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "starfishingho.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "sharkfishing.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "mansuro.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "tech.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "select_seat_nos[]",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "2ho.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 120000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "haeseonggold.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 180000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "onetwofishing.sunsang24.com",
+   "err": "no schedule"
+  },
+  {
+   "h": "wangfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "everstar.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "eochon.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 120000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "migeum.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  },
+  {
+   "h": "oceanstar.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 110000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "taegeukfishing.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": true,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "aceho.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": false,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 90000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "agree_rule[]",
+    "all_check",
+    "coupon_no",
+    "deposit_name",
+    "memo",
+    "name",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "phone1",
+    "phone2",
+    "phone3",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "ddole.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": false,
+   "small": false,
+   "price": 80000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "hongdan.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": true,
+   "small": false,
+   "price": 70000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": false,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "art.sunsang24.com",
+   "code": null,
+   "msg": null,
+   "login": true,
+   "pauth": false,
+   "contest": false,
+   "pname": true,
+   "small": false,
+   "price": 100000,
+   "opts": 0,
+   "seat": false,
+   "rm": "BANK",
+   "rmuse": true,
+   "bankadd": true,
+   "names": [
+    "coupon_no",
+    "pay_method",
+    "person_count",
+    "petc_data",
+    "phone",
+    "price_option",
+    "reservation_method",
+    "ship_schedule_no"
+   ]
+  },
+  {
+   "h": "blitz.sunsang24.com",
+   "err": "no data",
+   "len": 147
+  }
+ ],
+ "tf": [
+  {
+   "h": "dreamfishing.thefishing.kr",
+   "len": 96334,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=1363",
+   "act": [],
+   "names": [],
+   "ps": 0,
+   "seat": false,
+   "login": false
+  },
+  {
+   "h": "5sunrise.thefishing.kr",
+   "len": 84471,
+   "pops": []
+  },
+  {
+   "h": "misung.thefishing.kr",
+   "len": 87440,
+   "pops": []
+  },
+  {
+   "h": "sinil.thefishing.kr",
+   "len": 134225,
+   "pops": [
+    "/_core/module/reservation_boat_v3/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v3/popup.step1.php?date=20261205&PA_N_UID=5045",
+   "act": [
+    "/_core/module/reservation_boat_v3/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 0,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "no1.thefishing.kr",
+   "len": 122242,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=4651",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 0,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "proship.thefishing.kr",
+   "len": 172597,
+   "pops": [
+    "/_core/module/reservation_boat_v5.1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.1/popup.step1.php?date=20261205&PA_N_UID=1288",
+   "act": [
+    "/_core/module/reservation_boat_v5.1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 0,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "spider.thefishing.kr",
+   "len": 105620,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php?date=20261205&PA_N_UID=5788&PH_N_UID=0",
+   "act": [],
+   "names": [],
+   "ps": 0,
+   "seat": false,
+   "login": false
+  },
+  {
+   "h": "daewon2.thefishing.kr",
+   "len": 79448,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php?date=20261206&PA_N_UID=4810",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat2/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "goldfishingho.thefishing.kr",
+   "len": 79533,
+   "pops": []
+  },
+  {
+   "h": "susung.thefishing.kr",
+   "len": 79135,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=3277",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 2,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "chanceho.thefishing.kr",
+   "len": 194261,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=2283",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "wsstar.thefishing.kr",
+   "len": 80606,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5530",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 0,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "sinsegeho.thefishing.kr",
+   "len": 97223,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php?date=20261205&PA_N_UID=2453",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat2/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "sinju.thefishing.kr",
+   "len": 101138,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat2/popup.step1.php?date=20261205&PA_N_UID=6334",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat2/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "seven.thefishing.kr",
+   "len": 124448,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=6335",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "songdo.thefishing.kr",
+   "len": 98795,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5098",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "flex.thefishing.kr",
+   "len": 109780,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=4986&PH_N_UID=367",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "joen.thefishing.kr",
+   "len": 106695,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=3715",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "yuram.thefishing.kr",
+   "len": 80913,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5710",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "yhseaking.thefishing.kr",
+   "len": 107932,
+   "pops": [
+    "/_core/module/reservation_boat_v5.1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.1/popup.step1.php?date=20261205&PA_N_UID=1999",
+   "act": [
+    "/_core/module/reservation_boat_v5.1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "bluefishingho.thefishing.kr",
+   "len": 162513,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=1818",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 2,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "major.thefishing.kr",
+   "len": 90905,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php?date=20261205&PA_N_UID=5790&PH_N_UID=0",
+   "act": [],
+   "names": [],
+   "ps": 0,
+   "seat": false,
+   "login": false
+  },
+  {
+   "h": "hwasung.thefishing.kr",
+   "len": 77659,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5412",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "chungma.thefishing.kr",
+   "len": 138968,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=1299",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "bossfishing.thefishing.kr",
+   "len": 107010,
+   "pops": [
+    "/_core/module/reservation_boat_v5.1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.1/popup.step1.php?date=20261207&PA_N_UID=3045",
+   "act": [
+    "/_core/module/reservation_boat_v5.1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "gloryho.thefishing.kr",
+   "len": 120168,
+   "pops": []
+  },
+  {
+   "h": "chungchun.thefishing.kr",
+   "len": 140216,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5304",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "napoliho.thefishing.kr",
+   "len": 204684,
+   "pops": [
+    "/_core/module/reservation_boat_v3/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v3/popup.step1.php?date=20261205&PA_N_UID=1484",
+   "act": [
+    "/_core/module/reservation_boat_v3/action/popup.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 0,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "bumblebee.thefishing.kr",
+   "len": 148079,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=5962",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  },
+  {
+   "h": "eunseong.thefishing.kr",
+   "len": 105769,
+   "pops": [
+    "/_core/module/reservation_boat_v5.2_seat1/online.new.1.php",
+    "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php"
+   ],
+   "url": "/_core/module/reservation_boat_v5.2_seat1/popup.step1.php?date=20261205&PA_N_UID=6088",
+   "act": [
+    "/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.action.php",
+    "./popup.step1.php"
+   ],
+   "names": [
+    "BIP_NAME[]",
+    "BIP_TEL1[]",
+    "BIP_TEL2[]",
+    "BIP_TEL3[]",
+    "PA_N_UID",
+    "PH_N_UID",
+    "PS_N_UID",
+    "action",
+    "date",
+    "insert_form",
+    "link",
+    "ps_form",
+    "scr",
+    "temp_bi_stat"
+   ],
+   "ps": 1,
+   "seat": true,
+   "login": false
+  }
+ ]
+}

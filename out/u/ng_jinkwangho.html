@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="-1"/>
+<title>첫걸음 &gt; 예약1단계</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<link rel="stylesheet" href="/_core/module/reservation_boat_v5.2_seat1/css/style.css"/>
+<script src="https://js.thefishing.kr/script_i.js"></script>
+<script src="https://js.thefishing.kr/jquery-1.7.1.min.js"></script>
+<script src="/_core/module/reservation_boat_v5.2_seat1/js/reservation.js"></script>
+</head>
+<body>
+
+
+
+<!--팝업에서 ajax처리 시작-->
+<table id="reservation-day-table">
+</table>
+<!--팝업에서 ajax처리 종료-->
+
+
+
+<script>
+function form_check(f)
+{
+        var obj = document.getElementsByName("PA_N_UID");
+    var obj_true = 0;
+    for(var j = 0; j < obj.length; j++)
+    {
+        if(obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if(obj_true != 1)
+    {
+        alert('배를 선택해 주십시오.');
+        return false;
+    }
+
+    
+
+    var obj = document.getElementsByName("PS_N_UID");
+    var obj_true = 0;
+    for (var j = 0; j < obj.length; j++)
+    {
+        if (obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if (obj_true != 1)
+    {
+		alert('낚시종류를 선택해 주십시오.');
+		return false;
+    }
+
+	if(!f.BI_IN.value)
+	{
+        		alert('인원을 선택해 주십시오.');
+                f.BI_IN.focus();
+		return false;
+	}
+
+    if($('#temp_bi_stat').val() == "확인")
+    {
+                //좌석선택불가, 예약시 좌석안내사진으로 사용합니다
+                if($('#seat_img').length > 0) //선택된 좌석이 있다면:
+        {
+                        var BI_IN = $('#BI_IN').val();
+            var total_in = Number(BI_IN); //대인만
+            
+            var obj = document.getElementsByName("seat[]");
+            var obj_seat_num = 0;
+            for (var j = 0; j < obj.length; j++)
+            {
+                if (obj[j].value != '')
+                {
+                    ++obj_seat_num;
+                }
+            }
+
+            if(BI_IN != '독배')
+            {
+                if (obj_seat_num != total_in)
+                {
+                    alert('좌석 '+total_in+'개를 선택해주십시오, 현재 '+obj_seat_num+'개 선택하셨습니다.');
+                    return false;
+                }
+            }
+        }
+            }
+
+	if(!f.BI_NAME.value)
+	{
+		alert('예약자 성함을 입력해 주십시오.      ');
+		f.BI_NAME.focus();
+		return false;
+	}
+	if(!f.BI_TEL1.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL1.focus();
+		return false;
+	}
+    if(!f.BI_TEL2.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL2.focus();
+		return false;
+	}
+	if(!f.BI_TEL3.value)
+	{
+		alert('핸드폰번호를 입력해 주십시오.      ');
+		f.BI_TEL3.focus();
+		return false;
+	}
+        if(f.agree[0].checked == false)
+    {
+		alert('개인정보 수집 및 이용 약관 동의 하셔야합니다.');
+		f.agree[0].focus();
+		return false;
+    }
+    if(f.BI_3JA[0].checked == false)
+    {
+		alert('제3자 정보제공 동의 하셔야합니다.');
+		f.BI_3JA[0].focus();
+		return false;
+    }
+    if(f.BI_AD[0].checked == false && f.BI_AD[1].checked == false)
+    {
+		alert('광고성 정보 수신 동의여부 체크 하셔야합니다.');
+		f.BI_AD[0].focus();
+		return false;
+    }
+    
+    var ye = $('#id_ye').html();
+    var buga_total = "";
+    if($('#id_buga_total').length > 0)
+    {
+        var buga_total = $('#id_buga_total').html();
+    }
+    var data = 'ye='+ye+'&buga_total='+buga_total;
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.price.php",
+        data:data,
+        success:function(html)
+        {
+            if(html != 1)
+            {
+
+            }
+        }
+    });
+
+        if($('#submit').html() == "대기자내용확인")
+    {
+        if(!confirm('대기자로 예약하실 내용을 확인하시겠습니까?'))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if(!confirm($('#submit').html()+' 하시겠습니까?'))
+        {
+            return false;
+        }
+    }
+    }
+function agree_check(str)
+{
+    var f = document.insert_form;
+
+    if(str == "Y")
+    {
+        f.agree[0].checked = true;
+        f.BI_3JA[0].checked = true;
+        f.BI_AD[0].checked = true;
+    }
+    else
+    {
+        f.agree[1].checked = true;
+        f.BI_3JA[1].checked = true;
+        f.BI_AD[1].checked = true;
+    }
+}
+</script>
+
+<form id="insert_form" name="insert_form" method="post" action="/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.action.php" onsubmit="return form_check(this);">
+<input type="hidden" name="action" value="insert">
+<input type="hidden" name="link" value="%2F_core%2Fmodule%2Freservation_boat_v5.2_seat1%2Fpopup.step2.php">
+<input type="hidden" id="temp_bi_stat" name="temp_bi_stat">
+
+<div class="w1200_center">
+    <ul class="over_f top_tab_menu">
+        <li class="on"><i><img src="/_core/module/reservation_boat_v5.2_seat1/image/step_ico1_on.png"></i><span>STEP 01.</span>예약1단계</li>
+        <li><i><img src="/_core/module/reservation_boat_v5.2_seat1/image/step_ico2.png"></i><span>STEP 02.</span>예약확인</li>
+        <li><i><img src="/_core/module/reservation_boat_v5.2_seat1/image/step_ico3.png"></i><span>STEP 03.</span>예약완료</li>
+    </ul>
+
+    <table class="mytable1" style="table-layout:fixed;">
+    <colgroup>
+    <col width="170px"></col>
+    <col width=""></col>
+    <col width="170px"></col>
+    <col width=""></col>
+    </colgroup>
+        <tr>
+        <th style="border-top: none;">출조일</th>
+        <td colspan="3" class="res_td_padding" style="border-top: none; font-size: 18px;">
+            2026년 12월 05일 토요일(3물)
+
+                    </td>
+    </tr>
+
+
+        <tr>
+        <th>배 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+                            <table class="mytable3">
+                <colgroup>
+                <col width="70"></col>
+                <col width=""></col>
+                <col width="120"></col>
+                <col width="120"></col>
+                </colgroup>
+                <tr>
+                    <th height="26">선택</th>
+                    <th height="26">배명</th>
+                    <th height="26">총인원</th>
+                    <th height="26">남은자리</th>
+                </tr>
+                                <tr>
+                    <td height="30">
+                        
+                                                <input type="radio" id="PA_N_UID871" name="PA_N_UID" value="871" onclick="ps_url('20261205', '871', '', '');" checked="checked">
+                        
+                    </td>
+                    <td>
+                        <label for="PA_N_UID871">
+                                                    <span style="font-weight:bold;font-size:14px;">첫걸음</span>
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID871">
+                                                    <span style="font-weight:bold;font-size:14px;">11명</span>
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID871">
+                                                                                                                        <span style="font-weight:bold;font-size:14px;">11명</span>
+                                                                                                            </label>
+                    </td>
+                </tr>
+                                <tr>
+                    <td height="30">
+                        
+                                                <input type="radio" id="PA_N_UID5529" name="PA_N_UID" value="5529" onclick="ps_url('20261205', '5529', '', '');">
+                        
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5529">
+                                                    골드코스트                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5529">
+                                                    11명
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5529">
+                                                                                                                        <span>11명</span>
+                                                                                                            </label>
+                    </td>
+                </tr>
+                                <tr>
+                    <td height="30">
+                        
+                                                                        
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5532">
+                                                    모아나                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5532">
+                                                    11명
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID5532">
+                                                                                                                                                                </label>
+                    </td>
+                </tr>
+                                </table>
+                    </td>
+    </tr>    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+    <tr>
+        <th>낚시종류 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+                        <table>
+            <tr>
+                <td style="border:none;"><div style="width:15px;height:15px;background-color:#FFF265; border:1px solid #666;"></div></td>
+                <td style="border:none;">
+                    선택날짜에 적용된 가격입니다.
+                                    </td>
+            </tr>
+            </table>
+
+            <table class="mytable3">
+            <colgroup>
+            <col width="70"></col>
+            <col width=""></col>
+            <col width="120"></col>
+            <col width="120"></col>
+            <col width="120"></col>
+            </colgroup>
+            <tr>
+                <th height="26">선택</th>
+                <th height="26">낚시종류(남은자리)</th>
+                <th>금액구분</th>
+                <th height="26">금액</th>
+                <th height="26">예약금</th>
+            </tr>
+                                    
+                        <tr>
+                <td rowspan="2">
+                    <input type="radio" class="PS_N_UID" id="PS_N_UID2830" name="PS_N_UID" value="2830" onclick="ps_url('20261205', '871', '0', '2830');" checked="checked">
+                </td>
+                <td rowspan="2">
+                    <label for="PS_N_UID2830">
+                    <span class="ps_selis" id="PS12830">
+                        배낚시(11명)
+                    </span>
+                    </label>
+                </td>
+                <td style="font-size:12px;" class="on">대인</td>
+                <td height="30" style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID2830">
+                    <span class="ps_selis" id="PS22830">
+                        100,000원
+                                            </span>
+                    </label>
+                </td>
+                <td style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID2830">
+                    <span class="ps_selis" id="PS32830">
+                        0원
+                                            </span>
+                    </label>
+                </td>
+            </tr>
+                                                                        <tr>
+                <td height="30" style="font-size:12px;" class="on">독배</td>
+                <td style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID2830">
+                    <span class="ps_selis" id="PS22830">
+                        1,000,000원
+                                            </span>
+                    </label>
+                </td>
+                <td height="30" style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID2830">
+                    <span class="ps_selis" id="PS32830">
+                        

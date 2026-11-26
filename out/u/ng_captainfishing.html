@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="-1"/>
+<title>캡틴호 &gt; 예약1단계</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<link rel="stylesheet" href="/_core/module/reservation_boat_v5.2_seat1/css/style.css"/>
+<script src="https://js.thefishing.kr/script_i.js"></script>
+<script src="https://js.thefishing.kr/jquery-1.7.1.min.js"></script>
+<script src="/_core/module/reservation_boat_v5.2_seat1/js/reservation.js"></script>
+</head>
+<body>
+
+
+
+<!--팝업에서 ajax처리 시작-->
+<table id="reservation-day-table">
+</table>
+<!--팝업에서 ajax처리 종료-->
+
+
+
+<script>
+function form_check(f)
+{
+        var obj = document.getElementsByName("PA_N_UID");
+    var obj_true = 0;
+    for(var j = 0; j < obj.length; j++)
+    {
+        if(obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if(obj_true != 1)
+    {
+        alert('배를 선택해주십시오.');
+        return false;
+    }
+
+    
+
+    var obj = document.getElementsByName("PS_N_UID");
+    var obj_true = 0;
+    for (var j = 0; j < obj.length; j++)
+    {
+        if (obj[j].checked == true)
+        {
+            obj_true = 1;
+            break;
+        }
+    }
+    if (obj_true != 1)
+    {
+		alert('낚시종류를 선택해주십시오.');
+        if(obj[0])
+        {
+            obj[0].focus();
+        }
+		return false;
+    }
+
+
+	if(!f.BI_IN.value)
+	{
+        		alert('인원을 선택해주십시오.');
+                f.BI_IN.focus();
+		return false;
+	}
+
+    if($('#temp_bi_stat').val() == "확인")
+    {
+                //좌석선택불가, 예약시 좌석안내사진으로 사용합니다.
+                if($('#seat_img').length > 0)
+        {
+            /*
+            var BI_IN = $('#BI_IN').val();
+            BI_IN = Number(BI_IN);
+
+            var total_in;
+
+            if($('#BI_SO_IN').length > 0) {
+                var BI_SO_IN = Number($('#BI_SO_IN').val()) || 0;
+                total_in = parseInt(BI_IN + BI_SO_IN);
+            } else {
+                total_in = BI_IN;
+            }
+            */
+            /* 2026-10-23 독배선택시 NaN으로 나와서 수정*/
+            var BI_IN_RAW = $('#BI_IN').val();   // 원래 값('독배' 또는 숫자) 보관
+            var BI_IN = Number(BI_IN_RAW);
+            var total_in = BI_IN;   // 소인(BI_SO_IN)은 좌석수 비교에서 제외
+            /*********************************/
+
+            var obj = document.getElementsByName("seat[]");
+            var obj_seat_num = 0;
+            for (var j = 0; j < obj.length; j++)
+            {
+                if (obj[j].value != '')
+                {
+                    ++obj_seat_num;
+                }
+            }
+
+            /*2026-10-23 이전 기존
+            if(BI_IN != '독배') {
+                if(obj_seat_num != total_in) {
+                    alert('좌석 '+total_in+'개를 선택해주십시오, 현재 '+obj_seat_num+'개 선택하셨습니다.');
+                    return false;
+                }
+            }
+            */
+           if(BI_IN_RAW != '독배') {
+                if(obj_seat_num != total_in) {
+                    alert('좌석 '+total_in+'개를 선택해주십시오, 현재 '+obj_seat_num+'개 선택하셨습니다.');
+                    return false;
+                }
+            }
+            /*********************************/
+        }
+            }
+
+	if(!f.BI_NAME.value)
+	{
+		alert('예약자 성함을 입력해주십시오.');
+		f.BI_NAME.focus();
+		return false;
+	}
+	if(!f.BI_TEL1.value)
+	{
+		alert('핸드폰번호를 입력해주십시오.');
+		f.BI_TEL1.focus();
+		return false;
+	}
+    if(!f.BI_TEL2.value)
+	{
+		alert('핸드폰번호를 입력해주십시오.');
+		f.BI_TEL2.focus();
+		return false;
+	}
+	if(!f.BI_TEL3.value)
+	{
+		alert('핸드폰번호를 입력해주십시오.');
+		f.BI_TEL3.focus();
+		return false;
+	}
+
+        if(f.agree[0].checked == false)
+    {
+		alert('개인정보 수집 및 이용에 동의하셔야합니다.');
+		f.agree[0].focus();
+		return false;
+    }
+    if(f.BI_3JA[0].checked == false)
+    {
+		alert('제3자 정보제공에 동의하셔야합니다.');
+		f.BI_3JA[0].focus();
+		return false;
+    }
+    if(f.BI_AD[0].checked == false && f.BI_AD[1].checked == false)
+    {
+		alert('광고성 정보 수신에 동의하셔야합니다.');
+		f.BI_AD[0].focus();
+		return false;
+    }
+    
+    popup_price();
+
+    if(!confirm($('#submit').html()+' 하시겠습니까?'))
+    {
+        return false;
+    }
+}
+function agree_check(str)
+{
+    var f = document.insert_form;
+
+    if(str == "Y")
+    {
+        f.agree[0].checked = true;
+        f.BI_3JA[0].checked = true;
+        f.BI_AD[0].checked = true;
+    }
+    else
+    {
+        f.agree[1].checked = true;
+        f.BI_3JA[1].checked = true;
+        f.BI_AD[1].checked = true;
+    }
+}
+</script>
+
+<form id="insert_form" name="insert_form" method="post" action="/_core/module/reservation_boat_v5.2_seat1/action/popu2.step1.action.php" onsubmit="return form_check(this);">
+<input type="hidden" name="action" value="insert">
+<input type="hidden" name="link" value="%2F_core%2Fmodule%2Freservation_boat_v5.2_seat1%2Fpopu2.step2.php">
+<input type="hidden" id="temp_bi_stat" name="temp_bi_stat">
+
+<div class="w1200_center">
+    <ul class="over_f top_tab_menu2">
+        <li class="on"><i><img src="/_core/module/reservation_boat_v5.2_seat1/image/step_ico1_on.png"></i><span>STEP 01.</span>예약1단계</li>
+        <li><i><img src="/_core/module/reservation_boat_v5.2_seat1/image/step_ico3.png"></i><span>STEP 02.</span>예약완료</li>
+    </ul>
+
+    <table class="mytable1" style="table-layout:fixed;">
+    <colgroup>
+    <col width="170px"></col>
+    <col width=""></col>
+    <col width="170px"></col>
+    <col width=""></col>
+    </colgroup>
+    
+    <tr>
+        <th style="border-top: none;">출조일</th>
+        <td colspan="3" class="res_td_padding" style="border-top: none; font-size: 18px;">
+            2026년 12월 05일 토요일(3물)
+
+                    </td>
+    </tr>
+
+
+        <tr>
+        <th>배 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+                            <table class="mytable3">
+                <colgroup>
+                <col width="70"></col>
+                <col width=""></col>
+                <col width="120"></col>
+                <col width="120"></col>
+                </colgroup>
+                <tr>
+                    <th height="26">선택</th>
+                    <th height="26">배명</th>
+                    <th height="26">총인원</th>
+                    <th height="26">남은자리</th>
+                </tr>
+                                <tr>
+                    <td height="30">
+                        
+                                                <input type="radio" id="PA_N_UID2771" name="PA_N_UID" value="2771" onclick="ps_url('20261205', '2771', '', '');" checked="checked">
+                        
+                    </td>
+                    <td>
+                        <label for="PA_N_UID2771">
+                                                    <span style="font-weight:bold;font-size:14px;">캡틴호</span>
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID2771">
+                                                    <span style="font-weight:bold;font-size:14px;">21명</span>
+                                                </label>
+                    </td>
+                    <td>
+                        <label for="PA_N_UID2771">
+                                                                                                                        <span style="font-weight:bold;font-size:14px;">16명</span>
+                                                                                                            </label>
+                    </td>
+                </tr>
+                                </table>
+                    </td>
+    </tr>    
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+    
+    <tr>
+        <th>낚시종류 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+                        <table>
+            <tr>
+                <td style="border:none;"><div style="width:15px;height:15px;background-color:#FFF265; border:1px solid #666;"></div></td>
+                <td style="border:none;">
+                    선택날짜에 적용된 가격입니다.
+                                    </td>
+            </tr>
+            </table>
+
+            <table class="mytable3">
+            <colgroup>
+            <col width="70"></col>
+            <col width=""></col>
+            <col width="120"></col>
+            <col width="120"></col>
+            <col width="120"></col>
+            </colgroup>
+            <tr>
+                <th height="26">선택</th>
+                <th height="26">낚시종류(남은자리)</th>
+                <th>금액구분</th>
+                <th height="26">금액</th>
+                <th height="26">예약금</th>
+            </tr>
+                                    
+                        <tr>
+                <td rowspan="1">
+                    <input type="radio" class="PS_N_UID" id="PS_N_UID24009" name="PS_N_UID" value="24009" onclick="ps_url('20261205', '2771', '0', '24009');" checked="checked">
+                </td>
+                <td rowspan="1">
+                    <label for="PS_N_UID24009">
+                    <span class="ps_selis" id="PS124009">
+                        쭈꾸미/갑오징어(16명)
+                    </span>
+                    </label>
+                </td>
+                <td style="font-size:12px;" class="on">대인</td>
+                <td height="30" style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID24009">
+                    <span class="ps_selis" id="PS224009">
+                        100,000원
+                                            </span>
+                    </label>
+                </td>
+                <td style="text-align: right; padding-right: 7px;" class="on">
+                    <label for="PS_N_UID24009">
+                    <span class="ps_selis" id="PS324009">
+                        100,000원
+                                            </span>
+                    </label>
+                </td>
+            </tr>
+                                                                        
+
+                                    </table>
+
+            
+                    </td>
+    </tr>
+
+    
+    
+
+    
+
+            <tr>
+        <th>좌석 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3">
+            <div class="res_ship_seat_guide">
+                <div>
+                    <div id="seat_img" style="display: none;">좌석제스크립트사용</div>
+                    <p>대인 인원만큼 좌석을 선택해주세요</p>
+                </div>
+                <div class="res_ship_seat_guide_shape">
+                    예약불가&nbsp;<span class="ship_seat_guide_shape" style="background: lightgray; border: 2px solid lightgray;"></span>
+                    &nbsp;&nbsp;
+                    예약가능&nbsp;<span class="ship_seat_guide_shape" style="background: #ff4800; border: 2px solid #ff4800;"></span>
+                    &nbsp;&nbsp;
+                    선택됨&nbsp;<span class="ship_seat_guide_shape" style="background: black; border: 2px solid black;"></span>
+                    &nbsp;&nbsp;
+                    흡연가능&nbsp;<span class="ship_seat_guide_shape" style="background: blue; border: 2px solid blue;"></span>
+                    &nbsp;&nbsp;
+                    흡연구역&nbsp;<span class="ship_seat_guide_shape" style="background: blue; border: 2px solid blue; border-radius: 0px;"></span>
+                </div>
+            </div>
+
+
+            
+
+                        <div class="res_ship_seat">
+                            <div class="pa ship_name">캡틴호</div>
+                <div class="res_ship_seat_head res_ship_seat_head_r">
+                    <div class="pa res_seat01">
+                       <span class="num_view_no"></span>                    </div>
+
+                    <div class="pa res_seat02">
+                        <span id="c20261205277120" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '20');">20</span><input id="s20261205277120" class="seats" type="hidden" name="seat[]">                    </div>
+
+                    <div class="pa res_seat03">
+                        <span class="num_view_no"></span>                    </div>
+
+                    <div class="pa res_seat04">
+                        <span id="c20261205277121" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '21');">21</span><input id="s20261205277121" class="seats" type="hidden" name="seat[]">                    </div>
+
+                    <div class="pa res_seat05">
+                        <span class="num_view_no"></span>                    </div>
+                </div>
+
+                <div class="res_ship_seat_side res_ship_seat_side_r">
+                    <div class="pa res_seat06">
+                        <span id="c2026120527711" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '1');">1</span><input id="s2026120527711" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat07">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat08">
+                        <span id="c2026120527712" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '2');">2</span><input id="s2026120527712" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat09">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat10">
+                        <span class="res_num_view_disable">선</span>                    </div>
+
+                    <div class="pa res_seat11">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat12">
+                        <span id="c2026120527713" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '3');">3</span><input id="s2026120527713" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat13">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat14">
+                        <span id="c2026120527714" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '4');">4</span><input id="s2026120527714" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat15">
+                        <span class="num_view_no"></span>                    </div>
+
+                    <div class="pa res_seat16">
+                        <span id="c2026120527715" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '5');">5</span><input id="s2026120527715" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat17">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat18">
+                        <span class="res_num_view_disable">선</span>                    </div>
+                    <div class="pa res_seat19">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat20">
+                        <span class="res_num_view_disable">6</span>                    </div>
+
+                    <div class="pa res_seat21">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat22">
+                        <span class="res_num_view_disable">7</span>                    </div>
+                    <div class="pa res_seat23">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat24">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat25">
+                        <span class="res_num_view_disable">8</span>                    </div>
+                </div>
+                <!--//우현-->
+
+                <!--선미-->
+                <div class="res_ship_seat_back">
+                    <div class="pa res_seat26">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat27">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat28">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat29">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat30">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat31">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat32">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                </div>
+                <!--//선미-->
+
+                <!--좌  선수-->
+                <div class="res_ship_seat_head res_ship_seat_head_l">
+                    <div class="pa res_seat33">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat34">
+                        <span id="c20261205277118" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '18');">18</span><input id="s20261205277118" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat35">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat36">
+                        <span id="c20261205277119" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '19');">19</span><input id="s20261205277119" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat37">
+                        <span class="num_view_no"></span>                    </div>
+                </div>
+                <!--//좌  선수-->
+
+                <!--좌현-->
+                <div class="res_ship_seat_side res_ship_seat_side_l">
+                    <div class="pa res_seat38">
+                        <span id="c20261205277117" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '17');">17</span><input id="s20261205277117" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat39">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat40">
+                        <span id="c20261205277116" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '16');">16</span><input id="s20261205277116" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat41">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat42">
+                        <span id="c20261205277115" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '15');">15</span><input id="s20261205277115" class="seats" type="hidden" name="seat[]">                    </div>
+
+                    <div class="pa res_seat43">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat44">
+                        <span class="res_num_view_disable">선</span>                    </div>
+                    <div class="pa res_seat45">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat46">
+                        <span id="c20261205277114" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '14');">14</span><input id="s20261205277114" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat47">
+                        <span class="num_view_no"></span>                    </div>
+
+                    <div class="pa res_seat48">
+                        <span id="c20261205277113" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '13');">13</span><input id="s20261205277113" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat49">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat50">
+                        <span id="c20261205277112" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '12');">12</span><input id="s20261205277112" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat51">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat52">
+                        <span id="c20261205277111" class="res_num_view" onclick="ticket_seat_click('20261205', '2771', '11');">11</span><input id="s20261205277111" class="seats" type="hidden" name="seat[]">                    </div>
+
+                    <div class="pa res_seat53">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat54">
+                        <span class="res_num_view_disable">10</span>                    </div>
+                    <div class="pa res_seat55">
+                        <span class="num_view_no"></span>                    </div>
+                    <div class="pa res_seat56">
+                        <span id="c202612052771" class="res_num_view num_smoke_view" onclick="ticket_seat_click('20261205', '2771', '');"></span><input id="s202612052771" class="seats" type="hidden" name="seat[]">                    </div>
+                    <div class="pa res_seat57">
+                        <span class="res_num_view_disable">9</span>                    </div>
+                </div>
+                <!--//좌현-->
+            </div>
+
+            <div style="clear: both;"></div>
+
+            <!--좌석 공지-->
+            <div class="res_ship_seat_notice">
+                                    </div>
+            <!--//좌석 공지-->
+        </td>
+    </tr>
+<script>
+/*
+$( document ).ready(function() {
+    $(".res_ship_seat_side .pa").each(function(i, element) {
+        $(element).css("left", "calc(34 * i)px");
+    });
+});
+*/
+</script>    <tr>
+        <th>인원 선택 <span class="f_cred">(필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+            <div id="select_bi_in">
+                                <select id="BI_IN" name="BI_IN" onchange="popup_ajax_step1();" class="txt_box mr10">
+                <option value="">인원 선택</option>
+
+                
+
+                                                <option value="1">1명</option>
+                                <option value="2">2명</option>
+                                <option value="3">3명</option>
+                                <option value="4">4명</option>
+                                <option value="5">5명</option>
+                                <option value="6">6명</option>
+                                <option value="7">7명</option>
+                                <option value="8">8명</option>
+                                <option value="9">9명</option>
+                                <option value="10">10명</option>
+                                <option value="11">11명</option>
+                                <option value="12">12명</option>
+                                <option value="13">13명</option>
+                                <option value="14">14명</option>
+                                <option value="15">15명</option>
+                                <option value="16">16명</option>
+                                <option value="17">17명</option>
+                                <option value="18">18명</option>
+                                <option value="19">19명</option>
+                                <option value="20">20명</option>
+                                <option value="21">21명</option>
+                                <option value="22">22명</option>
+                                <option value="23">23명</option>
+                                <option value="24">24명</option>
+                                <option value="25">25명</option>
+                                <option value="26">26명</option>
+                                <option value="27">27명</option>
+                                <option value="28">28명</option>
+                                <option value="29">29명</option>
+                                <option value="30">30명</option>
+                                <option value="31">31명</option>
+                                <option value="32">32명</option>
+                                <option value="33">33명</option>
+                                <option value="34">34명</option>
+                                <option value="35">35명</option>
+                                <option value="36">36명</option>
+                                <option value="37">37명</option>
+                                <option value="38">38명</option>
+                                <option value="39">39명</option>
+                                <option value="40">40명</option>
+                                <option value="41">41명</option>
+                                <option value="42">42명</option>
+                                <option value="43">43명</option>
+                                <option value="44">44명</option>
+                                <option value="45">45명</option>
+                                <option value="46">46명</option>
+                                <option value="47">47명</option>
+                                <option value="48">48명</option>
+                                <option value="49">49명</option>
+                                <option value="50">50명</option>
+                                <option value="51">51명</option>
+                                <option value="52">52명</option>
+                                <option value="53">53명</option>
+                                <option value="54">54명</option>
+                                <option value="55">55명</option>
+                                <option value="56">56명</option>
+                                <option value="57">57명</option>
+                                <option value="58">58명</option>
+                                <option value="59">59명</option>
+                                <option value="60">60명</option>
+                                <option value="61">61명</option>
+                                <option value="62">62명</option>
+                                <option value="63">63명</option>
+                                <option value="64">64명</option>
+                                <option value="65">65명</option>
+                                <option value="66">66명</option>
+                                <option value="67">67명</option>
+                                <option value="68">68명</option>
+                                <option value="69">69명</option>
+                                <option value="70">70명</option>
+                                <option value="71">71명</option>
+                                <option value="72">72명</option>
+                                <option value="73">73명</option>
+                                <option value="74">74명</option>
+                                <option value="75">75명</option>
+                                <option value="76">76명</option>
+                                <option value="77">77명</option>
+                                <option value="78">78명</option>
+                                <option value="79">79명</option>
+                                <option value="80">80명</option>
+                                <option value="81">81명</option>
+                                <option value="82">82명</option>
+                                <option value="83">83명</option>
+                                <option value="84">84명</option>
+                                <option value="85">85명</option>
+                                <option value="86">86명</option>
+                                <option value="87">87명</option>
+                                <option value="88">88명</option>
+                                <option value="89">89명</option>
+                                <option value="90">90명</option>
+                                <option value="91">91명</option>
+                                <option value="92">92명</option>
+                                <option value="93">93명</option>
+                                <option value="94">94명</option>
+                                <option value="95">95명</option>
+                                <option value="96">96명</option>
+                                <option value="97">97명</option>
+                                <option value="98">98명</option>
+                                <option value="99">99명</option>
+                                                </select>
+
+                
+                
+                                <div style="margin-top: 5px;">
+                    남은좌석은 <span id="id_bi_in">16</span>개
+                    <span style="color: #999;">
+                                                                        (남은 좌석 이내로 선택해주세요<span class="select_bi_in_str" style="display:none;">, 대인 필수, 소인은 0.5명으로 계산됩니다</span>)
+                                            </span>
+                </div>
+                            </div>
+
+            <div id="select_no_bi_in" style="color:#ff0000;font-size:16px;font-weight:bold;display:none;">
+                낚시종류를 선택하세요.
+            </div>
+
+            <div id="seatid">
+
+            </div>
+        </td>
+    </tr>
+        <tr>
+        <th>총 금액</th>
+        <td class="res_td_padding_x2">
+            <div id="id_to" style="font-size: 18px">인원을 선택하세요.</div>
+        </td>
+        <th>예약 금액</th>
+        <td class="res_td_padding_x2">
+            <div id="id_ye" style="font-size: 18px">인원을 선택하세요.</div>
+        </td>
+    </tr>        <tr>
+        <th>부가상품</th>
+        <td colspan="3" class="res_td_padding">
+            <div style="width:490px;">
+                <select id="select_ud_uid" name="select_ud_uid" onchange="popup_buga_step1(1);" class="txt_box" style="width:100%; height:30px; font-size:14px;">
+                <option style="height:30px; font-size:14px;" value="">선택하세요</option>
+                                <option style="height:30px; font-size:14px;" value="564">낚시대+베이트릴 20,000원</option>
+                                </select>
+            </div>
+
+            <div id="buga" style="width:490px; margin-top:10px; display:none;">
+
+            </div>
+        </td>
+    </tr>
+    
+
+    <tr>
+        <th>안내·확인사항</th>
+        <td colspan="3" class="res_td_padding">
+                        <p>
+   <b>출조하시는분들은 <span style="background-color: #00ffff;">신분증</span> 필히 지참하세요.</b>
+</p>
+<p>
+   <b>신분증 미지참시 승선불가/환불불가 합니다.</b>
+</p>
+<p>
+   <b>예약자와입금자가 동일하게 해 주세요.</b>
+</p>
+<p>
+   <b>다를경우 문자 부탁드립니다.</b>
+</p>        </td>
+    </tr>
+    <tr>
+        <th>예약자명 <span class="f_cred">(필수)</span></th>
+        <td class="res_td_padding">
+            <input type="text" name="BI_NAME" value="" style="ime-mode:active; width:100px; height:25px; border:1px solid #a7a7a7; text-align: center;">
+        </td>
+        <th>입금자명 (선택)</th>
+        <td class="res_td_padding">
+            <input type="text" id="BI_BANK" name="BI_BANK" value="" style="ime-mode:active; width:100px; height:25px; border:1px solid #a7a7a7; text-align: center;">
+            <br>
+            <div style="color: #666;">*예약자와 입금자가 다를 경우</div>
+        </td>
+    </tr>
+    <tr>
+        <th>핸드폰 번호 <span class="f_cred"> (필수)</span></th>
+        <td colspan="3" class="res_td_padding">
+            <div>
+                <div style="float:left; width:72px;margin-right:12px;"><input type="text" id="BI_TEL1" name="BI_TEL1" value="010" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4||this.value=='010'){$('#BI_TEL2').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; text-align: center;"></div>
+                <div style="float:left; width:72px;margin-right:12px;"><input type="text" id="BI_TEL2" name="BI_TEL2" value="" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4){$('#BI_TEL3').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; text-align: center;"></div>
+                <div style="float:left; width:72px;"><input type="text" id="BI_TEL3" name="BI_TEL3" value="" maxlength="4" onkeyup="if(this.value.match(/[^0-9]/)){this.value=this.value.replace(/[^0-9]/g,'');}if(this.value.length==4){$('#BI_MEMO').focus();}" style="width:100%; height:25px; border:1px solid #a7a7a7; text-align: center;"></div>
+                <div style="clear:both;"></div>
+
+                            </div>
+        </td>
+    </tr>
+                <tr>
+        <th>요청사항(선택)</th>
+        <td colspan="3" class="res_td_padding">
+            <textarea id="BI_MEMO" name="BI_MEMO" class="txt_box" style="width: 99%; height:130px; border:1px solid #a7a7a7; padding:5px;" placeholder=""></textarea>
+        </td>
+    </tr>
+    
+    
+        </table>
+
+    <div style="width:100%; height:23px;"></div>
+
+            <div style="width:calc(100% - 50px); background-color:#f5f5f5;padding:10px 25px 15px 25px;border:1px solid #ccc;">
+        <!--동의1-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                <span style="width:200px;display:inline-block;">1. 개인정보 수집 및 이용 약관 동의</span>
+                <button type="button" id="ac1-b1" onclick="$('#ac1-c').show();$('#ac1-b1').hide();$('#ac1-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;">내용보기</button>
+                <button type="button" id="ac1-b2" onclick="$('#ac1-c').hide();$('#ac1-b1').show();$('#ac1-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="agree" value="Y" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="agree" value="N" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                 &nbsp;
+            </div>
+        </div>
+
+        <div id="ac1-c" style="display:none;">
+                <table class="mytable2" style="width:100%;font-size:0.9em;">
+            <tbody><tr>
+                <td height="3" colspan="3" style="background-color:#ccc;">
+                </td>
+            </tr>
+            <tr>
+                <th height="30" style="background:#efefef;">목적</th>
+                <th height="30" style="background:#efefef;">항목</th>
+                <th height="30" style="background:#efefef;">보유기간</th>
+            </tr>
+            <tr>
+                <td height="30">이용자 식별 및 본인여부 확인</td>
+                <td height="30">아이디, 이름, 생년월일, 비밀번호</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">고객서비스 이용에 관한 통지,<br>CS대응을 위한 이용자 식별</td>
+                <td height="30">연락처 (이메일, 휴대전화번호)</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">만 14세 미만 아동 확인</td>
+                <td height="30">법정 생년월일</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            <tr>
+                <td height="30">맞춤형 서비스 제공을 위한 이용자 식별</td>
+                <td height="30">성별</td>
+                <td height="30">회원 탈퇴 시까지</td>
+            </tr>
+            </tbody>
+        </table>
+                </div>
+
+
+        <!--동의2-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                <span style="width:200px;display:inline-block;">2. 제3자 정보제공 동의</span>
+                <button type="button" id="ac2-b1" onclick="$('#ac2-c').show();$('#ac2-b1').hide();$('#ac2-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;">내용보기</button>
+                <button type="button" id="ac2-b2" onclick="$('#ac2-c').hide();$('#ac2-b1').show();$('#ac2-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="BI_3JA" value="1" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="BI_3JA" value="0" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                &nbsp;
+            </div>
+        </div>
+
+        <div id="ac2-c" style="display:none;">
+            <div style="border:1px solid #ccc;border-top:none;padding:10px;background:#fff;font-size:0.9em;">
+                이 사이트는 더피싱 예약시스템을 이용하기 때문에 예약데이타를 더피싱에 제공하여야 합니다. <br>
+                * 제공되는 예약데이타 : 이름, 전화번호, 예약정보<br>
+            </div>
+        </div>
+
+
+
+        <!--동의3-->
+        <div class="over_f" style="border-bottom:1px solid #ccc;">
+            <div class="fl" style="margin:auto; font-weight:bold;padding: 5px 0 5px 0;">
+                 <span style="width:200px;display:inline-block;">3. 광고성 정보 수신 동의</span>
+                 <button type="button" id="ac3-b1" onclick="$('#ac3-c').show();$('#ac3-b1').hide();$('#ac3-b2').show();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;">내용보기</button>
+                 <button type="button" id="ac3-b2" onclick="$('#ac3-c').hide();$('#ac3-b1').show();$('#ac3-b2').hide();" style="font-size:0.8em;background:#fff;border:1px solid #ccc;border-radius:3px;cursor:pointer;display:none;">내용닫기</button>
+            </div>
+            <div class="fr mtop5">
+                <label><input type="radio" name="BI_AD" value="1" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의</span></label>
+                &nbsp;&nbsp;&nbsp;
+                <label><input type="radio" name="BI_AD" value="0" style="vertical-align:middle;"><span style="font-size:0.9em;vertical-align:middle;color:#555;">동의 안 함</span></label>
+                &nbsp;
+            </div>
+        </div>
+
+
+        <div id="ac3-c" style="display:none;">
+            <div style="border:1px solid #ccc;border-top:none;padding:10px;background:#fff;font-size:0.9em;">
+                서비스, 이벤트정보 제공을 위한 개인정보 수집 및 이용동의<span style="color:#999;"> (선택)</span>
+            </div>
+        </div>
+
+
+
+        <div class="mtop7"></div>
+
+        <div style="margin:auto; padding:5px 0;font-size:13px;background:#0ea906;color:#fff; text-align:center;margin-top:3px;letter-spacing:-0.05em;">서비스 제공을 위해서 반드시 필요한 최소한의 개인정보이므로 동의를 해주셔야 이용하실 수 있습니다.</div>
+        <div style="margin:auto; font-size:13px; padding:10px 0;text-align:center;border:4px solid #0ea906">
+            <label><input type="radio" name="all_agree" value="Y" onclick="agree_check('Y');"><span style="font-weight:bold;font-size:17px;color:#0051f7;">전체동의합니다.</span></label>
+            &nbsp;&nbsp;&nbsp;
+            <label><input type="radio" name="all_agree" value="N" onclick="agree_check('N');"><span style="font-size:14px;color:#666;">전체동의하지 않습니다.</span></label>
+        </div>
+    </div>
+        </div>
+
+<div style="height:25px;"></div>
+
+<p style="width:100%; text-align:center;margin-bottom:30px">
+    <button id="submit" type="submit" class="lar_btn f_sm">예약신청하기</button>
+</p>
+
+</form>
+
+
+<form name="ps_form" method="get" action="./popup.step1.php">
+<input type="hidden" name="date" value="20261205">
+<input type="hidden" name="PA_N_UID" value="2771">
+<input type="hidden" name="PH_N_UID" value="0">
+<input type="hidden" name="PS_N_UID" value="24009">
+<input type="hidden" name="scr">
+</form>
+
+
+<div style="height:150px;"></div>
+
+<script>
+function ticket_seat_click(date8, PA_N_UID, val)
+{
+    var temp_c = 'c'+ date8 + PA_N_UID + val;
+    var temp_s = 's'+ date8 + PA_N_UID + val;
+
+    if($('#'+temp_s).length)
+    {
+        if($('#'+temp_s).val() == val)
+        {
+            $('#'+temp_s).val('');
+            $('#'+temp_c).removeClass('res_num_view_chosen');
+            $('#'+temp_c).addClass('res_num_view');
+        }
+        else
+        {
+            $('#'+temp_s).val(val);
+            $('#'+temp_c).removeClass('res_num_view');
+            $('#'+temp_c).addClass('res_num_view_chosen');
+        }
+    }
+
+    if(!$('#select_bi_so_in').length)
+    {
+        var obj = $('.seats');
+        var fnum = obj.length;
+        var j = 0;
+        var i;
+
+        for (i = 0; i < fnum; i++)
+        {
+            if (obj[i].value != "")
+            {
+                j++;
+            }
+        }
+        $('#BI_IN').val(j);
+        popup_ajax_step1();
+    }
+}
+function ticket_seat_bus_click(date8, PA_N_UID, val)
+{
+    var temp_c = 'c'+ date8 + PA_N_UID + val;
+    var temp_s = 's'+ date8 + PA_N_UID + val;
+
+    if($('#'+temp_s).length)
+    {
+        if($('#'+temp_s).val() == val)
+        {
+            $('#'+temp_s).val('');
+            $('#'+temp_c).removeClass('res_seatCheck');
+            $('#'+temp_c).addClass('res_seatBox');
+        }
+        else
+        {
+            $('#'+temp_s).val(val);
+            $('#'+temp_c).removeClass('res_seatBox');
+            $('#'+temp_c).addClass('res_seatCheck');
+        }
+    }
+}
+var buga_status = null;
+function buga_open(UD_UID)
+{
+    if(buga_status != null && !buga_status.closed)
+    {
+        buga_status.location.replace("./popup.buga.php?UD_UID="+UD_UID);
+        buga_status.focus();
+        return;
+    }
+    buga_status = window.open("./popup.buga.php?UD_UID="+UD_UID,"buga_pop","width=500,height=600,scrollbars=yes,resizable=yes");
+    buga_status.focus();
+}
+function popup_price()
+{
+    var ye = $('#id_ye').html();
+    var buga_total = "";
+
+    if($('#id_buga_total').length)
+    {
+        var buga_total = $('#id_buga_total').html();
+    }
+
+    var data = 'ye='+ye+'&buga_total='+buga_total;
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.price.php",
+        data:data,
+        success:function(html)
+        {
+
+        }
+    });
+}
+function popup_ajax_step1()
+{
+        var BI_IN = $('#BI_IN').val();
+    var BI_SO_IN = "N";
+    
+    if(BI_IN == '독배')
+    {
+        if($('#seat-ps-result').length) //어종별좌석제
+        {
+                    }
+        else //배별좌석제
+        {
+            $('.res_num_view').addClass('res_num_view_chosen');
+            $('.res_num_view_chosen').removeClass('res_num_view');
+
+            var obj = document.getElementsByName("seat[]");
+            for (var j = 0; j < obj.length; j++)
+            {
+                obj[j].value = (j + 1);
+            }
+        }
+    }
+
+    var pay_method = $('#pay_method').val(); 
+
+    var data = 'date=20261205&PA_N_UID=2771&PH_N_UID=0&PS_N_UID=24009&BI_IN='+BI_IN+'&BI_SO_IN='+BI_SO_IN+'&pay_method='+pay_method+'&naun=16';
+    $.ajax({
+        type:"POST",
+        url:"/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.ajax.php",
+        data:data,
+        success:function(html)
+        {
+            if(html)
+            {
+                var arrString = html.split("|^|");
+                $('#id_ye').html(arrString[0]);                 $('#id_to').html(arrString[1]);                 $('#temp_bi_stat').val(arrString[2]); 
+                if(arrString[2] == "최대인원초과")
+                {
+                                        $('#BI_IN').find('option:first').attr('selected', 'selected');
+                    
+                    $('#id_ye').html('인원을 선택하세요.');                     $('#id_to').html('인원을 선택하세요.');                     $('#temp_bi_stat').val('');                     alert('최대 예약인원 초과 입니다, 인원을 다시 선택해주십시오.');
+
+                    $('#seatid').hide();                 }
+                else if(arrString[2] == "대기자")
+                {
+                    if(confirm("선택하신 인원은 남은 좌석수보다 많아 대기자로 등록가능합니다.\n대기자로 예약 하시겠습니까?\n"))
+                    {
+                                                $('#submit').html('대기자 신청하기');                         
+                        $('#seatid').hide();                     }
+                    else
+                    {
+                                                $('#BI_IN').find('option:first').attr('selected', 'selected');
+                        
+                        $('#id_ye').html('인원을 선택하세요.');                         $('#id_to').html('인원을 선택하세요.');                         $('#temp_bi_stat').val('');                         alert('인원을 다시 선택해주십시오.');
+
+                        $('#seatid').hide();                     }
+                }
+                else if(arrString[2] == "인원초과")
+                {
+                                        $('#BI_IN').find('option:first').attr('selected', 'selected');
+                    
+                    $('#id_ye').html('인원을 선택하세요.');                     $('#id_to').html('인원을 선택하세요.');                     $('#temp_bi_stat').val('');                     alert('인원초과 입니다, 인원을 다시 선택해주십시오.');
+
+                    $('#seatid').hide();                 }
+                else
+                {
+                                        $('#submit').html('예약 신청하기');                     
+                    $('#seatid').show();                     $('#seatid').html(arrString[3]);                 }
+            }
+        }
+    });
+}
+function popup_buga_step1(types)
+{
+    if(types == 1)     {
+        var data = $("#insert_form").serialize();
+        var select_ud_uid = $("#select_ud_uid").val();
+        if(select_ud_uid == "")
+        {
+            return;
+        }
+        else
+        {
+            var obj = document.getElementsByName("UD_UID[]");
+            var obj_true = 0;
+            for (var j = 0; j < obj.length; j++)
+            {
+                if (obj[j].value == select_ud_uid)
+                {
+                    alert('이미 선택하신 부가상품 입니다.');
+                    return;
+                }
+            }
+        }
+    }
+    else if(types == 2)     {
+        var data = $("#insert_form :not(select[name='select_ud_uid'])").serialize();
+    }
+
+    $.ajax({
+        type: "POST",
+        url: "/_core/module/reservation_boat_v5.2_seat1/action/popup.step1.buga.php",
+        data: data,
+        contentType: 'application/x-www-form-urlencoded; charset=utf-8',
+        dataType: 'html',
+        success:function(html)
+        {
+            if(html == "-1")
+            {
+                alert('오류입니다, 관리자에게 문의하세요.');
+            }
+            else
+            {
+                $('#buga').html(html);
+            }
+        }
+    });
+    $('#buga').show();
+}
+function popup_buga_up(UD_UID)
+{
+	var num = parseInt($('#bb_num_input'+UD_UID).val());
+	if(num > 0)
+	{
+		$('#bb_num_input'+UD_UID).val(parseInt(num + 1));
+        popup_buga_step1(2);
+	}
+}
+function popup_buga_down(UD_UID)
+{
+	var num = parseInt($('#bb_num_input'+UD_UID).val());
+	if(num > 1)
+	{
+		$('#bb_num_input'+UD_UID).val(parseInt(num - 1));
+		popup_buga_step1(2);
+	}
+}
+function popup_buga_del(UD_UID)
+{
+    $('#ud_uid_div'+UD_UID).remove();
+    popup_buga_step1(2);
+}
+function ps_url(date, PA_N_UID, PH_N_UID, PS_N_UID)
+{
+    var f = document.ps_form;
+    f.date.value = date;
+    f.PA_N_UID.value = PA_N_UID;
+    f.PH_N_UID.value = PH_N_UID;
+    f.PS_N_UID.value = PS_N_UID;
+    f.scr.value = $(document).scrollTop();
+    f.submit();
+}
+
+//var obj = document.getElementsByName("PS_N_UID");
+//var obj_num = obj.length;
+//if(obj_num == 1)
+//{
+//    $('.PS_N_UID').trigger('click');
+//}
+
+if($('.blinkEle').length)
+{
+    setInterval(function(){
+      $(".blinkEle").toggle();
+    }, 500);
+}
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div style="height:150px;"></div>
+
+</body>
+</html>
