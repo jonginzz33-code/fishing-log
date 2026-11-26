@@ -1,0 +1,28 @@
+name: Auth Domains
+on:
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add talla.co.kr to authorized domains
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          pip install -q google-auth requests
+          python3 - <<'PY'
+          import json, os, google.auth.transport.requests as tr
+          from google.oauth2 import service_account
+          cr = service_account.Credentials.from_service_account_file(os.environ['RUNNER_TEMP']+'/sa.json', scopes=['https://www.googleapis.com/auth/cloud-platform','https://www.googleapis.com/auth/firebase'])
+          s = tr.AuthorizedSession(cr)
+          u = 'https://identitytoolkit.googleapis.com/admin/v2/projects/fishing-log-9109d/config'
+          r = s.get(u, headers={'x-goog-user-project':'fishing-log-9109d'}); print('GET', r.status_code, r.text[:300] if r.status_code!=200 else '')
+          if r.status_code != 200: raise SystemExit(1)
+          d = r.json().get('authorizedDomains', []); print('now', d)
+          for x in ['talla.co.kr', 'www.talla.co.kr']:
+              if x not in d: d.append(x)
+          r = s.patch(u+'?updateMask=authorizedDomains', json={'authorizedDomains': d}, headers={'x-goog-user-project':'fishing-log-9109d'})
+          print('PATCH', r.status_code, r.text[:300] if r.status_code!=200 else r.json().get('authorizedDomains'))
+          if r.status_code != 200: raise SystemExit(1)
+          PY
