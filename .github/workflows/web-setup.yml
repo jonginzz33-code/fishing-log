@@ -1,0 +1,61 @@
+name: Web setup
+on:
+  workflow_dispatch:
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check perms · web app · auth domains · monitoring · api keys
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          pip -q install google-auth requests
+          python3 - <<'P'
+          import os, json, time, datetime, requests
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          cr = service_account.Credentials.from_service_account_file(os.environ["RUNNER_TEMP"]+"/sa.json", scopes=["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/firebase"])
+          cr.refresh(Request())
+          PJ = "fishing-log-9109d"
+          H = {"Authorization": "Bearer " + cr.token, "x-goog-user-project": PJ}
+          def say(*a): print("OUT", *[str(x).replace(PJ, "PJ").replace("jonginzz33", "U") for x in a])
+          r = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{PJ}:testIamPermissions", headers=H,
+              json={"permissions": ["monitoring.timeSeries.list", "firebase.projects.update", "firebaserules.releases.update", "identitytoolkit.tenants.update", "apikeys.keys.list", "serviceusage.services.enable"]})
+          say("perms", "|".join(p.replace(".", "_") for p in r.json().get("permissions", [])))
+          # web app
+          r = requests.get(f"https://firebase.googleapis.com/v1beta1/projects/{PJ}/webApps", headers=H)
+          apps = r.json().get("apps", [])
+          say("webApps", r.status_code, [a.get("displayName") for a in apps], (r.json().get("error") or {}).get("message", "")[:150])
+          if r.status_code == 200 and not apps:
+              c = requests.post(f"https://firebase.googleapis.com/v1beta1/projects/{PJ}/webApps", headers=H, json={"displayName": "talla.co.kr"})
+              say("create", c.status_code, (c.json().get("error") or {}).get("message", "")[:150])
+              time.sleep(20)
+              apps = requests.get(f"https://firebase.googleapis.com/v1beta1/projects/{PJ}/webApps", headers=H).json().get("apps", [])
+          for a in apps:
+              cf = requests.get(f"https://firebase.googleapis.com/v1beta1/{a['name']}/config", headers=H).json()
+              say("appId", cf.get("appId", "")[-12:], "key", (cf.get("apiKey") or "")[:6])
+          # auth domains
+          u = f"https://identitytoolkit.googleapis.com/admin/v2/projects/{PJ}/config"
+          r = requests.get(u, headers=H); cfg = r.json()
+          dom = cfg.get("authorizedDomains", [])
+          say("domains", r.status_code, dom, (cfg.get("error") or {}).get("message", "")[:150])
+          want = [d for d in ["talla.co.kr", "www.talla.co.kr"] if d not in dom]
+          if r.status_code == 200 and want:
+              p = requests.patch(u + "?updateMask=authorizedDomains", headers=H, json={"authorizedDomains": dom + want})
+              say("patch domains", p.status_code, p.json().get("authorizedDomains", (p.json().get("error") or {}).get("message", "")[:150]))
+          # monitoring
+          end = datetime.datetime.utcnow(); st = end - datetime.timedelta(days=1)
+          for m in ["firestore.googleapis.com/document/read_count"]:
+              r = requests.get(f"https://monitoring.googleapis.com/v3/projects/{PJ}/timeSeries", headers=H, params={
+                  "filter": f'metric.type="{m}"', "interval.startTime": st.isoformat("T")+"Z", "interval.endTime": end.isoformat("T")+"Z",
+                  "aggregation.alignmentPeriod": "86400s", "aggregation.perSeriesAligner": "ALIGN_SUM", "aggregation.crossSeriesReducer": "REDUCE_SUM"})
+              j = r.json()
+              say("mon", m, r.status_code, [p.get("value") for s in j.get("timeSeries", []) for p in s.get("points", [])][:3], (j.get("error") or {}).get("message", "")[:150])
+          # api keys
+          r = requests.get(f"https://apikeys.googleapis.com/v2/projects/{PJ}/locations/global/keys", headers=H)
+          for k in r.json().get("keys", []):
+              rs = k.get("restrictions", {})
+              say("key", k.get("displayName"), list(rs.keys()), [x.get("packageName") for x in rs.get("androidKeyRestrictions", {}).get("allowedApplications", [])][:3], rs.get("browserKeyRestrictions"))
+          if r.status_code != 200: say("keys", r.status_code, (r.json().get("error") or {}).get("message", "")[:150])
+          P
