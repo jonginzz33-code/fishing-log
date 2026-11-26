@@ -65,6 +65,8 @@ details summary{cursor:pointer;font-weight:800}
 .cN,.pN{color:var(--sky);font-weight:700}
 .alarm{border:0;border-radius:10px;padding:3px 10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
 .alarm.done{background:#1E4F3E;color:#9FF0CF}
+.sv{display:inline-block;background:#F2C14E;color:#2A1E00;border-radius:8px;padding:2px 9px;font-size:13px;font-weight:800;vertical-align:middle;margin-left:4px}
+.sv.sm{font-size:11.5px;padding:1px 7px;margin-left:2px}
 .cd{color:var(--sky);font-family:ui-monospace,Consolas,monospace}
 .rf{border:1.5px solid #3A6A88;background:transparent;color:#DDEAF2;border-radius:10px;padding:1px 8px;font-size:12px;cursor:pointer;font-family:inherit}
 .rf:disabled{opacity:.5}
@@ -571,6 +573,8 @@ details summary{cursor:pointer;font-weight:800}
     });
   };
 
+  // 저장(등록) 시각: added, 없으면 id 앞부분(저장한 순간의 시각)
+  function addedOf(n) { return +n.added || parseInt(String(n.id).slice(0, -4), 36) || 0; }
   function renderNeeds() {
     var ns = data.needs || [], st = data.needState || {}, q = $('nF').value.trim().toLowerCase();
     // 위 '지금 상태' 칸: 거래처 필요 제품 기준
@@ -595,7 +599,8 @@ details summary{cursor:pointer;font-weight:800}
     order.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
     $('nList').innerHTML = order.map(function (k) {
       var g = groups[k], gOk = g.filter(function (n) { return st[n.id] && st[n.id].sent; }).length;
-      return '<div class="ph">🏥 ' + esc(k) + ' <small style="color:var(--sub);font-weight:400">주문 ' + g.length + '개 · 알람 보냄 ' + gOk + '</small></div>' + g.map(function (n) {
+      var gAdded = Math.max.apply(null, g.map(addedOf));
+      return '<div class="ph">🏥 ' + esc(k) + (gAdded > 1.7e12 ? ' <span class="sv">💾 저장 ' + when(gAdded) + '</span>' : '') + ' <small style="color:var(--sub);font-weight:400">주문 ' + g.length + '개 · 알람 보냄 ' + gOk + '</small></div>' + g.map(function (n) {
         var s = st[n.id], badge, sub = [], has = s && s.t && typeof s.n === 'number';
         // 재고 상태
         if (!s || (!s.t && !has)) badge = '<span class="b u">확인 전</span>';
@@ -616,8 +621,8 @@ details summary{cursor:pointer;font-weight:800}
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (sent && s.at) sub.push('알람 ' + when(s.at));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
-        var added = n.added || parseInt(String(n.id).slice(0, -4), 36);
-        if (added > 1.7e12) sub.push('💾 저장 ' + when(added));
+        var added = addedOf(n);
+        if (added > 1.7e12 && g.length > 1) badge += ' <span class="sv sm">💾 ' + when(added) + '</span>'; // 여러 개일 땐 제품마다도
         return '<div class="ni' + (sent ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<div style="margin:4px 0 2px">' + alarm + '</div><small>' + sub.join(' · ') + '</small></div>' +
           '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
