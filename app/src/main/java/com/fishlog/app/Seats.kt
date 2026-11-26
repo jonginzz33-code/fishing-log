@@ -1047,12 +1047,16 @@ object Seats {
     }
 
     const val PERM = "seatAlarm"
-    fun allowed(c: Context): Boolean = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM) else prefs(c).getBoolean("seat_perm", false)
+    /** v7.13 (440): '예약' 화면은 관리자 · 'seat' 권한 받은 사람만 (뒤에서는 마지막으로 본 권한 prefs seat_use) */
+    const val PERM_USE = "seat"
+    fun canUse(c: Context): Boolean = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty() || Cloud.realAdmin) Cloud.can(PERM_USE) else prefs(c).getBoolean("seat_use", false)
+    fun allowed(c: Context): Boolean = canUse(c) && (if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM) else prefs(c).getBoolean("seat_perm", false))
     /** 권한 다시 받아 기억 · 없어졌으면 걸어 둔 알림 지움 */
     fun syncPerm(c: Context, done: () -> Unit) {
         fun apply() {
-            val ok = Cloud.can(PERM)
-            prefs(c).edit().putBoolean("seat_perm", ok).putBoolean("seat_p_s24", Cloud.can(PERM_S24)).putBoolean("seat_p_tf", Cloud.can(PERM_TF)).putBoolean("seat_p_auto", Cloud.can(PERM_AUTO)).apply()
+            val use = Cloud.can(PERM_USE)
+            val ok = use && Cloud.can(PERM)
+            prefs(c).edit().putBoolean("seat_use", use).putBoolean("seat_perm", ok).putBoolean("seat_p_s24", Cloud.can(PERM_S24)).putBoolean("seat_p_tf", Cloud.can(PERM_TF)).putBoolean("seat_p_auto", Cloud.can(PERM_AUTO)).apply()
             if (!ok && watches(c).isNotEmpty()) { saveWatches(c, emptyList()); schedule(c) }
             done()
         }
@@ -1077,7 +1081,7 @@ object Seats {
     private fun channel(c: Context) {
         val nm = c.getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CH) == null)
-            nm.createNotificationChannel(NotificationChannel(CH, "선상 빈자리 알림", NotificationManager.IMPORTANCE_HIGH).apply {
+            nm.createNotificationChannel(NotificationChannel(CH, "예약 · 빈자리 알림", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "알림 걸어 둔 배에 자리가 나면 바로 알려 줘요"; enableVibration(true) })
     }
 
@@ -1151,6 +1155,7 @@ object Seats {
     private val NEEDS = intArrayOf(1, 2, 3, 4, 6)
 
     fun show(a: Activity) {
+        if (!canUse(a)) { Ui.toast(a, "🔒 예약은 관리자에게 권한을 받은 분만 쓸 수 있어요"); syncPerm(a) {}; return }
         appCtx = a.applicationContext
         fun dp(v: Int) = Ui.dp(a, v)
         val p = prefs(a)
@@ -1196,7 +1201,7 @@ object Seats {
 
         // 제목 줄
         val head = Ui.row(a).apply { setPadding(dp(16), dp(8), dp(12), dp(4)) }
-        head.addView(Ui.text(a, 18f, Color.WHITE, true, "🚤 선상 빈자리"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        head.addView(Ui.text(a, 18f, Color.WHITE, true, "🚤 예약"), LinearLayout.LayoutParams(0, WRAP, 1f))
         val alarmBtn = Ui.pill(a, "🔔 0", false, Ui.TEXT, small = true)
         head.addView(alarmBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         // v7.07 (432): 🔄 새로고침 = 기억 비우고 다시 읽기

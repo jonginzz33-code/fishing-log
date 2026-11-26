@@ -766,7 +766,7 @@ object Cloud {
 
     // ---------------- 사용자 권한 (관리자가 체크박스로 켜고 끔, 기본 모두 꺼짐) ----------------
     /** 권한 이름 → 설명 */
-    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)", "wx" to "날씨 새로고침 (물때 창)", "liveMap" to "실시간 조과 지도 보기 (공유한 사람 경로·포인트)", "windy" to "🌬 윈디 바람 지도 보기 (물때 창)", "seatAlarm" to "🚤 선상 빈자리 · 자리 나면 알림", "s24" to "🚤 선상 빈자리 · 선상24 전체 보기", "tf" to "🎣 선상 빈자리 · 더피싱 전체 보기", "seatAuto" to "🤖 선상 빈자리 · 자리 나면 자동 예약 신청", "asUser" to "👤 일반 화면으로 전환 버튼 (시험용)")
+    val PERMS = listOf("group" to "그룹 만들기", "chatMod" to "전체 채팅 글 지우기 (채팅 도우미)", "wx" to "날씨 새로고침 (물때 창)", "liveMap" to "실시간 조과 지도 보기 (공유한 사람 경로·포인트)", "windy" to "🌬 윈디 바람 지도 보기 (물때 창)", "seat" to "🚤 예약 (선상 빈자리) 쓰기 · 앱 · 홈피", "seatAlarm" to "🚤 예약 · 자리 나면 알림", "s24" to "🚤 예약 · 선상24 전체 보기", "tf" to "🎣 예약 · 더피싱 전체 보기", "seatAuto" to "🤖 예약 · 자리 나면 자동 예약 신청", "asUser" to "👤 일반 화면으로 전환 버튼 (시험용)")
     @Volatile var myPerms: Set<String> = emptySet()
     fun can(p: String) = isAdmin || (!asUser && p in myPerms)
     fun loadMyPerms(done: (() -> Unit)? = null) {

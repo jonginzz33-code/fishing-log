@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>선상 빈자리</title>
+<title>예약</title>
 <link rel="icon" href="img/jogwa.png">
 <style>
 /* 412: 🚤 선상 빈자리 (홈피판) — 앱 '선상 빈자리'와 같은 모양 · 선단 홈페이지를 중계기(talla-relay)로 읽어요 */
@@ -60,9 +60,11 @@ h1{font-size:21px;margin:14px 0 8px}
 </style>
 </head>
 <body>
-<div class="wrap">
+<!-- v7.13 (440): 관리자 · '예약' 권한 받은 사람만 -->
+<div class="wrap" id="gate" style="text-align:center;padding-top:80px"><h1>🚤 예약</h1><p class="note" id="gateMsg">로그인 확인 중…</p><button class="btn" id="gateLogin" style="display:none;margin-top:14px">🔐 구글 로그인</button><p class="note" style="margin-top:18px"><a href="/">← 처음으로</a></p></div>
+<div class="wrap" id="appWrap" style="display:none">
 <nav><a class="logo" href="/"><span>talla</span>.co.kr</a><a class="note" href="/admin">관리</a></nav>
-<div style="display:flex;align-items:center;gap:8px"><h1 style="flex:1">🚤 선상 빈자리</h1><button class="btn" id="refresh">🔄 새로고침</button></div>
+<div style="display:flex;align-items:center;gap:8px"><h1 style="flex:1">🚤 예약</h1><button class="btn" id="refresh">🔄 새로고침</button></div>
 <div class="top">
   <div class="dbar"><button id="prev">‹</button><label class="day"><span id="dayTxt"></span><input type="date" id="day"></label><button id="next">›</button></div>
   <div class="pills">
@@ -77,7 +79,7 @@ h1{font-size:21px;margin:14px 0 8px}
   <div class="sum" id="sum"></div>
 </div>
 <div id="list"></div>
-<p class="note" style="margin-top:22px">선단 홈페이지 일정을 읽어 보여 줘요 (5분 안 기준) · 예약 · 입금은 각 선단 홈페이지에서 · 조과일지 앱의 '선상 빈자리'와 같아요</p>
+<p class="note" style="margin-top:22px">선단 홈페이지 일정을 읽어 보여 줘요 (5분 안 기준) · 예약 · 입금은 각 선단 홈페이지에서 · 조과일지 앱의 '예약'과 같아요</p>
 </div>
 <script>
 (function () {
@@ -395,12 +397,39 @@ h1{font-size:21px;margin:14px 0 8px}
   // 432: 🔄 = 읽은 것 비우고 다시 (중계기는 5분 기억이라 그 안이면 같은 값일 수 있어요)
   $('refresh').onclick = function () { schs = {}; loaded = {}; loading = {}; pre = {}; shown = 10; loadAll(); };
   $('day').value = day;
+  window.startFleets = function () {
   render();
   fetch('/data/fleets_off.json').then(function (r) { return r.json(); }).then(function (j) { (j.off || []).forEach(function (h) { OFF[h] = 1; }); }).catch(function () {});
   fetch('/data/fleets.json').then(function (r) { return r.json(); }).then(function (j) {
     DIR = j.f; AREAS = j.areas; DIR.forEach(function (f) { if (f[4] === '더피싱') DIR_TF[f[0]] = 1; });
     loadAll();
   }).catch(function () { $('list').innerHTML = '<p class="empty">선단 목록을 못 불러왔어요 · 새로고침해 주세요</p>'; });
+  };
+})();
+// v7.13 (440): 구글 로그인 + 관리자 또는 users/{uid}.perms.seat
+(function () {
+  var ADMIN = 'jonginzz33@gmail.com', started = false;
+  function load(src) { return new Promise(function (ok, no) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+  function msg(t, login) { document.getElementById('gateMsg').textContent = t; document.getElementById('gateLogin').style.display = login ? '' : 'none'; }
+  function open() { if (started) return; started = true; document.getElementById('gate').style.display = 'none'; document.getElementById('appWrap').style.display = ''; window.startFleets(); }
+  var V = '/__/firebase/10.14.1/';
+  window.tallaFb = (window.firebase ? Promise.resolve() : load(V + 'firebase-app-compat.js'))
+    .then(function () { return firebase.auth ? null : load(V + 'firebase-auth-compat.js'); })
+    .then(function () { return firebase.firestore ? null : load(V + 'firebase-firestore-compat.js'); })
+    .then(function () { return firebase.apps.length ? null : load('/__/firebase/init.js'); });
+  window.tallaFb
+    .then(function () {
+      document.getElementById('gateLogin').onclick = function () { firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(function (e) { msg('로그인 실패: ' + (e.message || e), true); }); };
+      firebase.auth().onAuthStateChanged(function (u) {
+        if (!u) { msg('예약은 관리자에게 권한을 받은 분만 볼 수 있어요 · 조과일지 앱과 같은 구글 계정으로 로그인해 주세요', true); return; }
+        if ((u.email || '').toLowerCase() === ADMIN) { open(); return; }
+        msg('권한 확인 중…', false);
+        firebase.firestore().collection('users').doc(u.uid).get().then(function (d) {
+          var p = (d.exists && d.data().perms) || {};
+          if (p.seat === true) open(); else msg('🔒 예약 권한이 없어요 · 관리자에게 \'🚤 예약 쓰기\' 권한을 받아 주세요', false);
+        }).catch(function () { msg('권한을 확인하지 못했어요 · 새로고침해 주세요', false); });
+      });
+    }).catch(function () { msg('로그인 준비를 못 했어요 · 새로고침해 주세요', false); });
 })();
 </script>
 <script src="menu.js"></script>

@@ -8,6 +8,7 @@
   function load(src) { return new Promise(function (ok, no) { var sc = document.createElement('script'); sc.src = src; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); }); }
   function ready() {
     if (window.firebase && firebase.apps && firebase.apps.length && firebase.auth) return Promise.resolve();
+    if (window.tallaFb) return window.tallaFb;   // 다른 스크립트(예약 화면)가 이미 불러오는 중
     var p = window.firebase ? Promise.resolve() : load('/__/firebase/10.14.1/firebase-app-compat.js');
     return p.then(function () { return firebase.auth ? null : load('/__/firebase/10.14.1/firebase-auth-compat.js'); })
       .then(function () { return firebase.apps.length ? null : load('/__/firebase/init.js'); });
@@ -69,7 +70,7 @@
       ['👥', '테스터 그룹 가입', 'https://groups.google.com/g/mytoilet-testers', '']] },
     { t: '🧰 도구', items: [
       ['🔗', '자주 가는 링크', '/links', ''],
-      ['🚤', '선상 빈자리 (홈피판)', '/fleets', '시험 중']] },
+      ['🚤', '예약 (홈피판)', '/fleets', '시험 중']] },
     { t: '🔐 관리', items: [
       ['🔐', '관리자 페이지', '/admin', '관리자만'],
       ['📋', '서버 규칙 복사', '/rules', '관리자만']] },

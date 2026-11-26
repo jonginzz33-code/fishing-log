@@ -129,6 +129,7 @@ class MainActivity : Activity() {
     private var forceUpdate = false
     private lateinit var chatBtn: TextView
     private lateinit var asUserBtn: TextView
+    private var seatMenuBtn: View? = null
     private var permsAsked = false
     private fun paintAsUser() {
         if (!::asUserBtn.isInitialized) return
@@ -355,7 +356,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        paintAsUser(); if (!permsAsked) { permsAsked = true; Cloud.loadMyPerms { runOnUiThread { paintAsUser() } } }
+        paintAsUser(); if (!permsAsked) { permsAsked = true; Seats.syncPerm(this) { runOnUiThread { paintAsUser(); seatMenuBtn?.visibility = if (Seats.canUse(this)) View.VISIBLE else View.GONE; paintQuick() } } }
         // 처음 한 번: 위치·개인정보 동의 (동의해야 사용)
         if (!Consent.ok(this)) {
             if (!consentOpen) { consentOpen = true; Consent.show(this) { consentOpen = false; recreate() } }
@@ -837,7 +838,8 @@ class MainActivity : Activity() {
         }, Ui.lp(this, MATCH, WRAP))
         menuBox.addView(Ui.button(this, "🗺 권역 낚시환경 (출조환경 · 예상조과)") { Region.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "🌐 자주 가는 사이트 (선사 예약)") { Boats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
-        menuBox.addView(Ui.button(this, "🚤 선상 빈자리 (선상24 · 자리 나면 알림)") { Seats.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
+        seatMenuBtn = Ui.button(this, "🚤 예약 (선상 빈자리 · 자리 나면 알림)") { Seats.show(this) }.apply { visibility = if (Seats.canUse(this@MainActivity)) View.VISIBLE else View.GONE }   // v7.13 (440 · 441)
+        menuBox.addView(seatMenuBtn, Ui.lp(this, MATCH, WRAP, top = 8))
         menuBox.addView(Ui.button(this, "📋 업데이트 내역") { History.show(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
         // v6.30 (282): 앱에서 바로 홈 화면에 위젯 놓기
         menuBox.addView(Ui.button(this, "📱 홈 화면에 위젯 추가 (퀵바 · 물때 · 가방)") { QuickWidget.pinMenu(this) }, Ui.lp(this, MATCH, WRAP, top = 8))
@@ -903,7 +905,7 @@ class MainActivity : Activity() {
     private lateinit var quickInline: LinearLayout
     private lateinit var quickRow: LinearLayout
     private lateinit var quickRowWrap: View
-    private class QItem(val id: String, private val icon0: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null,
+    private class QItem(val id: String, private val icon0: String, val label: String, val fill: String, val stroke: String, val admin: Boolean = false, val state: (() -> Boolean)? = null, /** v7.13 (440): 예약처럼 권한 받은 사람만 */ val perm: Boolean = false,
                         /** v6.35 (291): 그림이 상태에 따라 바뀌는 칸 */ val iconOf: (() -> String)? = null) {
         val icon: String get() = iconOf?.invoke() ?: icon0
     }
@@ -914,7 +916,7 @@ class MainActivity : Activity() {
         QItem("bag", "🎒", "가방", "#12301F", "#5FD39A"),
         QItem("region", "🗾", "권역", "#10283A", "#2FBF8F"),   // v6.46 (317) 권역 낚시환경
         QItem("boats", "🌐", "사이트", "#10283A", "#5BC8DF"),   // v6.23 (270) · v6.24 (272) 자주 가는 사이트
-        QItem("seat", "🚤", "빈자리", "#10283A", "#F2C14E"),   // v6.75 (380) 선상 빈자리
+        QItem("seat", "🚤", "예약", "#10283A", "#F2C14E", perm = true),   // v6.75 (380) 선상 빈자리
         QItem("groupwin", "👥", "그룹", "#12301F", "#2F6A48"),
         QItem("settings", "⚙", "설정", "#1A2A30", "#5FC4E0"),
         QItem("cal", "🎣", "추천", "#2A2410", "#6A5A22"),
@@ -941,7 +943,7 @@ class MainActivity : Activity() {
     private fun quickPrefs() = getSharedPreferences("fishlog", MODE_PRIVATE)
     private fun quickIds(): List<String> {
         val raw = quickPrefs().getString("quick_items", null) ?: "cal,group"
-        return raw.split(",").map { it.trim() }.filter { id -> QUICK.any { it.id == id && (!it.admin || Cloud.isAdmin) } }.distinct()
+        return raw.split(",").map { it.trim() }.filter { id -> QUICK.any { it.id == id && (!it.admin || Cloud.isAdmin) && (!it.perm || Seats.canUse(this)) } }.distinct()
     }
     private fun saveQuick(ids: List<String>) { quickPrefs().edit().putString("quick_items", ids.joinToString(",")).apply(); paintQuick() }
 
@@ -1054,7 +1056,7 @@ class MainActivity : Activity() {
             box.addView(Ui.text(this, 11.5f, Ui.SUB, false, "여기서 고른 칸이 위젯에도 같은 순서로 보여요 · 세로로 늘리면 두 줄").apply { setPadding(0, dp(4), 0, dp(10)) })
             box.addView(Ui.text(this, 12f, Ui.SUB, false, "체크한 메뉴가 맨 위 네모 칸으로 보여요 · ▲▼로 순서 · 2개까지는 ⚙ 옆, 3개부터는 제목 아래 한 줄 · ⚡ 퀵바 설정 칸은 늘 맨 끝에 고정"))
             val ids = quickIds().toMutableList()
-            val avail = QUICK.filter { !it.admin || Cloud.isAdmin }
+            val avail = QUICK.filter { (!it.admin || Cloud.isAdmin) && (!it.perm || Seats.canUse(this)) }
             val ordered = ids.mapNotNull { id -> avail.firstOrNull { it.id == id } } + avail.filter { it.id !in ids }
             ordered.forEach { q ->
                 val on = q.id in ids
