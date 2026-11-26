@@ -16,6 +16,9 @@ jobs:
           print("DSIZE",len(d),"blocks",d.count('ship_unit_ship_no_'),"title",re.findall(r'<title>([^<]*)',d)[:1])
           print("DTXT",re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',d))[:600])
           i=m.find('data-sdate="2026-12-02"')
-          print("MSEG",re.sub(r'\s+',' ',m[max(0,i-1500):i+1200]))
+          j=m.find('class="ship_unit_ship_no_',i)
+          k=m.find('class="ship_unit_ship_no_',j+30)
+          print("BLOCK",re.sub(r'\s+',' ',m[j:j+4000]))
+          i2=m.find('data-status_code',i); print("ST",sorted(set(re.findall(r'data-(?:ship_)?status_code="(\w+)"',m))))
           print("MLINKS",sorted(set(re.findall(r'schedule_fleet/[^"\' ]+',m)))[:15])
           Q
