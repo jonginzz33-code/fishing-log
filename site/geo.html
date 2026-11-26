@@ -130,7 +130,7 @@ details summary{cursor:pointer;font-weight:800}
     <p class="lead" style="margin:0 0 10px">거래처 · 제품은 저장해 둔 목록에서 자동완성돼요. 정한 간격마다 확인해서 재고가 필요 수량만큼 들어오면 휴대폰으로 알려줘요.</p>
     <div class="nf">
       <label>거래처 <span class="cN"></span><input id="nP" list="dlP" placeholder="약국 이름 (예: 해솔)" autocomplete="off"></label>
-      <label>제품 <span class="pN"></span><div class="ac"><input id="nN" placeholder="제품 이름 (예: 리바로 2mg)" autocomplete="off"><div class="acl hide" id="acl"></div></div></label>
+      <label>제품 <span class="pN"></span><div class="ac"><input id="nN" placeholder="제품 이름 또는 제품코드 (예: 리바로 2mg · 021753)" autocomplete="off"><div class="acl hide" id="acl"></div></div></label>
       <div class="nrow">
         <label>필요 수량<input id="nQ" type="number" min="1" value="1" inputmode="numeric"></label>
         <label>확인 간격<select id="nE">
@@ -147,7 +147,7 @@ details summary{cursor:pointer;font-weight:800}
   <div class="card">
     <h2>📋 필요재고목록 <span id="nCnt" style="color:var(--sub);font-size:14px"></span></h2>
     <p class="lead" style="margin:0 0 8px">거래처가 주문한 제품마다 <b>필요 수량</b>과 지오팜 <b>지금 재고</b>를 보여줘요.</p>
-    <input id="nF" placeholder="거래처 · 제품으로 찾기" style="margin-bottom:8px">
+    <input id="nF" placeholder="거래처 · 제품 · 제품코드로 찾기" style="margin-bottom:8px">
     <div class="msg" id="nMsg" style="margin:0 0 6px"></div>
     <div id="nList"></div>
   </div>
@@ -162,7 +162,7 @@ details summary{cursor:pointer;font-weight:800}
       <summary>📒 저장해 둔 거래처 <span class="cN"></span> · 제품 <span class="pN"></span> 목록 고치기</summary>
       <div id="pAdd" class="hide" style="margin-top:10px">
         <p class="lead" style="margin:0 0 6px">➕ 제품 목록에 따로 추가 — 지오팜에서 찾아서 고르면 자동완성 목록에 들어가요</p>
-        <div class="row"><input id="pQ" placeholder="제품명 두 글자 이상 (예: 리바로)" enterkeyhint="search"><button class="btn ok" id="pQbtn">검색</button></div>
+        <div class="row"><input id="pQ" placeholder="제품명 또는 제품코드 (예: 리바로 · 021753)" enterkeyhint="search"><button class="btn ok" id="pQbtn">검색</button></div>
         <div class="sr" id="pSr"></div>
       </div> — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
       <textarea id="cBulk" style="min-height:140px"></textarea>
@@ -391,7 +391,8 @@ details summary{cursor:pointer;font-weight:800}
   try { var c0 = JSON.parse(localStorage.getItem('geoProducts') || 'null'); if (c0) { prods = c0.products; prodsV = c0.v; } } catch (e) {}
   function setProds(list) {
     prods = list || [];
-    prodsLow = prods.map(function (p) { return p[0].toLowerCase().replace(/\s+/g, ''); });
+    // 이름 + 제품코드(021753:10169) 를 같이 찾음 → 제품넘버로도 검색됨
+    prodsLow = prods.map(function (p) { return p[0].toLowerCase().replace(/\s+/g, '') + ' ' + p[1]; });
     document.querySelectorAll('.pN').forEach(function (e) { e.textContent = '(' + prods.length.toLocaleString() + '개)'; });
     if ($('pBox').open && document.activeElement !== $('pBulk')) fillPBulk();
   }
@@ -476,9 +477,18 @@ details summary{cursor:pointer;font-weight:800}
     if (e.key === 'Escape') $('acl').classList.add('hide');
   };
 
+  // 숫자(제품코드)는 지오팜 검색이 못 찾아서, 저장해 둔 제품 목록에서 찾음
+  var isCode = function (q) { return /^\d{3,}(:\d*)?$/.test(q); };
+  function codeRows(q) {
+    return prods.filter(function (p) { return p[1].indexOf(q) >= 0; }).slice(0, 30).map(function (p) {
+      var c = p[1].split(',')[0].split(':');
+      return { code: c[0], sup: c[1], key: p[1], name: p[0], spec: '', maker: '', text: p[0], stock: null };
+    });
+  }
   window.doFind = function () {
     var q = $('nN').value.trim();
     if (q.length < 2) { $('sr').textContent = '두 글자 이상 입력해 주세요.'; return; }
+    if (isCode(q)) { var r0 = codeRows(q); $('sr').textContent = r0.length ? '' : '이 제품코드는 목록에 없어요.'; if (r0.length) { picked = [r0[0].name, r0[0].key]; $('nN').value = r0[0].name; hint(); } return; }
     $('qbtn').disabled = true; $('sr').textContent = '지오팜에서 검색 중…';
     call('search?q=' + encodeURIComponent(q), { wait: 45000 }).then(function (j) {
       $('qbtn').disabled = false;
@@ -557,7 +567,7 @@ details summary{cursor:pointer;font-weight:800}
         (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
       : '아직 필요 제품이 없어요. 아래에서 거래처 · 제품 · 필요 수량을 넣어 주세요.';
     $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cnt.ok + ')' : '';
-    var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name).toLowerCase().indexOf(q) >= 0; });
+    var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name + ' ' + n.code).toLowerCase().indexOf(q) >= 0; });
     var groups = {}, order = [];
     rows.forEach(function (n) { var k = n.pn || '(거래처 없음)'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(n); });
     order.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
@@ -596,6 +606,11 @@ details summary{cursor:pointer;font-weight:800}
   function pFind() {
     var q = $('pQ').value.trim(), box = $('pSr');
     if (q.length < 2) { box.textContent = '두 글자 이상 입력해 주세요.'; return; }
+    if (isCode(q)) {
+      var r0 = codeRows(q);
+      box.textContent = r0.length ? '“' + q + '” 는 이미 제품 목록에 있어요: ' + r0.map(function (x) { return x.name; }).join(' / ') : '이 제품코드는 목록에 없어요. 제품 이름으로 검색해 주세요.';
+      return;
+    }
     $('pQbtn').disabled = true; box.textContent = '지오팜에서 검색 중…';
     call('search?q=' + encodeURIComponent(q), { wait: 45000 }).then(function (j) {
       $('pQbtn').disabled = false; box.innerHTML = '';
