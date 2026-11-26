@@ -16,6 +16,7 @@
     { t: '', items: [['🏠', '홈', '/', '']] },
     { t: '📱 앱', items: [
       ['🎣', '조과일지', 'https://play.google.com/store/apps/details?id=kr.jogwailji.app', ''],
+      ['🌐', '조과일지 웹 (로그인)', '/app', ''],
       ['🚻', '급할 때', 'https://play.google.com/store/apps/details?id=kr.mytoilet.app', '']] },
     { t: '🧪 테스터', items: [
       ['🧪', '비공개 테스트 참여하기', '/#tester', ''],
@@ -48,7 +49,7 @@
   var dim = document.createElement('div'); dim.className = 'tm-dim';
   var pan = document.createElement('div'); pan.className = 'tm-pan';
   var here = location.pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
-  var h = '<div class="tm-head"><div>🎣 <span>talla</span>.co.kr</div><button class="tm-x" aria-label="닫기">✕</button></div>';
+  var h = '<div class="tm-head"><div><span>talla</span>.co.kr</div><button class="tm-x" aria-label="닫기">✕</button></div>';
   MENU.forEach(function (g) {
     if (g.t) h += '<div class="tm-t">' + g.t + '</div>';
     g.items.forEach(function (x) {

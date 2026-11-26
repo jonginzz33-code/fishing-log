@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>조과일지 웹</title>
+<link rel="icon" href="img/jogwa.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* 🎣 조과일지 웹 (보기 전용) — 앱과 같은 구글 계정으로 로그인 · 내 조과 · 그룹 출조 기록 · 전체 게시판 */
+:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--mine:#E8892A;--group:#2E8FB8;--all:#8A63D2;--ok:#2FBF8F}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.5}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px 60px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 58px 14px 0;border-bottom:1px solid #1E3446}
+.logo{font-size:20px;font-weight:900;text-decoration:none;color:inherit}.logo span{color:var(--sky)}
+.who{font-size:12.5px;color:var(--sub);text-align:right}
+.who button{margin-left:6px}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:22px;padding:11px 18px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit}
+.btn.ok{background:var(--ok);color:#04222A}.btn.ghost{background:transparent;color:#DDEAF2;border:1.5px solid #3A6A88}.btn.sm{padding:5px 12px;font-size:12.5px}
+.hide{display:none!important}
+.login{text-align:center;padding:50px 10px}
+.login img{width:84px;height:84px;border-radius:20px}
+.login h1{font-size:24px;margin:14px 0 4px}
+.login p{color:var(--sub);font-size:14px;margin:4px 0 20px}
+.msg{color:#FFB27A;font-size:13px;margin-top:12px;min-height:18px}
+.tabs{display:flex;gap:6px;margin:14px 0 4px;overflow-x:auto}
+.tab{flex:0 0 auto;border:1.5px solid #3A6A88;border-radius:99px;padding:8px 16px;font-weight:800;font-size:14px;cursor:pointer;background:transparent;color:#DDEAF2;font-family:inherit}
+.tab.on{color:#fff}
+.tab[data-t=mine].on{background:var(--mine);border-color:var(--mine)}
+.tab[data-t=group].on{background:var(--group);border-color:var(--group)}
+.tab[data-t=all].on{background:var(--all);border-color:var(--all)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:10px;text-align:center}
+.stat b{display:block;font-size:20px}.stat small{color:var(--sub);font-size:12px}
+.sel{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{border:1.5px solid #3A6A88;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:800;cursor:pointer;background:transparent;color:#DDEAF2;font-family:inherit}
+.chip.on{background:var(--group);border-color:var(--sky);color:#fff}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:10px;cursor:pointer;display:flex;gap:12px;align-items:center}
+.card:hover{border-color:#3A6A88}
+.card .d{width:54px;text-align:center;flex:0 0 auto;border-right:1px solid #1E3446;padding-right:10px}
+.card .d b{display:block;font-size:22px;line-height:1.1}.card .d small{color:var(--sub);font-size:11.5px}
+.card .m{flex:1;min-width:0}
+.card .t{font-weight:800;font-size:15px}
+.card .s{color:var(--sub);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .n{font-size:20px;font-weight:900;color:#FFD36E;flex:0 0 auto}
+.card .n small{font-size:12px;color:var(--sub);font-weight:400}
+.sp{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:#16324A;color:#BFE0FF;margin:3px 4px 0 0}
+.tag{display:inline-block;font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:7px;color:#fff;margin-left:6px;vertical-align:2px}
+.note{color:var(--sub);font-size:13px}
+.empty{color:var(--sub);text-align:center;padding:30px 0}
+.more{display:block;margin:14px auto 0}
+/* 상세 */
+.dim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#0E1F2C;border:1.5px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;width:100%;max-width:820px;max-height:92vh;overflow-y:auto;padding:14px 16px 30px}
+.sheet .hd{display:flex;align-items:center;gap:10px;position:sticky;top:-14px;background:#0E1F2C;padding:4px 0 8px;z-index:5}
+.sheet .hd h2{flex:1;font-size:18px;margin:0}
+.big{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.big .b{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;font-size:14px}
+.big .b b{color:#FFD36E;font-size:18px;margin-left:4px}
+h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
+#map{height:320px;border-radius:14px;border:1.5px solid var(--line);margin-top:6px;background:#12283A}
+.bars{display:flex;align-items:flex-end;gap:3px;height:110px;margin-top:6px;padding-top:16px}
+.bars .c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bars .c i{display:block;width:100%;border-radius:4px 4px 0 0;background:var(--mine)}
+.bars .c span{font-size:10px;color:var(--sub);margin-top:2px}.bars .c em{font-size:10px;color:#FFD36E;font-style:normal}
+.rows div{display:flex;justify-content:space-between;border-top:1px solid #1E3446;padding:6px 0;font-size:14px}
+.rows div:first-child{border-top:0}
+.wx{font-size:13px;color:#B8CAD6;white-space:pre-wrap}
+.photo{width:100%;max-width:360px;border-radius:14px;margin-top:6px;border:1.5px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><a class="logo" href="/"><span>talla</span>.co.kr</a><div class="who" id="who"></div></nav>
+
+<div id="setup" class="login hide"><p>⚠ 로그인 준비 중이에요 · 잠시 뒤 다시 열어 주세요</p></div>
+
+<div id="login" class="login hide">
+  <img src="img/jogwa.png" alt="">
+  <h1>조과일지 웹</h1>
+  <p>앱에서 쓰는 <b>같은 구글 계정</b>으로 로그인하면<br>내 조과 · 그룹 출조 기록 · 전체 게시판을 볼 수 있어요</p>
+  <button class="btn ok" id="loginBtn">G&nbsp; 구글로 로그인</button>
+  <div class="msg" id="loginMsg"></div>
+  <p class="note" style="margin-top:26px">보기 전용이에요 · 기록 · 고치기는 앱에서 해요</p>
+</div>
+
+<div id="main" class="hide">
+  <div class="tabs">
+    <button class="tab on" data-t="mine">📒 내 조과</button>
+    <button class="tab" data-t="group">👥 그룹</button>
+    <button class="tab" data-t="all">📰 전체 게시판</button>
+  </div>
+  <div id="view"></div>
+</div>
+</div>
+
+<script src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
+<script src="/__/firebase/10.14.1/firebase-auth-compat.js"></script>
+<script src="/__/firebase/10.14.1/firebase-firestore-compat.js"></script>
+<script src="/__/firebase/init.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function show(id) { ['setup', 'login', 'main'].forEach(function (k) { $(k).classList.toggle('hide', k !== id); }); }
+  if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) { show('setup'); return; }
+  var auth = firebase.auth(), db = firebase.firestore();
+  var me = null, tab = 'mine';
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  function d8(ms) { var d = new Date(ms); return d.getFullYear() + '.' + (d.getMonth() + 1) + '.' + d.getDate() + ' (' + DOW[d.getDay()] + ')'; }
+  function hm(ms) { var d = new Date(ms); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function dur(a, b) { if (!a || !b || b < a) return ''; var m = Math.round((b - a) / 60000); return (m >= 60 ? Math.floor(m / 60) + '시간 ' : '') + (m % 60 ? m % 60 + '분' : ''); }
+  function nameOf(names, s) { return (names && names[s - 1]) || (s + '번'); }
+
+  // 출조 하나를 같은 모양으로: {key, src, who, start, end, cat, boat, port, names[], catches:[{t,s,la,lo}], track:[[la,lo]], wx, thumb, ref}
+  function counts(t) {
+    var m = {};
+    t.catches.forEach(function (c) { var n = nameOf(t.names, c.s); m[n] = (m[n] || 0) + 1; });
+    return Object.keys(m).map(function (k) { return [k, m[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
+  }
+  function fromMine(d) {
+    try {
+      var o = JSON.parse(d.data().json || '{}');
+      return { key: 'm' + d.id, src: 'mine', who: '나', start: o.start, end: o.end, cat: o.cat || '', boat: o.boat || '', port: o.port || '', names: o.names || [],
+        catches: (o.catches || []).map(function (c) { return { t: c[0], s: c[1], la: c.length >= 4 ? c[2] : null, lo: c.length >= 4 ? c[3] : null }; }),
+        track: (o.track || []).map(function (p) { return [p[1], p[2]]; }), wx: o.wx || '' };
+    } catch (e) { return null; }
+  }
+  function fromDoc(d, src, gname) {
+    var x = d.data();
+    return { key: src[0] + d.id, src: src, who: x.ownerName || x.nick || '?', gname: gname || x.gname || '', start: x.start, end: x.end, cat: x.cat || '', boat: x.boat || '', port: x.port || '',
+      names: x.names || [], catches: (x.catches || []).map(function (c) { return { t: c.t, s: c.s, la: c.la == null ? null : c.la, lo: c.lo == null ? null : c.lo }; }),
+      track: null, hasTrack: !!x.hasTrack || !!x.pts, wx: x.wx || '', thumb: x.mthumb || '', prec: x.prec, ref: d.ref, total: x.total };
+  }
+
+  function card(t) {
+    var cs = counts(t), d = new Date(t.start || 0);
+    var tot = t.catches.length || t.total || 0;
+    var col = { mine: 'var(--mine)', group: 'var(--group)', all: 'var(--all)' }[t.src];
+    var sub = [t.cat, t.boat, t.port, dur(t.start, t.end)].filter(Boolean).join(' · ');
+    return '<div class="card" data-k="' + esc(t.key) + '"><div class="d"><b>' + d.getDate() + '</b><small>' + (d.getMonth() + 1) + '월 ' + DOW[d.getDay()] + '</small></div>' +
+      '<div class="m"><div class="t">' + (t.src === 'mine' ? esc(sub.split(' · ')[0] || '출조') : esc(t.who)) +
+      (t.src !== 'mine' ? '<span class="tag" style="background:' + col + '">' + (t.src === 'group' ? esc(t.gname || '그룹') : '전체') + '</span>' : '') + '</div>' +
+      '<div class="s">' + esc(d.getFullYear() + '년 · ' + (t.src === 'mine' ? sub.split(' · ').slice(1).join(' · ') : sub)) + '</div>' +
+      '<div>' + cs.slice(0, 4).map(function (x) { return '<span class="sp">' + esc(x[0]) + ' ' + x[1] + '</span>'; }).join('') + '</div></div>' +
+      '<div class="n">' + tot + '<small>마리</small></div></div>';
+  }
+  var cache = {};
+  function list(arr, el) {
+    arr.forEach(function (t) { cache[t.key] = t; });
+    el.insertAdjacentHTML('beforeend', arr.map(card).join(''));
+  }
+  $('view').addEventListener('click', function (e) {
+    var c = e.target.closest('.card'); if (c && cache[c.dataset.k]) detail(cache[c.dataset.k]);
+  });
+
+  // 📒 내 조과
+  function viewMine() {
+    var v = $('view'); v.innerHTML = '<p class="note">불러오는 중…</p>';
+    db.collection('users').doc(me.uid).collection('trips').orderBy('start', 'desc').get().then(function (q) {
+      var all = q.docs.map(fromMine).filter(Boolean);
+      var years = {}; all.forEach(function (t) { years[new Date(t.start).getFullYear()] = 1; });
+      var ys = Object.keys(years).sort().reverse(), cur = 'all';
+      function draw() {
+        var l = cur === 'all' ? all : all.filter(function (t) { return String(new Date(t.start).getFullYear()) === cur; });
+        var tot = l.reduce(function (s, t) { return s + t.catches.length; }, 0);
+        var best = {}; l.forEach(function (t) { counts(t).forEach(function (x) { best[x[0]] = (best[x[0]] || 0) + x[1]; }); });
+        var top = Object.keys(best).sort(function (a, b) { return best[b] - best[a]; })[0];
+        v.innerHTML = '<div class="sel">' + ['all'].concat(ys).map(function (y) { return '<button class="chip' + (y === cur ? ' on' : '') + '" data-y="' + y + '">' + (y === 'all' ? '전체' : y + '년') + '</button>'; }).join('') + '</div>' +
+          '<div class="stats"><div class="stat"><b>' + l.length + '</b><small>출조</small></div><div class="stat"><b>' + tot + '</b><small>마리</small></div><div class="stat"><b>' + esc(top || '-') + '</b><small>가장 많이 · ' + (top ? best[top] : 0) + '</small></div></div>' +
+          '<div id="lst"></div>' + (l.length ? '' : '<p class="empty">서버에 백업된 출조가 없어요<br><small>앱에서 출조를 끝내면 자동으로 서버에 백업돼요</small></p>');
+        list(l, $('lst'));
+        v.querySelectorAll('[data-y]').forEach(function (b) { b.onclick = function () { cur = b.dataset.y; draw(); }; });
+      }
+      draw();
+    }).catch(function (e) { v.innerHTML = '<p class="empty">못 불러왔어요 · ' + esc(e.code || e.message) + '</p>'; });
+  }
+
+  // 👥 그룹
+  var groups = null, gSel = null;
+  function viewGroup() {
+    var v = $('view'); v.innerHTML = '<p class="note">불러오는 중…</p>';
+    function go() {
+      if (!groups.length) { v.innerHTML = '<p class="empty">가입한 그룹이 없어요</p>'; return; }
+      if (!gSel) gSel = groups[0].id;
+      v.innerHTML = '<div class="sel">' + groups.map(function (g) { return '<button class="chip' + (g.id === gSel ? ' on' : '') + '" data-g="' + g.id + '">' + esc(g.name) + ' · ' + g.n + '명</button>'; }).join('') + '</div><div id="lst"><p class="note">불러오는 중…</p></div>';
+      v.querySelectorAll('[data-g]').forEach(function (b) { b.onclick = function () { gSel = b.dataset.g; go(); }; });
+      var g = groups.filter(function (x) { return x.id === gSel; })[0];
+      var last = null, el = $('lst');
+      function page() {
+        var q = db.collection('groups').doc(g.id).collection('trips').orderBy('start', 'desc').limit(30);
+        if (last) q = q.startAfter(last);
+        q.get().then(function (s) {
+          if (!last) el.innerHTML = '';
+          var old = el.querySelector('.more'); if (old) old.remove();
+          last = s.docs[s.docs.length - 1];
+          list(s.docs.map(function (d) { return fromDoc(d, 'group', g.name); }), el);
+          if (!s.size && !el.children.length) el.innerHTML = '<p class="empty">아직 올린 출조가 없어요</p>';
+          if (s.size === 30) { el.insertAdjacentHTML('beforeend', '<button class="btn ghost sm more">⬇ 더 보기</button>'); el.querySelector('.more').onclick = page; }
+        }).catch(function (e) { el.innerHTML = '<p class="empty">못 불러왔어요 · ' + esc(e.code || e.message) + '</p>'; });
+      }
+      page();
+    }
+    if (groups) return go();
+    db.collection('users').doc(me.uid).get().then(function (u) {
+      var ids = (u.exists && u.data().groups) || [];
+      return Promise.all(ids.map(function (id) { return db.collection('groups').doc(id).get().then(function (g) { return g.exists ? { id: id, name: g.data().name || '그룹', n: (g.data().members || []).length } : null; }).catch(function () { return null; }); }));
+    }).then(function (l) { groups = (l || []).filter(Boolean); go(); })
+      .catch(function (e) { v.innerHTML = '<p class="empty">못 불러왔어요 · ' + esc(e.code || e.message) + '</p>'; });
+  }
+
+  // 📰 전체 게시판
+  function viewAll() {
+    var v = $('view'); v.innerHTML = '<div id="lst"><p class="note">불러오는 중…</p></div>';
+    var last = null, el = $('lst');
+    function page() {
+      var q = db.collection('public').orderBy('start', 'desc').limit(30);
+      if (last) q = q.startAfter(last);
+      q.get().then(function (s) {
+        if (!last) el.innerHTML = '';
+        var old = el.querySelector('.more'); if (old) old.remove();
+        last = s.docs[s.docs.length - 1];
+        list(s.docs.map(function (d) { return fromDoc(d, 'all'); }), el);
+        if (s.size === 30) { el.insertAdjacentHTML('beforeend', '<button class="btn ghost sm more">⬇ 더 보기</button>'); el.querySelector('.more').onclick = page; }
+      }).catch(function (e) { el.innerHTML = '<p class="empty">못 불러왔어요 · ' + esc(e.code || e.message) + '</p>'; });
+    }
+    page();
+  }
+
+  // 상세 (밑에서 올라오는 창)
+  var map = null;
+  function detail(t) {
+    var cs = counts(t), tot = t.catches.length;
+    var dim = document.createElement('div'); dim.className = 'dim';
+    var hrs = {}; t.catches.forEach(function (c) { var h = new Date(c.t).getHours(); hrs[h] = (hrs[h] || 0) + 1; });
+    var hk = Object.keys(hrs).map(Number); var h0 = Math.min.apply(null, hk.concat([new Date(t.start).getHours()])), h1 = Math.max.apply(null, hk.concat([new Date(t.end || t.start).getHours()]));
+    var mx = Math.max.apply(null, Object.keys(hrs).map(function (k) { return hrs[k]; }).concat([1]));
+    var bars = ''; for (var h = h0; h <= h1 && h - h0 < 24; h++) bars += '<div class="c">' + (hrs[h] ? '<em>' + hrs[h] + '</em>' : '') + '<i style="height:' + ((hrs[h] || 0) / mx * 80) + '%"></i><span>' + h + '</span></div>';
+    var hasPts = t.catches.some(function (c) { return c.la != null; });
+    dim.innerHTML = '<div class="sheet"><div class="hd"><h2>' + esc(d8(t.start)) + (t.src !== 'mine' ? ' · ' + esc(t.who) : '') + '</h2><button class="btn ghost sm" id="x">닫기</button></div>' +
+      '<div class="note">' + esc([t.cat, t.boat, t.port, hm(t.start) + (t.end ? ' ~ ' + hm(t.end) : ''), dur(t.start, t.end), t.gname].filter(Boolean).join(' · ')) + '</div>' +
+      '<div class="big"><div class="b">총<b>' + (tot || t.total || 0) + '</b>마리</div>' + cs.map(function (x) { return '<div class="b">' + esc(x[0]) + '<b>' + x[1] + '</b></div>'; }).join('') + '</div>' +
+      (t.thumb ? '<h3>📷 대표 사진</h3><img class="photo" src="data:image/jpeg;base64,' + t.thumb + '">' : '') +
+      (tot ? '<h3>⏰ 시간대별</h3><div class="bars">' + bars + '</div>' : '') +
+      '<h3>🗺 지도</h3><div id="map"></div><div class="note" id="mapNote">' + (t.src === 'all' && t.prec !== 'exact' && t.prec !== true ? '게시판 글은 위치가 대략일 수 있어요' : '') + '</div>' +
+      (t.wx ? '<h3>🌤 그날 날씨</h3><div class="wx">' + esc(String(t.wx).slice(0, 600)) + '</div>' : '') +
+      (tot ? '<h3>🐟 잡은 시각</h3><div class="rows">' + t.catches.slice().sort(function (a, b) { return a.t - b.t; }).map(function (c, i) { return '<div><span>' + (i + 1) + '. ' + esc(nameOf(t.names, c.s)) + '</span><span class="note">' + hm(c.t) + '</span></div>'; }).join('') + '</div>' : '') +
+      '</div>';
+    document.body.appendChild(dim); document.body.style.overflow = 'hidden';
+    function close() { if (map) { map.remove(); map = null; } dim.remove(); document.body.style.overflow = ''; }
+    dim.addEventListener('click', function (e) { if (e.target === dim) close(); });
+    dim.querySelector('#x').onclick = close;
+    if (typeof L === 'undefined') { $('map').outerHTML = '<p class="note">지도를 못 불러왔어요</p>'; return; }
+    map = L.map('map', { zoomControl: true }).setView([36.5, 126.5], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+    var b = [];
+    function drawTrack(pts) {
+      if (!pts || pts.length < 2) return;
+      L.polyline(pts, { color: '#7FD6FF', weight: 3, opacity: .8 }).addTo(map); pts.forEach(function (p) { b.push(p); });
+      fit();
+    }
+    t.catches.forEach(function (c, i) {
+      if (c.la == null) return;
+      L.circleMarker([c.la, c.lo], { radius: 6, color: '#fff', weight: 1.5, fillColor: '#E8892A', fillOpacity: .95 }).addTo(map).bindPopup(esc(nameOf(t.names, c.s)) + ' · ' + hm(c.t));
+      b.push([c.la, c.lo]);
+    });
+    function fit() { if (b.length) map.fitBounds(b, { padding: [24, 24], maxZoom: 14 }); }
+    fit();
+    if (t.track) drawTrack(t.track);
+    else if (t.hasTrack && t.ref) {
+      var tr = t.src === 'group' ? t.ref.collection('detail').doc('track') : t.ref.collection('photos').doc('track');
+      tr.get().then(function (d) { var p = d.exists && d.data().pts; if (p) drawTrack(p.map(function (x) { return [x.la, x.lo]; })); }).catch(function () {});
+    }
+    if (!hasPts && !t.hasTrack && !(t.track && t.track.length)) $('mapNote').textContent = '위치 기록이 없어요';
+    setTimeout(function () { map && map.invalidateSize(); fit(); }, 200);
+  }
+
+  function go(t) {
+    tab = t;
+    document.querySelectorAll('.tab').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
+    if (t === 'mine') viewMine(); else if (t === 'group') viewGroup(); else viewAll();
+  }
+  document.querySelectorAll('.tab').forEach(function (b) { b.onclick = function () { go(b.dataset.t); }; });
+
+  $('loginBtn').onclick = function () {
+    var p = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(p).catch(function (e) {
+      if (/popup-blocked|operation-not-supported/i.test(e.code || '')) return auth.signInWithRedirect(p);
+      if (/cancel|closed/i.test(e.code || '')) return;
+      $('loginMsg').textContent = '로그인 실패 · ' + (e.code || e.message);
+    });
+  };
+  auth.onAuthStateChanged(function (u) {
+    me = u;
+    if (!u) { $('who').innerHTML = ''; show('login'); return; }
+    $('who').innerHTML = esc(u.displayName || u.email) + ' <button class="btn ghost sm" id="out">로그아웃</button>';
+    $('out').onclick = function () { groups = null; gSel = null; auth.signOut(); };
+    show('main'); go(tab);
+  });
+})();
+</script>
+<script src="menu.js"></script>
+</body>
+</html>
