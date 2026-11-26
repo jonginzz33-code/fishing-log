@@ -259,6 +259,17 @@ console.log('[v6.68 크기 제한 · 포인트 핀]');
   await ok('관리자 메모', setDoc(doc(ADM, 'adminNotes/main'), { text: '메모', t: now }));
   await no('남이 관리자 메모 보기', getDoc(doc(B, 'adminNotes/main')));
 }
+// v6.92 (409): 더피싱 본 배
+{
+  await ok('본 배 올리기', setDoc(doc(B, 'tfSeen/ssfish.thefishing.kr'), { s: { '6127': '테티스호' }, t: now }, { merge: true }));
+  await ok('다른 사람 본 배 더하기', setDoc(doc(A, 'tfSeen/ssfish.thefishing.kr'), { s: { '6128': '힐링호' }, t: now }, { merge: true }));
+  await ok('누구나 본 배 읽기', getDoc(doc(ADM, 'tfSeen/ssfish.thefishing.kr')));
+  await no('본 배 이상한 칸', setDoc(doc(B, 'tfSeen/x.thefishing.kr'), { s: {}, t: now, x: 1 }));
+  await no('본 배 이상한 주소', setDoc(doc(B, 'tfSeen/Bad Host!'), { s: {}, t: now }));
+  const big = {}; for (let i = 0; i < 61; i++) big['u' + i] = 'n';
+  await no('본 배 61척', setDoc(doc(B, 'tfSeen/y.thefishing.kr'), { s: big, t: now }));
+  await no('사용자가 본 배 지우기', deleteDoc(doc(B, 'tfSeen/ssfish.thefishing.kr')));
+}
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);

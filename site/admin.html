@@ -75,9 +75,10 @@ textarea{min-height:140px;resize:vertical}
   </div>
   <div class="card"><div id="ships" class="note">불러오는 중…</div></div>
 
-  <h2>🔎 선상24 배 목록에서 찾기 (자동으로 모은 배)</h2>
+  <h2>🔎 배 검색 — 선상24 · 더피싱 · 폰이 찾은 배 (관리자만)</h2>
   <div class="card">
-    <input id="q" placeholder="배 이름 또는 항구 (예: 동백, 오천항)">
+    <input id="q" placeholder="배 이름 · 항구 · 선단 (예: 동백, 오천항, 무창포)">
+    <div id="seenN" class="note" style="margin-top:6px"></div>
     <div id="qRes" class="note" style="margin-top:8px"></div>
   </div>
 
@@ -119,7 +120,7 @@ textarea{min-height:140px;resize:vertical}
     if (!u) { $('who').textContent = ''; show('login'); return; }
     $('who').textContent = u.email;
     if ((u.email || '').toLowerCase() !== ADMIN) { show('deny'); return; }
-    show('main'); loadShips(); loadMemo();
+    show('main'); loadShips(); loadMemo(); loadSeen();
   });
 
   // 🚤 배 추가 · 목록
@@ -161,21 +162,42 @@ textarea{min-height:140px;resize:vertical}
       .catch(function (e) { $('saveMsg').textContent = '저장 못 했어요: ' + (e.code || e.message) + ' (서버 규칙 게시가 필요할 수 있어요)'; });
   };
 
-  // 🔎 자동으로 모은 선상24 배 목록 (data/seat_sites.json)
-  var sites = null;
-  fetch('data/seat_sites.json').then(function (r) { return r.json(); }).then(function (j) { sites = j.ships || {}; }).catch(function () { sites = {}; });
+  // 🔎 v6.92 (409): 배 검색 = 선상24(data/seat_sites.json) + 더피싱(data/tf_sites.json) + 폰이 선단 화면에서 찾은 배(tfSeen)
+  var all = [];
+  fetch('data/seat_sites.json').then(function (r) { return r.json(); }).then(function (j) {
+    var o = j.ships || {}; Object.keys(o).forEach(function (no) { var s = o[no]; all.push({ src: '선상24', n: s.n, p: s.p, h: s.h, t: s.t, b: s.b }); });
+  }).catch(function () {});
+  var tfHost = {};
+  fetch('data/tf_sites.json').then(function (r) { return r.json(); }).then(function (j) {
+    (j.j || []).forEach(function (x) {
+      var area = String(x[2] || ''); tfHost[x[6]] = tfHost[x[6]] || { area: area, fleet: x[3] };
+      all.push({ src: '더피싱', n: x[1], p: area.split(' > ').pop(), a: area, f: x[3], h: x[6], fish: x[4] });
+    });
+  }).catch(function () {});
+  function loadSeen() {
+    db.collection('tfSeen').get().then(function (q) {
+      var have = {}; all.forEach(function (s) { if (s.src === '더피싱') have[s.h + '|' + String(s.n).replace(/\s/g, '')] = 1; });
+      var n = 0;
+      q.forEach(function (d) {
+        var m = (d.data() || {}).s || {}, ref = tfHost[d.id] || {};
+        Object.keys(m).forEach(function (uid) {
+          var nm = String(m[uid] || ''); if (!nm || have[d.id + '|' + nm.replace(/\s/g, '')]) return;
+          all.push({ src: '폰이 찾음', n: nm, p: (ref.area || '').split(' > ').pop(), a: ref.area, f: ref.fleet, h: d.id }); n++;
+        });
+      });
+      $('seenN').textContent = n ? '폰이 선단 화면에서 찾아 자동으로 넣은 배 ' + n + '척' : '';
+    }).catch(function () {});
+  }
+  var COL = { '선상24': '#3D7BD9', '더피싱': '#2FA06F', '폰이 찾음': '#8A63D2' };
   $('q').oninput = function () {
     var k = $('q').value.replace(/\s/g, '').replace(/호$/, '');
-    if (!k || !sites) { $('qRes').innerHTML = ''; return; }
-    var out = [];
-    Object.keys(sites).forEach(function (no) {
-      var s = sites[no]; var n = (s.n || '').replace(/\s/g, ''), p = (s.p || '').replace(/\s/g, '');
-      if (n.indexOf(k) >= 0 || p.indexOf(k) >= 0) out.push(s);
-    });
-    $('qRes').innerHTML = out.length ? out.slice(0, 30).map(function (s, i) {
-      return '<div class="item"><div class="t"><b>' + esc(s.n) + '</b><small>' + esc([s.p, s.h, s.t, s.b].filter(Boolean).join(' · ')) + '</small></div>' +
-        (s.h ? '<button class="btn ghost sm" data-i="' + i + '">＋</button>' : '') + '</div>';
-    }).join('') + (out.length > 30 ? '<div class="note">… ' + out.length + '척 중 30척</div>' : '') : '못 찾았어요';
+    if (!k) { $('qRes').innerHTML = ''; return; }
+    var out = all.filter(function (s) { return [s.n, s.p, s.a, s.f].some(function (v) { return String(v || '').replace(/\s/g, '').indexOf(k) >= 0; }); });
+    $('qRes').innerHTML = out.length ? out.slice(0, 40).map(function (s, i) {
+      return '<div class="item"><div class="t"><b>' + esc(s.n) + '</b> <span style="font-size:11px;color:#fff;background:' + COL[s.src] + ';border-radius:6px;padding:1px 6px">' + esc(s.src) + '</span>' +
+        '<small>' + esc([s.p, s.f, s.h, s.t, s.b, s.fish].filter(Boolean).join(' · ')) + '</small></div>' +
+        (s.h ? '<a class="btn ghost sm" href="https://' + esc(s.h) + '" target="_blank" rel="noopener">🌐</a><button class="btn ghost sm" data-i="' + i + '">＋</button>' : '') + '</div>';
+    }).join('') + (out.length > 40 ? '<div class="note">… ' + out.length + '척 중 40척</div>' : '') : '못 찾았어요';
     $('qRes').querySelectorAll('[data-i]').forEach(function (b) { b.onclick = function () {
       var s = out[+b.dataset.i]; resetForm();
       $('fName').value = s.n || ''; $('fUrl').value = s.h || ''; $('fPort').value = s.p || ''; $('fTel').value = s.t || '';

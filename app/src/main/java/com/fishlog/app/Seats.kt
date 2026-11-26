@@ -108,6 +108,21 @@ object Seats {
     }
     fun isS24Fleet(host: String) = host.endsWith(".sunsang24.com")
 
+    // ─────────────── v6.92 (410): 플랫폼(선상24 · 더피싱 원 홈페이지) 자료는 관리자 · 권한 있는 사람이 켰을 때만 ───────────────
+    // 모두에게 = 개인 선단 사이트(○○.sunsang24.com · ○○.thefishing.kr · 개인 사이트)만 · 뒤에서는 마지막으로 본 권한(prefs seat_p_*)
+    const val PERM_S24 = "s24"
+    const val PERM_TF = "tf"
+    fun canS24(c: Context) = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM_S24) else prefs(c).getBoolean("seat_p_s24", false)
+    fun canTf(c: Context) = if (Cloud.isAdmin || Cloud.myPerms.isNotEmpty()) Cloud.can(PERM_TF) else prefs(c).getBoolean("seat_p_tf", false)
+    fun s24On(c: Context) = canS24(c) && prefs(c).getBoolean("seat_s24on", false)
+    fun tfOn(c: Context) = canTf(c) && prefs(c).getBoolean("seat_tfon", false)
+    /** 선상24 지역 이름 → 더피싱 목록 지역 글자 (더피싱 전체 보기에서 그 지역 선단 고르기) */
+    private val AREA_KW = mapOf("인천인근" to listOf("인천", "영흥도"), "평택인근" to listOf("평택", "화성", "당진"), "태안인근" to listOf("태안", "안면도", "서산"),
+        "보령인근" to listOf("보령", "홍성"), "군산인근" to listOf("군산", "서천", "격포"), "영광인근" to listOf("영광"), "목포인근" to listOf("목포"),
+        "진도인근" to listOf("진도", "해남"), "여수인근" to listOf("여수"), "통영인근" to listOf("통영"), "삼천포인근" to listOf("사천", "삼천포"),
+        "완도인근" to listOf("완도", "고흥", "녹동"), "제주인근" to listOf("제주"), "서귀포인근" to listOf("제주"), "성산포인근" to listOf("제주"), "모슬포인근" to listOf("제주"))
+    fun areaKw(sel: Set<String>) = sel.flatMap { AREA_KW[it] ?: listOf(it.removeSuffix("인근")) }.distinct()
+
     // ─────────────── v6.91 (402): 관리자가 홈피(talla.co.kr/admin)에서 넣은 배 → 모든 앱에 기본 선단처럼 ───────────────
     // Firestore extraShips/{id} {name, url, port, tel, memo, t} · 폰 prefs 에 6시간 기억 · 내 선단 목록엔 안 넣음(따로 붙여 읽기)
     class Extra(val name: String, val host: String, val port: String, val tel: String, val memo: String)
@@ -498,6 +513,18 @@ object Seats {
         return out.filter { it.date.replace("-", "").take(6) == ym }.distinctBy { it.date + it.shipNo }
     }
 
+    /** v6.92 (410): 더피싱 선단 · 그 날이 든 8일 화면 한 번 (더피싱 전체 보기용 · 10분 기억) */
+    fun tfDay(host: String, date: String): List<Sch> {
+        val k = "${host}_d$date"
+        synchronized(mem) { mem[k]?.let { if (System.currentTimeMillis() - it.first < KEEP) return it.second } }
+        val h = get("https://$host/index.php?mid=bk&year=${date.take(4)}&month=${date.substring(5, 7)}&day=${date.substring(8, 10)}")
+        val got = parseTfFleet(host, h)
+        rememberTfShips(host, parseTfShipList(h) + got.map { it.shipNo to it.ship })
+        val l = got.filter { it.date == date }.distinctBy { it.shipNo }
+        synchronized(mem) { mem[k] = System.currentTimeMillis() to l }
+        return l
+    }
+
     // v6.91 (403): 선단 화면 위 '선박별 예약현황' 배 이름 · 읽은 일정의 배 → 폰에 기억(30일) → 목록에 없는 배(테티스호 등)도 찾기에
     private val TF_LIST = Regex("PA_N_UID=(\\d+)#list\"[^>]*>.*?<p><span>(.*?)</span>", RegexOption.DOT_MATCHES_ALL)
     fun parseTfShipList(html: String): List<Pair<String, String>> {
@@ -518,6 +545,12 @@ object Seats {
         if (!ch && old.has("t")) return
         p.edit().putString(key, JSONObject().put("t", System.currentTimeMillis()).put("s", m).toString()).apply()
         tfMem?.let { tfMem = withSeen(c, it) }
+        // v6.92 (409): 처음 본 배는 모두와 같이 (tfSeen/{선단} · 배 번호 → 이름만 · 60척까지)
+        if (ch && Cloud.uid != null) try {
+            val mm = HashMap<String, String>(); m.keys().forEach { k -> if (mm.size < 60) mm[k] = m.optString(k).take(40) }
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("tfSeen").document(host)
+                .set(mapOf("s" to mm, "t" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
+        } catch (_: Exception) {}
     }
     /** 기억해 둔 배 이름 중 목록에 없는 배를 목록에 붙임 (지역 · 선단 = 같은 선단 다른 배 것) */
     private fun withSeen(c: Context, l: List<TfShip>): List<TfShip> {
@@ -525,16 +558,22 @@ object Seats {
         val haveName = l.map { it.host + "|" + normShip(it.ship) }.toHashSet()
         val byHost = l.groupBy { it.host }
         val add = ArrayList<TfShip>()
-        p.all.keys.filter { it.startsWith("tf_seen_") }.forEach { key ->
-            val host = key.removePrefix("tf_seen_")
-            val o = try { JSONObject(p.getString(key, "{}") ?: "{}") } catch (_: Exception) { return@forEach }
-            if (System.currentTimeMillis() - o.optLong("t") > 30L * 86400000) { p.edit().remove(key).apply(); return@forEach }
-            val m = o.optJSONObject("s") ?: return@forEach
+        val srv = try { JSONObject(p.getString("tf_srv", "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
+        val srcs = p.all.keys.filter { it.startsWith("tf_seen_") }.map { it.removePrefix("tf_seen_") to "L" } + srv.keys().asSequence().map { it to "S" }.toList()
+        srcs.forEach { (host, kind) ->
+            val m = if (kind == "S") srv.optJSONObject(host) ?: return@forEach else {
+                val key = "tf_seen_$host"
+                val o = try { JSONObject(p.getString(key, "{}") ?: "{}") } catch (_: Exception) { return@forEach }
+                if (System.currentTimeMillis() - o.optLong("t") > 30L * 86400000) { p.edit().remove(key).apply(); return@forEach }
+                o.optJSONObject("s") ?: return@forEach
+            }
             val ref = byHost[host]?.firstOrNull()
             m.keys().forEach { uid ->
                 val n = m.optString(uid)
-                if ("$host|$uid" !in have && "$host|${normShip(n)}" !in haveName)
+                if ("$host|$uid" !in have && "$host|${normShip(n)}" !in haveName) {
+                    have.add("$host|$uid"); haveName.add("$host|${normShip(n)}")
                     add.add(TfShip(uid, n, ref?.area ?: "", ref?.fleet ?: host.substringBefore('.'), "", "", host))
+                }
             }
         }
         return if (add.isEmpty()) l else l + add
@@ -549,7 +588,15 @@ object Seats {
     fun tfShips(c: Context, done: (List<TfShip>) -> Unit) {
         tfMem?.let { done(it); return }
         var baseT = 0L
-        val base = try { JSONObject(c.assets.open("tf_sites.json").bufferedReader().readText()).let { baseT = it.optLong("t"); tfParse(it.optJSONArray("j")?.toString()) } } catch (_: Exception) { emptyList() }
+        val base0 = try { JSONObject(c.assets.open("tf_sites.json").bufferedReader().readText()).let { baseT = it.optLong("t"); tfParse(it.optJSONArray("j")?.toString()) } } catch (_: Exception) { emptyList() }
+        // v6.92 (409): 도메인(talla.co.kr/data/tf_sites.json)에 더 새것이 있으면 그것 (폰 파일 · 12시간마다 새로)
+        val f = java.io.File(c.filesDir, "tf_sites.json")
+        var base = base0
+        try { if (f.exists()) JSONObject(f.readText()).let { o -> if (o.optLong("t") >= baseT) { val l = tfParse(o.optJSONArray("j")?.toString()); if (l.size >= 100) { base = l; baseT = o.optLong("t") } } } } catch (_: Exception) {}
+        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > 12 * 3600_000L) Thread {
+            try { val t = get("https://talla.co.kr/data/tf_sites.json"); if ((JSONObject(t).optJSONArray("j")?.length() ?: 0) >= 100) f.writeText(t) } catch (_: Exception) {}
+        }.start()
+        refreshTfSeen(c)
         com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("config").document("tfSites").get()
             .addOnSuccessListener { d ->
                 // 관리자가 새로 모은 목록: 주소를 못 찾은 배(자기 도메인 선단 등)는 기본 목록 주소로 채움
@@ -558,6 +605,22 @@ object Seats {
                 val l = withSeen(c, if (srv.size >= 100) srv else base)
                 tfMem = l; done(l)
             }.addOnFailureListener { val l = withSeen(c, base); tfMem = l; done(l) }
+    }
+    /** v6.92 (409): 다른 사람 폰이 선단 화면에서 찾은 배 (tfSeen · 12시간마다) → 목록에 자동으로 */
+    private fun refreshTfSeen(c: Context) {
+        val p = prefs(c)
+        if (System.currentTimeMillis() - p.getLong("tf_srv_at", 0L) < 12 * 3600_000L || Cloud.uid == null) return
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("tfSeen").get().addOnSuccessListener { q ->
+            val o = JSONObject()
+            q.documents.forEach { d ->
+                if (!isTf(d.id)) return@forEach
+                @Suppress("UNCHECKED_CAST") val m = d.get("s") as? Map<String, Any?> ?: return@forEach
+                val j = JSONObject(); m.forEach { (k, v) -> (v as? String)?.takeIf { it.isNotBlank() }?.let { j.put(k, it.take(40)) } }
+                if (j.length() > 0) o.put(d.id, j)
+            }
+            p.edit().putString("tf_srv", o.toString()).putLong("tf_srv_at", System.currentTimeMillis()).apply()
+            tfMem?.let { tfMem = withSeen(c, it) }
+        }
     }
     /** 관리자: 더피싱 전체 목록 → 배마다 화면에서 선단 주소 → config/tfSites (몇 분 · 천천히) */
     fun tfCollect(progress: (String) -> Unit, done: (String) -> Unit) {
@@ -681,7 +744,7 @@ object Seats {
     fun syncPerm(c: Context, done: () -> Unit) {
         fun apply() {
             val ok = Cloud.can(PERM)
-            prefs(c).edit().putBoolean("seat_perm", ok).apply()
+            prefs(c).edit().putBoolean("seat_perm", ok).putBoolean("seat_p_s24", Cloud.can(PERM_S24)).putBoolean("seat_p_tf", Cloud.can(PERM_TF)).apply()
             if (!ok && watches(c).isNotEmpty()) { saveWatches(c, emptyList()); schedule(c) }
             done()
         }
@@ -720,9 +783,12 @@ object Seats {
         val byMonth = ws.filter { it.via == "phone" }.groupBy { it.host to it.date.replace("-", "").take(6) }
         for ((k, list) in byMonth) {
             if (k.first == S24) {
+                val s24ok = prefs(c).getBoolean("seat_p_s24", false)
                 for (w in list) {
-                    val sch = try { s24Month(w.shipNo, k.second) } catch (_: Exception) { continue }
-                    val s = sch.firstOrNull { it.date == w.date } ?: continue
+                    // v6.92 (410): 선상24 권한이 없으면 그 배 선단 홈페이지 일정으로 (선단 주소를 모르면 건너뜀)
+                    val fh = if (s24ok) null else siteOf(c, w.shipNo)?.host ?: continue
+                    val sch = try { if (fh != null) month(fh, k.second, fresh = true) else s24Month(w.shipNo, k.second) } catch (_: Exception) { continue }
+                    val s = sch.firstOrNull { it.date == w.date && (fh == null || it.shipNo == w.shipNo) } ?: continue
                     val ok = s.open && s.remain >= w.need
                     if (ok && !w.hit) { notify(c, w, s); fired++ }
                     w.hit = ok; w.last = s.remain; w.at = System.currentTimeMillis(); rememberSch(c, w, s)
@@ -787,11 +853,14 @@ object Seats {
         val fishSel = HashSet(p.getStringSet("seat_fish", emptySet()) ?: emptySet())
         val all = ArrayList<Sch>()
         // v6.78: 🌐 선상24 전체 (고른 날짜 · 지역 · 어종 · 30척씩)
-        var useS24 = p.getBoolean("seat_s24", true)
+        // v6.92 (410): 선상24 · 더피싱 전체는 권한 있는 사람이 칩을 켰을 때만 (처음 꺼짐)
+        var useS24 = s24On(a)
+        var useTf = tfOn(a)
         val areaSel = HashSet(p.getStringSet("seat_area", emptySet()) ?: emptySet())
         val s24 = ArrayList<Sch>()
         var s24Key = ""; var s24Total = 0; var s24Pg = 0; var s24Busy = false; var s24Err = false
-        Thread { try { s24Filter(a) } catch (_: Exception) {} }.start()
+        val tfAll = ArrayList<Sch>(); var tfKey = ""; var tfBusy = false; var tfHosts = 0
+        if (canS24(a)) Thread { try { s24Filter(a) } catch (_: Exception) {} }.start()
         val fails = ArrayList<String>()
         var loading = false
         var siteBusy = false
@@ -831,7 +900,9 @@ object Seats {
         val sortBtn = Ui.pill(a, "↕ 자리 많은 순 ▾", false, Ui.TEXT, small = true)
         // v6.85 (393): 🔎 배 이름 찾기
         val qBtn = Ui.pill(a, "🔎", false, Ui.TEXT, small = true)
-        listOf(qBtn, areaBtn, fishBtn, needBtn, sortBtn, filtBtn).forEach { pick.addView(it, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }) }
+        val s24Chip = Ui.pill(a, "🚤 선상24", false, Ui.TEXT, small = true)
+        val tfChip = Ui.pill(a, "🎣 더피싱", false, Ui.TEXT, small = true)
+        listOf(qBtn, s24Chip, tfChip, areaBtn, fishBtn, needBtn, sortBtn, filtBtn).forEach { pick.addView(it, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }) }
         var q = ""
         val qRow = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), dp(6)); visibility = View.GONE }
         val qEd = EditText(a).apply {
@@ -845,6 +916,22 @@ object Seats {
         root.addView(qRow)
         val found = HashMap<String, List<Sch>>()      // 이름으로 찾은 배 · 두 달 일정
         val foundBusy = HashSet<String>()
+        // v6.92 (408): 🔎 찾기 전용 빠른 통로 (6개 · 카드 사진 · 공지 받기 뒤에 줄 서지 않게) · 15초 넘으면 '못 읽었어요 · 다시 ↻'
+        val qPool = java.util.concurrent.Executors.newFixedThreadPool(6)
+        val foundErr = HashSet<String>()
+        fun qFetch(k: String, f: () -> List<Sch>) {
+            if (found.containsKey(k) || k in foundErr || !synchronized(foundBusy) { foundBusy.add(k) }) return
+            qPool.execute {
+                val ft = java.util.concurrent.FutureTask(f)
+                Thread(ft).start()
+                val r = try { ft.get(15, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { ft.cancel(true); null }
+                a.runOnUiThread {
+                    if (r == null) foundErr.add(k) else found[k] = r
+                    synchronized(foundBusy) { foundBusy.remove(k) }
+                    if (dlg.isShowing) later()
+                }
+            }
+        }
         val sum = Ui.text(a, 12f, Ui.SUB, false, "").apply { setPadding(dp(16), 0, dp(16), dp(4)) }
         root.addView(sum)
         val list = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(12), dp(24)) }
@@ -857,7 +944,7 @@ object Seats {
         refreshSites(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
         refreshExtras(a) { ch -> if (ch) a.runOnUiThread { if (dlg.isShowing) load(false) } }
 
-        fun savePrefs() = p.edit().putBoolean("seat_s24", useS24).putStringSet("seat_area", HashSet(areaSel)).putString("seat_day", day).putInt("seat_need", need).putInt("seat_sort", sort)
+        fun savePrefs() = p.edit().putStringSet("seat_area", HashSet(areaSel)).putString("seat_day", day).putInt("seat_need", need).putInt("seat_sort", sort)
             .putBoolean("seat_open", openOnly).putBoolean("seat_favtop", favTop).putStringSet("seat_fish", HashSet(fishSel)).apply()
 
         // v6.86 (395): 출항 시간대 · 운항 시간 (시간 모르는 배는 숨기지 않음)
@@ -895,7 +982,7 @@ object Seats {
         fun countOn(d: String): Int {
             val mine = all.filter { x -> x.date == d }
             val nos = mine.map { it.shipNo }.toSet()
-            return dedupe(a, mine + s24.filter { it.date == d && it.shipNo !in nos }).count { x -> x.open && x.remain >= need && fishMatch(x) }
+            return dedupe(a, mine + (if (useS24) s24.filter { it.date == d && it.shipNo !in nos } else emptyList()) + (if (useTf) tfAll.filter { it.date == d } else emptyList())).count { x -> x.open && x.remain >= need && fishMatch(x) }
         }
         fun setDay(d: String) { day = d; savePrefs(); render(); load(false) }
         fun shift(n: Int) {
@@ -1069,6 +1156,21 @@ object Seats {
                 if (allowed(a)) r.addView(Ui.pill(a, if (openSet(a, s)) "🔔 알림 걸림" else "🔔 열리면 알림", openSet(a, s), Color.parseColor("#F2C14E"), small = true) { toggleOpen(a, s); render() })
                 box.addView(r)
             }
+            // v6.92 (411): 📝 선단 홈페이지 최근 조과 (이 배 글 · 없으면 선단 최근 글)
+            if (isS24Fleet(s.host)) {
+                val ps = postsCached(s.host)
+                if (ps == null) { if (synchronized(extraBusy) { extraBusy.add("p:" + s.host) }) pool.execute { fleetPosts(s.host); a.runOnUiThread { later() } } }
+                else {
+                    val mine = postsOf(ps, s.ship)
+                    (mine.firstOrNull() ?: ps.firstOrNull())?.let { lp0 ->
+                        box.addView(Ui.text(a, 12f, if (mine.isNotEmpty()) Color.parseColor("#7FD6FF") else Ui.SUB, false,
+                            (if (mine.isNotEmpty()) "📝 최근 조과" else "📝 선단 조과") + (lp0.date.takeIf { it.isNotBlank() }?.let { " · " + agoLabel(it) } ?: "") + " · " + lp0.title).apply {
+                            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(6), 0, 0)
+                            setOnClickListener { openFleetBoards(a, s.host, s.ship) }
+                        })
+                    }
+                }
+            }
             // 막대
             val bar = LinearLayout(a).apply { background = Ui.bg(a, Color.parseColor("#22384A"), 99) }
             val frac = if (s.cap > 0) s.remain.toFloat() / s.cap else 0f
@@ -1116,6 +1218,7 @@ object Seats {
             ss?.tel?.let { t -> link("📞 전화") { dial(a, t) } }
             ss?.band?.let { b -> link("밴드") { Boats.openUrl(a, b) } }
             if (s.host == S24) link("📝 조황") { openBoards(a, s) }
+            if (isS24Fleet(s.host)) link("📝 조과") { openFleetBoards(a, s.host, s.ship) }
             // v6.90 (399): 같은 배가 다른 곳에도 있으면 그쪽 예약 버튼 (남은 자리 같이)
             s.also.forEach { o -> link("${srcOf(o.host)} " + (if (o.open) "${o.remain}자리 ›" else "${o.stName} ›")) { Boats.openUrl(a, bookUrlOf(a, o)) } }
             if (ss?.host != null && s.host == S24 && !canBook) link("🌐 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
@@ -1148,7 +1251,14 @@ object Seats {
             fishBtn.setTextColor(if (fishSel.isEmpty()) Ui.TEXT else Color.parseColor("#7FD6FF"))
             areaBtn.text = when (areaSel.size) { 0 -> "📍 지역 전체 ▾"; 1 -> "📍 ${areaSel.first()} ▾"; else -> "📍 ${areaSel.first()} 외 ${areaSel.size - 1} ▾" }
             areaBtn.setTextColor(if (areaSel.isEmpty()) Ui.TEXT else Color.parseColor("#7FD6FF"))
-            areaBtn.visibility = if (useS24) View.VISIBLE else View.GONE
+            areaBtn.visibility = if (useS24 || useTf) View.VISIBLE else View.GONE
+            // v6.92 (410): 관리자 · 권한 있는 사람만 [🚤 선상24] [🎣 더피싱] 칩
+            fun chipLook(c0: TextView, on: Boolean, col: Int) { c0.background = if (on) Ui.bg(a, col, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE); c0.setTextColor(if (on) Color.WHITE else Ui.TEXT) }
+            s24Chip.visibility = if (canS24(a)) View.VISIBLE else View.GONE
+            tfChip.visibility = if (canTf(a)) View.VISIBLE else View.GONE
+            if (!canS24(a)) useS24 = false
+            if (!canTf(a)) useTf = false
+            chipLook(s24Chip, useS24, Color.parseColor("#3D7BD9")); chipLook(tfChip, useTf, Color.parseColor("#2FA06F"))
             needBtn.text = "👥 ${need}자리 이상 ▾"
             needBtn.setTextColor(if (need > 1) Color.parseColor("#7FD6FF") else Ui.TEXT)
             val nFilt = (if (openOnly) 1 else 0) + (if (todSel.isNotEmpty()) 1 else 0) + (if (durSel != 0) 1 else 0)
@@ -1179,8 +1289,9 @@ object Seats {
                 val pq = normPort(q)
                 val byPort = pq.length >= 2
                 fun portHit(x: String) = byPort && x.isNotBlank() && normPort(x).contains(pq)
-                val nameC = (all + s24).filter { norm(it.ship).contains(nq) || norm(it.ship.substringBefore('[')).contains(nq) }
-                val portC = if (byPort) (all + s24).filter { portHit(portOf(a, it)) || (it.host == S24 && portHit(it.place.substringAfterLast(" · "))) } else emptyList()
+                val pool0 = all + (if (useS24) s24 else emptyList()) + (if (useTf) tfAll else emptyList())
+                val nameC = pool0.filter { norm(it.ship).contains(nq) || norm(it.ship.substringBefore('[')).contains(nq) }
+                val portC = if (byPort) pool0.filter { portHit(portOf(a, it)) || (it.host == S24 && portHit(it.place.substringAfterLast(" · "))) } else emptyList()
                 val dayCards = ArrayList<Sch>()
                 dayCards.addAll((nameC + portC).filter { it.date == day }.distinctBy { it.host + it.shipNo + it.schNo })
                 val shown = dayCards.map { it.shipNo }.toMutableSet()
@@ -1195,53 +1306,74 @@ object Seats {
                     row.addView(Ui.text(a, 12.5f, subCol, false, sub))
                     notes.add(row)
                 }
-                // 아직 안 읽은 선상24 배: talla.co.kr 배 목록에서 (이름 · 항구)
-                val more = sites(a).filter { (no, v) -> no !in shown && ((v.name.isNotBlank() && norm(v.name).contains(nq)) || portHit(v.port)) }.entries.take(if (byPort) 30 else 12)
-                more.forEach { (no, v) ->
-                    val f = found[no]
+                val have = activeFleets(a).map { it.host }.toSet()
+                val ym = day.replace("-", "").take(6)
+                /** v6.92 (408 · 410): 선단 홈페이지 한 곳 읽어 그 날 맞는 배 카드 · 없으면 '다음 출항' · 못 읽으면 '다시 ↻' */
+                fun readHost(host: String, title: String, emoji: String, want: (Sch) -> Boolean, fleetNm: String) {
+                    val k = "h:$host|$ym"
+                    val f = found[k]
+                    val hits = f?.filter { it.date == day && want(it) }.orEmpty()
+                    if (hits.isNotEmpty()) { dayCards.addAll(hits); hits.forEach { shown.add(it.shipNo) }; return }
+                    val err = k in foundErr
+                    val next = f?.filter { it.date > day && want(it) && (it.status == "ING" || it.status == "END") }?.minByOrNull { it.date }
+                    note("$emoji $title",
+                        when { err -> "⚠ 못 읽었어요 · 눌러서 다시 ↻"; f == null -> "⏳ 선단 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} ›" + (if (next.open) " (남은 ${next.remain}자리)" else ""); else -> "이 달 · 이 날 일정이 없어요 · 꾹 = 내 선단에 넣기" },
+                        when { err -> Color.parseColor("#F2C14E"); next != null -> Color.parseColor("#7FD6FF"); else -> Ui.SUB },
+                        when { err -> { { foundErr.remove(k); render() } }; next != null -> { { setDay(next.date) } }; else -> null })
+                    (notes.last()).setOnLongClickListener { addFleet(a, host, fleetNm) { load(true) }; true }
+                    if (f == null && !err) qFetch(k) { month(host, ym) }
+                }
+                // 선상24 배 (talla.co.kr 배 목록에서 이름 · 항구) — 선상24 전체를 켠 사람은 선상24 일정 · 아니면 그 배 선단 홈페이지만
+                val more = sites(a).filter { (no, v) -> no !in shown && ((v.name.isNotBlank() && norm(v.name).contains(nq)) || portHit(v.port)) }.entries.take(if (byPort) 40 else 16)
+                var hidden = 0
+                if (useS24) more.take(if (byPort) 30 else 12).forEach { (no, v) ->
+                    val k = "s24:$no"
+                    val f = found[k]
                     val hit = f?.firstOrNull { it.date == day }
                     if (hit != null) { dayCards.add(hit); return@forEach }
+                    val err = k in foundErr
                     val next = f?.filter { it.date > day && (it.status == "ING" || it.status == "END") }?.minByOrNull { it.date }
                     note("🚤 " + v.name + if (v.port.isNotBlank()) "  · ${v.port}" else "",
-                        when { f == null -> "⏳ 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} › (남은 ${next.remain}자리)"; else -> "이 날 · 앞으로 두 달 일정이 없어요" },
-                        if (next != null) Color.parseColor("#7FD6FF") else Ui.SUB, next?.let { n -> { setDay(n.date) } })
-                    if (f == null && synchronized(foundBusy) { foundBusy.add(no) }) pool.execute {
+                        when { err -> "⚠ 못 읽었어요 · 눌러서 다시 ↻"; f == null -> "⏳ 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} › (남은 ${next.remain}자리)"; else -> "이 날 · 앞으로 두 달 일정이 없어요" },
+                        when { err -> Color.parseColor("#F2C14E"); next != null -> Color.parseColor("#7FD6FF"); else -> Ui.SUB },
+                        when { err -> { { foundErr.remove(k); render() } }; next != null -> { { setDay(next.date) } }; else -> null })
+                    if (f == null && !err) qFetch(k) {
                         val l = ArrayList<Sch>()
                         val cal = Calendar.getInstance().apply { time = ymd.parse(day)!! }
                         repeat(2) { try { l.addAll(s24Month(no, ymF.format(cal.time))) } catch (_: Exception) {}; cal.add(Calendar.MONTH, 1) }
-                        a.runOnUiThread { found[no] = l; if (dlg.isShowing) later() }
+                        l
+                    }
+                } else {
+                    val byHost = LinkedHashMap<String, MutableList<Pair<String, ShipSite>>>()
+                    more.forEach { (no, v) ->
+                        val h = siteOf(a, no)?.host ?: v.host
+                        if (h == null || !isS24Fleet(h)) { hidden++; return@forEach }
+                        if (h !in have) byHost.getOrPut(h) { ArrayList() }.add(no to v)
+                    }
+                    byHost.entries.take(10).forEach { (h, l) ->
+                        val nos = l.map { it.first }.toSet(); val nms = l.map { normShip(it.second.name) }.toSet()
+                        readHost(h, l.joinToString(" · ") { it.second.name }.take(40) + "  · " + h.substringBefore('.'), "🚤",
+                            { x -> x.shipNo in nos || normShip(x.ship) in nms || (!byPort && norm(x.ship).contains(nq)) }, "")
                     }
                 }
-                // 더피싱 (기본 목록 678척)
+                // 더피싱 (기본 목록 678척 + 선단 화면에서 본 배) — 그 선단 홈페이지를 바로 읽어 카드로
                 val tf = tfMem
                 if (tf == null && synchronized(foundBusy) { foundBusy.add("tf") }) tfShips(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
-                val have = activeFleets(a).map { it.host }.toSet()
-                // v6.91 (401 · 403): 더피싱 = 항구로 찾으면 그 항구 선단의 그 날 배 전부 · 이름으로 찾으면 그 배 · 선단 일정을 바로 읽어 카드로
                 val tfPortHosts = if (byPort) (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && portHit(it.area.substringAfterLast(" > ")) }
                     .groupBy { it.host }.entries.take(10).map { it.key to it.value } else emptyList()
                 val tfPortSet = tfPortHosts.map { it.first }.toSet()
                 val tfNameHosts = (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && it.host !in tfPortSet && norm(it.ship).contains(nq) }
                     .groupBy { it.host }.entries.take(8).map { it.key to it.value }
-                fun readTf(host: String, l: List<TfShip>, byName: Boolean) {
-                    val k = "tf:$host|" + day.replace("-", "").take(6)
-                    val f = found[k]
-                    fun want(x: Sch) = !byName || norm(x.ship).contains(nq) || norm(x.ship.substringBefore('[')).contains(nq)
-                    val hits = f?.filter { it.date == day && want(it) }.orEmpty()
-                    if (hits.isNotEmpty()) { dayCards.addAll(hits); return }
-                    val next = f?.filter { it.date > day && want(it) && (it.status == "ING" || it.status == "END") }?.minByOrNull { it.date }
-                    val fleetNm = l.first().fleet.substringBefore(" (").ifBlank { host.substringBefore('.') }
-                    val title = if (byName) "🎣 " + l.joinToString(" · ") { it.ship }.take(40) + "  · $fleetNm" else "🎣 $fleetNm  · " + l.joinToString(" · ") { it.ship }.take(40)
-                    note(title,
-                        when { f == null -> "⏳ 더피싱 일정 읽는 중…"; next != null -> "이 날 일정 없음 · 다음 출항 ${dayLabel(next.date)} ›"; else -> "이 달 · 이 날 일정이 없거나 못 읽었어요 · 꾹 = 내 선단에 넣기" },
-                        if (next != null) Color.parseColor("#7FD6FF") else Ui.SUB, next?.let { n -> { setDay(n.date) } })
-                    (notes.last()).setOnLongClickListener { addFleet(a, host, fleetNm) { load(true) }; true }
-                    if (f == null && synchronized(foundBusy) { foundBusy.add(k) }) pool.execute {
-                        val r = try { month(host, day.replace("-", "").take(6)) } catch (_: Exception) { emptyList() }
-                        a.runOnUiThread { found[k] = r; if (dlg.isShowing) later() }
-                    }
+                tfPortHosts.forEach { (h, l) ->
+                    val fleetNm = l.first().fleet.substringBefore(" (").ifBlank { h.substringBefore('.') }
+                    readHost(h, "$fleetNm  · " + l.joinToString(" · ") { it.ship }.take(40), "🎣", { true }, fleetNm)
                 }
-                tfPortHosts.forEach { (h, l) -> readTf(h, l, false) }
-                tfNameHosts.forEach { (h, l) -> readTf(h, l, true) }
+                tfNameHosts.forEach { (h, l) ->
+                    val fleetNm = l.first().fleet.substringBefore(" (").ifBlank { h.substringBefore('.') }
+                    readHost(h, l.joinToString(" · ") { it.ship }.take(40) + "  · $fleetNm", "🎣",
+                        { x -> norm(x.ship).contains(nq) || norm(x.ship.substringBefore('[')).contains(nq) }, fleetNm)
+                }
+                if (hidden > 0 && canS24(a)) note("🚤 선단 주소를 모르는 선상24 배 ${hidden}척", "위 [🚤 선상24]를 켜면 같이 찾아요", Ui.SUB) { useS24 = true; p.edit().putBoolean("seat_s24on", true).apply(); render(); loadS24(true) }
                 // 항구 이름 자동 완성 (지도 항구 2,267곳)
                 if (byPort) {
                     val pn = Ports.list(a).map { it.name }.filter { normPort(it).contains(pq) && normPort(it) != pq }.distinct().take(6)
@@ -1261,25 +1393,29 @@ object Seats {
                 if (cards.isEmpty() && notes.isEmpty()) list.addView(Ui.text(a, 13.5f, Ui.SUB, false, "'$q' 배 · 항구를 못 찾았어요 · 띄어쓰기 없이 몇 글자만 쳐 보세요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
                 return@render
             }
-            if (activeFleets(a).isEmpty() && !useS24) {
-                list.addView(Ui.text(a, 14f, Ui.TEXT, false, "아직 볼 선단이 없어요.\n\n[⚙ 선단]에서 선상24 선단 주소를 넣어 주세요.\n예) sungbin.sunsang24.com").apply { setPadding(dp(6), dp(20), dp(6), dp(10)) })
+            if (activeFleets(a).isEmpty() && !useS24 && !useTf) {
+                list.addView(Ui.text(a, 14f, Ui.TEXT, false, "아직 볼 선단이 없어요.\n\n🔎 배 이름 · 항구(예: 마검포항)로 찾거나\n[⚙ 선단]에서 자주 타는 선단 홈페이지 주소를 넣어 주세요.\n예) sungbin.sunsang24.com · ssfish.thefishing.kr").apply { setPadding(dp(6), dp(20), dp(6), dp(10)) })
+                list.addView(Ui.button(a, "🔎 배 · 항구로 찾기", true) { qBtn.performClick() }, Ui.lp(a, MATCH, WRAP, top = 8))
                 list.addView(Ui.button(a, "＋ 선단 추가") { openFleets(a) { load(true) } }, Ui.lp(a, MATCH, WRAP, top = 8))
                 sum.text = ""; return@render
             }
             val mineDay = all.filter { it.date == day && it.host in fl.map { f -> f.host } }
             val mineNos = mineDay.map { it.shipNo }.toSet()
-            var day0 = dedupe(a, mineDay + (if (useS24) s24.filter { it.date == day && it.shipNo !in mineNos } else emptyList()))
+            val flHosts = fl.map { it.host }.toSet()
+            var day0 = dedupe(a, mineDay + (if (useS24) s24.filter { it.date == day && it.shipNo !in mineNos } else emptyList()) +
+                (if (useTf) tfAll.filter { it.date == day && it.host !in flHosts } else emptyList()))
             val total = day0.size
             day0 = day0.filter { fishMatch(it) }
             val openN = day0.count { it.open && it.remain >= need }
             if (openOnly) day0 = day0.filter { it.open && it.remain >= need }
             day0 = sortList(day0)
             val fv = favs(a)
-            sum.text = (if (loading || s24Busy) "⏳ 읽는 중 · " else "") + "${dayLabel(day)} · 배 ${total}척" +
+            sum.text = (if (loading || s24Busy || tfBusy) "⏳ 읽는 중 · " else "") + "${dayLabel(day)} · 배 ${total}척" +
                 (if (useS24 && s24Total > s24.size) " (선상24 ${s24Total}척 중 ${s24.size}척 읽음)" else "") + " · ${need}자리 이상 빈 배 ${openN}척" +
-                (if (fails.isNotEmpty()) " · ⚠ 못 읽은 선단 ${fails.size}곳" else "") + (if (s24Err) " · ⚠ 선상24 목록을 못 읽었어요" else "")
+                (if (fails.isNotEmpty()) " · ⚠ 못 읽은 선단 ${fails.size}곳" else "") + (if (s24Err) " · ⚠ 선상24 목록을 못 읽었어요" else "") + (if (useTf && tfHosts > 0) " · 🎣 더피싱 선단 ${tfHosts}곳" else "")
+            if (useTf && areaSel.isEmpty()) list.addView(Ui.text(a, 12f, Color.parseColor("#2FBF8F"), false, "🎣 더피싱 전체: 📍 지역을 고르면 그 지역 더피싱 선단 배를 같이 보여 줘요 (선단 10곳까지)").apply { setPadding(dp(4), dp(4), dp(4), dp(4)) })
             if (day0.isEmpty()) {
-                list.addView(Ui.text(a, 13.5f, Ui.SUB, false, if (loading || s24Busy) "선상24에서 읽는 중…" else if (total == 0) "이 날 나가는 배가 없어요 (선단이 일정을 아직 안 올렸을 수 있어요)" else "고른 조건에 맞는 배가 없어요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
+                list.addView(Ui.text(a, 13.5f, Ui.SUB, false, if (loading || s24Busy || tfBusy) "읽는 중…" else if (total == 0) "이 날 나가는 배가 없어요 (선단이 일정을 아직 안 올렸을 수 있어요)" else "고른 조건에 맞는 배가 없어요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
                 return@render
             }
             fun section(t: String, c: Int) = list.addView(Ui.text(a, 12f, c, true, t).apply { setPadding(dp(4), dp(8), 0, dp(2)) })
@@ -1305,7 +1441,7 @@ object Seats {
                 }.start()
             }
             if (useS24 && s24Total > s24.size) list.addView(Ui.button(a, if (s24Busy) "⏳ 읽는 중…" else "🌐 선상24 더 보기 (${s24.size} / ${s24Total}척)") { if (!s24Busy) loadS24(false) }.apply { minHeight = dp(46); textSize = 14f }, Ui.lp(a, MATCH, WRAP, top = 10))
-            list.addView(Ui.text(a, 11f, Ui.SUB, false, "선상24 목록 · 선단 페이지를 내 폰이 읽어 와요 · 정렬은 읽어 온 배 안에서 · 예약 › = 그 배 선단 홈페이지(조황 글에서 찾음 · 못 찾으면 선상24) · 카드 꾹 = 메뉴(선상24 예약 창 · 내 선단에 넣기 · 주소 직접 넣기 · 검색)").apply { setPadding(dp(4), dp(14), dp(4), 0) })
+            list.addView(Ui.text(a, 11f, Ui.SUB, false, (if (useS24) "선상24 목록 · " else "") + "선단 홈페이지를 내 폰이 읽어 와요 · 정렬은 읽어 온 배 안에서 · 예약 › = 그 배 선단 홈페이지 · 🔎 = 배 이름 · 항구로 찾기 · 카드 꾹 = 메뉴(내 선단에 넣기 · 검색)").apply { setPadding(dp(4), dp(14), dp(4), 0) })
         }
 
         loadS24 = { reset ->
@@ -1333,8 +1469,30 @@ object Seats {
             }
         }
 
+        // v6.92 (410): 🎣 더피싱 전체 = 고른 지역의 더피싱 선단(10곳까지) 그 날 화면 한 번씩
+        fun loadTf() {
+            if (!useTf) { tfAll.clear(); tfKey = ""; return }
+            val kws = areaKw(areaSel)
+            val key = "$day|${kws.sorted()}"
+            if (key == tfKey) return
+            tfKey = key; tfAll.clear(); tfHosts = 0
+            if (kws.isEmpty()) { render(); return }
+            tfShips(a) { l ->
+                val have = activeFleets(a).map { it.host }.toSet()
+                val hosts = l.filter { it.host.isNotBlank() && it.host !in have && kws.any { k -> it.area.contains(k) } }.map { it.host }.distinct().take(10)
+                val d0 = day
+                a.runOnUiThread { if (key != tfKey) return@runOnUiThread; tfBusy = true; tfHosts = hosts.size; render() }
+                Thread {
+                    val got = ArrayList<Sch>()
+                    val ths = hosts.map { h -> Thread { try { val r = tfDay(h, d0); synchronized(got) { got.addAll(r) } } catch (_: Exception) {} } }
+                    ths.forEach { it.start() }; ths.forEach { try { it.join(25000) } catch (_: Exception) {} }
+                    a.runOnUiThread { if (!dlg.isShowing || key != tfKey) return@runOnUiThread; tfAll.clear(); synchronized(got) { tfAll.addAll(got) }; tfBusy = false; render() }
+                }.start()
+            }
+        }
         load = { fresh ->
             loadS24(fresh)
+            loadTf()
             val fl = activeFleets(a)
             val months = linkedSetOf(day.replace("-", "").take(6), ymF.format(Date()))
             if (fl.isNotEmpty()) {
@@ -1409,7 +1567,7 @@ object Seats {
         }
 
         fishBtn.setOnClickListener {
-            val names = all.filter { it.date >= ymd.format(Date()) }.flatMap { fishList(it) }.groupingBy { it }.eachCount()
+            val names = (all + tfAll).filter { it.date >= ymd.format(Date()) }.flatMap { fishList(it) }.groupingBy { it }.eachCount()
             val (sh, chipsF, paint) = multiSheet("🐟 어종", fishSel) { v -> fishSel.clear(); fishSel.addAll(v); savePrefs(); render(); loadS24(true) }
             fun chips(t: String, l: List<String>) = chipsF(sh.body, t, l, names)
             val sf = if (useS24) filterMem?.second else null
@@ -1430,10 +1588,12 @@ object Seats {
             paint(); sh.show()
         }
         areaBtn.setOnClickListener {
-            val (sh, chips, paint) = multiSheet("📍 지역", areaSel) { v -> areaSel.clear(); areaSel.addAll(v); savePrefs(); render(); loadS24(true) }
+            val (sh, chips, paint) = multiSheet("📍 지역", areaSel) { v -> areaSel.clear(); areaSel.addAll(v); savePrefs(); render(); loadS24(true); loadTf() }
             val sf = filterMem?.second
-            if (sf == null || sf.area.isEmpty()) sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "선상24 지역 목록을 아직 못 받았어요 · 잠시 뒤 다시 열어 주세요").apply { setPadding(0, dp(12), 0, 0) })
-            sf?.area?.forEach { (t, l) ->
+            // 선상24 지역 목록이 없으면(권한 · 못 받음) 기본 이름으로
+            val areas = sf?.area?.takeIf { it.isNotEmpty() } ?: listOf("서해안" to listOf("인천인근", "평택인근", "태안인근", "보령인근", "군산인근", "영광인근", "목포인근", "진도인근"),
+                "남해안" to listOf("삼천포인근", "완도인근", "여수인근", "통영인근"), "제주도" to listOf("제주인근"))
+            areas.forEach { (t, l) ->
                 if (l.isEmpty()) return@forEach
                 chips(sh.body, t, l, emptyMap())
             }
@@ -1495,7 +1655,17 @@ object Seats {
             sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "조황 순은 선상24 배만 알아요 · 더피싱 · 개인 사이트 배는 맨 뒤 · 최근 조황 순은 날짜를 받아 오며 순서가 바뀌어요").apply { setPadding(0, dp(10), 0, 0) })
             sh.show()
         }
-        fleetBtn.setOnClickListener { openFleets(a) { useS24 = p.getBoolean("seat_s24", true); load(true) } }
+        fleetBtn.setOnClickListener { openFleets(a) { load(true) } }
+        s24Chip.setOnClickListener {
+            useS24 = !useS24; p.edit().putBoolean("seat_s24on", useS24).apply()
+            Ui.toast(a, if (useS24) "🚤 선상24 전체 배를 같이 보여 줘요" else "🚤 선상24 전체 끔 · 선단 홈페이지만")
+            render(); if (useS24) loadS24(true)
+        }
+        tfChip.setOnClickListener {
+            useTf = !useTf; p.edit().putBoolean("seat_tfon", useTf).apply()
+            Ui.toast(a, if (useTf) "🎣 더피싱 전체 · 📍 지역을 고르면 그 지역 선단을 같이 읽어요" else "🎣 더피싱 전체 끔")
+            tfKey = ""; render(); loadTf()
+        }
         dayBtn.setOnClickListener { openCalendar() }
         fun recentQ() = (p.getString("seat_q", "") ?: "").split('\n').filter { it.isNotBlank() }
         qBtn.setOnClickListener {
@@ -1520,6 +1690,7 @@ object Seats {
 
         dlg.setContentView(root)
         Ui.edge(dlg.window)
+        dlg.setOnDismissListener { try { qPool.shutdownNow() } catch (_: Exception) {} }
         dlg.show()
         render()
         load(false)
@@ -1542,18 +1713,9 @@ object Seats {
         sh.onClose = { if (dirty) changed() }
         fun draw() {
             sh.body.removeAllViews()
-            // v6.78: 🌐 선상24 전체 켜고 끄기
-            val r0 = Ui.row(a).apply { setPadding(0, dp(4), 0, dp(10)) }
-            val c0 = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
-            c0.addView(Ui.text(a, 14.5f, Ui.TEXT, true, "🌐 선상24 전체 배"))
-            c0.addView(Ui.text(a, 11.5f, Ui.SUB, false, "고른 날짜 · 지역 · 어종의 선상24 배를 모두 찾아요 (30척씩)"))
-            r0.addView(c0, LinearLayout.LayoutParams(0, WRAP, 1f))
-            r0.addView(android.widget.Switch(a).apply { isChecked = prefs(a).getBoolean("seat_s24", true)
-                setOnCheckedChangeListener { _, v -> prefs(a).edit().putBoolean("seat_s24", v).apply(); dirty = true } })
-            sh.body.addView(r0)
             sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, true, "⭐ 내 선단 (선단 홈페이지 · 한 달 일정 · 물때까지)").apply { setPadding(0, dp(4), 0, dp(4)) })
             val l = fleets(a)
-            if (l.isEmpty()) sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "선상24에서 자주 타는 선단 홈페이지 주소를 넣어 주세요 (예: sungbin.sunsang24.com) · 그 선단의 배 일정을 다 읽어 와요"))
+            if (l.isEmpty()) sh.body.addView(Ui.text(a, 13f, Ui.SUB, false, "자주 타는 선단 홈페이지 주소를 넣어 주세요 (예: sungbin.sunsang24.com · ssfish.thefishing.kr) · 그 선단의 배 일정을 다 읽어 와요"))
             l.forEachIndexed { i, f ->
                 val r = Ui.row(a).apply { setPadding(0, dp(8), 0, dp(8)) }
                 val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
@@ -1619,6 +1781,76 @@ object Seats {
         val iv = android.widget.ImageView(a).apply { adjustViewBounds = true; scaleType = android.widget.ImageView.ScaleType.FIT_CENTER; minimumHeight = Ui.dp(a, 200) }
         shipImg(a, url, iv)
         android.app.AlertDialog.Builder(a, R.style.FlAlert).setTitle("🚤 $title").setView(iv).setPositiveButton("닫기", null).show()
+    }
+    // ─────────────── v6.92 (411): 선단 홈페이지 조과 글 (○○.sunsang24.com/ship/board) ───────────────
+    class Post(val id: String, val title: String, val text: String, val ship: String, val fish: String, val date: String, val img: String)
+    private val postMem = HashMap<String, Pair<Long, List<Post>>>()
+    fun postsCached(host: String) = synchronized(postMem) { postMem[host]?.takeIf { System.currentTimeMillis() - it.first < 60 * 60_000L }?.second }
+    private val POST_LI = Regex("<li>\\s*<a href=\"/ship/board_detail/(\\d+)\"(.*?)</li>", RegexOption.DOT_MATCHES_ALL)
+    fun parsePosts(html: String): List<Post> = POST_LI.findAll(html).map { m ->
+        val seg = m.groupValues[2]
+        fun g(rx: String) = Regex(rx, RegexOption.DOT_MATCHES_ALL).find(seg)?.let { tfText(it.groupValues[1]) } ?: ""
+        val dm = Regex("class=\"date[^\"]*\">\\s*(\\d{4})\\.\\s*(\\d{1,2})\\.\\s*(\\d{1,2})").find(seg)
+        Post(m.groupValues[1], g("class=\"data-title\">(.*?)</h5>"), g("class=\"data-text\">(.*?)</p>"), g("class=\"shipname\">(.*?)</span>"),
+            g("class=\"fish\">(.*?)</span>"), dm?.let { "%s-%02d-%02d".format(it.groupValues[1], it.groupValues[2].toInt(), it.groupValues[3].toInt()) } ?: "",
+            Regex("data-src=\"([^\"]+)\"").find(seg)?.groupValues?.get(1) ?: "")
+    }.filter { it.title.isNotBlank() }.distinctBy { it.id }.toList()
+    /** 선단 조과 글 첫 쪽 (한 시간 기억 · 못 읽으면 null) */
+    fun fleetPosts(host: String): List<Post>? {
+        postsCached(host)?.let { return it }
+        if (!isS24Fleet(host)) return null
+        val l = try { parsePosts(get("https://$host/ship/board")) } catch (_: Exception) { return null }
+        synchronized(postMem) { postMem[host] = System.currentTimeMillis() to l }
+        return l
+    }
+    fun postsOf(l: List<Post>, ship: String): List<Post> {
+        val n = normShip(ship); if (n.isBlank()) return emptyList()
+        return l.filter { p -> val pn = normShip(p.ship); pn.isNotBlank() && (pn.contains(n) || n.contains(pn)) }
+    }
+    fun agoLabel(d: String): String {
+        val n = try { ((ymd.parse(ymd.format(Date()))!!.time - ymd.parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { return "" }
+        return when { n < 0 -> ""; n == 0 -> "오늘"; n == 1 -> "어제"; n < 30 -> "${n}일 전"; else -> "${n / 30}달 전" }
+    }
+    /** 📝 선단 조과 글 목록 — 이 배 글 먼저 · 누르면 선단 홈페이지 원래 글 */
+    private fun openFleetBoards(a: Activity, host: String, ship: String) {
+        fun dp(v: Int) = Ui.dp(a, v)
+        val sh = Sheet(a, 0.75f)
+        sh.head.addView(Ui.text(a, 17f, Ui.TEXT, true, "📝 $ship 조과"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        sh.head.addView(Ui.pill(a, "닫기", false, Ui.TEXT, small = true) { sh.close() })
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        sh.body.addView(box)
+        box.addView(Ui.text(a, 13f, Ui.SUB, false, "불러오는 중…"))
+        Thread {
+            val l = fleetPosts(host)
+            a.runOnUiThread {
+                box.removeAllViews()
+                if (l == null || l.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, if (l == null) "못 불러왔어요 · 인터넷을 확인해 주세요" else "아직 조과 글이 없어요")); return@runOnUiThread }
+                val mine = postsOf(l, ship); val rest = l.filter { it !in mine }
+                box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "선단 홈페이지(${host}) 조과 글 최근 ${l.size}개 · 누르면 원래 글"))
+                fun row(o: Post) {
+                    val r = LinearLayout(a).apply {
+                        orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(10), dp(8), dp(10), dp(8)); background = Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66"))
+                        isClickable = true; setOnClickListener { Boats.openUrl(a, "https://$host/ship/board_detail/${o.id}") }
+                    }
+                    if (o.img.isNotBlank()) {
+                        val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP; background = Ui.bg(a, Color.parseColor("#1B3A52"), 10); clipToOutline = true }
+                        shipImg(a, o.img, iv)
+                        r.addView(iv, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(10) })
+                    }
+                    val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    col.addView(Ui.text(a, 14f, Ui.TEXT, true, o.title).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    col.addView(Ui.text(a, 11.5f, Ui.SUB, false, listOf(o.date.takeIf { it.isNotBlank() }?.let { "$it (${agoLabel(it)})" } ?: "", o.ship, o.fish).filter { it.isNotBlank() }.joinToString(" · ")))
+                    if (o.text.isNotBlank()) col.addView(Ui.text(a, 12f, Color.parseColor("#B8CAD6"), false, o.text).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })
+                    r.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    box.addView(r, Ui.lp(a, MATCH, WRAP, top = 6))
+                }
+                if (mine.isNotEmpty()) { box.addView(Ui.text(a, 12.5f, Color.parseColor("#7FD6FF"), true, "🚤 $ship").apply { setPadding(0, dp(10), 0, 0) }); mine.forEach { row(it) } }
+                if (rest.isNotEmpty()) { box.addView(Ui.text(a, 12.5f, Ui.SUB, true, if (mine.isEmpty()) "선단 조과 글" else "같은 선단 다른 배").apply { setPadding(0, dp(12), 0, 0) }); rest.forEach { row(it) } }
+                box.addView(Ui.button(a, "🌐 선단 조과 게시판 열기") { Boats.openUrl(a, "https://$host/ship/board") }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 12))
+            }
+        }.start()
+        sh.show()
     }
     /** 📝 그 배 조황 글 목록 (선상24) — 누르면 원래 글 */
     private fun openBoards(a: Activity, s: Sch) {
