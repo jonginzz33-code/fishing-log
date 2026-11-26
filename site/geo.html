@@ -549,6 +549,8 @@ details summary{cursor:pointer;font-weight:800}
     return call('checkNeeds', { method: 'POST', body: { ids: ids } }).then(function (j) {
       if (btn) btn.disabled = false;
       $('nMsg').textContent = $('msg').textContent = j.msg || j.error || '';
+      // 알람 보내기에 실패했으면 빨간 글씨로
+      $('nMsg').style.color = $('msg').style.color = j.notifyFail ? 'var(--bad)' : '';
       load();
     });
   }
@@ -558,7 +560,7 @@ details summary{cursor:pointer;font-weight:800}
     var qty = Math.max(1, Math.round(+$('nQ').value) || 1);
     if (!pTxt) { $('nHint').textContent = '거래처를 적어 주세요.'; $('nP').focus(); return; }
     if (!pr) { $('nHint').textContent = '제품을 목록에서 고르거나 “지오팜에서 찾기”로 골라 주세요.'; $('nN').focus(); return; }
-    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: +$('nE').value, memo: $('nM').value.trim() };
+    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: +$('nE').value, memo: $('nM').value.trim(), added: Date.now() };
     var btn = $('nAdd'); btn.disabled = true;
     saveNeeds((data.needs || []).concat([n])).then(function (j) {
       btn.disabled = false;
@@ -604,7 +606,8 @@ details summary{cursor:pointer;font-weight:800}
         // 알람 상태 (누르면 바뀜)
         var sent = !!(s && s.sent);
         var alarm = '<button class="alarm ' + (sent ? 'done' : 'wait') + '" data-alarm="' + esc(n.id) + '" data-sent="' + (sent ? 1 : 0) + '" title="누르면 바뀌어요">' +
-          (sent ? '✅ 알람전송완료!' : '🔔 알람전송대기중') + '</button>';
+          (sent ? '✅ 알람전송완료!' : '🔔 알람전송대기중') + '</button>' +
+          (!sent && s && s.failAt ? ' <span class="b f">⚠ 알람 보내기 실패 ' + when(s.failAt) + '</span>' : '');
         sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && typeof s.n === 'number' ? s.n + '개' : '?'));
         // 다음 자동 확인까지 남은 시간 (1초마다 줄어듦) + 지금 새로고침
         var due = s && s.t ? s.t + n.every * 60000 : 0;
@@ -613,6 +616,8 @@ details summary{cursor:pointer;font-weight:800}
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (sent && s.at) sub.push('알람 ' + when(s.at));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
+        var added = n.added || parseInt(String(n.id).slice(0, -4), 36);
+        if (added > 1.7e12) sub.push('💾 저장 ' + when(added));
         return '<div class="ni' + (sent ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<div style="margin:4px 0 2px">' + alarm + '</div><small>' + sub.join(' · ') + '</small></div>' +
           '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
