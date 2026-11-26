@@ -63,6 +63,10 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.quiet{font-size:14px;gap:6px}
+.quiet label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.quiet input[type=checkbox]{width:18px;height:18px;accent-color:var(--ok)}
+.quiet select{background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:10px;padding:5px 6px;font-size:14px;font-family:inherit}
 .ac{position:relative}
 .acl{position:absolute;left:0;right:0;top:100%;z-index:5;max-height:300px;overflow:auto;background:#0F2231;border:1.5px solid #3A6A88;border-radius:12px;margin-top:2px}
 .acl div{padding:8px 12px;font-size:14px;color:var(--text);cursor:pointer;border-top:1px solid #1E3446}
@@ -106,6 +110,11 @@ details summary{cursor:pointer;font-weight:800}
       <div class="tile g">재고 들어옴<b id="sOk">-</b></div>
       <div class="tile f">아직 부족<b id="sShort">-</b></div>
       <div class="tile">확인 전 · 실패<b id="sNew">-</b></div>
+    </div>
+    <div class="row quiet" style="margin-bottom:12px">
+      <label><input type="checkbox" id="qOn"> 🌙 조회 안 하는 시간</label>
+      <select id="qFrom"></select><span>시 ~</span><select id="qTo"></select><span>시</span>
+      <label style="margin-left:8px"><input type="checkbox" id="qWk"> 토 · 일 쉬기</label>
     </div>
     <div class="row">
       <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
@@ -265,6 +274,7 @@ details summary{cursor:pointer;font-weight:800}
       $('cycle').textContent = st.paused ? '⏸ 감시가 멈춰 있어요 · 감시 ' + j.watch.length + '개'
         : '감시 ' + j.watch.length + '개를 ' + j.groups + '묶음으로 나눠 ' + st.every + '분마다 한 묶음씩 확인 (한 바퀴 약 ' + (lap >= 60 ? Math.round(lap / 6) / 10 + '시간' : lap + '분') + ') · 마지막 한 바퀴 시작 ' + last;
       data.settings = st;
+      showQuiet(st.quiet);
       $('problem').classList.toggle('hide', !j.problem);
       if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
@@ -292,6 +302,19 @@ details summary{cursor:pointer;font-weight:800}
     call('settings', { method: 'POST', body: body }).then(function (j) { $('msg').textContent = j.msg || j.error || ''; load(); });
   }
   $('every').onchange = function () { setCfg({ every: +$('every').value }); };
+  // 조회 안 하는 시간 (퇴근 뒤 · 주말)
+  for (var hh = 0; hh < 24; hh++) { $('qFrom').add(new Option(hh, hh)); $('qTo').add(new Option(hh, hh)); }
+  function showQuiet(q) {
+    q = q || { on: false, from: 19, to: 8, weekend: false };
+    $('qOn').checked = q.on; $('qFrom').value = q.from; $('qTo').value = q.to; $('qWk').checked = q.weekend;
+    $('qFrom').disabled = $('qTo').disabled = !q.on;
+  }
+  ['qOn', 'qFrom', 'qTo', 'qWk'].forEach(function (id) {
+    $(id).onchange = function () {
+      $('qFrom').disabled = $('qTo').disabled = !$('qOn').checked;
+      setCfg({ quiet: { on: $('qOn').checked, from: +$('qFrom').value, to: +$('qTo').value, weekend: $('qWk').checked } });
+    };
+  });
   // 전체 목록을 지금 바로 한 바퀴 확인 (묶음마다 따로 요청)
   $('refreshAll').onclick = function () {
     var btn = $('refreshAll'), n = data.groups || 1, i = 0, ok = 0, fail = 0, re = 0;
@@ -529,7 +552,8 @@ details summary{cursor:pointer;font-weight:800}
     });
     $('sAll').textContent = ns.length; $('sOk').textContent = cnt.ok; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
     $('sLine').textContent = ns.length
-      ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · 다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next))
+      ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · ' +
+        (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
       : '아직 필요 제품이 없어요. 아래에서 거래처 · 제품 · 필요 수량을 넣어 주세요.';
     $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cnt.ok + ')' : '';
     var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name).toLowerCase().indexOf(q) >= 0; });
