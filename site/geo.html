@@ -148,7 +148,8 @@ details summary{cursor:pointer;font-weight:800}
 
   <div class="card">
     <details>
-      <summary>📒 저장해 둔 거래처 · 제품 목록 고치기 (자동완성용)</summary>
+      <summary>📒 저장해 둔 거래처 · 제품 목록 고치기 (자동완성용) <button class="btn ok sm" id="cRefresh" style="margin-left:6px;vertical-align:middle">🔄 거래처 새로고침</button></summary>
+      <div class="msg" id="cMsg"></div>
       <p class="lead" style="margin:10px 0 6px">거래처 — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
       <textarea id="cBulk" style="min-height:140px"></textarea>
       <div class="row" style="margin:6px 0 14px"><button class="btn ok sm" onclick="saveList('customers', 'cBulk', this)">거래처 저장</button></div>
@@ -487,6 +488,16 @@ details summary{cursor:pointer;font-weight:800}
     var n = (data.needs || []).filter(function (x) { return x.id === d; })[0];
     if (!n || !confirm('기다리는 목록에서 뺄까요?\n[' + n.pn + '] ' + n.name)) return;
     saveNeeds(data.needs.filter(function (x) { return x.id !== d; })).then(function (j) { $('nMsg').textContent = j.msg || j.error || ''; renderNeeds(); });
+  };
+  // 지오팜에서 거래처 목록 다시 받기 (거래처가 늘었을 때)
+  $('cRefresh').onclick = function (e) {
+    e.preventDefault(); e.stopPropagation(); // 펼침/접힘 안 되게
+    var btn = $('cRefresh'); btn.disabled = true;
+    $('cMsg').textContent = '지오팜에서 거래처 받아오는 중…';
+    call('refreshCustomers', { method: 'POST', wait: 60000 }).then(function (j) {
+      btn.disabled = false; $('cMsg').textContent = j.msg || j.error || '';
+      $('cBulk').blur(); load();
+    });
   };
   window.saveList = function (kind, el, btn) {
     btn.disabled = true;
