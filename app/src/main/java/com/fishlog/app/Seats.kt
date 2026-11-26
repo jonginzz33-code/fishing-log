@@ -329,10 +329,11 @@ object Seats {
 
     // v6.97 (414): 선단 홈페이지 대표 사진 — prefs seat_img_<host> = 주소|yyyyMMdd (못 찾음 = 빈 주소 · 7일)
     private val OG_IMG = Regex("<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']|<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']og:image[\"']", RegexOption.IGNORE_CASE)
-    private val WEB_MAIN = Regex("https?://imga\\.sunsang24\\.com/ship_img/[^\"'\\s)]+ship_web_main/[^\"'\\s)]+\\.(?:jpg|jpeg|png)", RegexOption.IGNORE_CASE)
+    // v6.98: 선단 첫 화면 맨 위 배 사진 (.img_submain = ship_mobile_main · 없으면 ship_web_main) — og:image 는 선상24 기본 바다 그림이라 마지막
+    private val WEB_MAIN = Regex("https?://imga\\.sunsang24\\.com/ship_img/[^\"'\\s)]+ship_(?:mobile|web)_main/[^\"'\\s)]+\\.(?:jpg|jpeg|png)", RegexOption.IGNORE_CASE)
     /** null = 아직 모름 · "" = 없음 */
     fun fleetImg(c: Context, host: String): String? {
-        val v = prefs(c).getString("seat_img_$host", null) ?: return null
+        val v = prefs(c).getString("seat_img2_$host", null) ?: return null
         val u = v.substringBefore('|'); val d = v.substringAfterLast('|')
         val age = try { ((System.currentTimeMillis() - SimpleDateFormat("yyyyMMdd", Locale.KOREA).parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { 99 }
         return if (age < (if (u.isBlank()) 7 else 30)) u else null
@@ -341,19 +342,28 @@ object Seats {
         var u = ""
         try {
             val h = get("https://$host/")
-            u = OG_IMG.find(h)?.let { m -> m.groupValues[1].ifBlank { m.groupValues[2] } }?.trim() ?: ""
-            if (u.isBlank()) u = WEB_MAIN.find(h)?.value ?: ""
+            u = WEB_MAIN.findAll(h).map { it.value }.sortedBy { if (it.contains("ship_mobile_main")) 0 else 1 }.firstOrNull() ?: ""
+            if (u.isBlank()) u = OG_IMG.find(h)?.let { m -> m.groupValues[1].ifBlank { m.groupValues[2] } }?.trim() ?: ""
+            // 선상24 · 더피싱 공용 기본 그림은 빼기
+            if (u.contains("assets.sunsang24.com") || u.endsWith("/og.jpg") || u.contains("/n/images/")) u = ""
             if (u.startsWith("//")) u = "https:$u" else if (u.startsWith("/")) u = "https://$host$u"
             if (!u.startsWith("http")) u = ""
             // 사이트 기본 로고 · 아이콘은 빼기
             if (Regex("favicon|logo|icon|kakao|naver", RegexOption.IGNORE_CASE).containsMatchIn(u.substringAfterLast('/'))) u = ""
         } catch (_: Exception) { return }   // 못 읽음 → 다음에 다시
-        prefs(c).edit().putString("seat_img_$host", u + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())).apply()
+        prefs(c).edit().putString("seat_img2_$host", u + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())).apply()
     }
 
     // v6.86 (395): 배 사진 (작은 사진 · 메모리 + 폰 파일)
     private val imgMem = android.util.LruCache<String, android.graphics.Bitmap>(60)
     private val imgBusy = HashSet<String>()
+    /** 큰 사진(선단 첫 화면 사진 등)은 긴 변 ~480px 로 줄여 읽기 */
+    private fun small(b: ByteArray): android.graphics.Bitmap? {
+        val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size, o)
+        var n = 1; while (maxOf(o.outWidth, o.outHeight) / (n * 2) >= 480) n *= 2
+        return android.graphics.BitmapFactory.decodeByteArray(b, 0, b.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = n })
+    }
     fun shipImg(c: Context, url: String, view: android.widget.ImageView) {
         if (url.isBlank()) return
         view.tag = url
@@ -362,13 +372,13 @@ object Seats {
         Thread {
             val f = java.io.File(c.cacheDir, "shipimg/" + Integer.toHexString(url.hashCode()) + ".jpg")
             val bm = try {
-                if (f.exists() && System.currentTimeMillis() - f.lastModified() < 14 * 86400_000L) android.graphics.BitmapFactory.decodeFile(f.path)
+                if (f.exists() && System.currentTimeMillis() - f.lastModified() < 14 * 86400_000L) small(f.readBytes())
                 else {
                     val cn = URL(url).openConnection() as HttpURLConnection
                     cn.connectTimeout = 8000; cn.readTimeout = 10000
                     val bytes = cn.inputStream.use { it.readBytes() }; cn.disconnect()
                     f.parentFile?.mkdirs(); f.writeBytes(bytes)
-                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    small(bytes)
                 }
             } catch (_: Exception) { null }
             synchronized(imgBusy) { imgBusy.remove(url) }
@@ -1190,7 +1200,7 @@ object Seats {
                 val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
                 picBox.addView(iv, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
                 shipImg(a, s.img, iv)
-                picBox.setOnClickListener { showPhoto(a, if (s.img.contains("ship_web_main")) s.img else s.img.replace("_smini.", "_mini."), s.ship) }
+                picBox.setOnClickListener { showPhoto(a, if (s.img.contains("_main/")) s.img else s.img.replace("_smini.", "_mini."), s.ship) }
             }
             head.addView(picBox, LinearLayout.LayoutParams(dp(62), dp(62)).apply { rightMargin = dp(10) })
             val info = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
