@@ -68,6 +68,10 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
 .rows div{display:flex;justify-content:space-between;border-top:1px solid #1E3446;padding:6px 0;font-size:14px}
 .rows div:first-child{border-top:0}
 .wx{font-size:13px;color:#B8CAD6;white-space:pre-wrap}
+.wxt{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+.wxt th{color:var(--sub);font-weight:700;font-size:11.5px;text-align:left;padding:4px 6px;border-bottom:1px solid #2C4F66}
+.wxt td{padding:5px 6px;border-bottom:1px solid #1E3446}
+.wxt small{color:var(--sub)}
 .photo{width:100%;max-width:360px;border-radius:14px;margin-top:6px;border:1.5px solid var(--line)}
 </style>
 </head>
@@ -230,6 +234,32 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     page();
   }
 
+  // 🌤 그날 날씨: 앱이 저장한 시간별 값 {"h":{시각:{w 바람,d 풍향,g 돌풍,wv 파고,s 수온,t 기온,sk 하늘,pt 비,p 강수확률}},"m":{시각:실측 수온}}
+  var DIRS = ['북', '북북동', '북동', '동북동', '동', '동남동', '남동', '남남동', '남', '남남서', '남서', '서남서', '서', '서북서', '북서', '북북서'];
+  function dirName(d) { return d == null ? '' : DIRS[Math.round(((d % 360) + 360) % 360 / 22.5) % 16]; }
+  function f1(x) { return x == null ? '-' : (Math.round(x * 10) / 10).toString(); }
+  function wxTable(t) {
+    var o; try { o = typeof t.wx === 'string' ? JSON.parse(t.wx) : t.wx; } catch (e) { return ''; }
+    if (!o || !o.h) return '';
+    var m = o.m || {};
+    var from = (t.start || 0) - 3600000, to = (t.end || t.start || 0) + 3600000;
+    var ks = Object.keys(o.h).map(Number).sort(function (a, b) { return a - b; });
+    var in_ = ks.filter(function (k) { return k >= from && k <= to; });
+    if (!in_.length) in_ = ks.slice(0, 12);
+    function sky(h) { if (h.th || (h.c != null && h.c >= 95)) return '⚡'; if (h.pt && h.pt > 0) return h.pt === 3 ? '🌨' : '🌧'; return { 1: '☀', 3: '⛅', 4: '☁' }[h.sk] || (h.c != null ? (h.c <= 1 ? '☀' : h.c <= 3 ? '⛅' : '☁') : ''); }
+    var mk = Object.keys(m).map(Number);
+    // 기온이 전부 0 이면 못 받은 값 (예전 기록) → 안 보임
+    var noT = in_.every(function (k) { return !o.h[k].t; });
+    function meas(k) { var best = null; mk.forEach(function (x) { if (Math.abs(x - k) <= 1800000 && (best == null || Math.abs(x - k) < Math.abs(best - k))) best = x; }); return best == null ? null : m[best]; }
+    var rows = in_.map(function (k) {
+      var h = o.h[k], ms = meas(k);
+      return '<tr><td>' + hm(k) + '</td><td>' + sky(h) + (h.t != null && !noT ? ' ' + f1(h.t) + '°' : '') + '</td><td>' + (h.w != null ? dirName(h.d) + ' <b>' + f1(h.w) + '</b>' + (h.g != null ? ' <small>(' + f1(h.g) + ')</small>' : '') : '-') + '</td><td>' + f1(h.wv) + '</td><td>' +
+        (ms != null ? '<b style="color:#7FD6FF">' + f1(ms) + '</b>' : f1(h.s)) + '</td></tr>';
+    }).join('');
+    return '<h3>🌤 그날 날씨' + (o.st ? ' <small class="note">· ' + esc(o.st) + '</small>' : '') + '</h3><div style="overflow-x:auto"><table class="wxt"><tr><th>시각</th><th>하늘 · 기온</th><th>바람 m/s (돌풍)</th><th>파고 m</th><th>수온 ℃</th></tr>' + rows + '</table></div>' +
+      '<div class="note">수온 하늘색 = 실측 · 나머지는 예보</div>';
+  }
+
   // 상세 (밑에서 올라오는 창)
   var map = null;
   function detail(t) {
@@ -246,7 +276,7 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
       (t.thumb ? '<h3>📷 대표 사진</h3><img class="photo" src="data:image/jpeg;base64,' + t.thumb + '">' : '') +
       (tot ? '<h3>⏰ 시간대별</h3><div class="bars">' + bars + '</div>' : '') +
       '<h3>🗺 지도</h3><div id="map"></div><div class="note" id="mapNote">' + (t.src === 'all' && t.prec !== 'exact' && t.prec !== true ? '게시판 글은 위치가 대략일 수 있어요' : '') + '</div>' +
-      (t.wx ? '<h3>🌤 그날 날씨</h3><div class="wx">' + esc(String(t.wx).slice(0, 600)) + '</div>' : '') +
+      wxTable(t) +
       (tot ? '<h3>🐟 잡은 시각</h3><div class="rows">' + t.catches.slice().sort(function (a, b) { return a.t - b.t; }).map(function (c, i) { return '<div><span>' + (i + 1) + '. ' + esc(nameOf(t.names, c.s)) + '</span><span class="note">' + hm(c.t) + '</span></div>'; }).join('') + '</div>' : '') +
       '</div>';
     document.body.appendChild(dim); document.body.style.overflow = 'hidden';
@@ -267,7 +297,8 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
       L.circleMarker([c.la, c.lo], { radius: 6, color: '#fff', weight: 1.5, fillColor: '#E8892A', fillOpacity: .95 }).addTo(map).bindPopup(esc(nameOf(t.names, c.s)) + ' · ' + hm(c.t));
       b.push([c.la, c.lo]);
     });
-    function fit() { if (b.length) map.fitBounds(b, { padding: [24, 24], maxZoom: 14 }); }
+    // 점이 한 곳에 몰려 있으면 해안이 보이게 덜 확대 (최대 12)
+    function fit() { if (b.length) map.fitBounds(b, { padding: [30, 30], maxZoom: 12 }); }
     fit();
     if (t.track) drawTrack(t.track);
     else if (t.hasTrack && t.ref) {
