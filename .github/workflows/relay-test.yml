@@ -7,17 +7,20 @@ jobs:
     steps:
       - run: |
           set +e
+          mkdir -p out; cd out
           R="https://talla-relay.jonginzz33.workers.dev/?u="
-          for h in poseidon sungbin noel kyungil; do
-            curl -s -m 60 "${R}https%3A%2F%2F$h.sunsang24.com%2Fship%2Fschedule_fleet%2F2026-12-03%2F0%2Fsimple_day1" -o /tmp/$h.html
-          done
-          python3 - <<'Q'
-          import re
-          for h in ['poseidon','sungbin','noel','kyungil']:
-            d=open(f'/tmp/{h}.html',encoding='utf-8',errors='ignore').read()
-            print("==",h,len(d),d.count('ship_unit_ship_no_'))
-            print("WON",re.findall(r'[^<>]{0,60}[0-9][0-9,]{3,}\s*원[^<>]{0,30}',d)[:5])
-            print("PRICEATTR",re.findall(r'[\w-]*price[\w-]*="?[^"\s>]*',d,re.I)[:8])
-            j=d.find('ship_unit_ship_no_')
-            print("BLOCK",re.sub(r'\s+',' ',d[j:j+3500]))
-          Q
+          enc() { python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$1"; }
+          get() { curl -s -m 60 "${R}$(enc "$1")" -o "$2"; echo "$2 $(wc -c < $2)"; }
+          for d in 2026-12-03 2026-12-05 2026-12-10; do get "https://gull.sunsang24.com/ship/schedule_fleet/$d/0/simple_day1" gull_$d.html; done
+          get "https://gull.sunsang24.com/" gull_home.html
+          SCH=$(grep -oh 'data-schedule_no="[0-9]*"' gull_*.html | head -1 | grep -o '[0-9]*')
+          echo "SCH=$SCH"
+          get "https://gull.sunsang24.com/mypage/reservation_ready/$SCH" gull_ready.html
+          grep -oh 'src="[^"]*\.js[^"]*"' gull_ready.html | sort -u > gull_js.txt; cat gull_js.txt
+          for j in $(grep -o '"[^"]*"' gull_js.txt | tr -d '"' | grep -v 'http' | head -8); do n=$(echo $j | tr '/?=&' '____'); get "https://gull.sunsang24.com$j" js_$n; done
+          get "https://yamujin.thefishing.kr/index.php?mid=bk&year=2026&month=12&day=05" yam_bk.html
+          P=$(grep -o "popup.step1.php?[^']*" yam_bk.html | head -1); echo "P=$P"
+          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/$P" yam_step1.html
+          grep -oh 'action="[^"]*"\|src="[^"]*\.js[^"]*"' yam_step1.html | sort -u
+      - uses: actions/upload-artifact@v4
+        with: { name: pages, path: out }
