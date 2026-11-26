@@ -144,7 +144,7 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     var cs = counts(t), d = new Date(t.start || 0);
     var tot = t.catches.length || t.total || 0;
     var col = { mine: 'var(--mine)', group: 'var(--group)', all: 'var(--all)' }[t.src];
-    var sub = [t.cat, t.boat, t.port, dur(t.start, t.end)].filter(Boolean).join(' · ');
+    var sub = [catName(t.cat), t.boat, t.port, dur(t.start, t.end)].filter(Boolean).join(' · ');
     return '<div class="card" data-k="' + esc(t.key) + '"><div class="d"><b>' + d.getDate() + '</b><small>' + (d.getMonth() + 1) + '월 ' + DOW[d.getDay()] + '</small></div>' +
       '<div class="m"><div class="t">' + (t.src === 'mine' ? esc(sub.split(' · ')[0] || '출조') : esc(t.who)) +
       (t.src !== 'mine' ? '<span class="tag" style="background:' + col + '">' + (t.src === 'group' ? esc(t.gname || '그룹') : '전체') + '</span>' : '') + '</div>' +
@@ -260,6 +260,12 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
       '<div class="note">수온 하늘색 = 실측 · 나머지는 예보</div>';
   }
 
+  // 어종 색 = 앱과 같게 (1번 주황 · 2번 하늘 · 그 밖)
+  var SLOTC = ['#F28C38', '#5BC8DF', '#5FD39A', '#F07AA0', '#B9A6FF', '#F2C14E', '#FF7B5C', '#9ADBFF'];
+  function slotCol(s) { return SLOTC[(s - 1) % SLOTC.length] || '#F28C38'; }
+  var CATN = { boat: '선상낚시', night: '해루질', walk: '워킹낚시', fresh: '민물낚시' };
+  function catName(c) { return CATN[c] || c; }
+
   // 상세 (밑에서 올라오는 창)
   var map = null;
   function detail(t) {
@@ -271,8 +277,8 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     var bars = ''; for (var h = h0; h <= h1 && h - h0 < 24; h++) bars += '<div class="c">' + (hrs[h] ? '<em>' + hrs[h] + '</em>' : '') + '<i style="height:' + ((hrs[h] || 0) / mx * 80) + '%"></i><span>' + h + '</span></div>';
     var hasPts = t.catches.some(function (c) { return c.la != null; });
     dim.innerHTML = '<div class="sheet"><div class="hd"><h2>' + esc(d8(t.start)) + (t.src !== 'mine' ? ' · ' + esc(t.who) : '') + '</h2><button class="btn ghost sm" id="x">닫기</button></div>' +
-      '<div class="note">' + esc([t.cat, t.boat, t.port, hm(t.start) + (t.end ? ' ~ ' + hm(t.end) : ''), dur(t.start, t.end), t.gname].filter(Boolean).join(' · ')) + '</div>' +
-      '<div class="big"><div class="b">총<b>' + (tot || t.total || 0) + '</b>마리</div>' + cs.map(function (x) { return '<div class="b">' + esc(x[0]) + '<b>' + x[1] + '</b></div>'; }).join('') + '</div>' +
+      '<div class="note">' + esc([catName(t.cat), t.boat, t.port, hm(t.start) + (t.end ? ' ~ ' + hm(t.end) : ''), dur(t.start, t.end), t.gname].filter(Boolean).join(' · ')) + '</div>' +
+      '<div class="big"><div class="b">총<b>' + (tot || t.total || 0) + '</b>마리</div>' + cs.map(function (x) { var sl = (t.names || []).indexOf(x[0]) + 1; return '<div class="b"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:' + (sl > 0 ? slotCol(sl) : '#9FB4C2') + '"></span>' + esc(x[0]) + '<b>' + x[1] + '</b></div>'; }).join('') + '</div>' +
       (t.thumb ? '<h3>📷 대표 사진</h3><img class="photo" src="data:image/jpeg;base64,' + t.thumb + '">' : '') +
       (tot ? '<h3>⏰ 시간대별</h3><div class="bars">' + bars + '</div>' : '') +
       '<h3>🗺 지도</h3><div id="map"></div><div class="note" id="mapNote">' + (t.src === 'all' && t.prec !== 'exact' && t.prec !== true ? '게시판 글은 위치가 대략일 수 있어요' : '') + '</div>' +
@@ -285,7 +291,13 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     dim.querySelector('#x').onclick = close;
     if (typeof L === 'undefined') { $('map').outerHTML = '<p class="note">지도를 못 불러왔어요</p>'; return; }
     map = L.map('map', { zoomControl: true }).setView([36.5, 126.5], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+    // 앱과 같게: 기본 = 위성 사진(Esri) · 오른쪽 위에서 [위성 | 지도] 바꾸기 (브라우저에 기억)
+    var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18, attribution: 'Esri' });
+    var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' });
+    var useSat = true; try { useSat = localStorage.getItem('app_sat') !== '0'; } catch (e) {}
+    (useSat ? sat : osm).addTo(map);
+    L.control.layers({ '🛰 위성': sat, '🗺 지도': osm }, null, { position: 'topright' }).addTo(map);
+    map.on('baselayerchange', function (e) { try { localStorage.setItem('app_sat', e.layer === sat ? '1' : '0'); } catch (x) {} });
     var b = [];
     function drawTrack(pts) {
       if (!pts || pts.length < 2) return;
@@ -294,7 +306,7 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     }
     t.catches.forEach(function (c, i) {
       if (c.la == null) return;
-      L.circleMarker([c.la, c.lo], { radius: 6, color: '#fff', weight: 1.5, fillColor: '#E8892A', fillOpacity: .95 }).addTo(map).bindPopup(esc(nameOf(t.names, c.s)) + ' · ' + hm(c.t));
+      L.circleMarker([c.la, c.lo], { radius: 7, color: '#fff', weight: 2, fillColor: slotCol(c.s), fillOpacity: .95 }).addTo(map).bindPopup(esc(nameOf(t.names, c.s)) + ' · ' + hm(c.t));
       b.push([c.la, c.lo]);
     });
     // 점이 한 곳에 몰려 있으면 해안이 보이게 덜 확대 (최대 12)
