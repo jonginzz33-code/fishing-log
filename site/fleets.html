@@ -167,12 +167,43 @@ h1{font-size:21px;margin:14px 0 8px}
     if (ql) return DIR.filter(function (f) { return (f[0] + f[1] + f[2] + f[3]).toLowerCase().replace(/\s/g, '').indexOf(ql) >= 0; }).slice(0, 60);
     return DIR.filter(function (f) { return areaSel.indexOf(f[3]) >= 0; });
   }
+  // 중계기 /day = 선단 40곳을 한 번에 읽어 정리한 결과 (새 중계기) · 안 되면 예전처럼 한 곳씩
+  var dayOk = null;
+  function loadBatch(fs, d, g) {
+    var ks = fs.map(function (f) { return f[0] + '|' + d; });
+    fs.forEach(function (f) { loading[f[0] + '|' + d] = 1; });
+    var ctl = new AbortController(); var to = setTimeout(function () { ctl.abort(); }, 30000);
+    return fetch(RELAY.replace('/?u=', '/day?d=') + d + '&h=' + fs.map(function (f) { return f[0]; }).join(','), { signal: ctl.signal })
+      .then(function (r) { if (!r.ok) throw new Error('old'); return r.json(); })
+      .then(function (j) {
+        clearTimeout(to); dayOk = true;
+        fs.forEach(function (f) {
+          var k = f[0] + '|' + d, l = j[f[0]] || [];
+          l.forEach(function (s) { s.host = f[0]; s.f = f; });
+          schs[k] = l; loaded[k] = 1; delete loading[k];
+        });
+        if (g === gen) later();
+      })
+      .catch(function () {
+        clearTimeout(to); ks.forEach(function (k) { delete loading[k]; });
+        if (dayOk === null) dayOk = false;
+        return Promise.all(fs.map(function (f) { return loadFleet(f, d, g); }));
+      });
+  }
   function loadAll() {
-    var g = ++gen, l = fleetsOn(), i = 0, run = 0;
-    function next() {
-      while (run < 8 && i < l.length) { run++; loadFleet(l[i++], day, g).then(function () { run--; if (g === gen) next(); }); }
+    var g = ++gen, l = fleetsOn().filter(function (f) { var k = f[0] + '|' + day; return !loaded[k] && !loading[k]; });
+    // 즐겨찾기 배가 있는 선단 먼저
+    var favH = {}; Object.keys(favs).forEach(function (k) { favH[k.split('|')[0]] = 1; });
+    l.sort(function (a, b) { return (favH[b[0]] ? 1 : 0) - (favH[a[0]] ? 1 : 0); });
+    if (dayOk === false) {
+      var i = 0, run = 0;
+      (function next() { while (run < 12 && i < l.length) { run++; loadFleet(l[i++], day, g).then(function () { run--; if (g === gen) next(); }); } })();
+    } else {
+      var bs = []; for (var j = 0; j < l.length; j += 40) bs.push(l.slice(j, j + 40));
+      var bi = 0, brun = 0;
+      (function nextB() { while (brun < 4 && bi < bs.length) { brun++; loadBatch(bs[bi++], day, g).then(function () { brun--; if (g === gen) nextB(); }); } })();
     }
-    next(); render();
+    render();
   }
 
   // ── 화면 ──
