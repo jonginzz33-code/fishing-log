@@ -12,7 +12,7 @@
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.6}
 a{color:inherit;text-decoration:none}
 .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
-nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid #1E3446}
+nav{display:flex;align-items:center;justify-content:space-between;padding:18px 0;padding-right:58px;border-bottom:1px solid #1E3446;min-height:70px}
 .logo{font-size:22px;font-weight:900}.logo span{color:var(--sky)}
 nav .links a{color:var(--sub);margin-left:18px;font-size:15px}
 .hero{text-align:center;padding:56px 0 28px}
@@ -57,13 +57,18 @@ footer a{text-decoration:underline;margin-right:12px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width:560px){.two{grid-template-columns:1fr}}
 @media (max-width:560px){nav .links{display:none}}
+.sec{font-size:19px;margin:26px 0 10px}.sec small{font-size:12.5px;color:var(--sub);font-weight:500;margin-left:6px}
+.tools{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.tool{display:block;background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px}
+.tool .i{font-size:28px}.tool b{display:block;font-size:16px;margin:6px 0 2px}.tool p{margin:0;font-size:13px;color:#B8CAD6}
+.tool .k{display:inline-block;margin-top:8px;font-size:11px;font-weight:800;padding:1px 8px;border-radius:8px}
+.k.t{background:#16324A;color:#7FD6FF}.k.a{background:#4A2A12;color:#FFC98A}.k.g{background:#1E4F3E;color:#9FF0CF}
 </style>
 </head>
 <body>
 <div class="wrap">
 <nav>
   <a class="logo" href="/">🎣 <span>talla</span>.co.kr</a>
-  <div class="links"><a href="#apps">앱</a><a href="#legal">개인정보처리방침</a><a href="admin" title="관리자">🔐</a></div>
 </nav>
 
 
@@ -131,7 +136,15 @@ footer a{text-decoration:underline;margin-right:12px}
   </div>
 </section>
 
-<div class="soon">🛠 준비 중 — 웹에서 내 조과 보기 (아이폰 · PC) · 문의 메일 · 새 앱</div>
+<h2 class="sec">🧰 도구 <small>talla.co.kr 에서 쓰는 것 · 오른쪽 위 ☰ 메뉴에도 있어요</small></h2>
+<section class="tools">
+  <a class="tool" href="/fleets"><div class="i">🚤</div><b>배 선단 보기</b><p>선상24 · 더피싱 선단 1,000곳 찾기 · 그 날 일정 · 조과 · 전화</p><span class="k t">시험 중</span></a>
+  <a class="tool" href="/admin"><div class="i">🔐</div><b>관리자</b><p>배 추가 · 배 검색 · 나만 보는 메모 (구글 로그인)</p><span class="k a">관리자만</span></a>
+  <a class="tool" href="/rules"><div class="i">📋</div><b>서버 규칙 복사</b><p>Firebase 규칙 게시할 때 한 번에 복사</p><span class="k a">관리자만</span></a>
+  <a class="tool" href="#legal"><div class="i">📄</div><b>개인정보 · 계정 삭제</b><p>조과일지 · 급할 때 처리방침 · 탈퇴 안내</p><span class="k g">모두</span></a>
+</section>
+
+<div class="soon">🛠 준비 중 — 웹에서 내 조과 보기 (아이폰 · PC) · 앱처럼 선상 빈자리 · 문의 메일 · 새 앱</div>
 
 <footer id="legal">
   © 2026 talla.co.kr<br>
@@ -146,5 +159,6 @@ function copyGuide(b){
  if(navigator.clipboard){navigator.clipboard.writeText(t).then(done,function(){prompt("복사해 주세요",t)})}else{prompt("복사해 주세요",t)}
 }
 </script>
+<script src="/menu.js"></script>
 </body>
 </html>
