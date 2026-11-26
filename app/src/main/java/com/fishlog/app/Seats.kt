@@ -1471,11 +1471,11 @@ object Seats {
 
         // v6.92 (410): 🎣 더피싱 전체 = 고른 지역의 더피싱 선단(10곳까지) 그 날 화면 한 번씩
         fun loadTf() {
-            if (!useTf) { tfAll.clear(); tfKey = ""; return }
+            if (!useTf) { tfAll.clear(); tfKey = ""; tfBusy = false; tfHosts = 0; return }
             val kws = areaKw(areaSel)
             val key = "$day|${kws.sorted()}"
             if (key == tfKey) return
-            tfKey = key; tfAll.clear(); tfHosts = 0
+            tfKey = key; tfAll.clear(); tfHosts = 0; tfBusy = false
             if (kws.isEmpty()) { render(); return }
             tfShips(a) { l ->
                 val have = activeFleets(a).map { it.host }.toSet()
