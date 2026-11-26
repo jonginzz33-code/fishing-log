@@ -4,7 +4,9 @@ on:
 jobs:
   t:
     runs-on: ubuntu-latest
+    permissions: { contents: write }
     steps:
+      - uses: actions/checkout@v4
       - run: |
           set +e
           mkdir -p out; cd out
@@ -22,5 +24,8 @@ jobs:
           P=$(grep -o "popup.step1.php?[^']*" yam_bk.html | head -1); echo "P=$P"
           get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/$P" yam_step1.html
           grep -oh 'action="[^"]*"\|src="[^"]*\.js[^"]*"' yam_step1.html | sort -u
-      - uses: actions/upload-artifact@v4
-        with: { name: pages, path: out }
+          get "https://yamujin.thefishing.kr/_core/module/reservation_boat_v5.2_seat1/js/reservation.js" yam_reservation.js
+          get "https://assets.sunsang24.com/real/hosting/resources/js/service_type.js" s24_service_type.js
+          cd ..
+          git config user.name dump; git config user.email d@x
+          git checkout -q --orphan relay-dump; git rm -rq --cached . ; git add out; git commit -qm dump; git push -qf origin HEAD:relay-dump
