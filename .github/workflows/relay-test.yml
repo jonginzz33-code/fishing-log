@@ -8,17 +8,16 @@ jobs:
       - run: |
           set +e
           R="https://talla-relay.jonginzz33.workers.dev/?u="
-          curl -s -m 60 "${R}https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F2026-12-02%2F0%2Fsimple_day1" -o /tmp/d.html
-          curl -s -m 60 "${R}https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F202612" -o /tmp/m.html
+          for h in poseidon sungbin noel kyungil; do
+            curl -s -m 60 "${R}https%3A%2F%2F$h.sunsang24.com%2Fship%2Fschedule_fleet%2F2026-12-03%2F0%2Fsimple_day1" -o /tmp/$h.html
+          done
           python3 - <<'Q'
           import re
-          d=open('/tmp/d.html',encoding='utf-8',errors='ignore').read(); m=open('/tmp/m.html',encoding='utf-8',errors='ignore').read()
-          print("DSIZE",len(d),"blocks",d.count('ship_unit_ship_no_'),"title",re.findall(r'<title>([^<]*)',d)[:1])
-          print("DTXT",re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',d))[:600])
-          i=m.find('data-sdate="2026-12-02"')
-          j=m.find('class="ship_unit_ship_no_',i)
-          k=m.find('class="ship_unit_ship_no_',j+30)
-          print("BLOCK",re.sub(r'\s+',' ',m[j:j+4000]))
-          i2=m.find('data-status_code',i); print("ST",sorted(set(re.findall(r'data-(?:ship_)?status_code="(\w+)"',m))))
-          print("MLINKS",sorted(set(re.findall(r'schedule_fleet/[^"\' ]+',m)))[:15])
+          for h in ['poseidon','sungbin','noel','kyungil']:
+            d=open(f'/tmp/{h}.html',encoding='utf-8',errors='ignore').read()
+            print("==",h,len(d),d.count('ship_unit_ship_no_'))
+            print("WON",re.findall(r'[^<>]{0,60}[0-9][0-9,]{3,}\s*원[^<>]{0,30}',d)[:5])
+            print("PRICEATTR",re.findall(r'[\w-]*price[\w-]*="?[^"\s>]*',d,re.I)[:8])
+            j=d.find('ship_unit_ship_no_')
+            print("BLOCK",re.sub(r'\s+',' ',d[j:j+3500]))
           Q
