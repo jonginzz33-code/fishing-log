@@ -7,17 +7,11 @@ jobs:
     steps:
       - run: |
           set +e
-          R=https://talla-relay.jonginzz33.workers.dev/?u=
-          enc() { python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$1"; }
-          for h in ssfish.thefishing.kr yamujin.thefishing.kr; do
-            curl -s -m 40 "$R$(enc "https://$h/index.php?mid=gall")" -o /tmp/g.html
-            echo "GALL $h $(wc -c < /tmp/g.html)"
-            python3 - "$h" <<'Q'
-          import re,sys
-          s=open('/tmp/g.html',encoding='utf-8',errors='ignore').read()
-          i=s.find('wr_uid=')
-          seg=s[max(0,i-1500):i+2500]
-          print("SEG", sys.argv[1], re.sub(r'\s+',' ',seg)[:3800])
-          print("CNT", len(set(re.findall(r'mid=gall[^"]*wr_uid=(\d+)',s))))
-          Q
+          R=https://talla-relay.jonginzz33.workers.dev
+          echo "PING $(curl -s -m 20 $R/ping)"
+          H="aceho.thefishing.kr,agamifishing.thefishing.kr,apache.thefishing.kr,apollo.sunsang24.com,araon.sunsang24.com,arcadiaho.thefishing.kr,arirang.sunsang24.com,avatar.sunsang24.com,bestho.thefishing.kr,bigboss24.sunsang24.com,bigmarine.thefishing.kr,bikini.thefishing.kr,bite.sunsang24.com,biteho.thefishing.kr,bj.sunsang24.com,blackpig.thefishing.kr,bluefishing.thefishing.kr,bravofishing.thefishing.kr,bumblebee.thefishing.kr,captainfishing.thefishing.kr,chanceho.thefishing.kr,chojun.thefishing.kr,chongkakho.thefishing.kr,chungchun.thefishing.kr,combat.sunsang24.com,csho.sunsang24.com,daejin.thefishing.kr,daeyang.thefishing.kr,daol.sunsang24.com,ddung.thefishing.kr,doji.sunsang24.com,dokhan.thefishing.kr,dol.thefishing.kr,dongbaek.sunsang24.com,dongmun.sunsang24.com,dream.sunsang24.com,eagleho.thefishing.kr,ebadafishing.sunsang24.com,einsho.thefishing.kr,enjoy.sunsang24.com"
+          for i in 1 2; do
+            o=$(curl -s -m 60 -o /tmp/d.json -w "%{http_code} %{size_download} %{time_total}" "$R/day?d=2026-12-03&h=$H")
+            echo "DAY$i $o"
+            python3 -c "import json;d=json.load(open('/tmp/d.json'));ok=[k for k,v in d.items() if v is not None];print('PARSE hosts',len(d),'ok',len(ok),'ships',sum(len(v) for v in d.values() if v),'null',[k for k,v in d.items() if v is None][:5])" 2>&1 | head -3
           done
