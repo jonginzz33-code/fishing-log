@@ -575,6 +575,11 @@ details summary{cursor:pointer;font-weight:800}
 
   // 저장(등록) 시각: added, 없으면 id 앞부분(저장한 순간의 시각)
   function addedOf(n) { return +n.added || parseInt(String(n.id).slice(0, -4), 36) || 0; }
+  // 날짜까지 항상: "11/27(목) 오전 2:02"
+  function whenDate(t) {
+    var d = new Date(t);
+    return (d.getMonth() + 1) + '/' + d.getDate() + '(' + '일월화수목금토'[d.getDay()] + ') ' + d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+  }
   function renderNeeds() {
     var ns = data.needs || [], st = data.needState || {}, q = $('nF').value.trim().toLowerCase();
     // 위 '지금 상태' 칸: 거래처 필요 제품 기준
