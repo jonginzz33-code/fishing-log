@@ -1,0 +1,19 @@
+name: Web app config
+# 388 · 402: 홈피 로그인용 Firebase 웹 앱 설정 확인 (없으면 하나 만들기) · 손으로 실행
+on: { workflow_dispatch: {} }
+jobs:
+  cfg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: List / create web app
+        env: { SA: "${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}" }
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"; export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          F="npx -y firebase-tools@13 --project fishing-log-9109d --non-interactive"
+          $F apps:list WEB || true
+          ID=$($F apps:list WEB --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s).result||[];console.log(r[0]?r[0].appId:"")}catch(e){console.log("")}})')
+          if [ -z "$ID" ]; then $F apps:create WEB "talla-site" || true; ID=$($F apps:list WEB --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s).result||[];console.log(r[0]?r[0].appId:"")})'); fi
+          echo "APP=$ID"
+          [ -n "$ID" ] && $F apps:sdkconfig WEB "$ID" || true
