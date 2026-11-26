@@ -221,7 +221,8 @@ console.log('[v6.68 크기 제한 · 포인트 핀]');
   const pin = { name: '쭈 포인트', memo: '물 빠질 때', lat: 36.3, lon: 126.5, r: 500, sp: ['주꾸미'], owner: 'B', ownerName: 'b', t: now };
   await ok('나만 핀 만들기', setDoc(doc(B, 'users/B/pins/p1'), pin));
   await no('남의 나만 핀 보기', getDoc(doc(A, 'users/B/pins/p1')));
-  await no('핀 반경 너무 큼', setDoc(doc(B, 'users/B/pins/p2'), { ...pin, r: 5000 }));
+  await ok('핀 반경 5km', setDoc(doc(B, 'users/B/pins/p4'), { ...pin, r: 5000 }));
+  await no('핀 반경 너무 큼', setDoc(doc(B, 'users/B/pins/p2'), { ...pin, r: 5001 }));
   await no('핀 이름 없음', setDoc(doc(B, 'users/B/pins/p3'), { ...pin, name: '' }));
   await ok('그룹 핀 만들기', setDoc(doc(B, 'groups/g1/pins/p1'), pin));
   await ok('그룹원이 핀 보기', getDoc(doc(A, 'groups/g1/pins/p1')));
@@ -246,6 +247,17 @@ console.log('[v6.68 크기 제한 · 포인트 핀]');
   await ok('누구나 배 표 보기', getDoc(doc(D, 'shipVotes/s24_2685/v/B')));
   await no('남의 배 표 지우기', deleteDoc(doc(A, 'shipVotes/s24_2685/v/B')));
   await ok('내 배 표 지우기', deleteDoc(doc(B, 'shipVotes/s24_2685/v/B')));
+}
+// v6.91 (402 · 388)
+{
+  const ship = { name: '테티스호', url: 'https://ssfish.thefishing.kr', port: '무창포항', tel: '010', memo: '', t: now };
+  await ok('관리자 배 넣기', setDoc(doc(ADM, 'extraShips/e1'), ship));
+  await ok('사용자 배 목록 읽기', getDoc(doc(B, 'extraShips/e1')));
+  await no('사용자가 배 넣기', setDoc(doc(B, 'extraShips/e2'), ship));
+  await no('관리자도 이상한 칸', setDoc(doc(ADM, 'extraShips/e3'), { ...ship, x: 1 }));
+  await ok('관리자 배 지우기', deleteDoc(doc(ADM, 'extraShips/e1')));
+  await ok('관리자 메모', setDoc(doc(ADM, 'adminNotes/main'), { text: '메모', t: now }));
+  await no('남이 관리자 메모 보기', getDoc(doc(B, 'adminNotes/main')));
 }
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();

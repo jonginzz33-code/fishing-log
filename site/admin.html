@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>관리자 · talla</title>
+<link rel="icon" href="img/jogwa.png">
+<style>
+/* v6.91 (388 · 402): 관리자만 보는 공간 — 구글 로그인 · 배 추가(모든 앱 선상 빈자리에) · 메모 */
+:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--ok:#2FBF8F;--bad:#FF8A8A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.55}
+a{color:inherit}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px 40px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 0;border-bottom:1px solid #1E3446}
+.logo{font-size:20px;font-weight:900;text-decoration:none}.logo span{color:var(--sky)}
+.who{font-size:13px;color:var(--sub);text-align:right}
+h2{font-size:18px;margin:22px 0 10px}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px}
+.btn{display:inline-block;border:0;border-radius:20px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+.btn.ok{background:var(--ok);color:#04222A}.btn.ghost{background:transparent;color:#DDEAF2;border:1.5px solid #3A6A88}
+.btn.bad{background:transparent;color:var(--bad);border:1.5px solid #6A3A3A}.btn.sm{padding:6px 12px;font-size:13px}
+label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
+input,textarea{width:100%;background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit}
+textarea{min-height:140px;resize:vertical}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+@media (max-width:560px){.grid{grid-template-columns:1fr}}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.item{display:flex;gap:10px;align-items:center;border-top:1px solid #1E3446;padding:10px 0}
+.item:first-child{border-top:0}
+.item .t{flex:1;min-width:0}.item b{display:block}.item small{color:var(--sub);word-break:break-all}
+.note{font-size:13px;color:var(--sub)}
+.msg{font-size:14px;margin-top:8px;min-height:20px}
+.hide{display:none}
+.warn{background:#3A2410;border:1.5px solid #E8892A;border-radius:14px;padding:12px 14px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <a class="logo" href="/">🎣 <span>talla</span>.co.kr · 관리자</a>
+  <div class="who" id="who">확인 중…</div>
+</nav>
+
+<div id="setup" class="card warn hide"></div>
+
+<div id="login" class="card hide">
+  <p>관리자 계정(구글)으로 로그인해 주세요.</p>
+  <button class="btn ok" id="loginBtn">🔐 구글로 로그인</button>
+  <div class="msg" id="loginMsg"></div>
+</div>
+
+<div id="deny" class="card hide">
+  <p>이 공간은 관리자만 볼 수 있어요.</p>
+  <button class="btn ghost" id="outBtn2">로그아웃</button>
+</div>
+
+<div id="main" class="hide">
+  <h2>🚤 배 추가 — 모든 앱 '선상 빈자리'에 기본으로 나와요</h2>
+  <div class="card">
+    <div class="grid">
+      <div><label>배 이름 (필수)</label><input id="fName" maxlength="40" placeholder="예: 테티스호"></div>
+      <div><label>사이트 주소 (필수)</label><input id="fUrl" maxlength="200" placeholder="예: ssfish.thefishing.kr"></div>
+      <div><label>항구</label><input id="fPort" maxlength="30" placeholder="예: 무창포항"></div>
+      <div><label>전화</label><input id="fTel" maxlength="30" placeholder="예: 010-0000-0000"></div>
+    </div>
+    <label>메모</label><input id="fMemo" maxlength="200" placeholder="예: 쭈갑 · 오전배">
+    <div class="row">
+      <button class="btn ok" id="saveBtn">＋ 추가</button>
+      <button class="btn ghost hide" id="cancelBtn">고치기 취소</button>
+    </div>
+    <div class="msg" id="saveMsg"></div>
+    <p class="note">선상24 선단(○○.sunsang24.com) · 더피싱 선단(○○.thefishing.kr)은 빈자리까지 나와요. 처음 보는 개인 사이트는 앱이 자리를 못 읽어서 '사이트 열기'만 될 수 있어요. 앱은 6시간마다 이 목록을 새로 읽어요.</p>
+  </div>
+  <div class="card"><div id="ships" class="note">불러오는 중…</div></div>
+
+  <h2>🔎 선상24 배 목록에서 찾기 (자동으로 모은 배)</h2>
+  <div class="card">
+    <input id="q" placeholder="배 이름 또는 항구 (예: 동백, 오천항)">
+    <div id="qRes" class="note" style="margin-top:8px"></div>
+  </div>
+
+  <h2>📝 나만 보는 메모</h2>
+  <div class="card">
+    <textarea id="memo" placeholder="여기 적은 건 관리자만 봐요"></textarea>
+    <div class="row"><button class="btn ok" id="memoBtn">💾 저장</button><span class="msg" id="memoMsg"></span></div>
+  </div>
+  <div class="row"><button class="btn ghost" id="outBtn">로그아웃</button></div>
+</div>
+</div>
+
+<script src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
+<script src="/__/firebase/10.14.1/firebase-auth-compat.js"></script>
+<script src="/__/firebase/10.14.1/firebase-firestore-compat.js"></script>
+<script src="/__/firebase/init.js"></script>
+<script>
+(function () {
+  var ADMIN = 'jonginzz33@gmail.com';
+  var $ = function (id) { return document.getElementById(id); };
+  function show(id) { ['login', 'deny', 'main', 'setup'].forEach(function (k) { $(k).classList.toggle('hide', k !== id); }); }
+  function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
+    $('who').textContent = '';
+    $('setup').innerHTML = '⚠ 로그인 설정이 아직 안 됐어요.<br>Firebase 콘솔 → 프로젝트 설정 → <b>웹 앱 추가(&lt;/&gt;)</b>를 한 번 해 주세요. (Firebase Hosting 은 체크 안 해도 돼요)';
+    show('setup'); return;
+  }
+  var auth = firebase.auth(), db = firebase.firestore();
+  var editId = null;
+  $('loginBtn').onclick = function () {
+    var p = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(p).catch(function (e) {
+      if (/popup|cancel/i.test(e.code || '')) return auth.signInWithRedirect(p);
+      $('loginMsg').textContent = (/unauthorized-domain/.test(e.code || '') ? '⚠ Firebase 승인된 도메인에 이 주소가 없어요 (talla.co.kr 추가 필요) · ' : '로그인 실패 · ') + (e.code || e.message);
+    });
+  };
+  $('outBtn').onclick = $('outBtn2').onclick = function () { auth.signOut(); };
+  auth.onAuthStateChanged(function (u) {
+    if (!u) { $('who').textContent = ''; show('login'); return; }
+    $('who').textContent = u.email;
+    if ((u.email || '').toLowerCase() !== ADMIN) { show('deny'); return; }
+    show('main'); loadShips(); loadMemo();
+  });
+
+  // 🚤 배 추가 · 목록
+  function hostOk(u) { return /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(u.replace(/^https?:\/\//i, '').split(/[/?#]/)[0]); }
+  function loadShips() {
+    db.collection('extraShips').orderBy('t', 'desc').get().then(function (q) {
+      if (q.empty) { $('ships').textContent = '아직 넣은 배가 없어요'; return; }
+      var h = '';
+      q.forEach(function (d) {
+        var x = d.data();
+        h += '<div class="item"><div class="t"><b>' + esc(x.name) + '</b><small>' + esc([x.port, x.url, x.tel, x.memo].filter(Boolean).join(' · ')) + '</small></div>' +
+          '<button class="btn ghost sm" data-e="' + d.id + '">✎</button><button class="btn bad sm" data-d="' + d.id + '">🗑</button></div>';
+      });
+      $('ships').innerHTML = h;
+      $('ships').querySelectorAll('[data-d]').forEach(function (b) { b.onclick = function () {
+        if (!confirm('이 배를 지울까요? (모든 앱에서 빠져요)')) return;
+        db.collection('extraShips').doc(b.dataset.d).delete().then(loadShips).catch(function (e) { alert('못 지웠어요: ' + e.code); });
+      }; });
+      $('ships').querySelectorAll('[data-e]').forEach(function (b) { b.onclick = function () {
+        db.collection('extraShips').doc(b.dataset.e).get().then(function (d) {
+          var x = d.data() || {}; editId = d.id;
+          $('fName').value = x.name || ''; $('fUrl').value = x.url || ''; $('fPort').value = x.port || ''; $('fTel').value = x.tel || ''; $('fMemo').value = x.memo || '';
+          $('saveBtn').textContent = '💾 고치기 저장'; $('cancelBtn').classList.remove('hide'); window.scrollTo(0, 0);
+        });
+      }; });
+    }).catch(function (e) { $('ships').textContent = '못 불러왔어요: ' + (e.code || e.message) + ' (서버 규칙 게시가 필요할 수 있어요)'; });
+  }
+  function resetForm() {
+    editId = null; ['fName', 'fUrl', 'fPort', 'fTel', 'fMemo'].forEach(function (k) { $(k).value = ''; });
+    $('saveBtn').textContent = '＋ 추가'; $('cancelBtn').classList.add('hide');
+  }
+  $('cancelBtn').onclick = resetForm;
+  $('saveBtn').onclick = function () {
+    var d = { name: $('fName').value.trim(), url: $('fUrl').value.trim(), port: $('fPort').value.trim(), tel: $('fTel').value.trim(), memo: $('fMemo').value.trim(), t: Date.now() };
+    if (!d.name || !d.url) { $('saveMsg').textContent = '배 이름과 사이트 주소를 적어 주세요'; return; }
+    if (!hostOk(d.url)) { $('saveMsg').textContent = '사이트 주소를 확인해 주세요 (예: ssfish.thefishing.kr)'; return; }
+    var ref = editId ? db.collection('extraShips').doc(editId) : db.collection('extraShips').doc();
+    ref.set(d).then(function () { $('saveMsg').textContent = '✓ 저장했어요 · 앱에는 6시간 안에 나와요'; resetForm(); loadShips(); })
+      .catch(function (e) { $('saveMsg').textContent = '저장 못 했어요: ' + (e.code || e.message) + ' (서버 규칙 게시가 필요할 수 있어요)'; });
+  };
+
+  // 🔎 자동으로 모은 선상24 배 목록 (data/seat_sites.json)
+  var sites = null;
+  fetch('data/seat_sites.json').then(function (r) { return r.json(); }).then(function (j) { sites = j.ships || {}; }).catch(function () { sites = {}; });
+  $('q').oninput = function () {
+    var k = $('q').value.replace(/\s/g, '').replace(/호$/, '');
+    if (!k || !sites) { $('qRes').innerHTML = ''; return; }
+    var out = [];
+    Object.keys(sites).forEach(function (no) {
+      var s = sites[no]; var n = (s.n || '').replace(/\s/g, ''), p = (s.p || '').replace(/\s/g, '');
+      if (n.indexOf(k) >= 0 || p.indexOf(k) >= 0) out.push(s);
+    });
+    $('qRes').innerHTML = out.length ? out.slice(0, 30).map(function (s, i) {
+      return '<div class="item"><div class="t"><b>' + esc(s.n) + '</b><small>' + esc([s.p, s.h, s.t, s.b].filter(Boolean).join(' · ')) + '</small></div>' +
+        (s.h ? '<button class="btn ghost sm" data-i="' + i + '">＋</button>' : '') + '</div>';
+    }).join('') + (out.length > 30 ? '<div class="note">… ' + out.length + '척 중 30척</div>' : '') : '못 찾았어요';
+    $('qRes').querySelectorAll('[data-i]').forEach(function (b) { b.onclick = function () {
+      var s = out[+b.dataset.i]; resetForm();
+      $('fName').value = s.n || ''; $('fUrl').value = s.h || ''; $('fPort').value = s.p || ''; $('fTel').value = s.t || '';
+      window.scrollTo(0, 0); $('saveMsg').textContent = '확인하고 [＋ 추가]를 눌러 주세요';
+    }; });
+  };
+
+  // 📝 메모
+  function loadMemo() {
+    db.collection('adminNotes').doc('main').get().then(function (d) { $('memo').value = (d.data() || {}).text || ''; })
+      .catch(function (e) { $('memoMsg').textContent = '못 불러왔어요: ' + (e.code || e.message); });
+  }
+  $('memoBtn').onclick = function () {
+    db.collection('adminNotes').doc('main').set({ text: $('memo').value.slice(0, 50000), t: Date.now() })
+      .then(function () { $('memoMsg').textContent = '✓ 저장했어요'; })
+      .catch(function (e) { $('memoMsg').textContent = '저장 못 했어요: ' + (e.code || e.message); });
+  };
+})();
+</script>
+</body>
+</html>

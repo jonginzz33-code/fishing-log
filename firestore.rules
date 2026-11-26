@@ -38,6 +38,21 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // v6.91 (402): 관리자가 홈피(talla.co.kr/admin)에서 넣는 배 · 모든 앱이 읽어 선상 빈자리에
+    match /extraShips/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() && (request.resource == null || (
+        request.resource.data.keys().hasOnly(['name', 'url', 'port', 'tel', 'memo', 't'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 40
+        && request.resource.data.url is string && request.resource.data.url.size() >= 4 && request.resource.data.url.size() <= 200
+        && (!('port' in request.resource.data) || (request.resource.data.port is string && request.resource.data.port.size() <= 30))
+        && (!('tel' in request.resource.data) || (request.resource.data.tel is string && request.resource.data.tel.size() <= 30))
+        && (!('memo' in request.resource.data) || (request.resource.data.memo is string && request.resource.data.memo.size() <= 200))));
+    }
+    // v6.91 (388): 관리자만 보는 메모 (홈피)
+    match /adminNotes/{id} {
+      allow read, write: if isAdmin();
+    }
     // v3.7 🦀 해루질 참고 구역 (모두 읽기 · 관리자만 쓰기)
     match /haeruZones/{doc} {
       allow read: if signedIn();
@@ -146,7 +161,7 @@ service cloud.firestore {
         && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
         && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
         && d.lat is number && d.lat >= -90 && d.lat <= 90 && d.lon is number && d.lon >= -180 && d.lon <= 180
-        && d.r is number && d.r >= 50 && d.r <= 3000
+        && d.r is number && d.r >= 50 && d.r <= 5000
         && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10))
         && (!('ownerName' in d) || (d.ownerName is string && d.ownerName.size() <= 30 && okName(d.ownerName)))
         && d.t is int;
@@ -156,7 +171,7 @@ service cloud.firestore {
       return d.keys().hasOnly(['name', 'memo', 'lat', 'lon', 'r', 'sp', 'owner', 'ownerName', 't', 'edited'])
         && d.name is string && d.name.size() >= 1 && d.name.size() <= 30
         && (!('memo' in d) || (d.memo is string && d.memo.size() <= 200))
-        && d.lat is number && d.lon is number && d.r is number && d.r >= 50 && d.r <= 3000
+        && d.lat is number && d.lon is number && d.r is number && d.r >= 50 && d.r <= 5000
         && (!('sp' in d) || (d.sp is list && d.sp.size() <= 10)) && d.t is int;
     }
     match /pins/{pid} {
