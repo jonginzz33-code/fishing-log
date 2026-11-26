@@ -2,6 +2,11 @@
   "hosting": {
     "public": "site",
     "cleanUrls": true,
-    "ignore": ["firebase.json", "**/.*"]
+    "ignore": ["firebase.json", "**/.*"],
+    "headers": [
+      { "source": "**", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+      { "source": "/img/**", "headers": [{ "key": "Cache-Control", "value": "max-age=86400" }] },
+      { "source": "/data/**", "headers": [{ "key": "Cache-Control", "value": "max-age=600" }] }
+    ]
   }
 }

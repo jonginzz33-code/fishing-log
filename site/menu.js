@@ -23,7 +23,7 @@
       ['👥', '테스터 그룹 가입', 'https://groups.google.com/g/mytoilet-testers', '']] },
     { t: '🧰 도구', items: [
       ['🔗', '자주 가는 링크', '/links', ''],
-      ['🚤', '배 선단 보기', '/fleets', '시험 중']] },
+      ['🚤', '선상 빈자리 (홈피판)', '/fleets', '시험 중']] },
     { t: '🔐 관리', items: [
       ['🔐', '관리자 페이지', '/admin', '관리자만'],
       ['📋', '서버 규칙 복사', '/rules', '관리자만']] },
@@ -33,10 +33,11 @@
       ['🚻', '급할 때 개인정보처리방침', '/geuphal/privacy.html', ''],
       ['🚻', '급할 때 계정 삭제', '/geuphal/delete-account.html', '']] }
   ];
-  var css = '.tm-btn{position:fixed;top:12px;right:14px;z-index:60;width:46px;height:46px;border-radius:14px;border:1.5px solid #3A6A88;background:#12283A;color:#EAF2F6;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.35)}' +
+  var css = '.tm-btn{position:relative;flex:0 0 auto;margin-right:12px;width:42px;height:42px;border-radius:14px;border:1.5px solid #3A6A88;background:#12283A;color:#EAF2F6;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.35)}' +
     '.tm-dim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70;opacity:0;pointer-events:none;transition:opacity .2s}' +
     '.tm-dim.on{opacity:1;pointer-events:auto}' +
-    '.tm-pan{position:fixed;top:0;right:0;bottom:0;width:min(330px,86vw);background:#0E1F2C;border-left:1.5px solid #2C4F66;z-index:80;transform:translateX(105%);transition:transform .22s;overflow-y:auto;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;color:#EAF2F6}' +
+    '.tm-btn.fx{position:fixed;top:12px;left:14px;z-index:60}' +
+    '.tm-pan{position:fixed;top:0;left:0;bottom:0;width:min(330px,86vw);background:#0E1F2C;border-right:1.5px solid #2C4F66;z-index:80;transform:translateX(-105%);transition:transform .22s;overflow-y:auto;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;color:#EAF2F6}' +
     '.tm-pan.on{transform:none}' +
     '.tm-head{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 10px;border-bottom:1px solid #1E3446;font-weight:900;font-size:18px}.tm-head span{color:#7FD6FF}' +
     '.tm-x{border:0;background:transparent;color:#9FB4C2;font-size:24px;cursor:pointer}' +
@@ -67,6 +68,10 @@
     open(false);
     if (a.getAttribute('href') === '/#tester') { var t = document.getElementById('tester'); if (t) { t.open = true; setTimeout(function () { t.scrollIntoView({ behavior: 'smooth' }); }, 230); } }
   }); });
-  document.body.appendChild(btn); document.body.appendChild(dim); document.body.appendChild(pan);
+  // ☰ = 왼쪽 끝 (로고 앞) · 위 줄이 없는 페이지는 왼쪽 위에 떠 있게
+  var nav = document.querySelector('nav');
+  if (nav) { var lg = nav.firstElementChild; nav.insertBefore(btn, lg); if (lg) lg.style.marginRight = 'auto'; nav.style.justifyContent = 'flex-start'; nav.style.paddingRight = '0'; }
+  else { btn.classList.add('fx'); document.body.appendChild(btn); }
+  document.body.appendChild(dim); document.body.appendChild(pan);
   if (location.hash === '#tester') { var t = document.getElementById('tester'); if (t) t.open = true; }
 })();

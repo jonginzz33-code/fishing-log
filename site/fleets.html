@@ -4,116 +4,316 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>배 선단 보기</title>
+<title>선상 빈자리</title>
 <link rel="icon" href="img/jogwa.png">
 <style>
-/* 배 선단 보기 (시험) — 선상24 · 더피싱 선단 홈페이지 모음 · 고른 날 일정 바로 가기 */
-:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--ok:#2FBF8F;--bad:#FF8A8A}
+/* 412: 🚤 선상 빈자리 (홈피판) — 앱 '선상 빈자리'와 같은 모양 · 선단 홈페이지를 중계기(talla-relay)로 읽어요 */
+:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--ok:#2FBF8F;--yel:#F2C14E;--grp:#2E8FB8}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.55}
-a{color:inherit}
-.wrap{max-width:820px;margin:0 auto;padding:0 16px 40px}
-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 58px 16px 0;border-bottom:1px solid #1E3446}
-.logo{font-size:20px;font-weight:900;text-decoration:none}.logo span{color:var(--sky)}
-.who{font-size:13px;color:var(--sub);text-align:right}
-h2{font-size:18px;margin:22px 0 10px}
-.card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:16px;margin-bottom:14px}
-.btn{display:inline-block;border:0;border-radius:20px;padding:10px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
-.btn.ok{background:var(--ok);color:#04222A}.btn.ghost{background:transparent;color:#DDEAF2;border:1.5px solid #3A6A88}
-.btn.bad{background:transparent;color:var(--bad);border:1.5px solid #6A3A3A}.btn.sm{padding:6px 12px;font-size:13px}
-label{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
-input,textarea{width:100%;background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit}
-textarea{min-height:140px;resize:vertical}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
-@media (max-width:560px){.grid{grid-template-columns:1fr}}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
-.item{display:flex;gap:10px;align-items:center;border-top:1px solid #1E3446;padding:10px 0}
-.item:first-child{border-top:0}
-.item .t{flex:1;min-width:0}.item b{display:block}.item small{color:var(--sub);word-break:break-all}
-.note{font-size:13px;color:var(--sub)}
-.msg{font-size:14px;margin-top:8px;min-height:20px}
-.hide{display:none}
-.warn{background:#3A2410;border:1.5px solid #E8892A;border-radius:14px;padding:12px 14px;font-size:14px}
-
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.chip{border:1.5px solid #3A6A88;border-radius:99px;padding:5px 12px;font-size:13px;font-weight:800;cursor:pointer;background:transparent;color:#DDEAF2;font-family:inherit}
-.chip.on{background:#2E8FB8;border-color:#7FD6FF;color:#fff}
-.tag{font-size:11px;color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px;font-weight:800}
-.fleet{border-top:1px solid #1E3446;padding:12px 0}.fleet:first-child{border-top:0}
-.fleet b{font-size:16px}.ships{font-size:13px;color:#B8CAD6;margin:2px 0 8px}
-.btns{display:flex;flex-wrap:wrap;gap:6px}
-input[type=date]{width:auto;color-scheme:dark}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.45}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:760px;margin:0 auto;padding:0 12px 60px}
+nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 58px 12px 0;border-bottom:1px solid #1E3446}
+.logo{font-size:19px;font-weight:900}.logo span{color:var(--sky)}
+h1{font-size:21px;margin:14px 0 8px}
+.top{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0 8px}
+.dbar{display:flex;gap:8px}
+.dbar button{border:1.5px solid #3A6A88;background:transparent;color:var(--text);border-radius:16px;font-size:18px;width:54px;cursor:pointer}
+.dbar .day{flex:1;background:var(--grp);border:0;border-radius:18px;color:#fff;font-weight:900;font-size:17px;padding:12px 8px;cursor:pointer;position:relative}
+.dbar .day input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.pills{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex:0 0 auto;border:1.5px solid #3A6A88;border-radius:99px;padding:7px 13px;font-size:13.5px;font-weight:800;cursor:pointer;background:transparent;color:#DDEAF2;font-family:inherit;white-space:nowrap}
+.pill.on{color:var(--sky);border-color:var(--sky)}
+.qbox{margin-top:8px}
+.qbox input{width:100%;background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit}
+.sum{font-size:12.5px;color:var(--sub);margin-top:8px}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:12px;margin-top:10px}
+.card.fav{border-color:var(--yel)}
+.card.closed{opacity:.6}
+.hd{display:flex;gap:10px;align-items:flex-start}
+.hd .nm{flex:1;min-width:0;font-weight:900;font-size:16px}
+.star{font-size:22px;color:#4A5966;cursor:pointer;line-height:1;background:none;border:0}
+.star.on{color:var(--yel)}
+.ln{font-size:12.5px;color:#B8CAD6;margin-top:3px}
+.tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:5px;font-size:11.5px;color:var(--sub)}
+.tag{font-size:10.5px;font-weight:800;color:#fff;padding:1px 7px;border-radius:6px}
+.site{display:block;font-size:12px;color:var(--sky);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bot{display:flex;align-items:center;gap:6px;margin-top:8px}
+.bot .rm{flex:1;font-size:13px}
+.bot .rm b{font-size:18px}
+.btn{border-radius:99px;padding:8px 14px;font-weight:800;font-size:13.5px;border:1.5px solid #3A6A88;color:var(--sky);background:transparent;white-space:nowrap;display:inline-block}
+.btn.go{background:var(--grp);border-color:var(--grp);color:#fff}
+.links{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.links .btn{padding:5px 11px;font-size:12.5px}
+.empty{color:var(--sub);text-align:center;padding:26px 6px;font-size:14px}
+.more{display:block;width:100%;margin-top:12px;padding:12px;font-size:14px}
+.dim{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#0E1F2C;border:1.5px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;width:100%;max-width:760px;max-height:84vh;overflow-y:auto;padding:14px 16px 26px}
+.sheet .sh{display:flex;align-items:center;gap:8px;margin-bottom:6px}.sheet .sh b{flex:1;font-size:17px}
+.sheet .g{font-size:12.5px;color:var(--sub);font-weight:800;margin:12px 0 6px;display:flex;align-items:center;gap:8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1.5px solid #3A6A88;border-radius:99px;padding:6px 12px;font-size:13.5px;font-weight:800;cursor:pointer;background:transparent;color:#DDEAF2;font-family:inherit}
+.chip.on{background:var(--grp);border-color:var(--sky);color:#fff}
+.chip small{color:var(--sub);font-weight:400}.chip.on small{color:#DDEAF2}
+.note{font-size:12px;color:var(--sub)}
 </style>
 </head>
 <body>
 <div class="wrap">
-<nav>
-  <a class="logo" href="/"><span>talla</span>.co.kr · 배 선단</a>
-  <div class="who">시험 페이지</div>
-</nav>
-<h2>🚤 배 선단 보기</h2>
-<div class="card">
-  <div class="row" style="margin-top:0"><label style="margin:0">📅 날짜</label><input type="date" id="day"></div>
-  <input id="q" placeholder="배 이름 · 항구 · 지역 · 선단 (예: 백호, 오천항, 무창포, 안면도)" style="margin-top:10px">
-  <div class="chips" id="src"></div>
-  <div class="note" id="cnt" style="margin-top:8px">목록 불러오는 중…</div>
+<nav><a class="logo" href="/"><span>talla</span>.co.kr</a><a class="note" href="/admin">관리</a></nav>
+<h1>🚤 선상 빈자리</h1>
+<div class="top">
+  <div class="dbar"><button id="prev">‹</button><label class="day"><span id="dayTxt"></span><input type="date" id="day"></label><button id="next">›</button></div>
+  <div class="pills">
+    <button class="pill" id="qBtn">🔎</button>
+    <button class="pill" id="areaBtn"></button>
+    <button class="pill" id="fishBtn"></button>
+    <button class="pill" id="needBtn"></button>
+    <button class="pill" id="sortBtn"></button>
+    <button class="pill" id="openBtn"></button>
+  </div>
+  <div class="qbox" id="qBox" style="display:none"><input id="q" placeholder="배 이름 · 항구 · 선단 (예: 백호, 오천항, 무창포)"></div>
+  <div class="sum" id="sum"></div>
 </div>
-<div class="card"><div id="res" class="note">위에 배 이름이나 항구를 적어 주세요.</div></div>
-<p class="note">선단 홈페이지 일정은 그 사이트에서 열려요 (남은 자리 · 예약은 거기서). 자리 숫자를 이 페이지에 바로 모아 보여 주는 건 다음 단계예요.</p>
+<div id="list"></div>
+<p class="note" style="margin-top:22px">선단 홈페이지 일정을 읽어 보여 줘요 (5분 안 기준) · 예약 · 입금은 각 선단 홈페이지에서 · 조과일지 앱의 '선상 빈자리'와 같아요</p>
 </div>
 <script>
 (function () {
+  var RELAY = 'https://talla-relay.jonginzz33.workers.dev/?u=';
   var $ = function (id) { return document.getElementById(id); };
-  function esc(s) { return String(s || '').replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
-  var t = new Date(); $('day').value = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate());
-  var fleets = {};   // host -> {src, name, area, ships:{}, tel}
-  function add(src, host, ship, area, fleet, tel) {
-    if (!host) return; host = String(host).toLowerCase();
-    var f = fleets[host] || (fleets[host] = { src: src, host: host, name: '', area: '', ships: {}, tel: '' });
-    if (fleet && !f.name) f.name = fleet; if (area && !f.area) f.area = area; if (tel && !f.tel) f.tel = tel;
-    if (ship) f.ships[String(ship).trim()] = 1;
-  }
-  var SRC = { '선상24 선단': '#3D7BD9', '더피싱 선단': '#2FA06F' };
-  var on = { '선상24 선단': true, '더피싱 선단': true };
-  var left = 2;
-  function ready() { if (--left > 0) return; $('cnt').textContent = '선단 ' + Object.keys(fleets).length + '곳 · 배 ' + Object.keys(fleets).reduce(function (n, h) { return n + Object.keys(fleets[h].ships).length; }, 0) + '척'; draw(); }
-  fetch('data/seat_sites.json').then(function (r) { return r.json(); }).then(function (j) {
-    var o = j.ships || {};
-    Object.keys(o).forEach(function (no) { var s = o[no]; if (s.h && /\.sunsang24\.com$/.test(s.h)) add('선상24 선단', s.h, s.n, s.p, '', s.t); });
-  }).catch(function () {}).then(ready);
-  fetch('data/tf_sites.json').then(function (r) { return r.json(); }).then(function (j) {
-    (j.j || []).forEach(function (x) { add('더피싱 선단', x[6], x[1], x[2], String(x[3] || '').split(' (')[0], ''); });
-  }).catch(function () {}).then(ready);
-  $('src').innerHTML = Object.keys(SRC).map(function (k) { return '<button class="chip on" data-k="' + k + '">' + k + '</button>'; }).join('');
-  $('src').querySelectorAll('[data-k]').forEach(function (b) { b.onclick = function () { on[b.dataset.k] = !on[b.dataset.k]; b.classList.toggle('on', on[b.dataset.k]); draw(); }; });
-  function dayUrl(f, d) {
-    var y = d.slice(0, 4), m = d.slice(5, 7), dd = d.slice(8, 10);
-    if (f.src === '선상24 선단') return 'https://' + f.host + '/ship/schedule_fleet/' + y + m;
-    return 'https://' + f.host + '/index.php?mid=bk&year=' + y + '&month=' + m + '&day=' + dd + '#list';
-  }
-  function draw() {
-    var k = $('q').value.replace(/\s/g, '').replace(/호$/, '');
-    if (!k) { $('res').innerHTML = '위에 배 이름이나 항구를 적어 주세요.'; return; }
-    var d = $('day').value;
-    var out = Object.keys(fleets).map(function (h) { return fleets[h]; }).filter(function (f) {
-      if (!on[f.src]) return false;
-      return [f.name, f.area, f.host].concat(Object.keys(f.ships)).some(function (v) { return String(v || '').replace(/\s/g, '').indexOf(k) >= 0; });
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function ls(k, d) { try { var v = localStorage.getItem('fl_' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem('fl_' + k, JSON.stringify(v)); } catch (e) {} }
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+  // 상태
+  var day = ymd(new Date(Date.now() + 86400000));
+  var areaSel = ls('area', []), fishSel = ls('fish', []), need = ls('need', 1), sortI = ls('sort', 0), openOnly = ls('open', true), favs = ls('fav', {});
+  var SORTS = ['자리 많은 순', '출항 빠른 순', '이름 순'];
+  var DIR = null, AREAS = [];
+  var schs = {}, loaded = {}, loading = {}, gen = 0, shown = 20, q = '';
+
+  // ── 선단 페이지 읽기 (앱 Seats.parse · parseTfFleet 와 같은 규칙) ──
+  function txt(h) { var d = document.createElement('div'); d.innerHTML = String(h).replace(/<br\s*\/?>/gi, ' '); return (d.textContent || '').replace(/\s+/g, ' ').trim(); }
+  function parseS24(host, html) {
+    var tide = {}, m, rt = /id="d(\d{4}-\d{2}-\d{2})"[\s\S]{0,600}?class="swell">([^<]*)</g;
+    while ((m = rt.exec(html))) tide[m[1]] = m[2].trim();
+    var out = [];
+    html.split('<div class="ship_unit_ship_no_').slice(1).forEach(function (b) {
+      var g = function (re) { var x = re.exec(b); return x ? x[1] : ''; };
+      var date = g(/data-sdate="([^"]+)"/), shipNo = g(/data-ship_no="(\d+)"/);
+      if (!date || !shipNo) return;
+      var name = txt(g(/<li class="title">\s*<span[^>]*>([^<]+)<\/span>/)) || '배';
+      var fm = null, x, rf = /<span class="fishspecies"><strong>([^<]*)<\/strong><\/span>\s*\/\s*<span class="way"><strong>([^<]*)<\/strong>/g;
+      while ((x = rf.exec(b))) fm = x;
+      var tm = '', rti = /운항시간\s*:\s*<\/strong><\/span>\s*([^<]+)</g; while ((x = rti.exec(b))) tm = x[1].replace(/&nbsp;/g, ' ').trim();
+      var si = b.indexOf('<li class="seat">'), se = si >= 0 ? b.indexOf('</li>', si) : -1;
+      var seatH = si >= 0 ? b.substring(si, se < 0 ? b.length : se) : '';
+      var seat = seatH.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+      var st = (/data-status_code="(\w+)"/.exec(seatH) || /data-ship_status_code="(\w+)"/.exec(seatH) || [0, 'ING'])[1];
+      var rm = +((/남은자리\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]), rs = +((/예약\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]);
+      if (st === 'END') { var c = +((/(\d+)\s*명/.exec(seat) || [0, rs])[1]); rs = Math.max(rs, c); rm = 0; }
+      out.push({ host: host, shipNo: shipNo, schNo: g(/data-schedule_no="(\d+)"/), ship: name, date: date, fish: fm ? fm[1].trim() : '', way: fm ? fm[2].trim() : '',
+        time: tm, remain: rm, reserved: rs, status: st, tide: tide[date] || '' });
     });
-    $('res').innerHTML = out.length ? out.slice(0, 40).map(function (f) {
-      var ships = Object.keys(f.ships);
-      return '<div class="fleet"><b>' + esc(f.name || f.host.split('.')[0]) + '</b><span class="tag" style="background:' + SRC[f.src] + '">' + esc(f.src) + '</span>' +
-        '<div class="note">' + esc([f.area, f.host, f.tel].filter(Boolean).join(' · ')) + '</div>' +
-        '<div class="ships">🚤 ' + esc(ships.slice(0, 10).join(' · ')) + (ships.length > 10 ? ' 외 ' + (ships.length - 10) + '척' : '') + '</div>' +
-        '<div class="btns"><a class="btn ok sm" href="' + esc(dayUrl(f, d)) + '" target="_blank" rel="noopener">📅 ' + esc(d.slice(5).replace('-', '/')) + ' 일정 · 자리</a>' +
-        (f.src === '선상24 선단' ? '<a class="btn ghost sm" href="https://' + esc(f.host) + '/ship/board" target="_blank" rel="noopener">📝 조과</a>' : '') +
-        '<a class="btn ghost sm" href="https://' + esc(f.host) + '" target="_blank" rel="noopener">🌐 홈페이지</a>' +
-        (f.tel ? '<a class="btn ghost sm" href="tel:' + esc(f.tel) + '">📞</a>' : '') + '</div></div>';
-    }).join('') + (out.length > 40 ? '<div class="note">… ' + out.length + '곳 중 40곳</div>' : '') : '못 찾았어요 · 띄어쓰기 없이 몇 글자만 적어 보세요';
+    return out;
   }
-  $('q').oninput = draw; $('day').onchange = draw;
+  function parseTf(host, html) {
+    var out = [], secs = [], m, rs = /id="new-div-(\d{8})"/g;
+    while ((m = rs.exec(html))) secs.push(m);
+    secs.forEach(function (s, i) {
+      var body = html.substring(s.index + s[0].length, i + 1 < secs.length ? secs[i + 1].index : html.length);
+      var prev = 0, r, rr = /admin-right-(\d{8})-(\d+)-\d+"[^>]*>\s*<img[^>]*alt="([^"]*)"/g;
+      while ((r = rr.exec(body))) {
+        var seg = body.substring(prev, r.index); prev = r.index + r[0].length;
+        var full = '', n0, rn = /font-size:\s*15px;\s*font-weight:\s*bold;?"\s*>([\s\S]*?)<\/span>/g; while ((n0 = rn.exec(seg))) full = txt(n0[1]);
+        var ship = full.split('[')[0].split('(')[0].trim() || full || ('배 ' + r[2]);
+        var cell = function (alt) { var c = new RegExp('alt="' + alt + '"></td>\\s*<td[^>]*>([\\s\\S]*?)</td>').exec(seg); return c ? txt(c[1]) : ''; };
+        var alt = r[3], n = (/(\d+)\s*명/.exec(alt) || [0, null])[1];
+        var st = alt.indexOf('남은') >= 0 && n != null ? (+n > 0 ? 'ING' : 'END') : /완료|마감/.test(alt) ? 'END' : /기상/.test(alt) ? 'BAD_WEATHER' : /정비|점검/.test(alt) ? 'CHECK' : 'NONE';
+        var d8 = r[1];
+        out.push({ host: host, shipNo: r[2], schNo: r[2], ship: ship, date: d8.slice(0, 4) + '-' + d8.slice(4, 6) + '-' + d8.slice(6), fish: cell('낚시종류').replace(/★/g, '').trim() || cell('공지').slice(0, 30),
+          way: full.slice(ship.length).trim(), time: '', remain: n == null ? 0 : +n, reserved: 0, status: st, tide: '' });
+      }
+    });
+    return out;
+  }
+  function isTf(h) { return /\.thefishing\.kr$/.test(h) || DIR_TF[h]; }
+  var DIR_TF = {};
+  function pageUrl(f, d) {
+    return f[4] === '더피싱' ? 'https://' + f[0] + '/index.php?mid=bk&year=' + d.slice(0, 4) + '&month=' + d.slice(5, 7) + '&day=' + d.slice(8, 10)
+      : 'https://' + f[0] + '/ship/schedule_fleet/' + d + '/0/simple_day1';
+  }
+  function loadFleet(f, d, g) {
+    var k = f[0] + '|' + d;
+    if (loaded[k] || loading[k]) return Promise.resolve();
+    loading[k] = 1;
+    var ctl = new AbortController(); var to = setTimeout(function () { ctl.abort(); }, 25000);
+    return fetch(RELAY + encodeURIComponent(pageUrl(f, d)), { signal: ctl.signal }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (h) {
+      clearTimeout(to);
+      var l = (f[4] === '더피싱' ? parseTf(f[0], h) : parseS24(f[0], h)).filter(function (s) { return s.date === d; });
+      var seen = {}; l = l.filter(function (s) { var kk = s.shipNo + '|' + s.schNo; if (seen[kk]) return false; seen[kk] = 1; return true; });
+      l.forEach(function (s) { s.f = f; });
+      schs[k] = l; loaded[k] = 1;
+    }).catch(function () { clearTimeout(to); loaded[k] = 1; schs[k] = []; }).then(function () { delete loading[k]; if (g === gen) later(); });
+  }
+  var tmr = null; function later() { if (!tmr) tmr = setTimeout(function () { tmr = null; render(); }, 250); }
+  function fleetsOn() {
+    if (!DIR) return [];
+    var ql = q.toLowerCase().replace(/\s/g, '');
+    if (ql) return DIR.filter(function (f) { return (f[0] + f[1] + f[2] + f[3]).toLowerCase().replace(/\s/g, '').indexOf(ql) >= 0; }).slice(0, 60);
+    return DIR.filter(function (f) { return areaSel.indexOf(f[3]) >= 0; });
+  }
+  function loadAll() {
+    var g = ++gen, l = fleetsOn(), i = 0, run = 0;
+    function next() {
+      while (run < 8 && i < l.length) { run++; loadFleet(l[i++], day, g).then(function () { run--; if (g === gen) next(); }); }
+    }
+    next(); render();
+  }
+
+  // ── 화면 ──
+  function norm(x) { return String(x).replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s/g, '').replace(/호$/, '').toLowerCase(); }
+  function startMin(t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : 9999; }
+  function hours(t) { var m = /(\d{1,2}):(\d{2})\s*~\s*(\d{1,2}):(\d{2})/.exec(t || ''); if (!m) return 0; var a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4]; if (b <= a) b += 1440; return (b - a) / 60; }
+  function stName(s) { return { CHECK: '점검일', BAD_WEATHER: '기상악화', ING: '마감', END: '마감' }[s.status] || '예약 안 받음'; }
+  function isOpen(s) { return s.status === 'ING' && s.remain > 0; }
+  function bookUrl(s) {
+    if (s.f[4] === '더피싱') return 'https://' + s.host + '/index.php?mid=bk&year=' + s.date.slice(0, 4) + '&month=' + s.date.slice(5, 7) + '&day=' + s.date.slice(8, 10) + '#list';
+    return +s.schNo > 0 ? 'https://' + s.host + '/mypage/reservation_ready/' + s.schNo : 'https://' + s.host + '/ship/schedule_fleet/' + s.date.replace(/-/g, '').slice(0, 6);
+  }
+  function pillText() {
+    $('areaBtn').textContent = '📍 ' + (areaSel.length ? areaSel[0] + (areaSel.length > 1 ? ' 외 ' + (areaSel.length - 1) : '') : '지역 고르기') + ' ▾';
+    $('areaBtn').classList.toggle('on', areaSel.length > 0);
+    $('fishBtn').textContent = '🐟 ' + (fishSel.length ? fishSel[0] + (fishSel.length > 1 ? ' 외 ' + (fishSel.length - 1) : '') : '어종 전체') + ' ▾';
+    $('fishBtn').classList.toggle('on', fishSel.length > 0);
+    $('needBtn').textContent = '👥 ' + need + '자리 이상 ▾';
+    $('sortBtn').textContent = '↕ ' + SORTS[sortI] + ' ▾';
+    $('openBtn').textContent = openOnly ? '✓ 빈자리 있는 배만' : '모든 배 보기';
+    $('openBtn').classList.toggle('on', openOnly);
+    $('qBtn').classList.toggle('on', !!q);
+    var d = new Date(day + 'T00:00:00');
+    $('dayTxt').textContent = '📅 ' + (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + DOW[d.getDay()] + ') ▾';
+  }
+  function all() {
+    var l = [];
+    fleetsOn().forEach(function (f) { (schs[f[0] + '|' + day] || []).forEach(function (s) { l.push(s); }); });
+    // 같은 날 · 같은 배 이름 · 같은 항구를 다른 선단이 같이 올리면 한 카드로 (앞에 온 것 + '다른 곳')
+    var out = [], idx = {};
+    l.forEach(function (s) {
+      var k = norm(s.ship) + '|' + (s.f[2] || '').replace(/\s|항$/g, '');
+      if (s.f[2] && idx[k] && idx[k].host !== s.host) { (idx[k].also = idx[k].also || []).push(s); return; }
+      idx[k] = s; out.push(s);
+    });
+    return out;
+  }
+  function render() {
+    pillText();
+    var L = $('list');
+    var fl = fleetsOn();
+    if (!DIR) { L.innerHTML = '<p class="empty">선단 목록 불러오는 중…</p>'; return; }
+    if (!fl.length) {
+      L.innerHTML = '<p class="empty">' + (q ? '찾는 선단이 없어요' : '📍 지역을 골라 주세요 · 그 지역 선단 홈페이지 일정을 읽어 와요') + '</p>' + (q ? '' : areaChips());
+      L.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { areaSel = [b.dataset.a]; lsSet('area', areaSel); loadAll(); }; });
+      $('sum').textContent = ''; return;
+    }
+    var done = fl.filter(function (f) { return loaded[f[0] + '|' + day]; }).length;
+    var src = all();
+    var fishAll = {}; src.forEach(function (s) { String(s.fish).split(/[,/·\s]+/).forEach(function (x) { x = x.trim(); if (x.length >= 2 && x.length <= 8) fishAll[x] = (fishAll[x] || 0) + 1; }); });
+    FISH = Object.keys(fishAll).sort(function (a, b) { return fishAll[b] - fishAll[a]; }).slice(0, 30);
+    var l = src.filter(function (s) {
+      if (fishSel.length && !fishSel.some(function (x) { return String(s.fish + s.way).indexOf(x) >= 0; })) return false;
+      if (openOnly && !(isOpen(s) && s.remain >= need)) return false;
+      return true;
+    });
+    l.sort(function (a, b) {
+      var fa = favs[a.host + '|' + a.shipNo] ? 0 : 1, fb = favs[b.host + '|' + b.shipNo] ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      var oa = isOpen(a) ? 0 : 1, ob = isOpen(b) ? 0 : 1; if (oa !== ob) return oa - ob;
+      if (sortI === 0) return b.remain - a.remain;
+      if (sortI === 1) return startMin(a.time) - startMin(b.time);
+      return a.ship.localeCompare(b.ship, 'ko');
+    });
+    var open = src.filter(function (s) { return isOpen(s) && s.remain >= need; }).length;
+    $('sum').innerHTML = (done < fl.length ? '⏳ ' : '📍 ') + '선단 ' + fl.length + '곳' + (done < fl.length ? ' 중 ' + done + '곳 읽음' : '') + ' · 배 ' + src.length + '척 · ' + need + '자리 이상 빈 배 <b style="color:#2FBF8F">' + open + '척</b>';
+    if (!l.length) { L.innerHTML = '<p class="empty">' + (done < fl.length ? '읽는 중…' : (openOnly ? '조건에 맞는 빈 배가 없어요 · 다른 날짜나 지역을 골라 보세요' : '이 날 일정이 없어요')) + '</p>'; return; }
+    L.innerHTML = l.slice(0, shown).map(card).join('') + (l.length > shown ? '<button class="btn more" id="more">⬇ 더 보기 (' + shown + ' / ' + l.length + '척)</button>' : '');
+    if ($('more')) $('more').onclick = function () { shown += 20; render(); };
+    L.querySelectorAll('.star').forEach(function (b) { b.onclick = function () { var k = b.dataset.k; if (favs[k]) delete favs[k]; else favs[k] = 1; lsSet('fav', favs); render(); }; });
+  }
+  var FISH = [];
+  function card(s) {
+    var fk = s.host + '|' + s.shipNo, fav = !!favs[fk], op = isOpen(s);
+    var h = hours(s.time);
+    var col = !op ? '#4A5966' : s.remain <= 3 ? '#F2C14E' : '#2FBF8F';
+    var line = [s.fish, s.way, s.time ? s.time + (h ? ' (' + (h % 1 ? h.toFixed(1) : h) + '시간)' : '') : '', s.tide ? '🌊 ' + s.tide : ''].filter(Boolean).join(' · ');
+    var cap = s.remain + s.reserved;
+    var tail = !op ? (cap ? ' · 예약 ' + s.reserved + '/' + cap : '') : s.remain <= 3 ? ' 남음 · 곧 마감' : (s.reserved ? ' 남음 · 예약 ' + s.reserved + '/' + cap : ' 남음');
+    return '<div class="card' + (fav ? ' fav' : '') + (op ? '' : ' closed') + '"><div class="hd"><div class="nm">' + esc(s.ship) + '</div><button class="star' + (fav ? ' on' : '') + '" data-k="' + esc(fk) + '">' + (fav ? '★' : '☆') + '</button></div>' +
+      '<div class="ln">' + esc(line) + '</div>' +
+      '<div class="tags"><span class="tag" style="background:' + (s.f[4] === '더피싱' ? '#2FA06F' : '#3D7BD9') + '">' + s.f[4] + '</span>' + (s.f[2] ? '⚓ ' + esc(s.f[2]) : '') + ' · ' + esc(s.f[3]) + '</div>' +
+      '<a class="site" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🌐 ' + esc(s.host.replace(/^www\./, '')) + '</a>' +
+      '<div class="bot"><div class="rm"><b style="color:' + col + '">' + (op ? s.remain + '자리' : stName(s)) + '</b>' + tail + '</div>' +
+      (op && s.remain >= need ? '<a class="btn go" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">예약 ›</a>' : '<a class="btn" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">일정 ›</a>') + '</div>' +
+      '<div class="links"><a class="btn" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🏠 홈피</a>' +
+      (s.f[4] === '선상24' ? '<a class="btn" href="https://' + esc(s.host) + '/ship/board" target="_blank" rel="noopener">📝 조과</a>' : '') +
+      (s.also || []).map(function (o) { return '<a class="btn" href="' + esc(bookUrl(o)) + '" target="_blank" rel="noopener">' + esc(o.f[1].split(' · ')[0] || o.host) + ' ' + (isOpen(o) ? o.remain + '자리' : stName(o)) + ' ›</a>'; }).join('') +
+      '</div></div>';
+  }
+  function areaChips(multi) {
+    var gs = {}; AREAS.forEach(function (a) { (gs[a[1]] = gs[a[1]] || []).push(a[0]); });
+    var cnt = {}; (DIR || []).forEach(function (f) { cnt[f[3]] = (cnt[f[3]] || 0) + 1; });
+    return Object.keys(gs).map(function (g) {
+      return '<div class="g">' + g + '</div><div class="chips">' + gs[g].map(function (a) {
+        return '<button class="chip' + (areaSel.indexOf(a) >= 0 ? ' on' : '') + '" data-a="' + a + '">' + a.replace('인근', '') + ' <small>' + (cnt[a] || 0) + '</small></button>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+  function sheet(title, html, onClose) {
+    var d = document.createElement('div'); d.className = 'dim';
+    d.innerHTML = '<div class="sheet"><div class="sh"><b>' + title + '</b><button class="btn go" id="shOk">✓ 보기</button></div>' + html + '</div>';
+    document.body.appendChild(d);
+    function close() { d.remove(); onClose && onClose(); }
+    d.addEventListener('click', function (e) { if (e.target === d) close(); });
+    d.querySelector('#shOk').onclick = close;
+    return d;
+  }
+  $('areaBtn').onclick = function () {
+    var before = areaSel.join();
+    var d = sheet('📍 지역 (여러 개)', '<p class="note">숫자 = 그 지역 선단 수 · 많이 고를수록 오래 걸려요</p>' + areaChips(), function () { lsSet('area', areaSel); if (areaSel.join() !== before) { shown = 20; loadAll(); } else render(); });
+    d.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { var a = b.dataset.a, i = areaSel.indexOf(a); if (i >= 0) areaSel.splice(i, 1); else areaSel.push(a); b.classList.toggle('on'); }; });
+  };
+  $('fishBtn').onclick = function () {
+    var d = sheet('🐟 어종 (여러 개)', FISH.length ? '<div class="chips" style="margin-top:8px"><button class="chip' + (fishSel.length ? '' : ' on') + '" data-x="">전체</button>' + FISH.map(function (f) { return '<button class="chip' + (fishSel.indexOf(f) >= 0 ? ' on' : '') + '" data-f="' + esc(f) + '">' + esc(f) + '</button>'; }).join('') + '</div>' : '<p class="note">먼저 지역을 골라 일정을 읽어 주세요</p>', function () { lsSet('fish', fishSel); shown = 20; render(); });
+    d.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { var f = b.dataset.f, i = fishSel.indexOf(f); if (i >= 0) fishSel.splice(i, 1); else fishSel.push(f); b.classList.toggle('on'); d.querySelector('[data-x]').classList.toggle('on', !fishSel.length); }; });
+    var x = d.querySelector('[data-x]'); if (x) x.onclick = function () { fishSel = []; d.querySelectorAll('.chip').forEach(function (c) { c.classList.toggle('on', c === x); }); };
+  };
+  $('needBtn').onclick = function () {
+    var d = sheet('👥 같이 가는 사람', '<div class="chips" style="margin-top:8px">' + [1, 2, 3, 4, 5, 6, 8, 10].map(function (n) { return '<button class="chip' + (n === need ? ' on' : '') + '" data-n="' + n + '">' + n + '자리 이상</button>'; }).join('') + '</div>');
+    d.querySelectorAll('[data-n]').forEach(function (b) { b.onclick = function () { need = +b.dataset.n; lsSet('need', need); d.remove(); shown = 20; render(); }; });
+  };
+  $('sortBtn').onclick = function () {
+    var d = sheet('↕ 정렬', '<div class="chips" style="margin-top:8px">' + SORTS.map(function (s, i) { return '<button class="chip' + (i === sortI ? ' on' : '') + '" data-i="' + i + '">' + s + '</button>'; }).join('') + '</div>');
+    d.querySelectorAll('[data-i]').forEach(function (b) { b.onclick = function () { sortI = +b.dataset.i; lsSet('sort', sortI); d.remove(); render(); }; });
+  };
+  $('openBtn').onclick = function () { openOnly = !openOnly; lsSet('open', openOnly); shown = 20; render(); };
+  $('qBtn').onclick = function () { var v = $('qBox').style.display === 'none'; $('qBox').style.display = v ? '' : 'none'; if (v) $('q').focus(); else if (q) { q = ''; $('q').value = ''; loadAll(); } };
+  var qt = null; $('q').oninput = function () { clearTimeout(qt); qt = setTimeout(function () { q = $('q').value.trim(); shown = 20; loadAll(); }, 500); };
+  function setDay(d) { day = d; shown = 20; $('day').value = d; loadAll(); }
+  $('day').onchange = function () { if ($('day').value) setDay($('day').value); };
+  $('prev').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - 1); setDay(ymd(d)); };
+  $('next').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + 1); setDay(ymd(d)); };
+  $('day').value = day;
+  render();
+  fetch('/data/fleets.json').then(function (r) { return r.json(); }).then(function (j) {
+    DIR = j.f; AREAS = j.areas; DIR.forEach(function (f) { if (f[4] === '더피싱') DIR_TF[f[0]] = 1; });
+    loadAll();
+  }).catch(function () { $('list').innerHTML = '<p class="empty">선단 목록을 못 불러왔어요 · 새로고침해 주세요</p>'; });
 })();
 </script>
-<script src="/menu.js"></script>
+<script src="menu.js"></script>
 </body>
 </html>
