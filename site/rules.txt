@@ -49,6 +49,15 @@ service cloud.firestore {
         && (!('tel' in request.resource.data) || (request.resource.data.tel is string && request.resource.data.tel.size() <= 30))
         && (!('memo' in request.resource.data) || (request.resource.data.memo is string && request.resource.data.memo.size() <= 200))));
     }
+    // v6.92 (409): 폰이 더피싱 선단 화면에서 찾은 배 (배 번호 → 이름) · 모두 같이 씀 · 선단 하나에 60척까지
+    match /tfSeen/{host} {
+      allow read: if signedIn();
+      allow create, update: if notBanned() && host.size() <= 80 && host.matches('^[a-z0-9.-]+$')
+        && request.resource.data.keys().hasOnly(['s', 't'])
+        && request.resource.data.s is map && request.resource.data.s.size() <= 60
+        && request.resource.data.t is int;
+      allow delete: if isAdmin();
+    }
     // v6.91 (388): 관리자만 보는 메모 (홈피)
     match /adminNotes/{id} {
       allow read, write: if isAdmin();
