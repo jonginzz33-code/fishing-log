@@ -44,7 +44,7 @@ object Seats {
     class Fleet(var host: String, var name: String, var on: Boolean = true)
     class Sch(val host: String, val shipNo: String, val schNo: String, val ship: String, val date: String,
               val fish: String, val way: String, val time: String, val remain: Int, val reserved: Int,
-              val status: String, val tide: String, val place: String = "", val price: Int = 0) {
+              val status: String, val tide: String, val place: String = "", var price: Int = 0) {
         // v7.07 (428): 오늘 배는 출항 시각이 지나면 사이트가 예약을 안 받음 (화면엔 '남은자리 · 예약 버튼'이 그대로 있어도)
         val departed: Boolean get() {
             val m = startMin; if (m < 0) return false
@@ -728,7 +728,15 @@ object Seats {
             val pt = t.area.substringAfterLast(" > ").trim(); if (pt.isBlank()) return@forEach
             pairs.add(pt to (byHost[t.host] ?: DirF(t.host, t.fleet.substringBefore(" (").ifBlank { t.ship }, pt, "", "더피싱"))) }
         exShips?.forEach { e -> if (e.port.isNotBlank() && e.host.isNotBlank()) pairs.add(e.port to (byHost[e.host] ?: DirF(e.host, e.name, e.port, "", srcOf(e.host)))) }
-        val out = pairs.groupBy { portKey(it.first) }.filterKeys { it.isNotBlank() }.map { (k, l) ->
+        // v7.11 (436): 항구가 '인천'처럼 넓게 적힌 선단은 선단 · 배 이름 안의 항구로 (오이도 승원호 → 오이도)
+        val good = pairs.filter { looksPort(portTok(it.first)) }.map { portKey(it.first) }.toHashSet()
+        val fixed = pairs.map { pr ->
+            if (looksPort(portTok(pr.first))) return@map pr
+            val nm = pr.second.name.split(Regex("[\\s,/()·\\[\\]]+")).map { it.trim() }.filter { it.length >= 2 }
+            val hit = nm.firstOrNull { t -> portKey(t).let { it.length >= 2 && it in good } }
+            if (hit != null) hit to pr.second else pr
+        }
+        val out = fixed.groupBy { portKey(it.first) }.filterKeys { it.isNotBlank() }.map { (k, l) ->
             val toks = l.map { portTok(it.first).let { t -> if (looksPort(t)) t else t + "항" } }
             val name = toks.groupingBy { it }.eachCount().entries.sortedWith(compareBy({ if (it.key.endsWith("항")) 0 else 1 }, { -it.value })).first().key
             val fl = l.map { it.second }.distinctBy { it.host }
@@ -1413,11 +1421,13 @@ object Seats {
             }
             // v6.86 (395 · 396): 선상24 배는 한 달 일정에서 공지 · 오픈 시각 · 물때 채우기 (보이는 카드만 · 한 시간 기억)
             val ym0 = s.date.replace("-", "").take(6)
-            if (s.host == S24) {
+            // v7.11 (435): 선상24 선단 카드도 화면에 보일 때 그 배 한 달 일정(선상24)에서 금액 · 공지 채우기 (보이는 카드만 · 한 시간 기억)
+            if (s.host == S24 || (isS24Fleet(s.host) && s.shipNo.isNotBlank())) {
                 val ex = extraCached(s.shipNo, ym0)
                 if (ex == null) { if (synchronized(extraBusy) { extraBusy.add(s.shipNo + ym0) }) pool.execute {
-                    s24Extra(s.shipNo, ym0); lastBoard(a, s.shipNo, true); a.runOnUiThread { later() } } }
-                else ex.firstOrNull { it.schNo == s.schNo }?.let { e ->
+                    s24Extra(s.shipNo, ym0); if (s.host == S24) lastBoard(a, s.shipNo, true); a.runOnUiThread { later() } } }
+                else (ex.firstOrNull { it.schNo == s.schNo && s.schNo.isNotBlank() } ?: ex.firstOrNull { it.date == s.date && normShip(it.ship) == normShip(s.ship) } ?: ex.filter { it.date == s.date }.singleOrNull())?.let { e ->
+                    if (s.price <= 0) s.price = e.price
                     if (s.notice.isBlank()) s.notice = e.notice; if (s.openAt.isBlank()) s.openAt = e.openAt; if (s.tideW.isBlank()) s.tideW = e.tideW
                     if (s.img.isBlank()) s.img = e.img
                 }
