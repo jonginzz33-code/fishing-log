@@ -8,17 +8,14 @@ jobs:
       - run: |
           set +e
           R="https://talla-relay.jonginzz33.workers.dev/?u="
-          for x in dongmun:2026-11-26 dongmun:2026-11-27 oceanleader:2026-11-26 oceanleader:2026-11-27; do
-            h=${x%%:*}; d=${x#*:}
-            curl -s -m 40 "${R}https%3A%2F%2F$h.sunsang24.com%2Fship%2Fschedule_fleet%2F$d%2F0%2Fsimple_day1" -o /tmp/p.html
-            python3 - "$x" <<'Q'
-          import re,sys
+          curl -s -m 40 "${R}https%3A%2F%2F52fish.thefishing.kr%2Findex.php%3Fmid%3Dbk%26year%3D2026%26month%3D12%26day%3D02" -o /tmp/p.html
+          python3 - <<'Q'
+          import re
           s=open('/tmp/p.html',encoding='utf-8',errors='ignore').read()
-          for b in s.split('<div class="ship_unit_ship_no_')[1:]:
-              name=re.search(r'<li class="title">\s*<span[^>]*>([^<]+)',b)
-              i=b.find('<li class="seat">'); j=b.find('</li>',i)
-              seat=re.sub(r'\s+',' ',b[i:j]) if i>=0 else 'NOSEAT'
-              btn=re.findall(r'class="[^"]*(?:btn|status|reserv)[^"]*"[^>]*>[^<]{0,30}',b)
-              print("SH",sys.argv[1],name.group(1) if name else '?',"|",seat[:400],"|",[x[:80] for x in btn][:6])
+          print("SIZE",len(s),"secs",len(re.findall(r'id="new-div-\d{8}"',s)),"rows",len(re.findall(r'admin-right-\d{8}-\d+-\d+',s)))
+          i=s.find('id="new-div-20261202"')
+          j=s.find('id="new-div-',i+20)
+          seg=s[i:j if j>0 else i+12000]
+          k=seg.find('admin-right-')
+          print("SEG",re.sub(r'\s+',' ',seg[max(0,k-3500):k+600]))
           Q
-          done
