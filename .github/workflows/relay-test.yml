@@ -7,15 +7,5 @@ jobs:
     steps:
       - run: |
           set +e
-          R="https://talla-relay.jonginzz33.workers.dev/?u="
-          curl -s -m 40 "${R}https%3A%2F%2F52fish.thefishing.kr%2Findex.php%3Fmid%3Dbk%26year%3D2026%26month%3D12%26day%3D02" -o /tmp/p.html
-          python3 - <<'Q'
-          import re
-          s=open('/tmp/p.html',encoding='utf-8',errors='ignore').read()
-          print("SIZE",len(s),"secs",len(re.findall(r'id="new-div-\d{8}"',s)),"rows",len(re.findall(r'admin-right-\d{8}-\d+-\d+',s)))
-          for m in re.finditer(r'admin-right-(\d{8})-(\d+)-\d+"[^>]*>(.{0,200})',s):
-              if m.group(1)!='20261202': continue
-              pre=s[max(0,m.start()-6000):m.start()]
-              nm=re.findall(r'<span style="font-size:15px; font-weight:bold;[^"]*">(.*?)</span>',pre,re.S)
-              print("ROW",m.group(2),"|",(nm[-1] if nm else '?')[:60].replace('\n',' '),"|",re.sub(r'\s+',' ',m.group(3))[:160])
-          Q
+          for d in 2026-12-02 2026-12-03 2026-12-05; do echo "DAY $d $(curl -s -m 60 "https://talla-relay.jonginzz33.workers.dev/day?d=$d&h=poseidon.sunsang24.com" | head -c 600)"; done
+          echo "MON $(curl -s -m 60 'https://talla-relay.jonginzz33.workers.dev/?u=https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F202612' | grep -o 'data-sdate="[^"]*"' | sort | uniq -c | head -12 | tr '\n' ' ')"
