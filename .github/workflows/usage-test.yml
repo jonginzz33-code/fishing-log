@@ -24,8 +24,8 @@ jobs:
               r = requests.get(f"https://monitoring.googleapis.com/v3/projects/{P_}/timeSeries", headers=h, params={
                   "filter": f'metric.type="{m}"', "interval.startTime": st.isoformat("T")+"Z", "interval.endTime": end.isoformat("T")+"Z",
                   "aggregation.alignmentPeriod": "86400s", "aggregation.perSeriesAligner": "ALIGN_SUM", "aggregation.crossSeriesReducer": "REDUCE_SUM"})
-              print(m, r.status_code, r.text[:400])
+              print(m, r.status_code, (r.json().get("error") or {}).get("message","ok")[:200].replace("fishing","F"))
           r = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{P_}:testIamPermissions", headers=h,
               json={"permissions": ["resourcemanager.projects.setIamPolicy", "monitoring.timeSeries.list", "serviceusage.services.enable"]})
-          print("perms", r.status_code, r.text[:400])
+          print("perms", r.status_code, "|".join(x.replace(".","_") for x in r.json().get("permissions", [])))
           P
