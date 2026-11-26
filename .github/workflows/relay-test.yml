@@ -8,18 +8,17 @@ jobs:
       - run: |
           set +e
           R="https://talla-relay.jonginzz33.workers.dev/?u="
-          for h in ssfish.thefishing.kr yamujin.thefishing.kr jungwonho.thefishing.kr teammansu.kr; do
-            curl -s -m 40 "${R}https%3A%2F%2F$h%2Findex.php%3Fmid%3Dgall" -o /tmp/g.html
-            python3 - "$h" <<'Q'
+          for x in dongmun:2026-11-26 dongmun:2026-11-27 oceanleader:2026-11-26 oceanleader:2026-11-27; do
+            h=${x%%:*}; d=${x#*:}
+            curl -s -m 40 "${R}https%3A%2F%2F$h.sunsang24.com%2Fship%2Fschedule_fleet%2F$d%2F0%2Fsimple_day1" -o /tmp/p.html
+            python3 - "$x" <<'Q'
           import re,sys
-          s=open('/tmp/g.html',encoding='utf-8',errors='ignore').read()
-          print("SIZE",sys.argv[1],len(s),"rows",len(re.findall(r'<tr class="bg',s)))
-          i=s.find('<tr class="bg')
-          if i>=0:
-              j=s.find('</tr>',i)
-              print("ROW",sys.argv[1],re.sub(r'\s+',' ',s[i:j])[-1600:])
-          else:
-              k=s.find('wr_uid=')
-              print("NOTR",sys.argv[1],re.sub(r'\s+',' ',s[max(0,k-800):k+800]))
+          s=open('/tmp/p.html',encoding='utf-8',errors='ignore').read()
+          for b in s.split('<div class="ship_unit_ship_no_')[1:]:
+              name=re.search(r'<li class="title">\s*<span[^>]*>([^<]+)',b)
+              i=b.find('<li class="seat">'); j=b.find('</li>',i)
+              seat=re.sub(r'\s+',' ',b[i:j]) if i>=0 else 'NOSEAT'
+              btn=re.findall(r'class="[^"]*(?:btn|status|reserv)[^"]*"[^>]*>[^<]{0,30}',b)
+              print("SH",sys.argv[1],name.group(1) if name else '?',"|",seat[:400],"|",[x[:80] for x in btn][:6])
           Q
           done
