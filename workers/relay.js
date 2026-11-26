@@ -90,7 +90,7 @@ async function day(url, ctx) {
     const href = tf ? 'https://' + h + '/index.php?mid=bk&year=' + d.slice(0, 4) + '&month=' + d.slice(5, 7) + '&day=' + d.slice(8, 10)
       : 'https://' + h + '/ship/schedule_fleet/' + d + '/0/simple_day1';
     try {
-      const html = await Promise.race([getPage(href), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 20000))]);
+      const html = await Promise.race([getPage(href), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 10000))]);
       const seen = {};
       out[h] = (tf ? parseTf(html) : parseS24(html)).filter((s) => s.date === d && !seen[s.shipNo + '|' + s.schNo] && (seen[s.shipNo + '|' + s.schNo] = 1));
     } catch (e) { out[h] = null; }

@@ -44,8 +44,16 @@ object Seats {
     class Sch(val host: String, val shipNo: String, val schNo: String, val ship: String, val date: String,
               val fish: String, val way: String, val time: String, val remain: Int, val reserved: Int,
               val status: String, val tide: String, val place: String = "", val price: Int = 0) {
-        val open get() = status == "ING" && remain > 0
-        val stName get() = when (status) { "CHECK" -> "점검일"; "BAD_WEATHER" -> "기상악화"; "ING", "END" -> "마감"; else -> "예약 안 받음" }
+        // v7.07 (428): 오늘 배는 출항 시각이 지나면 사이트가 예약을 안 받음 (화면엔 '남은자리 · 예약 버튼'이 그대로 있어도)
+        val departed: Boolean get() {
+            val m = startMin; if (m < 0) return false
+            val now = Calendar.getInstance()
+            val today = String.format(Locale.US, "%04d-%02d-%02d", now.get(Calendar.YEAR), now.get(Calendar.MONTH) + 1, now.get(Calendar.DAY_OF_MONTH))
+            return date == today && now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE) >= m
+        }
+        val open get() = status == "ING" && remain > 0 && !departed
+        val stName get() = if (status == "ING" && departed) "⏰ 출항 지남" else when (status) {
+            "CHECK" -> "🔧 점검일"; "BAD_WEATHER" -> "⛈ 기상악화 · 예약 불가"; "CALL" -> "📞 전화예약"; "ING", "END" -> "마감"; else -> "예약 안 받음" }
         val cap get() = remain + reserved
         val key get() = "$host|$shipNo"
         // v6.86 (395 · 396): 배 사진 · 조황 글 수 · 그날 공지 · 예약 오픈 시각 · 선상24 물때
@@ -176,12 +184,12 @@ object Seats {
         return if (isTfUrl(url) && url.startsWith("https://")) try { get0(url) } catch (e: Exception) { try { get0("http://" + url.removePrefix("https://")) } catch (_: Exception) { throw e } }
         else get0(url)
     }
-    private fun get0(url: String): String {
+    private fun get0(url: String, readMs: Int = 0): String {
         val cn = URL(url).openConnection() as HttpURLConnection
         // 개인 사이트(무료 서버)는 처음 깨어나는 데 오래 걸려서 넉넉히
         val slow = !url.contains("sunsang24.com") && !isTfUrl(url)
         val tf = isTfUrl(url)
-        cn.connectTimeout = if (slow) 20000 else if (tf) 10000 else 8000; cn.readTimeout = if (slow) 40000 else if (tf) 20000 else 12000; cn.instanceFollowRedirects = true
+        cn.connectTimeout = if (slow) 20000 else if (tf) 10000 else 8000; cn.readTimeout = if (readMs > 0) readMs else if (slow) 40000 else if (tf) 20000 else 12000; cn.instanceFollowRedirects = true
         // 더피싱은 PC 화면 모양으로 읽어요 (폰 모양은 다를 수 있어서 · 저장해 본 화면이 PC 크롬)
         cn.setRequestProperty("User-Agent", if (isTfUrl(url)) "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
             else "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile")
@@ -584,7 +592,7 @@ object Seats {
     /** v7.01 (425): 중계기 /day — 선단 40곳 그 날 일정을 한 번에 (정리된 JSON) · 받은 건 s24Day/tfDay 기억(mem)에 넣음 · 실패하면 null */
     fun dayBatch(hosts: List<String>, date: String): Map<String, List<Sch>>? {
         if (hosts.isEmpty() || System.currentTimeMillis() < relayBadUntil) return null
-        val t = try { get0(RELAY.removeSuffix("/?u=") + "/day?d=$date&h=" + hosts.joinToString(",")) } catch (_: Exception) { return null }
+        val t = try { get0(RELAY.removeSuffix("/?u=") + "/day?d=$date&h=" + hosts.joinToString(","), 35000) } catch (_: Exception) { return null }   // v7.07 (432): 중계기가 40곳 다 읽을 때까지 35초 기다림
         val o = try { JSONObject(t) } catch (_: Exception) { return null }
         val out = HashMap<String, List<Sch>>()
         hosts.forEach { h ->
@@ -1116,6 +1124,9 @@ object Seats {
         head.addView(Ui.text(a, 18f, Color.WHITE, true, "🚤 선상 빈자리"), LinearLayout.LayoutParams(0, WRAP, 1f))
         val alarmBtn = Ui.pill(a, "🔔 0", false, Ui.TEXT, small = true)
         head.addView(alarmBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
+        // v7.07 (432): 🔄 새로고침 = 기억 비우고 다시 읽기
+        val refreshBtn = Ui.pill(a, "🔄", false, Ui.TEXT, small = true)
+        head.addView(refreshBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         val fleetBtn = Ui.pill(a, "⚙ 선단", false, Ui.TEXT, small = true)
         head.addView(fleetBtn, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
         head.addView(Ui.pill(a, "닫기", false, Ui.TEXT, small = true) { dlg.dismiss() })
@@ -1152,6 +1163,8 @@ object Seats {
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
         }
         qRow.addView(qEd, LinearLayout.LayoutParams(0, WRAP, 1f))
+        val qGo = Ui.pill(a, "🔍 찾기", true, Ui.GROUP, small = true) { qEd.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) }
+        qRow.addView(qGo, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
         val qX = Ui.pill(a, "✕", false, Ui.TEXT, small = true)
         qRow.addView(qX, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
         root.addView(qRow)
@@ -1369,6 +1382,12 @@ object Seats {
                 sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, sb.length, 0)
                 if (hot) { val h = sb.length; sb.append(" 🔥"); sb.setSpan(android.text.style.RelativeSizeSpan(0.8f), h, sb.length, 0) }
                 // v6.99 (418): 이름 옆 회색 선단 · 배 이름 글자 없앰 (아래 🌐 주소 줄로 충분)
+                // v7.07 (431 B안): 배 이름 ㅡ ⚓ 항구 (하늘색 · 굵게)
+                portOf(a, s).takeIf { it.isNotBlank() }?.let { pt ->
+                    val st = sb.length; sb.append("  ㅡ ⚓ $pt")
+                    sb.setSpan(android.text.style.ForegroundColorSpan(Color.parseColor("#7FD6FF")), st, sb.length, 0)
+                    sb.setSpan(android.text.style.RelativeSizeSpan(0.88f), st, sb.length, 0)
+                }
                 text = sb; textSize = 15.5f; setTextColor(Ui.TEXT); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             top.addView(Ui.text(a, 22f, if (fav) Color.parseColor("#F2C14E") else Color.parseColor("#4A5966"), false, if (fav) "★" else "☆").apply {
@@ -1404,9 +1423,7 @@ object Seats {
             }
             // v6.90 (399): 출처 꼬리표 [선상24] [더피싱] [개인 사이트] (같은 배가 여러 곳이면 다)
             // v7.01 (423): 출처 꼬리표 [선상24] [더피싱] 없앰 (선단은 아래 🌐 주소 줄로)
-            portOf(a, s).takeIf { it.isNotBlank() }?.let { pt ->
-                l3.addView(Ui.text(a, 11f, Ui.SUB, false, "⚓ $pt"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
-            }
+            // v7.07 (431): ⚓ 항구는 제목 줄로 옮김
             if (l3.childCount > 0) info.addView(l3, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) })
             head.addView(info, LinearLayout.LayoutParams(0, WRAP, 1f))
             box.addView(head)
@@ -1436,7 +1453,7 @@ object Seats {
                     setOnClickListener { openFleetBoards(a, s.host, s.ship) }
                 })
             }
-            val col = when { !s.open -> Color.parseColor("#4A5966"); s.remain <= 3 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#2FBF8F") }
+            val col = when { s.status == "BAD_WEATHER" -> Color.parseColor("#FF6B6B"); s.status == "CALL" -> Color.parseColor("#F2C14E"); !s.open -> Color.parseColor("#4A5966"); s.remain <= 3 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#2FBF8F") }
             // v6.97 (417): 막대 대신 선단 주소 한 줄 (누르면 홈페이지 · 꾹 = 주소 복사)
             val homeHost = if (s.host == S24) ss?.host else s.host
             if (homeHost != null) box.addView(Ui.text(a, 11.5f, Color.parseColor("#7FD6FF"), false, "🌐 " + homeHost.removePrefix("www.")).apply {
@@ -1456,6 +1473,7 @@ object Seats {
                 sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, sb.length, 0)
                 sb.setSpan(android.text.style.RelativeSizeSpan(1.2f), 0, sb.length, 0)
                 val tail = when {
+                    s.departed && s.status == "ING" -> " · 오늘 배는 출항 전에만 예약돼요"
                     s.status != "ING" && s.status != "END" -> ""
                     !s.open -> " · 예약 ${s.reserved}/${s.cap}"
                     s.cap <= s.remain -> " 남음"
@@ -1471,6 +1489,11 @@ object Seats {
             if (canBook) {
                 // v6.84: 선단 사이트를 찾은 배는 '예약 ›' = 그 선단 예약 화면 (내 선단에 넣은 배처럼 · 선상24 창은 꾹 메뉴)
                 bot.addView(Ui.pill(a, "예약 ›", true, Ui.GROUP, small = true) { Boats.openUrl(a, bookUrlOf(a, s)) })
+            } else if (s.status == "CALL" || s.status == "BAD_WEATHER" || s.status == "CHECK" || s.departed) {
+                // v7.07 (428): 전화예약 = 📞 · 기상악화 · 점검일 · 출항 지남 = 일정 보기
+                val tel = ss?.tel
+                if (s.status == "CALL" && tel != null) bot.addView(Ui.pill(a, "📞 전화예약", true, Color.parseColor("#F2C14E"), small = true) { dial(a, tel) })
+                else bot.addView(Ui.pill(a, "일정 ›", false, Ui.TEXT, small = true) { Boats.openUrl(a, bookUrlOf(a, s)) })
             } else if ((s.status == "ING" || s.status == "END") && allowed(a)) {
                 val label = if (w != null) "🔔 알림 켜짐 · ${w.need}자리" else "🔔 자리 나면 알림"
                 bot.addView(Ui.pill(a, label, w != null, Color.parseColor("#F2C14E"), small = true) {
@@ -1559,7 +1582,7 @@ object Seats {
                 val r = (p.getString("seat_q", "") ?: "").split('\n').filter { it.isNotBlank() }
                 if (r.isNotEmpty()) {
                     val w = FlowLayout(a)
-                    r.forEach { t -> w.addView(Ui.pill(a, "🕘 $t", false, Ui.TEXT, small = true) { qEd.setText(t); qEd.setSelection(t.length) }) }
+                    r.forEach { t -> w.addView(Ui.pill(a, "🕘 $t", false, Ui.TEXT, small = true) { qEd.setText(t); qEd.setSelection(t.length); qEd.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) }) }
                     list.addView(Ui.text(a, 12f, Ui.SUB, true, "최근 찾은 배").apply { setPadding(dp(4), dp(6), 0, dp(4)) })
                     list.addView(w)
                 }
@@ -1669,7 +1692,7 @@ object Seats {
                     val pn = Ports.list(a).map { it.name }.filter { normPort(it).contains(pq) && normPort(it) != pq }.distinct().take(6)
                     if (pn.isNotEmpty()) {
                         val w = FlowLayout(a)
-                        pn.forEach { t -> w.addView(Ui.pill(a, "⚓ $t", false, Ui.TEXT, small = true) { qEd.setText(t); qEd.setSelection(t.length) }) }
+                        pn.forEach { t -> w.addView(Ui.pill(a, "⚓ $t", false, Ui.TEXT, small = true) { qEd.setText(t); qEd.setSelection(t.length); qEd.onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) }) }
                         list.addView(w)
                     }
                 }
@@ -1707,7 +1730,7 @@ object Seats {
             if (openOnly) day0 = day0.filter { it.open && it.remain >= need }
             day0 = sortList(day0)
             val fv = favs(a)
-            sum.text = (if (loading) "⏳ 선단 ${loadTotal}곳 중 ${loadDone}곳 읽음 · " else if (areaLeft > 0) "⏳ 📍 선단 ${areaTotal}곳 중 ${areaTotal - areaLeft}곳 읽음 · " else if (s24Busy || tfBusy) "⏳ 읽는 중 · " else "") +
+            sum.text = (if (loading) "⏳ 선단 ${loadTotal}곳 중 ${loadDone}곳 읽음 · " else if (areaLeft > 0 && areaLeft == areaTotal) "⏳ 중계기에서 선단 ${areaTotal}곳 읽는 중… · " else if (areaLeft > 0) "⏳ 📍 선단 ${areaTotal}곳 중 ${areaTotal - areaLeft}곳 읽음 · " else if (s24Busy || tfBusy) "⏳ 읽는 중 · " else "") +
                 (if (areaSel.isNotEmpty() && areaLeft == 0 && areaTotal > 0) "📍 선단 ${areaTotal}곳" + (if (areaRest.isNotEmpty()) " (남은 ${areaRest.size}곳)" else "") + (if (areaSkip > 0) " · 쉬는 ${areaSkip}곳 뺌" else "") + " · " else "") + "${dayLabel(day)} · 배 ${total}척" +
                 (if (useS24 && s24Total > s24.size) " (선상24 ${s24Total}척 중 ${s24.size}척 읽음)" else "") + " · ${need}자리 이상 빈 배 ${openN}척" +
                 (if (fails.isNotEmpty()) " · ⚠ 못 읽은 선단 ${fails.size}곳" else "") + (if (s24Err) " · ⚠ 선상24 목록을 못 읽었어요" else "") + (if (useTf && tfHosts > 0) " · 🎣 더피싱 선단 ${tfHosts}곳" else "")
@@ -2050,14 +2073,17 @@ object Seats {
             render()
         }
         qX.setOnClickListener { qBtn.performClick() }
-        qEd.addTextChangedListener(object : android.text.TextWatcher {
-            override fun afterTextChanged(e: android.text.Editable?) { q = e?.toString()?.trim() ?: ""; render() }
-            override fun beforeTextChanged(x: CharSequence?, st: Int, c: Int, af: Int) {}
-            override fun onTextChanged(x: CharSequence?, st: Int, b: Int, c: Int) {}
-        })
+        // v7.07 (428): 한 글자 칠 때마다 찾지 않고 키보드 [검색] 또는 🔍 누를 때만
         qEd.setOnEditorActionListener { _, _, _ ->
+            q = qEd.text.toString().trim(); render()
             if (q.isNotBlank()) p.edit().putString("seat_q", (listOf(q) + recentQ().filter { it != q }).take(5).joinToString("\n")).apply()
             (a.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(qEd.windowToken, 0); true
+        }
+        refreshBtn.setOnClickListener {
+            synchronized(mem) { mem.keys.removeAll { it.contains("_d") || it.contains("_2") } }
+            found.clear(); foundErr.clear(); areaKey = ""
+            synchronized(postMem) { postMem.clear() }
+            Ui.toast(a, "🔄 다시 읽어요"); load(true)
         }
         prevBtn.setOnClickListener { shift(-1) }
         nextBtn.setOnClickListener { shift(1) }
