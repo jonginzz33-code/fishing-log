@@ -5,27 +5,5 @@ jobs:
   t:
     runs-on: ubuntu-latest
     steps:
-      - name: Try Cloud Monitoring + IAM
-        env:
-          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: |
-          echo "$SA" > "$RUNNER_TEMP/sa.json"
-          pip -q install google-auth requests
-          python3 - <<'P'
-          import json, os, datetime, requests
-          from google.oauth2 import service_account
-          from google.auth.transport.requests import Request
-          cr = service_account.Credentials.from_service_account_file(os.environ["RUNNER_TEMP"]+"/sa.json", scopes=["https://www.googleapis.com/auth/cloud-platform"])
-          cr.refresh(Request()); h = {"Authorization": "Bearer " + cr.token}
-          print("sa", cr.service_account_email)
-          P_ = "fishing-log-9109d"
-          end = datetime.datetime.utcnow(); st = end - datetime.timedelta(days=1)
-          for m in ["firestore.googleapis.com/document/read_count", "firestore.googleapis.com/document/write_count"]:
-              r = requests.get(f"https://monitoring.googleapis.com/v3/projects/{P_}/timeSeries", headers=h, params={
-                  "filter": f'metric.type="{m}"', "interval.startTime": st.isoformat("T")+"Z", "interval.endTime": end.isoformat("T")+"Z",
-                  "aggregation.alignmentPeriod": "86400s", "aggregation.perSeriesAligner": "ALIGN_SUM", "aggregation.crossSeriesReducer": "REDUCE_SUM"})
-              print(m, r.status_code, (r.json().get("error") or {}).get("message","ok")[:200].replace("fishing","F"))
-          r = requests.post(f"https://cloudresourcemanager.googleapis.com/v1/projects/{P_}:testIamPermissions", headers=h,
-              json={"permissions": ["resourcemanager.projects.setIamPolicy", "monitoring.timeSeries.list", "serviceusage.services.enable"]})
-          print("perms", r.status_code, "|".join(x.replace(".","_") for x in r.json().get("permissions", [])))
-          P
+      - run: |
+          echo "INIT $(curl -s https://talla.co.kr/__/firebase/init.json | tr -d '\n' | sed 's/AIza[A-Za-z0-9_-]*/KEY/' | head -c 300)"
