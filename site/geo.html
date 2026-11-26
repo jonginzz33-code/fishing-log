@@ -65,6 +65,9 @@ details summary{cursor:pointer;font-weight:800}
 .cN,.pN{color:var(--sky);font-weight:700}
 .alarm{border:0;border-radius:10px;padding:3px 10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
 .alarm.done{background:#1E4F3E;color:#9FF0CF}
+.cd{color:var(--sky);font-family:ui-monospace,Consolas,monospace}
+.rf{border:1.5px solid #3A6A88;background:transparent;color:#DDEAF2;border-radius:10px;padding:1px 8px;font-size:12px;cursor:pointer;font-family:inherit}
+.rf:disabled{opacity:.5}
 .alarm.wait{background:#4A3B12;color:#FDE7A8}
 .quiet{font-size:14px;gap:6px}
 .quiet label{display:flex;align-items:center;gap:5px;cursor:pointer}
@@ -603,16 +606,39 @@ details summary{cursor:pointer;font-weight:800}
         var alarm = '<button class="alarm ' + (sent ? 'done' : 'wait') + '" data-alarm="' + esc(n.id) + '" data-sent="' + (sent ? 1 : 0) + '" title="누르면 바뀌어요">' +
           (sent ? '✅ 알람전송완료!' : '🔔 알람전송대기중') + '</button>';
         sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && typeof s.n === 'number' ? s.n + '개' : '?'));
-        sub.push(sent ? '자동 확인 쉼' : everyLabel(n.every) + '마다');
+        // 다음 자동 확인까지 남은 시간 (1초마다 줄어듦) + 지금 새로고침
+        var due = s && s.t ? s.t + n.every * 60000 : 0;
+        sub.push(sent ? '자동 확인 쉼' : everyLabel(n.every) + '마다 · ⏱ <span class="cd" data-due="' + due + '"></span>');
+        sub.push('<button class="rf" data-chk="' + esc(n.id) + '">🔄 지금 새로고침</button>');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (sent && s.at) sub.push('알람 ' + when(s.at));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
         return '<div class="ni' + (sent ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<div style="margin:4px 0 2px">' + alarm + '</div><small>' + sub.join(' · ') + '</small></div>' +
-          '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
+          '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
     }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 필요 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
   }
   $('nF').oninput = renderNeeds;
+  // 남은 시간 1초마다 다시 그리기
+  var autoAt = 0;
+  function tick() {
+    var now = Date.now();
+    // 확인 시간이 지나고 1분 반쯤 됐으면 서버 결과를 한 번 다시 불러옴 (2분에 한 번까지)
+    var late = [].some.call(document.querySelectorAll('.cd'), function (el) { var d = +el.getAttribute('data-due'); return d && now - d > 90000; });
+    if (late && !data.quietNow && now - autoAt > 120000 && !document.hidden) { autoAt = now; load(); }
+    document.querySelectorAll('.cd').forEach(function (el) {
+      var due = +el.getAttribute('data-due');
+      if (data.quietNow) { el.textContent = '🌙 쉬는 시간'; return; }
+      if (!due) { el.textContent = '곧 확인'; return; }
+      var left = Math.round((due - now) / 1000);
+      if (left <= 0) { el.textContent = '곧 확인 (1분 안)'; return; }
+      var h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60;
+      el.textContent = '다음 확인 ' + (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
+    });
+  }
+  setInterval(tick, 1000);
+  var _rn = renderNeeds;
+  renderNeeds = function () { _rn(); tick(); };
   $('nNow').onclick = function () { var ids = (data.needs || []).map(function (n) { return n.id; }); if (ids.length) checkNow(ids, $('nNow')); };
   $('nList').onclick = function (e) {
     var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo'), al = e.target.getAttribute('data-alarm');
