@@ -696,8 +696,17 @@ object Seats {
     }
     // v7.08 (434): ⚓ 항구로 고르기 — '항구 → 선단'은 저장된 목록(seat_sites · tf_sites · 한 달에 한 번 모음)에서 바로
     /** 항구 이름 비교용 (마검포항 · 마검포 = '마검' · 당암포구 · 당암포 = '당암') */
+    /** '중간선착장' · '선착장' · '대체부두'처럼 항구 이름 없이 자리만 말하는 낱말 (오이도 중간선착장 = 오이도) */
+    private fun genericPortWord(t: String): Boolean {
+        val r = t.replace(Regex("(선착장|부두|물양장|여객선?터미널|항구|포구|항)$"), "")
+        return r.length < 2 || r in setOf("중간", "신", "구", "내", "외", "대체", "제1", "제2", "제3", "북", "남", "동", "서")
+    }
+    private fun portTok(p: String): String {
+        val toks = p.split(Regex("[\\s,/()·>]+")).map { it.trim() }.filter { it.isNotBlank() }
+        return toks.firstOrNull { looksPort(it) && !genericPortWord(it) } ?: toks.firstOrNull { !genericPortWord(it) } ?: toks.firstOrNull() ?: ""
+    }
     fun portKey(p: String): String {
-        val tok = p.split(Regex("[\\s,/()·>]+")).map { it.trim() }.firstOrNull { looksPort(it) } ?: p.trim().substringBefore(' ')
+        val tok = portTok(p)
         var k = tok.replace(" ", "").removeSuffix("항")
         if (k.endsWith("포구")) k = k.removeSuffix("구")
         if (k.endsWith("포") && k.length > 2) k = k.removeSuffix("포")
@@ -705,16 +714,29 @@ object Seats {
     }
     class PortG(val key: String, val name: String, val area: String, val fleets: List<DirF>, val lat: Double, val lon: Double)
     @Volatile private var portMem: Pair<Int, List<PortG>>? = null
+    /** 항구별 선단 — 배 하나하나의 항구로 묶음 (한 선단이 여러 항구에서 나가면 그 항구마다 · 지역을 못 정한 선단도 넣음) */
     fun portGroups(c: Context): List<PortG> {
-        val dir = dirFleets(c)
-        portMem?.let { if (it.first == dir.size) return it.second }
-        val out = dir.filter { it.port.isNotBlank() }.groupBy { portKey(it.port) }.filterKeys { it.isNotBlank() }.map { (k, l) ->
-            val toks = l.map { f -> f.port.split(Regex("[\\s,/()·>]+")).firstOrNull { looksPort(it) } ?: f.port.trim().substringBefore(' ') }
+        val dir = dirFleets(c); val st = sites(c); val tf = tfMem ?: emptyList()
+        val key = dir.size * 31 + st.size * 7 + tf.size
+        portMem?.let { if (it.first == key) return it.second }
+        val byHost = dir.associateBy { it.host }
+        val pairs = ArrayList<Pair<String, DirF>>()   // 항구 글자 → 선단
+        st.values.forEach { v -> val h = v.host?.lowercase() ?: return@forEach
+            if (!isS24Fleet(h) || v.port.isBlank()) return@forEach
+            pairs.add(v.port to (byHost[h] ?: DirF(h, v.name, v.port, "", "선상24"))) }
+        tf.forEach { t -> if (t.host.isBlank()) return@forEach
+            val pt = t.area.substringAfterLast(" > ").trim(); if (pt.isBlank()) return@forEach
+            pairs.add(pt to (byHost[t.host] ?: DirF(t.host, t.fleet.substringBefore(" (").ifBlank { t.ship }, pt, "", "더피싱"))) }
+        exShips?.forEach { e -> if (e.port.isNotBlank() && e.host.isNotBlank()) pairs.add(e.port to (byHost[e.host] ?: DirF(e.host, e.name, e.port, "", srcOf(e.host)))) }
+        val out = pairs.groupBy { portKey(it.first) }.filterKeys { it.isNotBlank() }.map { (k, l) ->
+            val toks = l.map { portTok(it.first).let { t -> if (looksPort(t)) t else t + "항" } }
             val name = toks.groupingBy { it }.eachCount().entries.sortedWith(compareBy({ if (it.key.endsWith("항")) 0 else 1 }, { -it.value })).first().key
-            val pt = l.firstOrNull { !it.lat.isNaN() }
-            PortG(k, name, l.groupingBy { it.area }.eachCount().maxByOrNull { it.value }!!.key, l, pt?.lat ?: Double.NaN, pt?.lon ?: Double.NaN)
+            val fl = l.map { it.second }.distinctBy { it.host }
+            val pt = fl.firstOrNull { !it.lat.isNaN() }
+            val area = fl.map { it.area }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: (pt?.let { nearestArea(it.lat, it.lon) } ?: "")
+            PortG(k, name, area, fl, pt?.lat ?: Double.NaN, pt?.lon ?: Double.NaN)
         }
-        portMem = dir.size to out
+        portMem = key to out
         return out
     }
     fun dirName(host: String): String? = dirMem?.second?.firstOrNull { it.host == host }?.name
@@ -1664,6 +1686,15 @@ object Seats {
                     notes.add(row)
                 }
                 val have = activeFleets(a).map { it.host }.toSet()
+                // v7.09 (434): 찾는 글자가 항구면 '그 항구 선단 모두 보기' (오이도 중간선착장 → 오이도 선단 8곳)
+                val qk = portKey(q)
+                if (qk.length >= 2) portGroups(a).filter { it.key == qk || it.key.startsWith(qk) }.sortedByDescending { it.fleets.size }.take(3).forEach { g ->
+                    note("⚓ ${g.name} 선단 ${g.fleets.size}곳 모두 보기 ›", "그 항구 선단 자리를 모두 읽어요", Color.parseColor("#7FD6FF")) {
+                        if (useS24) { useS24 = false; p.edit().putBoolean("seat_s24on", false).apply() }
+                        portSel.clear(); portSel.add(g.key); savePrefs(); portGo = "$day|P${portSel.sorted()}"; portAuto = true
+                        qBtn.performClick(); loadAreaFn()
+                    }
+                }
                 val ym = day.replace("-", "").take(6)
                 /** v6.92 (408 · 410): 선단 홈페이지 한 곳 읽어 그 날 맞는 배 카드 · 없으면 '다음 출항' · 못 읽으면 '다시 ↻' */
                 fun readHost(host: String, title: String, emoji: String, want: (Sch) -> Boolean, fleetNm: String) {
@@ -1781,12 +1812,12 @@ object Seats {
             } else if (!useS24 && areaKey != "$day|P${portSel.sorted()}") {
                 val gs = portGroups(a).filter { it.key in portSel }
                 val off = offFleets(a); val favH = favs(a).map { it.substringBefore('|') }.toSet(); val have = activeFleets(a).map { it.host }.toSet()
-                val n = gs.flatMap { it.fleets }.filter { it.host !in have && (it.host !in off || it.host in favH) }.distinctBy { it.host }.size
+                val n = gs.flatMap { it.fleets }.filter { it.host !in have }.distinctBy { it.host }.size
                 list.addView(Ui.button(a, "🔍 ${dayLabel(day)} · ${need}자리 이상 · 선단 ${n}곳 검색", true) { portGo = "$day|P${portSel.sorted()}"; portAuto = true; loadAreaFn() }
                     .apply { minHeight = dp(54); textSize = 15.5f }, Ui.lp(a, MATCH, WRAP, top = 8))
                 list.addView(Ui.text(a, 11.5f, Ui.SUB, false, "고른 항구 선단만 지금 자리를 읽어요 · 10곳쯤이면 2~5초 · 선단이 많은 항구는 10초쯤").apply { setPadding(dp(6), dp(6), dp(6), dp(4)) })
                 gs.sortedByDescending { it.fleets.size }.forEach { g ->
-                    val fl = g.fleets.filter { it.host !in off || it.host in favH }
+                    val fl = g.fleets
                     list.addView(Ui.text(a, 13.5f, Color.parseColor("#7FD6FF"), true, "⚓ ${g.name} · 선단 ${fl.size}곳").apply { setPadding(dp(6), dp(12), dp(6), dp(2)) })
                     list.addView(Ui.text(a, 12.5f, Ui.TEXT, false, fl.joinToString("  ·  ") { it.name.substringBefore(" · ") }).apply { setPadding(dp(6), 0, dp(6), 0) })
                 }
@@ -1937,9 +1968,10 @@ object Seats {
                     if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
                     val have = activeFleets(a).map { it.host }.toSet()
                     val off = offFleets(a); val favH = favs(a).map { it.substringBefore('|') }.toSet()
+                    // 항구 검색은 선단이 적어서 '쉬는 선단'도 다 읽어요 (쉬는 목록은 한 달에 한 번이라 그 사이 새 일정을 놓치지 않게)
                     val fl = portGroups(a).filter { it.key in portSel }.flatMap { it.fleets }.distinctBy { it.host }.filter { it.host !in have }
-                    areaSkip = fl.count { it.host in off && it.host !in favH }
-                    areaRead(fl.filter { it.host !in off || it.host in favH })
+                    areaSkip = 0
+                    areaRead(fl)
                 } }
                 return
             }
@@ -2088,7 +2120,7 @@ object Seats {
             val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
             sh.body.addView(box)
             val off = offFleets(a)
-            val gs = portGroups(a).map { it to it.fleets.count { f -> f.host !in off } }.filter { it.second > 0 }
+            val gs = portGroups(a).map { it to it.fleets.size }.filter { it.second > 0 }
             val me = Spot.base(a, null, null)
             val myArea = me?.let { nearestArea(it.first, it.second) }
             val open = HashSet<String>().apply { myArea?.let { add(it) }; gs.filter { it.first.key in sel }.forEach { add(it.first.area) } }
