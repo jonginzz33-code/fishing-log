@@ -240,32 +240,39 @@ object Seats {
     private val rxTime = Regex("""운항시간\s*:\s*</strong></span>\s*([^<]+)<""")
     private val rxTag = Regex("<[^>]+>")
 
+    // v7.06: 선상24 선단 홈페이지는 두 가지 모양 — A <div class="ship_unit_ship_no_N"> <li class="seat"> · B <table class="ship_unit_ship_no_N"> <div class="title"> 배 이름 · <div id="fish"> · <li class="shiptime"> · '남은자리 N명' (오이도 포세이돈호 등)
+    private val rxUnit = Regex("""<(?:div|table) class="ship_unit_ship_no_""")
+    private val rxNameB = Regex("""<div class="title">\s*([^<]+?)\s*</div>""")
+    private val rxFishB = Regex("""id="fish">([^<]*)</div>\s*/?\s*([^<]*)<""")
+    private val rxTimeB = Regex("""class="shiptime">[\s\S]*?class="detail">\s*([^<]+?)\s*<""")
     fun parse(host: String, html: String): List<Sch> {
         val tide = HashMap<String, String>()
         rxTide.findAll(html).forEach { tide[it.groupValues[1]] = it.groupValues[2].trim() }
         val out = ArrayList<Sch>()
-        val parts = html.split("<div class=\"ship_unit_ship_no_")
+        val parts = html.split(rxUnit)
         for (b in parts.drop(1)) {
             try {
                 val date = Regex("""data-sdate="([^"]+)"""").find(b)?.groupValues?.get(1) ?: continue
-                val shipNo = Regex("""data-ship_no="(\d+)"""").find(b)?.groupValues?.get(1) ?: continue
+                val shipNo = Regex("""data-ship_no="(\d+)"""").find(b)?.groupValues?.get(1) ?: Regex("""^(\d+)""").find(b)?.groupValues?.get(1) ?: continue
                 val schNo = Regex("""data-schedule_no="(\d+)"""").find(b)?.groupValues?.get(1) ?: ""
-                val name = rxName.find(b)?.groupValues?.get(1)?.trim()?.let { android.text.Html.fromHtml(it, 0).toString() } ?: "배"
-                val fm = rxFish.findAll(b).lastOrNull()
-                val time = rxTime.findAll(b).lastOrNull()?.groupValues?.get(1)?.replace("&nbsp;", " ")?.trim() ?: ""
+                val name = (rxName.find(b) ?: rxNameB.find(b))?.groupValues?.get(1)?.trim()?.let { android.text.Html.fromHtml(it, 0).toString().trim() }?.ifBlank { null } ?: "배"
+                val fmA = rxFish.findAll(b).lastOrNull()
+                val fmB = if (fmA == null) rxFishB.find(b) else null
+                val fish = (fmA ?: fmB)?.groupValues?.get(1)?.trim() ?: ""
+                val way = (fmA ?: fmB)?.groupValues?.get(2)?.trim() ?: ""
+                val time = (rxTime.findAll(b).lastOrNull() ?: rxTimeB.find(b))?.groupValues?.get(1)?.replace("&nbsp;", " ")?.trim() ?: ""
                 val si = b.indexOf("<li class=\"seat\">")
-                val seatHtml = if (si >= 0) b.substring(si, minOf(b.length, b.indexOf("</li>", si).let { if (it < 0) b.length else it })) else ""
+                val seatHtml = if (si >= 0) b.substring(si, minOf(b.length, b.indexOf("</li>", si).let { if (it < 0) b.length else it })) else b
                 val seat = rxTag.replace(seatHtml, " ").replace("&nbsp;", " ").replace(Regex("\\s+"), " ")
                 val status = Regex("""data-status_code="(\w+)"""").find(seatHtml)?.groupValues?.get(1)
                     ?: Regex("""data-ship_status_code="(\w+)"""").find(seatHtml)?.groupValues?.get(1) ?: "ING"
-                var remain = Regex("""남은자리\s*:\s*(\d+)""").find(seat)?.groupValues?.get(1)?.toInt() ?: 0
+                var remain = Regex("""남은자리\s*:?\s*(\d+)""").find(seat)?.groupValues?.get(1)?.toInt() ?: 0
                 var reserved = Regex("""예약\s*:\s*(\d+)""").find(seat)?.groupValues?.get(1)?.toInt() ?: 0
                 if (status == "END") {   // '예약마감 20명 예약 : 20명' — 앞 숫자 = 정원
                     val capN = Regex("""(\d+)\s*명""").find(seat)?.groupValues?.get(1)?.toInt() ?: reserved
                     reserved = maxOf(reserved, capN); remain = 0
                 }
-                out.add(Sch(host, shipNo, schNo, name, date, fm?.groupValues?.get(1)?.trim() ?: "", fm?.groupValues?.get(2)?.trim() ?: "",
-                    time, remain, reserved, status, tide[date] ?: ""))
+                out.add(Sch(host, shipNo, schNo, name, date, fish, way, time, remain, reserved, status, tide[date] ?: ""))
             } catch (_: Exception) {}
         }
         return out
@@ -512,10 +519,11 @@ object Seats {
         val d = date.replace("-", "")
         return if (d.length == 8) "https://$host/index.php?mid=bk&year=${d.take(4)}&month=${d.substring(4, 6)}&day=${d.substring(6)}#list" else "https://$host/index.php?mid=bk"
     }
-    private fun tfText(x: String) = android.text.Html.fromHtml(x.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), " "), 0).toString().replace(Regex("\\s+"), " ").trim()
+    private fun tfText(x: String) = android.text.Html.fromHtml(x.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), " ").replace(Regex("<img[^>]*>", RegexOption.IGNORE_CASE), ""), 0).toString().replace('\uFFFC', ' ').replace(Regex("\\s+"), " ").trim()
     private val TF_SEC = Regex("id=\"new-div-(\\d{8})\"")
     private val TF_ROW = Regex("admin-right-(\\d{8})-(\\d+)-\\d+\"[^>]*>\\s*<img[^>]*alt=\"([^\"]*)\"")
-    private val TF_NAME = Regex("font-size:\\s*15px;\\s*font-weight:\\s*bold;?\"\\s*>(.*?)</span>", RegexOption.DOT_MATCHES_ALL)
+    // v7.06: 'font-weight:bold;color:#0043fc;' 처럼 색이 붙은 선단도 (52fish 오전배 · 오후배)
+    private val TF_NAME = Regex("font-size:\\s*15px;\\s*font-weight:\\s*bold;?[^\"]*\"\\s*>(.*?)</span>", RegexOption.DOT_MATCHES_ALL)
     private fun tfCell(seg: String, alt: String) = Regex("alt=\"$alt\"></td>\\s*<td[^>]*>(.*?)</td>", RegexOption.DOT_MATCHES_ALL).find(seg)?.let { tfText(it.groupValues[1]) } ?: ""
     fun parseTfFleet(host: String, html: String): List<Sch> {
         val out = ArrayList<Sch>()

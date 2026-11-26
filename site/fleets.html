@@ -102,19 +102,21 @@ h1{font-size:21px;margin:14px 0 8px}
     var tide = {}, m, rt = /id="d(\d{4}-\d{2}-\d{2})"[\s\S]{0,600}?class="swell">([^<]*)</g;
     while ((m = rt.exec(html))) tide[m[1]] = m[2].trim();
     var out = [];
-    html.split('<div class="ship_unit_ship_no_').slice(1).forEach(function (b) {
+    html.split(/<(?:div|table) class="ship_unit_ship_no_/).slice(1).forEach(function (b) {
       var g = function (re) { var x = re.exec(b); return x ? x[1] : ''; };
-      var date = g(/data-sdate="([^"]+)"/), shipNo = g(/data-ship_no="(\d+)"/);
+      var date = g(/data-sdate="([^"]+)"/), shipNo = g(/data-ship_no="(\d+)"/) || g(/^(\d+)/);
       if (!date || !shipNo) return;
-      var name = txt(g(/<li class="title">\s*<span[^>]*>([^<]+)<\/span>/)) || '배';
+      var name = txt(g(/<li class="title">\s*<span[^>]*>([^<]+)<\/span>/) || g(/<div class="title">\s*([^<]+?)\s*<\/div>/)) || '배';
       var fm = null, x, rf = /<span class="fishspecies"><strong>([^<]*)<\/strong><\/span>\s*\/\s*<span class="way"><strong>([^<]*)<\/strong>/g;
       while ((x = rf.exec(b))) fm = x;
+      if (!fm) fm = /id="fish">([^<]*)<\/div>\s*\/?\s*([^<]*)</.exec(b);
       var tm = '', rti = /운항시간\s*:\s*<\/strong><\/span>\s*([^<]+)</g; while ((x = rti.exec(b))) tm = x[1].replace(/&nbsp;/g, ' ').trim();
+      if (!tm) { var tb = /class="shiptime">[\s\S]*?class="detail">\s*([^<]+?)\s*</.exec(b); if (tb) tm = tb[1].trim(); }
       var si = b.indexOf('<li class="seat">'), se = si >= 0 ? b.indexOf('</li>', si) : -1;
-      var seatH = si >= 0 ? b.substring(si, se < 0 ? b.length : se) : '';
+      var seatH = si >= 0 ? b.substring(si, se < 0 ? b.length : se) : b;
       var seat = seatH.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
       var st = (/data-status_code="(\w+)"/.exec(seatH) || /data-ship_status_code="(\w+)"/.exec(seatH) || [0, 'ING'])[1];
-      var rm = +((/남은자리\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]), rs = +((/예약\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]);
+      var rm = +((/남은자리\s*:?\s*(\d+)/.exec(seat) || [0, 0])[1]), rs = +((/예약\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]);
       if (st === 'END') { var c = +((/(\d+)\s*명/.exec(seat) || [0, rs])[1]); rs = Math.max(rs, c); rm = 0; }
       out.push({ host: host, shipNo: shipNo, schNo: g(/data-schedule_no="(\d+)"/), ship: name, date: date, fish: fm ? fm[1].trim() : '', way: fm ? fm[2].trim() : '',
         time: tm, remain: rm, reserved: rs, status: st, tide: tide[date] || '' });
@@ -129,7 +131,7 @@ h1{font-size:21px;margin:14px 0 8px}
       var prev = 0, r, rr = /admin-right-(\d{8})-(\d+)-\d+"[^>]*>\s*<img[^>]*alt="([^"]*)"/g;
       while ((r = rr.exec(body))) {
         var seg = body.substring(prev, r.index); prev = r.index + r[0].length;
-        var full = '', n0, rn = /font-size:\s*15px;\s*font-weight:\s*bold;?"\s*>([\s\S]*?)<\/span>/g; while ((n0 = rn.exec(seg))) full = txt(n0[1]);
+        var full = '', n0, rn = /font-size:\s*15px;\s*font-weight:\s*bold;?[^"]*"\s*>([\s\S]*?)<\/span>/g; while ((n0 = rn.exec(seg))) full = txt(n0[1]);
         var ship = full.split('[')[0].split('(')[0].trim() || full || ('배 ' + r[2]);
         var cell = function (alt) { var c = new RegExp('alt="' + alt + '"></td>\\s*<td[^>]*>([\\s\\S]*?)</td>').exec(seg); return c ? txt(c[1]) : ''; };
         var alt = r[3], n = (/(\d+)\s*명/.exec(alt) || [0, null])[1];

@@ -24,26 +24,29 @@ const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods
 
 // ── 선단 페이지 읽기 (앱 Seats.parse · parseTfFleet 와 같은 규칙) ──
 function txt(h) {
-  return String(h).replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  return String(h).replace(/<br\s*\/?>/gi, ' ').replace(/<img[^>]*>/gi, '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).replace(/\s+/g, ' ').trim();
 }
 function parseS24(html) {
   const tide = {}; let m; const rt = /id="d(\d{4}-\d{2}-\d{2})"[\s\S]{0,600}?class="swell">([^<]*)</g;
   while ((m = rt.exec(html))) tide[m[1]] = m[2].trim();
   const out = [];
-  for (const b of html.split('<div class="ship_unit_ship_no_').slice(1)) {
+  for (const b of html.split(/<(?:div|table) class="ship_unit_ship_no_/).slice(1)) {
     const g = (re) => { const x = re.exec(b); return x ? x[1] : ''; };
-    const date = g(/data-sdate="([^"]+)"/), shipNo = g(/data-ship_no="(\d+)"/);
+    // 두 가지 모양: A <div …> <li class="seat"> · B <table …> <div class="title"> · id="fish" · li.shiptime · 남은자리 N명
+    const date = g(/data-sdate="([^"]+)"/), shipNo = g(/data-ship_no="(\d+)"/) || g(/^(\d+)/);
     if (!date || !shipNo) continue;
-    const name = txt(g(/<li class="title">\s*<span[^>]*>([^<]+)<\/span>/)) || '배';
+    const name = txt(g(/<li class="title">\s*<span[^>]*>([^<]+)<\/span>/) || g(/<div class="title">\s*([^<]+?)\s*<\/div>/)) || '배';
     let fm = null, x; const rf = /<span class="fishspecies"><strong>([^<]*)<\/strong><\/span>\s*\/\s*<span class="way"><strong>([^<]*)<\/strong>/g;
     while ((x = rf.exec(b))) fm = x;
+    if (!fm) fm = /id="fish">([^<]*)<\/div>\s*\/?\s*([^<]*)</.exec(b);
     let tm = ''; const rti = /운항시간\s*:\s*<\/strong><\/span>\s*([^<]+)</g; while ((x = rti.exec(b))) tm = x[1].replace(/&nbsp;/g, ' ').trim();
+    if (!tm) { const tb = /class="shiptime">[\s\S]*?class="detail">\s*([^<]+?)\s*</.exec(b); if (tb) tm = tb[1].trim(); }
     const si = b.indexOf('<li class="seat">'), se = si >= 0 ? b.indexOf('</li>', si) : -1;
-    const seatH = si >= 0 ? b.substring(si, se < 0 ? b.length : se) : '';
+    const seatH = si >= 0 ? b.substring(si, se < 0 ? b.length : se) : b;
     const seat = seatH.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
     const st = (/data-status_code="(\w+)"/.exec(seatH) || /data-ship_status_code="(\w+)"/.exec(seatH) || [0, 'ING'])[1];
-    let rm = +((/남은자리\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]), rs = +((/예약\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]);
+    let rm = +((/남은자리\s*:?\s*(\d+)/.exec(seat) || [0, 0])[1]), rs = +((/예약\s*:\s*(\d+)/.exec(seat) || [0, 0])[1]);
     if (st === 'END') { const c = +((/(\d+)\s*명/.exec(seat) || [0, rs])[1]); rs = Math.max(rs, c); rm = 0; }
     out.push({ shipNo, schNo: g(/data-schedule_no="(\d+)"/), ship: name, date, fish: fm ? fm[1].trim() : '', way: fm ? fm[2].trim() : '', time: tm, remain: rm, reserved: rs, status: st, tide: tide[date] || '' });
   }
@@ -57,7 +60,7 @@ function parseTf(html) {
     let prev = 0, r; const rr = /admin-right-(\d{8})-(\d+)-\d+"[^>]*>\s*<img[^>]*alt="([^"]*)"/g;
     while ((r = rr.exec(body))) {
       const seg = body.substring(prev, r.index); prev = r.index + r[0].length;
-      let full = '', n0; const rn = /font-size:\s*15px;\s*font-weight:\s*bold;?"\s*>([\s\S]*?)<\/span>/g; while ((n0 = rn.exec(seg))) full = txt(n0[1]);
+      let full = '', n0; const rn = /font-size:\s*15px;\s*font-weight:\s*bold;?[^"]*"\s*>([\s\S]*?)<\/span>/g; while ((n0 = rn.exec(seg))) full = txt(n0[1]);
       const ship = full.split('[')[0].split('(')[0].trim() || full || ('배 ' + r[2]);
       const cell = (alt) => { const c = new RegExp('alt="' + alt + '"></td>\\s*<td[^>]*>([\\s\\S]*?)</td>').exec(seg); return c ? txt(c[1]) : ''; };
       const alt = r[3], n = (/(\d+)\s*명/.exec(alt) || [0, null])[1];
