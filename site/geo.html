@@ -62,6 +62,13 @@ details summary{cursor:pointer;font-weight:800}
 .ni>div{flex:1;min-width:0}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
+.cN,.pN{color:var(--sky);font-weight:700}
+.ac{position:relative}
+.acl{position:absolute;left:0;right:0;top:100%;z-index:5;max-height:300px;overflow:auto;background:#0F2231;border:1.5px solid #3A6A88;border-radius:12px;margin-top:2px}
+.acl div{padding:8px 12px;font-size:14px;color:var(--text);cursor:pointer;border-top:1px solid #1E3446}
+.acl div:first-child{border-top:0}
+.acl div.on,.acl div:hover{background:#1E3F57}
+.acl small{color:var(--sub);font-family:ui-monospace,Consolas,monospace;margin-left:6px}
 </style>
 </head>
 <body>
@@ -121,8 +128,8 @@ details summary{cursor:pointer;font-weight:800}
     <h2>🏥 거래처 필요 제품 재고 기다리기</h2>
     <p class="lead" style="margin:0 0 10px">거래처 · 제품은 저장해 둔 목록에서 자동완성돼요. 정한 간격마다 확인해서 재고가 필요 수량만큼 들어오면 휴대폰으로 알려줘요.</p>
     <div class="nf">
-      <label>거래처<input id="nP" list="dlP" placeholder="약국 이름 (예: 해솔)" autocomplete="off"></label>
-      <label>제품<input id="nN" list="dlN" placeholder="제품 이름 (예: 리바로)" autocomplete="off"></label>
+      <label>거래처 <span class="cN"></span><input id="nP" list="dlP" placeholder="약국 이름 (예: 해솔)" autocomplete="off"></label>
+      <label>제품 <span class="pN"></span><div class="ac"><input id="nN" placeholder="제품 이름 (예: 리바로 2mg)" autocomplete="off"><div class="acl hide" id="acl"></div></div></label>
       <div class="nrow">
         <label>필요 수량<input id="nQ" type="number" min="1" value="1" inputmode="numeric"></label>
         <label>확인 간격<select id="nE">
@@ -147,18 +154,18 @@ details summary{cursor:pointer;font-weight:800}
   </div>
 
   <div class="card">
-    <details>
-      <summary>📒 저장해 둔 거래처 · 제품 목록 고치기 (자동완성용) <button class="btn ok sm" id="cRefresh" style="margin-left:6px;vertical-align:middle">🔄 거래처 새로고침</button></summary>
+    <details id="pBox">
+      <summary>📒 저장해 둔 거래처 <span class="cN"></span> · 제품 <span class="pN"></span> 목록 고치기 <button class="btn ok sm" id="cRefresh" style="margin-left:6px;vertical-align:middle">🔄 거래처 새로고침</button></summary>
       <div class="msg" id="cMsg"></div>
-      <p class="lead" style="margin:10px 0 6px">거래처 — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
+      <p class="lead" style="margin:10px 0 6px">거래처 <b class="cN"></b> — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
       <textarea id="cBulk" style="min-height:140px"></textarea>
       <div class="row" style="margin:6px 0 14px"><button class="btn ok sm" onclick="saveList('customers', 'cBulk', this)">거래처 저장</button></div>
-      <p class="lead" style="margin:0 0 6px">제품 — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (지오팜에서 찾아 추가한 제품은 자동으로 여기 들어가요)</p>
+      <p class="lead" style="margin:0 0 6px">제품 <b class="pN"></b> — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (지오팜에서 찾아 추가한 제품은 자동으로 여기 들어가요)</p>
       <textarea id="pBulk" style="min-height:140px"></textarea>
       <div class="row" style="margin-top:6px"><button class="btn ok sm" onclick="saveList('products', 'pBulk', this)">제품 저장</button></div>
     </details>
   </div>
-  <datalist id="dlP"></datalist><datalist id="dlN"></datalist>
+  <datalist id="dlP"></datalist>
 
   <div class="card">
     <h2>📋 필요재고목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
@@ -186,7 +193,6 @@ details summary{cursor:pointer;font-weight:800}
 <script>
 (function () {
   var API = 'https://geo-restock.jonginzz33.workers.dev/api/';
-  var ALLOW = ['choseong505@gmail.com', 'jonginzz33@gmail.com'];
   var $ = function (id) { return document.getElementById(id); };
   var show = function (id) { ['login', 'deny', 'app'].forEach(function (x) { $(x).classList.toggle('hide', x !== id); }); };
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -212,7 +218,7 @@ details summary{cursor:pointer;font-weight:800}
   auth.onAuthStateChanged(function (u) {
     if (!u) { $('who').textContent = ''; show('login'); return; }
     $('who').innerHTML = esc(u.email) + ' · <a href="javascript:logout()">로그아웃</a>';
-    if (ALLOW.indexOf((u.email || '').toLowerCase()) < 0) { show('deny'); return; }
+    // 허락된 계정인지는 서버가 검사 (아니면 status 가 403 → 권한 없음 화면)
     show('app');
     load();
   });
@@ -227,6 +233,7 @@ details summary{cursor:pointer;font-weight:800}
       if (opt.body) h['Content-Type'] = 'application/json';
       return fetch(API + path, { method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined, signal: ctl ? ctl.signal : undefined });
     }).then(function (r) {
+      if (r.status === 403) return { error: '권한이 없어요', denied: true };
       return r.json().catch(function () { return { error: '서버 응답을 읽지 못했어요 (' + r.status + ')' }; });
     }).catch(function () {
       return { error: late ? '응답이 늦어요. 지오팜이 잠시 답을 안 하는 것 같아요. 다시 눌러 주세요.' : '서버에 연결하지 못했어요. 서버가 아직 안 올라갔을 수 있어요.' };
@@ -243,6 +250,7 @@ details summary{cursor:pointer;font-weight:800}
   window.load = function () {
     $('cycle').textContent = '불러오는 중…';
     call('status').then(function (j) {
+      if (j.denied) { show('deny'); return; }
       if (j.error) { $('cycle').textContent = j.error; return; }
       data = j;
       var c = { in: 0, sold: 0, fail: 0, new: 0 };
@@ -261,7 +269,7 @@ details summary{cursor:pointer;font-weight:800}
       if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
       render();
-      fillLists(); hint(); renderNeeds();
+      fillLists(); hint(); renderNeeds(); loadProducts(j.productsV);
     });
   };
 
@@ -352,15 +360,34 @@ details summary{cursor:pointer;font-weight:800}
     return d.toDateString() === now.toDateString() ? hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
   };
 
+  // 제품 목록 (지오팜 전체 · 만 개 넘음): 브라우저에 저장해 두고, 서버 판 번호가 바뀔 때만 다시 받음
+  var prods = [], prodsV = null, prodsLow = [];
+  try { var c0 = JSON.parse(localStorage.getItem('geoProducts') || 'null'); if (c0) { prods = c0.products; prodsV = c0.v; } } catch (e) {}
+  function setProds(list) {
+    prods = list || [];
+    prodsLow = prods.map(function (p) { return p[0].toLowerCase().replace(/\s+/g, ''); });
+    document.querySelectorAll('.pN').forEach(function (e) { e.textContent = '(' + prods.length.toLocaleString() + '개)'; });
+    if ($('pBox').open && document.activeElement !== $('pBulk')) fillPBulk();
+  }
+  setProds(prods);
+  function loadProducts(v) {
+    if (v && v === prodsV) return;
+    call('products', { wait: 60000 }).then(function (j) {
+      if (!j.products) return;
+      prodsV = j.v; setProds(j.products);
+      try { localStorage.setItem('geoProducts', JSON.stringify({ v: j.v, products: j.products })); } catch (e) {}
+      hint();
+    });
+  }
+  function fillPBulk() { $('pBulk').value = prods.map(function (p) { return p[0] + ' | ' + p[1]; }).join('\n'); }
+  $('pBox').ontoggle = function () { if ($('pBox').open) fillPBulk(); }; // 만 줄이라 펼칠 때만 채움
+
   // 서버에서 받은 목록으로 자동완성 · 고치기 칸 채우기
   function fillLists() {
-    var cs = data.customers || [], ps = data.products || [];
+    var cs = data.customers || [];
     $('dlP').innerHTML = cs.map(function (c) { return '<option value="' + esc(c.name) + '">'; }).join('');
-    var seen = {};
-    $('dlN').innerHTML = ps.filter(function (p) { if (seen[p[0]]) return false; seen[p[0]] = 1; return true; })
-      .map(function (p) { return '<option value="' + esc(p[0]) + '">'; }).join('');
+    document.querySelectorAll('.cN').forEach(function (e) { e.textContent = '(' + cs.length + '곳)'; });
     if (document.activeElement !== $('cBulk')) $('cBulk').value = cs.map(function (c) { return c.code + ' | ' + c.name; }).join('\n');
-    if (document.activeElement !== $('pBulk')) $('pBulk').value = ps.map(function (p) { return p[0] + ' | ' + p[1]; }).join('\n');
   }
   function findPharm(v) {
     v = v.trim(); if (!v) return null;
@@ -371,23 +398,57 @@ details summary{cursor:pointer;font-weight:800}
   }
   function findProd(v) {
     v = v.trim(); if (!v) return null;
-    var hit = (data.products || []).filter(function (p) { return p[0] === v; });
-    return hit[0] || null;
+    for (var i = 0; i < prods.length; i++) if (prods[i][0] === v) return prods[i];
+    return null;
   }
+  // 제품 자동완성: 띄어쓰기로 나눈 단어가 모두 들어간 제품 (예: "리바로 2mg")
+  var acRows = [], acOn = -1;
+  function acShow() {
+    var words = $('nN').value.toLowerCase().split(/\s+/).filter(Boolean), box = $('acl');
+    acRows = []; acOn = -1;
+    if (!words.length || findProd($('nN').value)) { box.classList.add('hide'); return; }
+    for (var i = 0; i < prodsLow.length && acRows.length < 40; i++) {
+      var s = prodsLow[i], ok = true;
+      for (var k = 0; k < words.length; k++) if (s.indexOf(words[k]) < 0) { ok = false; break; }
+      if (ok) acRows.push(prods[i]);
+    }
+    box.innerHTML = acRows.map(function (p, i) { return '<div data-i="' + i + '">' + esc(p[0]) + '<small>' + esc(p[1]) + '</small></div>'; }).join('');
+    box.classList.toggle('hide', !acRows.length);
+  }
+  function acPick(i) {
+    var p = acRows[i]; if (!p) return;
+    $('nN').value = p[0]; picked = p; $('acl').classList.add('hide'); $('sr').innerHTML = ''; hint();
+  }
+  $('acl').onmousedown = function (e) { var d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); acPick(+d.getAttribute('data-i')); } };
+  $('nN').onblur = function () { setTimeout(function () { $('acl').classList.add('hide'); }, 150); };
+  $('nN').onfocus = acShow;
   var picked = null; // 지오팜 검색에서 고른 제품 [이름, 코드]
   function hint() {
     var ph = findPharm($('nP').value), pr = picked && picked[0] === $('nN').value.trim() ? picked : findProd($('nN').value);
     var parts = [];
     if ($('nP').value.trim()) parts.push(ph ? '🏥 ' + ph.name + ' (' + ph.code + ')' : '🏥 목록에 없는 거래처 (이름 그대로 저장)');
     if (pr) parts.push('💊 ' + pr[1]);
-    else if ($('nN').value.trim().length >= 2) parts.push('💊 저장된 제품이 아니에요 → 지오팜에서 찾기');
+    else if ($('nN').value.trim().length >= 2) parts.push('💊 아래 목록에서 고르거나, 없으면 지오팜에서 찾기');
     $('nHint').textContent = parts.join('  ·  ');
     $('nHint').className = 'hint' + (pr ? ' ok' : '');
     $('qbtn').classList.toggle('hide', !!pr || $('nN').value.trim().length < 2);
   }
   $('nP').oninput = hint;
-  $('nN').oninput = function () { $('sr').innerHTML = ''; hint(); };
-  $('nN').onkeydown = function (e) { if (e.key === 'Enter' && !$('qbtn').classList.contains('hide')) doFind(); };
+  $('nN').oninput = function () { $('sr').innerHTML = ''; acShow(); hint(); };
+  $('nN').onkeydown = function (e) {
+    var open = !$('acl').classList.contains('hide');
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      acOn = Math.max(0, Math.min(acRows.length - 1, acOn + (e.key === 'ArrowDown' ? 1 : -1)));
+      [].forEach.call($('acl').children, function (d, i) { d.classList.toggle('on', i === acOn); if (i === acOn) d.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (open && acRows.length) { e.preventDefault(); acPick(acOn >= 0 ? acOn : 0); }
+      else if (!$('qbtn').classList.contains('hide')) doFind();
+    }
+    if (e.key === 'Escape') $('acl').classList.add('hide');
+  };
 
   window.doFind = function () {
     var q = $('nN').value.trim();
@@ -409,11 +470,10 @@ details summary{cursor:pointer;font-weight:800}
           var name = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
           picked = [name, key];
           $('nN').value = name; box.innerHTML = ''; hint();
-          // 자주 쓰는 제품 목록에도 저장 (다음부터 자동완성)
-          var ps = data.products || [];
-          if (!ps.some(function (p) { return p[1] === key; })) {
-            data.products = ps.concat([[name, key]]);
-            call('products', { method: 'POST', body: { products: data.products } }).then(fillLists);
+          // 제품 목록에도 저장 (다음부터 자동완성)
+          if (!prods.some(function (p) { return p[1] === key; })) {
+            setProds(prods.concat([[name, key]]));
+            call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function () { prodsV = null; load(); });
           }
         };
         d.append(s, b); box.append(d);
