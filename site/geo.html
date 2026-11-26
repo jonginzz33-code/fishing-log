@@ -51,6 +51,17 @@ textarea{min-height:200px;resize:vertical;font:13px/1.45 ui-monospace,Consolas,m
 .filter button.on{background:#3A6A88}
 details summary{cursor:pointer;font-weight:800}
 .hide{display:none!important}
+.nf label{display:block;font-size:13px;color:var(--sub);margin-bottom:8px}
+.nf label input,.nf label select{margin-top:3px;color:var(--text)}
+.nf select{width:100%;background:#0F2231;border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit}
+.nrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hint{font-size:12.5px;color:var(--sub);min-height:18px;margin:0 0 8px;font-family:ui-monospace,Consolas,monospace}
+.hint.ok{color:var(--ok)}
+.ph{font-weight:800;font-size:14px;margin:12px 0 2px;color:var(--sky)}
+.ni{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #1E3446;font-size:13.5px}
+.ni>div{flex:1;min-width:0}
+.ni small{display:block;color:var(--sub);font-size:12px}
+.ni.came{background:rgba(47,191,143,.08)}
 </style>
 </head>
 <body>
@@ -107,10 +118,46 @@ details summary{cursor:pointer;font-weight:800}
   </div>
 
   <div class="card">
-    <h2>➕ 제품 찾아서 추가</h2>
-    <div class="row"><input id="q" placeholder="제품명 두 글자 이상 (예: 리바로)" enterkeyhint="search"><button class="btn ok" id="qbtn" onclick="doFind()">검색</button></div>
-    <div class="sr" id="sr"></div>
+    <h2>🏥 거래처 필요 제품 재고 기다리기</h2>
+    <p class="lead" style="margin:0 0 10px">거래처 · 제품은 저장해 둔 목록에서 자동완성돼요. 정한 간격마다 확인해서 재고가 필요 수량만큼 들어오면 휴대폰으로 알려줘요.</p>
+    <div class="nf">
+      <label>거래처<input id="nP" list="dlP" placeholder="약국 이름 (예: 해솔)" autocomplete="off"></label>
+      <label>제품<input id="nN" list="dlN" placeholder="제품 이름 (예: 리바로)" autocomplete="off"></label>
+      <div class="nrow">
+        <label>필요 수량<input id="nQ" type="number" min="1" value="1" inputmode="numeric"></label>
+        <label>확인 간격<select id="nE">
+          <option value="10">10분마다</option><option value="30">30분마다</option><option value="60" selected>1시간마다</option><option value="120">2시간마다</option>
+          <option value="180">3시간마다</option><option value="360">6시간마다</option><option value="720">12시간마다</option><option value="1440">하루마다</option>
+        </select></label>
+      </div>
+      <div class="hint" id="nHint"></div>
+      <div class="row"><button class="btn ok" id="nAdd">➕ 추가하고 바로 확인</button><button class="btn ghost hide" id="qbtn">🔍 지오팜에서 찾기</button></div>
+      <div class="sr" id="sr"></div>
+    </div>
   </div>
+
+  <div class="card">
+    <h2>⏳ 기다리는 제품 <span id="nCnt" style="color:var(--sub);font-size:14px"></span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <input id="nF" placeholder="거래처 · 제품으로 찾기" style="flex:1">
+      <button class="btn ok sm" id="nNow">🔄 전부 지금 확인</button>
+    </div>
+    <div class="msg" id="nMsg" style="margin:0 0 6px"></div>
+    <div id="nList"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>📒 저장해 둔 거래처 · 제품 목록 고치기 (자동완성용)</summary>
+      <p class="lead" style="margin:10px 0 6px">거래처 — 한 줄에 하나: <b>거래처코드 | 이름</b></p>
+      <textarea id="cBulk" style="min-height:140px"></textarea>
+      <div class="row" style="margin:6px 0 14px"><button class="btn ok sm" onclick="saveList('customers', 'cBulk', this)">거래처 저장</button></div>
+      <p class="lead" style="margin:0 0 6px">제품 — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (지오팜에서 찾아 추가한 제품은 자동으로 여기 들어가요)</p>
+      <textarea id="pBulk" style="min-height:140px"></textarea>
+      <div class="row" style="margin-top:6px"><button class="btn ok sm" onclick="saveList('products', 'pBulk', this)">제품 저장</button></div>
+    </details>
+  </div>
+  <datalist id="dlP"></datalist><datalist id="dlN"></datalist>
 
   <div class="card">
     <h2>📋 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
@@ -169,15 +216,20 @@ details summary{cursor:pointer;font-weight:800}
     load();
   });
 
+  // opt.wait: 이 시간(ms)이 지나도 답이 없으면 기다리기를 멈추고 안내 (기본 90초)
   function call(path, opt) {
     opt = opt || {};
+    var ctl = window.AbortController ? new AbortController() : null, late = false;
+    var timer = ctl && setTimeout(function () { late = true; ctl.abort(); }, opt.wait || 90000);
     return auth.currentUser.getIdToken().then(function (t) {
       var h = { Authorization: 'Bearer ' + t };
       if (opt.body) h['Content-Type'] = 'application/json';
-      return fetch(API + path, { method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined });
+      return fetch(API + path, { method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined, signal: ctl ? ctl.signal : undefined });
     }).then(function (r) {
       return r.json().catch(function () { return { error: '서버 응답을 읽지 못했어요 (' + r.status + ')' }; });
-    }).catch(function () { return { error: '서버에 연결하지 못했어요. 서버가 아직 안 올라갔을 수 있어요.' }; });
+    }).catch(function () {
+      return { error: late ? '응답이 늦어요. 지오팜이 잠시 답을 안 하는 것 같아요. 다시 눌러 주세요.' : '서버에 연결하지 못했어요. 서버가 아직 안 올라갔을 수 있어요.' };
+    }).then(function (j) { if (timer) clearTimeout(timer); return j; });
   }
 
   function state(name) {
@@ -208,6 +260,7 @@ details summary{cursor:pointer;font-weight:800}
       if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
       render();
+      fillLists(); hint(); renderNeeds();
     });
   };
 
@@ -289,35 +342,159 @@ details summary{cursor:pointer;font-weight:800}
     });
   };
 
+  // ───── 거래처별 필요 제품 ─────
+  var EVERY = { 10: '10분', 30: '30분', 60: '1시간', 120: '2시간', 180: '3시간', 360: '6시간', 720: '12시간', 1440: '하루' };
+  var everyLabel = function (m) { return EVERY[m] || (m >= 60 ? Math.round(m / 6) / 10 + '시간' : m + '분'); };
+  var when = function (t) {
+    var d = new Date(t), now = new Date();
+    var hm = d.toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' });
+    return d.toDateString() === now.toDateString() ? hm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  };
+
+  // 서버에서 받은 목록으로 자동완성 · 고치기 칸 채우기
+  function fillLists() {
+    var cs = data.customers || [], ps = data.products || [];
+    $('dlP').innerHTML = cs.map(function (c) { return '<option value="' + esc(c.name) + '">'; }).join('');
+    var seen = {};
+    $('dlN').innerHTML = ps.filter(function (p) { if (seen[p[0]]) return false; seen[p[0]] = 1; return true; })
+      .map(function (p) { return '<option value="' + esc(p[0]) + '">'; }).join('');
+    if (document.activeElement !== $('cBulk')) $('cBulk').value = cs.map(function (c) { return c.code + ' | ' + c.name; }).join('\n');
+    if (document.activeElement !== $('pBulk')) $('pBulk').value = ps.map(function (p) { return p[0] + ' | ' + p[1]; }).join('\n');
+  }
+  function findPharm(v) {
+    v = v.trim(); if (!v) return null;
+    var cs = data.customers || [];
+    var hit = cs.filter(function (c) { return c.name === v || c.code === v; });
+    if (!hit.length) hit = cs.filter(function (c) { return c.name.indexOf(v) >= 0; });
+    return hit.length === 1 ? hit[0] : null;
+  }
+  function findProd(v) {
+    v = v.trim(); if (!v) return null;
+    var hit = (data.products || []).filter(function (p) { return p[0] === v; });
+    return hit[0] || null;
+  }
+  var picked = null; // 지오팜 검색에서 고른 제품 [이름, 코드]
+  function hint() {
+    var ph = findPharm($('nP').value), pr = picked && picked[0] === $('nN').value.trim() ? picked : findProd($('nN').value);
+    var parts = [];
+    if ($('nP').value.trim()) parts.push(ph ? '🏥 ' + ph.name + ' (' + ph.code + ')' : '🏥 목록에 없는 거래처 (이름 그대로 저장)');
+    if (pr) parts.push('💊 ' + pr[1]);
+    else if ($('nN').value.trim().length >= 2) parts.push('💊 저장된 제품이 아니에요 → 지오팜에서 찾기');
+    $('nHint').textContent = parts.join('  ·  ');
+    $('nHint').className = 'hint' + (pr ? ' ok' : '');
+    $('qbtn').classList.toggle('hide', !!pr || $('nN').value.trim().length < 2);
+  }
+  $('nP').oninput = hint;
+  $('nN').oninput = function () { $('sr').innerHTML = ''; hint(); };
+  $('nN').onkeydown = function (e) { if (e.key === 'Enter' && !$('qbtn').classList.contains('hide')) doFind(); };
+
   window.doFind = function () {
-    var q = $('q').value.trim();
+    var q = $('nN').value.trim();
     if (q.length < 2) { $('sr').textContent = '두 글자 이상 입력해 주세요.'; return; }
     $('qbtn').disabled = true; $('sr').textContent = '지오팜에서 검색 중…';
-    call('search?q=' + encodeURIComponent(q)).then(function (j) {
+    call('search?q=' + encodeURIComponent(q), { wait: 45000 }).then(function (j) {
       $('qbtn').disabled = false;
       var box = $('sr'); box.innerHTML = '';
       if (j.error || j.msg) { box.textContent = j.error || j.msg; if (!(j.rows || []).length) return; }
       if (!j.rows.length) { box.textContent = '검색 결과가 없어요.'; return; }
-      var have = {};
-      data.watch.forEach(function (w) { w[1].split(',').forEach(function (c) { have[c] = 1; }); });
       j.rows.forEach(function (x) {
         var key = x.code + ':' + x.sup;
         var d = document.createElement('div');
         var s = document.createElement('span');
-        s.innerHTML = esc(x.text) + '<br><small>' + key + (x.stock != null ? ' · 재고 ' + x.stock : '') + '</small>';
+        s.innerHTML = esc(x.text) + '<br><small>' + key + (x.stock != null ? ' · 지금 재고 ' + x.stock : '') + '</small>';
         var b = document.createElement('button');
-        b.className = 'btn sm ' + (have[key] ? 'ghost' : 'ok');
-        b.textContent = have[key] ? '감시 중' : '추가';
-        b.disabled = !!have[key];
+        b.className = 'btn sm ok'; b.textContent = '고르기';
         b.onclick = function () {
           var name = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
-          save(data.watch.concat([[name, key]]), b).then(function (r) { if (!r.error) { b.textContent = '감시 중'; b.className = 'btn sm ghost'; b.disabled = true; } });
+          picked = [name, key];
+          $('nN').value = name; box.innerHTML = ''; hint();
+          // 자주 쓰는 제품 목록에도 저장 (다음부터 자동완성)
+          var ps = data.products || [];
+          if (!ps.some(function (p) { return p[1] === key; })) {
+            data.products = ps.concat([[name, key]]);
+            call('products', { method: 'POST', body: { products: data.products } }).then(fillLists);
+          }
         };
         d.append(s, b); box.append(d);
       });
     });
   };
-  $('q').onkeydown = function (e) { if (e.key === 'Enter') doFind(); };
+  $('qbtn').onclick = doFind;
+
+  function saveNeeds(list) {
+    return call('needs', { method: 'POST', body: { needs: list } }).then(function (j) {
+      if (j.needs) data.needs = j.needs;
+      return j;
+    });
+  }
+  function checkNow(ids, btn) {
+    if (btn) btn.disabled = true;
+    $('nMsg').textContent = '지오팜에서 확인 중…';
+    return call('checkNeeds', { method: 'POST', body: { ids: ids } }).then(function (j) {
+      if (btn) btn.disabled = false;
+      $('nMsg').textContent = j.msg || j.error || '';
+      load();
+    });
+  }
+  $('nAdd').onclick = function () {
+    var pTxt = $('nP').value.trim(), ph = findPharm(pTxt);
+    var pr = picked && picked[0] === $('nN').value.trim() ? picked : findProd($('nN').value);
+    var qty = Math.max(1, Math.round(+$('nQ').value) || 1);
+    if (!pTxt) { $('nHint').textContent = '거래처를 적어 주세요.'; $('nP').focus(); return; }
+    if (!pr) { $('nHint').textContent = '제품을 목록에서 고르거나 “지오팜에서 찾기”로 골라 주세요.'; $('nN').focus(); return; }
+    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: +$('nE').value };
+    var btn = $('nAdd'); btn.disabled = true;
+    saveNeeds((data.needs || []).concat([n])).then(function (j) {
+      btn.disabled = false;
+      if (j.error) { $('nMsg').textContent = j.error; return; }
+      $('nN').value = ''; $('nQ').value = 1; picked = null; hint();
+      renderNeeds();
+      checkNow([n.id]);
+    });
+  };
+
+  function renderNeeds() {
+    var ns = data.needs || [], st = data.needState || {}, q = $('nF').value.trim().toLowerCase();
+    var cameN = 0;
+    ns.forEach(function (n) { if (st[n.id] && st[n.id].ok) cameN++; });
+    $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cameN + ')' : '';
+    var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name).toLowerCase().indexOf(q) >= 0; });
+    var groups = {}, order = [];
+    rows.forEach(function (n) { var k = n.pn || '(거래처 없음)'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(n); });
+    order.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
+    $('nList').innerHTML = order.map(function (k) {
+      return '<div class="ph">🏥 ' + esc(k) + '</div>' + groups[k].map(function (n) {
+        var s = st[n.id], badge, sub = [];
+        if (!s || !s.t) badge = '<span class="b u">확인 전</span>';
+        else if (s.n == null) badge = '<span class="b f">조회 실패</span>';
+        else if (s.ok) badge = '<span class="b g">✅ 들어옴 ' + s.n + '개</span>';
+        else badge = '<span class="b s">⏳ 재고 ' + s.n + '개</span>';
+        sub.push('필요 ' + n.qty + '개');
+        sub.push(everyLabel(n.every) + '마다');
+        if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
+        if (s && s.ok && s.at) sub.push('들어온 시각 ' + when(s.at));
+        return '<div class="ni' + (s && s.ok ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<small>' + sub.join(' · ') + '</small></div>' +
+          '<button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
+      }).join('');
+    }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 기다리는 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
+  }
+  $('nF').oninput = renderNeeds;
+  $('nNow').onclick = function () { var ids = (data.needs || []).map(function (n) { return n.id; }); if (ids.length) checkNow(ids, $('nNow')); };
+  $('nList').onclick = function (e) {
+    var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel');
+    if (c) return checkNow([c], e.target);
+    if (!d) return;
+    var n = (data.needs || []).filter(function (x) { return x.id === d; })[0];
+    if (!n || !confirm('기다리는 목록에서 뺄까요?\n[' + n.pn + '] ' + n.name)) return;
+    saveNeeds(data.needs.filter(function (x) { return x.id !== d; })).then(function (j) { $('nMsg').textContent = j.msg || j.error || ''; renderNeeds(); });
+  };
+  window.saveList = function (kind, el, btn) {
+    btn.disabled = true;
+    call(kind, { method: 'POST', body: { text: $(el).value } }).then(function (j) {
+      btn.disabled = false; $('msg').textContent = j.msg || j.error || ''; alert(j.msg || j.error || '');
+      $(el).blur(); load();
+    });
+  };
 })();
 </script>
 <script src="/menu.js"></script>
