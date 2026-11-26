@@ -89,6 +89,14 @@ details summary{cursor:pointer;font-weight:800}
       <div class="tile f">실패<b id="tFail">-</b></div>
       <div class="tile">확인 전<b id="tNew">-</b></div>
     </div>
+    <div class="row" style="margin-bottom:12px">
+      <span style="font-size:14px">⏱ 확인 간격</span>
+      <select id="every" style="background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:8px 10px;font-size:15px;font-family:inherit">
+        <option value="1">1분마다</option><option value="2">2분마다</option><option value="3">3분마다</option><option value="5">5분마다</option>
+        <option value="10">10분마다</option><option value="15">15분마다</option><option value="30">30분마다</option><option value="60">1시간마다</option>
+      </select>
+      <button class="btn ghost sm" id="pause">⏸ 잠시 멈춤</button>
+    </div>
     <div class="row">
       <button class="btn ok" onclick="act('run', this)">🔄 지금 한 묶음 확인</button>
       <button class="btn ghost" onclick="act('test', this)">🔔 테스트 알림</button>
@@ -187,7 +195,14 @@ details summary{cursor:pointer;font-weight:800}
       j.watch.forEach(function (w) { c[state(w[0])]++; });
       $('tSold').textContent = c.sold; $('tIn').textContent = c.in; $('tFail').textContent = c.fail; $('tNew').textContent = c.new;
       var last = j.lastCycle ? new Date(j.lastCycle.t).toLocaleString('ko-KR') : '아직 없음';
-      $('cycle').textContent = '감시 ' + j.watch.length + '개 · ' + j.groups + '묶음을 1분마다 한 묶음씩 확인 (한 바퀴 약 ' + j.groups + '분) · 마지막 한 바퀴 시작 ' + last;
+      var st = j.settings || { every: 1, paused: false };
+      $('every').value = String(st.every);
+      $('pause').textContent = st.paused ? '▶ 다시 시작' : '⏸ 잠시 멈춤';
+      $('pause').className = 'btn sm ' + (st.paused ? 'ok' : 'ghost');
+      var lap = j.groups * st.every;
+      $('cycle').textContent = st.paused ? '⏸ 감시가 멈춰 있어요 · 감시 ' + j.watch.length + '개'
+        : '감시 ' + j.watch.length + '개를 ' + j.groups + '묶음으로 나눠 ' + st.every + '분마다 한 묶음씩 확인 (한 바퀴 약 ' + (lap >= 60 ? Math.round(lap / 6) / 10 + '시간' : lap + '분') + ') · 마지막 한 바퀴 시작 ' + last;
+      data.settings = st;
       $('problem').classList.toggle('hide', !j.problem);
       if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
@@ -207,6 +222,12 @@ details summary{cursor:pointer;font-weight:800}
         '</td><td class="x"><button class="btn bad sm" data-del="' + r.i + '">삭제</button></td></tr>';
     }).join('') || '<tr><td style="color:var(--sub)">해당하는 제품이 없어요</td></tr>';
   }
+  function setCfg(body) {
+    $('msg').textContent = '저장 중…';
+    call('settings', { method: 'POST', body: body }).then(function (j) { $('msg').textContent = j.msg || j.error || ''; load(); });
+  }
+  $('every').onchange = function () { setCfg({ every: +$('every').value }); };
+  $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }); };
   $('lq').oninput = render;
   $('filter').onclick = function (e) {
     var f = e.target.getAttribute('data-f'); if (!f) return;
