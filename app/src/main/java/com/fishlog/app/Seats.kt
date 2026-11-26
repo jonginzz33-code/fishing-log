@@ -614,7 +614,20 @@ object Seats {
         AREA_KW.forEach { (ar, ks) -> if (ks.any { x.contains(it) }) return ar }
         return null
     }
-    class DirF(val host: String, val name: String, val port: String, val area: String, val src: String)
+    class DirF(val host: String, val name: String, val port: String, val area: String, val src: String, val lat: Double = Double.NaN, val lon: Double = Double.NaN)
+    // v7.02 (426): 앞으로 한 달 일정이 없는 선단 (talla.co.kr/data/fleets_off.json · GitHub 매일 새벽) → 평소엔 안 읽음
+    @Volatile private var offMem: Set<String>? = null
+    private const val OFF_URL = "https://talla.co.kr/data/fleets_off.json"
+    fun offFleets(c: Context): Set<String> {
+        offMem?.let { return it }
+        val f = java.io.File(c.filesDir, "fleets_off.json")
+        val m = try { JSONObject(f.readText()).optJSONArray("off")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet() } catch (_: Exception) { emptySet() }
+        offMem = m
+        if (!f.exists() || System.currentTimeMillis() - f.lastModified() > 12 * 3600_000L) Thread {
+            try { val t = get(OFF_URL); JSONObject(t); f.writeText(t); offMem = null } catch (_: Exception) {}
+        }.start()
+        return m
+    }
     @Volatile private var dirMem: Pair<Int, List<DirF>>? = null
     /** 선단 모음 (선상24 선단 · 더피싱 선단) — 항구 위치(지도 항구 2,267곳)로 가까운 지역 · 못 찾으면 이름 글자로 */
     fun dirFleets(c: Context): List<DirF> {
@@ -623,22 +636,25 @@ object Seats {
         dirMem?.let { if (it.first == key) return it.second }
         val idx = HashMap<String, Ports.Port>()
         try { Ports.list(c).forEach { pt -> val k = normPort(pt.name); if (k.length >= 2 && (k !in idx || pt.big)) idx[k] = pt } } catch (_: Exception) {}
-        fun byPort(p: String): String? {
+        fun portPt(p: String): Ports.Port? {
             p.split(',', '/', ' ', '(', ')', '>', '·').map { normPort(it.trim()) }.filter { it.length >= 2 }.forEach { t ->
-                (idx[t] ?: idx.entries.firstOrNull { it.key.startsWith(t) }?.value)?.let { pt -> nearestArea(pt.lat, pt.lon)?.let { return it } }
+                (idx[t] ?: idx.entries.firstOrNull { it.key.startsWith(t) }?.value)?.let { pt -> if (nearestArea(pt.lat, pt.lon) != null) return pt }
             }
             return null
         }
+        fun byPort(p: String): String? = portPt(p)?.let { nearestArea(it.lat, it.lon) }
         val out = ArrayList<DirF>()
         st.values.filter { it.host != null && isS24Fleet(it.host) }.groupBy { it.host!! }.forEach { (h, l) ->
             val port = l.map { it.port }.filter { it.isNotBlank() }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: ""
             val ar = byPort(port) ?: areaByWord(port) ?: return@forEach
-            out.add(DirF(h, l.map { it.name }.filter { it.isNotBlank() }.distinct().take(3).joinToString(" · "), port, ar, "선상24"))
+            val pt = portPt(port)
+            out.add(DirF(h, l.map { it.name }.filter { it.isNotBlank() }.distinct().take(3).joinToString(" · "), port, ar, "선상24", pt?.lat ?: Double.NaN, pt?.lon ?: Double.NaN))
         }
         tf.filter { it.host.isNotBlank() }.groupBy { it.host }.forEach { (h, l) ->
             val a0 = l.first().area
             val ar = areaByWord(a0) ?: byPort(a0.substringAfterLast(" > ")) ?: return@forEach
-            out.add(DirF(h, l.first().fleet.substringBefore(" (").ifBlank { l.map { it.ship }.distinct().take(3).joinToString(" · ") }, a0.substringAfterLast(" > "), ar, "더피싱"))
+            val pt = portPt(a0.substringAfterLast(" > "))
+            out.add(DirF(h, l.first().fleet.substringBefore(" (").ifBlank { l.map { it.ship }.distinct().take(3).joinToString(" · ") }, a0.substringAfterLast(" > "), ar, "더피싱", pt?.lat ?: Double.NaN, pt?.lon ?: Double.NaN))
         }
         dirMem = key to out
         return out
@@ -1070,6 +1086,7 @@ object Seats {
         val tfAll = ArrayList<Sch>(); var tfKey = ""; var tfBusy = false; var tfHosts = 0
         // v6.95: 📍 지역의 선단 전부 (모두에게 · 하루치만 · 6곳씩)
         val areaAll = ArrayList<Sch>(); var areaKey = ""; var areaLeft = 0; var areaTotal = 0; var areaGen = 0
+        val areaRest = ArrayList<DirF>(); var areaSkip = 0; var areaReadFn: (List<DirF>) -> Unit = {}
         var areaEx: java.util.concurrent.ExecutorService? = null
         if (areaSel.isEmpty() && !p.getBoolean("seat_area_auto", false)) {
             p.edit().putBoolean("seat_area_auto", true).apply()
@@ -1649,12 +1666,15 @@ object Seats {
             day0 = sortList(day0)
             val fv = favs(a)
             sum.text = (if (loading) "⏳ 선단 ${loadTotal}곳 중 ${loadDone}곳 읽음 · " else if (areaLeft > 0) "⏳ 📍 선단 ${areaTotal}곳 중 ${areaTotal - areaLeft}곳 읽음 · " else if (s24Busy || tfBusy) "⏳ 읽는 중 · " else "") +
-                (if (areaSel.isNotEmpty() && areaLeft == 0 && areaTotal > 0) "📍 선단 ${areaTotal}곳 · " else "") + "${dayLabel(day)} · 배 ${total}척" +
+                (if (areaSel.isNotEmpty() && areaLeft == 0 && areaTotal > 0) "📍 선단 ${areaTotal}곳" + (if (areaRest.isNotEmpty()) " (남은 ${areaRest.size}곳)" else "") + (if (areaSkip > 0) " · 쉬는 ${areaSkip}곳 뺌" else "") + " · " else "") + "${dayLabel(day)} · 배 ${total}척" +
                 (if (useS24 && s24Total > s24.size) " (선상24 ${s24Total}척 중 ${s24.size}척 읽음)" else "") + " · ${need}자리 이상 빈 배 ${openN}척" +
                 (if (fails.isNotEmpty()) " · ⚠ 못 읽은 선단 ${fails.size}곳" else "") + (if (s24Err) " · ⚠ 선상24 목록을 못 읽었어요" else "") + (if (useTf && tfHosts > 0) " · 🎣 더피싱 선단 ${tfHosts}곳" else "")
             if (useTf && areaSel.isEmpty()) list.addView(Ui.text(a, 12f, Color.parseColor("#2FBF8F"), false, "🎣 더피싱 전체: 📍 지역을 고르면 그 지역 더피싱 선단 배를 같이 보여 줘요 (선단 10곳까지)").apply { setPadding(dp(4), dp(4), dp(4), dp(4)) })
             if (day0.isEmpty()) {
                 list.addView(Ui.text(a, 13.5f, Ui.SUB, false, if (loading || s24Busy || tfBusy || areaLeft > 0) "읽는 중… (읽히는 선단부터 바로 나와요)" else if (total == 0) "이 날 나가는 배가 없어요 (선단이 일정을 아직 안 올렸을 수 있어요)" else "고른 조건에 맞는 배가 없어요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
+                if (areaRest.isNotEmpty() && areaLeft <= 0) list.addView(Ui.button(a, "⬇ 선단 ${minOf(40, areaRest.size)}곳 더 읽기 (남은 ${areaRest.size}곳)") {
+                    val next = areaRest.take(40); areaRest.removeAll(next.toSet()); areaReadFn(next)
+                }.apply { minHeight = dp(46); textSize = 14f }, Ui.lp(a, MATCH, WRAP, top = 10))
                 return@render
             }
             fun section(t: String, c: Int) = list.addView(Ui.text(a, 12f, c, true, t).apply { setPadding(dp(4), dp(8), 0, dp(2)) })
@@ -1668,6 +1688,10 @@ object Seats {
                 restShown.forEach { list.addView(card(it, it.key in fv), Ui.lp(a, MATCH, WRAP, top = 6)) }
             }
             if (restShown.size < rest.size) list.addView(moreBtn(favL.size + restShown.size, favL.size + rest.size), Ui.lp(a, MATCH, WRAP, top = 10))
+            if (areaRest.isNotEmpty() && restShown.size >= rest.size) list.addView(Ui.button(a, if (areaLeft > 0) "⏳ 선단 읽는 중…" else "⬇ 선단 ${minOf(40, areaRest.size)}곳 더 읽기 (남은 ${areaRest.size}곳)") {
+                if (areaLeft > 0) return@button
+                val next = areaRest.take(40); areaRest.removeAll(next.toSet()); areaReadFn(next)
+            }.apply { minHeight = dp(46); textSize = 14f }, Ui.lp(a, MATCH, WRAP, top = 10))
             // v6.82 (390): 배 사이트 목록에 없는 배만 폰이 조황 글에서 찾기 (한 번에 6척까지)
             val miss = (favL + restShown).filter { it.host == S24 && needsLookup(a, it.shipNo) }.map { it.shipNo }.distinct().take(6)
             if (miss.isNotEmpty() && !siteBusy) {
@@ -1731,35 +1755,49 @@ object Seats {
         }
         // v6.94: 선단마다 읽히는 대로 바로 보여 주기 (느린 선단 하나 때문에 전체가 '읽는 중'에 묶이지 않게)
         //        더피싱 선단 = 고른 날 8일 화면 한 번만 (한 달 치는 🔔 알림 · 달력에서)
+        // v7.02 (메모 426 · 5번): 즐겨찾기 선단 · 가까운 선단 40곳 먼저 → 나머지는 [⬇ 선단 더 읽기] · 한 달 일정 없는 선단은 뺌
+        fun areaRead(part: List<DirF>) {
+            if (part.isEmpty()) return
+            val gen = areaGen; val d0 = day
+            areaTotal += part.size; areaLeft += part.size; render()
+            val ex = areaEx ?: java.util.concurrent.Executors.newFixedThreadPool(6).also { areaEx = it }
+            fun one(f: DirF) = ex.execute {
+                val r = try { if (isTf(f.host)) tfDay(f.host, d0) else s24Day(f.host, d0) } catch (_: Exception) { emptyList() }
+                a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) render() else later() }
+            }
+            part.chunked(40).forEach { ch -> ex.execute {
+                val got = dayBatch(ch.map { it.host }, d0)
+                if (got == null) { ch.forEach { one(it) }; return@execute }
+                val miss = ch.filter { it.host !in got }
+                a.runOnUiThread {
+                    if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
+                    got.values.forEach { areaAll.addAll(it) }; areaLeft -= got.size
+                    if (areaLeft <= 0) render() else later()
+                }
+                miss.forEach { one(it) }
+            } }
+        }
+        areaReadFn = { areaRead(it) }
         fun loadArea() {
             val key = "$day|${areaSel.sorted()}"
             if (key == areaKey) return
-            areaKey = key; areaAll.clear(); val gen = ++areaGen
-            areaEx?.shutdownNow(); areaEx = null; areaLeft = 0; areaTotal = 0
+            areaKey = key; areaAll.clear(); ++areaGen
+            areaEx?.shutdownNow(); areaEx = null; areaLeft = 0; areaTotal = 0; areaRest.clear()
             if (areaSel.isEmpty()) { render(); return }
+            val gen = areaGen
             tfShips(a) { _ -> a.runOnUiThread {
                 if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
                 val have = activeFleets(a).map { it.host }.toSet()
-                val fl = dirFleets(a).filter { it.area in areaSel && it.host !in have }.take(150)
-                areaTotal = fl.size; areaLeft = fl.size; render()
-                val d0 = day
-                val ex = java.util.concurrent.Executors.newFixedThreadPool(6); areaEx = ex
-                fun one(f: DirF) = ex.execute {
-                    val r = try { if (isTf(f.host)) tfDay(f.host, d0) else s24Day(f.host, d0) } catch (_: Exception) { emptyList() }
-                    a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) { render(); ex.shutdown() } else later() }
-                }
-                // v7.01 (425): 중계기로 40곳씩 한 번에 → 못 읽은 선단만 한 곳씩
-                fl.chunked(40).forEach { part -> ex.execute {
-                    val got = dayBatch(part.map { it.host }, d0)
-                    if (got == null) { part.forEach { one(it) }; return@execute }
-                    val miss = part.filter { it.host !in got }
-                    a.runOnUiThread {
-                        if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
-                        got.values.forEach { areaAll.addAll(it) }; areaLeft -= got.size
-                        if (areaLeft <= 0) { render(); ex.shutdown() } else later()
-                    }
-                    miss.forEach { one(it) }
-                } }
+                val off = offFleets(a)
+                val favH = favs(a).map { it.substringBefore('|') }.toSet()
+                val me = Spot.base(a, null, null)
+                val fl = dirFleets(a).filter { it.area in areaSel && it.host !in have && (it.host !in off || it.host in favH) }
+                    .sortedWith(compareBy<DirF>({ if (it.host in favH) 0 else 1 }, { f ->
+                        if (me == null || f.lat.isNaN()) AREAS.firstOrNull { it.name == f.area }?.let { ar -> if (me == null) 0.0 else km(me.first, me.second, ar.lat, ar.lon) + 5 } ?: 999.0
+                        else km(me.first, me.second, f.lat, f.lon) }))
+                areaSkip = dirFleets(a).count { it.area in areaSel && it.host in off && it.host !in favH }
+                val first = fl.take(40); areaRest.addAll(fl.drop(40))
+                areaRead(first)
             } }
         }
         load = { fresh ->

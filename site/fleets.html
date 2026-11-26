@@ -93,7 +93,7 @@ h1{font-size:21px;margin:14px 0 8px}
   var day = ymd(new Date(Date.now() + 86400000));
   var areaSel = ls('area', []), fishSel = ls('fish', []), need = ls('need', 1), sortI = ls('sort', 0), openOnly = ls('open', true), favs = ls('fav', {});
   var SORTS = ['자리 많은 순', '출항 빠른 순', '이름 순'];
-  var DIR = null, AREAS = [];
+  var DIR = null, AREAS = [], OFF = {}, LIMIT = 40, extra = 0;
   var schs = {}, loaded = {}, loading = {}, gen = 0, shown = 20, q = '';
 
   // ── 선단 페이지 읽기 (앱 Seats.parse · parseTfFleet 와 같은 규칙) ──
@@ -165,8 +165,14 @@ h1{font-size:21px;margin:14px 0 8px}
     if (!DIR) return [];
     var ql = q.toLowerCase().replace(/\s/g, '');
     if (ql) return DIR.filter(function (f) { return (f[0] + f[1] + f[2] + f[3]).toLowerCase().replace(/\s/g, '').indexOf(ql) >= 0; }).slice(0, 60);
-    return DIR.filter(function (f) { return areaSel.indexOf(f[3]) >= 0; });
+    // 한 달 일정 없는 선단(쉬는 곳)은 빼고 · 즐겨찾기 선단 먼저 · 40곳씩 (아래 [⬇ 선단 더 읽기])
+    var favH = {}; Object.keys(favs).forEach(function (k) { favH[k.split('|')[0]] = 1; });
+    var l = DIR.filter(function (f) { return areaSel.indexOf(f[3]) >= 0 && (!OFF[f[0]] || favH[f[0]]); });
+    l.sort(function (a, b) { return (favH[b[0]] ? 1 : 0) - (favH[a[0]] ? 1 : 0); });
+    return l.slice(0, LIMIT + extra);
   }
+  function areaAllN() { var favH = {}; Object.keys(favs).forEach(function (k) { favH[k.split('|')[0]] = 1; }); return (DIR || []).filter(function (f) { return areaSel.indexOf(f[3]) >= 0 && (!OFF[f[0]] || favH[f[0]]); }).length; }
+  function offN() { return (DIR || []).filter(function (f) { return areaSel.indexOf(f[3]) >= 0 && OFF[f[0]]; }).length; }
   // 중계기 /day = 선단 40곳을 한 번에 읽어 정리한 결과 (새 중계기) · 안 되면 예전처럼 한 곳씩
   var dayOk = null;
   function loadBatch(fs, d, g) {
@@ -269,10 +275,16 @@ h1{font-size:21px;margin:14px 0 8px}
       return a.ship.localeCompare(b.ship, 'ko');
     });
     var open = src.filter(function (s) { return isOpen(s) && s.remain >= need; }).length;
-    $('sum').innerHTML = (done < fl.length ? '⏳ ' : '📍 ') + '선단 ' + fl.length + '곳' + (done < fl.length ? ' 중 ' + done + '곳 읽음' : '') + ' · 배 ' + src.length + '척 · ' + need + '자리 이상 빈 배 <b style="color:#2FBF8F">' + open + '척</b>';
-    if (!l.length) { L.innerHTML = '<p class="empty">' + (done < fl.length ? '읽는 중…' : (openOnly ? '조건에 맞는 빈 배가 없어요 · 다른 날짜나 지역을 골라 보세요' : '이 날 일정이 없어요')) + '</p>'; return; }
-    L.innerHTML = l.slice(0, shown).map(card).join('') + (l.length > shown ? '<button class="btn more" id="more">⬇ 더 보기 (' + shown + ' / ' + l.length + '척)</button>' : '');
+    $('sum').innerHTML = (done < fl.length ? '⏳ ' : '📍 ') + '선단 ' + fl.length + '곳' + (done < fl.length ? ' 중 ' + done + '곳 읽음' : '') + (!q && areaAllN() > fl.length ? ' (남은 ' + (areaAllN() - fl.length) + '곳)' : '') + (!q && offN() ? ' · 쉬는 ' + offN() + '곳 뺌' : '') + ' · 배 ' + src.length + '척 · ' + need + '자리 이상 빈 배 <b style="color:#2FBF8F">' + open + '척</b>';
+    var restF0 = q ? 0 : areaAllN() - fl.length;
+    if (!l.length) { L.innerHTML = '<p class="empty">' + (done < fl.length ? '읽는 중…' : (openOnly ? '조건에 맞는 빈 배가 없어요 · 다른 날짜나 지역을 골라 보세요' : '이 날 일정이 없어요')) + '</p>' +
+      (done >= fl.length && restF0 > 0 ? '<button class="btn more" id="moreF">⬇ 선단 ' + Math.min(40, restF0) + '곳 더 읽기 (남은 ' + restF0 + '곳)</button>' : '');
+      if ($('moreF')) $('moreF').onclick = function () { extra += 40; loadAll(); }; return; }
+    var restF = q ? 0 : areaAllN() - fl.length;
+    L.innerHTML = l.slice(0, shown).map(card).join('') + (l.length > shown ? '<button class="btn more" id="more">⬇ 더 보기 (' + shown + ' / ' + l.length + '척)</button>' : '') +
+      (l.length <= shown && restF > 0 ? '<button class="btn more" id="moreF">' + (done < fl.length ? '⏳ 선단 읽는 중…' : '⬇ 선단 ' + Math.min(40, restF) + '곳 더 읽기 (남은 ' + restF + '곳)') + '</button>' : '');
     if ($('more')) $('more').onclick = function () { shown += 20; render(); };
+    if ($('moreF')) $('moreF').onclick = function () { if (done < fl.length) return; extra += 40; loadAll(); };
     L.querySelectorAll('.star').forEach(function (b) { b.onclick = function () { var k = b.dataset.k; if (favs[k]) delete favs[k]; else favs[k] = 1; lsSet('fav', favs); render(); }; });
   }
   var FISH = [];
@@ -314,7 +326,7 @@ h1{font-size:21px;margin:14px 0 8px}
   }
   $('areaBtn').onclick = function () {
     var before = areaSel.join();
-    var d = sheet('📍 지역 (여러 개)', '<p class="note">숫자 = 그 지역 선단 수 · 많이 고를수록 오래 걸려요</p>' + areaChips(), function () { lsSet('area', areaSel); if (areaSel.join() !== before) { shown = 20; loadAll(); } else render(); });
+    var d = sheet('📍 지역 (여러 개)', '<p class="note">숫자 = 그 지역 선단 수 · 많이 고를수록 오래 걸려요</p>' + areaChips(), function () { lsSet('area', areaSel); if (areaSel.join() !== before) { shown = 20; extra = 0; loadAll(); } else render(); });
     d.querySelectorAll('[data-a]').forEach(function (b) { b.onclick = function () { var a = b.dataset.a, i = areaSel.indexOf(a); if (i >= 0) areaSel.splice(i, 1); else areaSel.push(a); b.classList.toggle('on'); }; });
   };
   $('fishBtn').onclick = function () {
@@ -333,12 +345,13 @@ h1{font-size:21px;margin:14px 0 8px}
   $('openBtn').onclick = function () { openOnly = !openOnly; lsSet('open', openOnly); shown = 20; render(); };
   $('qBtn').onclick = function () { var v = $('qBox').style.display === 'none'; $('qBox').style.display = v ? '' : 'none'; if (v) $('q').focus(); else if (q) { q = ''; $('q').value = ''; loadAll(); } };
   var qt = null; $('q').oninput = function () { clearTimeout(qt); qt = setTimeout(function () { q = $('q').value.trim(); shown = 20; loadAll(); }, 500); };
-  function setDay(d) { day = d; shown = 20; $('day').value = d; loadAll(); }
+  function setDay(d) { day = d; shown = 20; extra = 0; $('day').value = d; loadAll(); }
   $('day').onchange = function () { if ($('day').value) setDay($('day').value); };
   $('prev').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() - 1); setDay(ymd(d)); };
   $('next').onclick = function () { var d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + 1); setDay(ymd(d)); };
   $('day').value = day;
   render();
+  fetch('/data/fleets_off.json').then(function (r) { return r.json(); }).then(function (j) { (j.off || []).forEach(function (h) { OFF[h] = 1; }); }).catch(function () {});
   fetch('/data/fleets.json').then(function (r) { return r.json(); }).then(function (j) {
     DIR = j.f; AREAS = j.areas; DIR.forEach(function (f) { if (f[4] === '더피싱') DIR_TF[f[0]] = 1; });
     loadAll();

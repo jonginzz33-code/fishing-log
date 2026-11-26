@@ -16,13 +16,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Collect
-        run: python tools/seat_sites.py && python tools/fleets_build.py
+        run: |
+          python tools/seat_sites.py && python tools/fleets_build.py
+          # 426: 쉬는 선단 찾기는 하루 한 번 (새벽 4:17 · 손으로 실행할 때도)
+          if [ "$(date -u +%H)" = "19" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then python tools/fleets_active.py || true; fi
       - name: Commit
         id: c
         run: |
           git config user.name "seat-sites bot"
           git config user.email "actions@users.noreply.github.com"
-          git add site/data/seat_sites.json site/data/fleets.json
+          git add site/data/seat_sites.json site/data/fleets.json site/data/fleets_off.json
           if git diff --cached --quiet; then echo "changed=0" >> "$GITHUB_OUTPUT"; exit 0; fi
           git commit -m "배 사이트 목록 새로 고침 [skip ci]"
           git pull --rebase -q origin main && git push -q origin HEAD:main

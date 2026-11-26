@@ -12,8 +12,38 @@
     return p.then(function () { return firebase.auth ? null : load('/__/firebase/10.14.1/firebase-auth-compat.js'); })
       .then(function () { return firebase.apps.length ? null : load('/__/firebase/init.js'); });
   }
+  // 로그인하면 [로그아웃] · 20분 동안 아무것도 안 하면 자동 로그아웃 (탭이 여러 개여도 같이 셈)
+  var IDLE = 20 * 60 * 1000, idleT = null;
+  function touch() { try { localStorage.setItem('talla_act', String(Date.now())); } catch (e) {} }
+  function idleOn() {
+    if (idleT) return;
+    touch();
+    var last = 0;
+    ['click', 'keydown', 'scroll', 'touchstart', 'mousemove'].forEach(function (ev) {
+      window.addEventListener(ev, function () { var n = Date.now(); if (n - last > 15000) { last = n; touch(); } }, { passive: true });
+    });
+    idleT = setInterval(function () {
+      var a = 0; try { a = +localStorage.getItem('talla_act') || 0; } catch (e) {}
+      if (a && Date.now() - a > IDLE) { clearInterval(idleT); idleT = null; firebase.auth().signOut().then(function () { alert('20분 동안 쓰지 않아서 로그아웃했어요'); location.reload(); }); }
+    }, 30000);
+  }
+  function outBtn(u) {
+    var adm = document.querySelector('nav a.adm');
+    if (!adm) return;
+    if (u) {
+      adm.textContent = '🚪 로그아웃'; adm.href = '#';
+      adm.onclick = function (e) { e.preventDefault(); firebase.auth().signOut().then(function () { location.reload(); }); };
+    } else { adm.textContent = '🔐 관리자 로그인'; adm.href = '/admin'; adm.onclick = null; }
+  }
   ready().then(function () {
     firebase.auth().onAuthStateChanged(function (u) {
+      if (u) {
+        // 마지막으로 쓴 지 20분 넘었으면 열자마자 로그아웃
+        var a = 0; try { a = +localStorage.getItem('talla_act') || 0; } catch (e) {}
+        if (a && Date.now() - a > IDLE) { firebase.auth().signOut(); return; }
+        idleOn();
+      }
+      outBtn(u);
       var ok = !!u && (u.email || '').toLowerCase() === ADMIN;
       window.tallaAdmin = ok;
       document.dispatchEvent(new Event(ok ? 'talla-admin' : 'talla-guest'));
