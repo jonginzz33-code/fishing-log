@@ -138,6 +138,7 @@ details summary{cursor:pointer;font-weight:800}
           <option value="180">3시간마다</option><option value="360">6시간마다</option><option value="720">12시간마다</option><option value="1440">하루마다</option>
         </select></label>
       </div>
+      <label>📝 알림 메모 <small style="color:var(--sub)">(재고 들어오면 알림에 같이 와요 · 안 써도 돼요)</small><input id="nM" maxlength="100" placeholder="예: 김약사님께 전화 · 2박스 바로 주문"></label>
       <div class="hint" id="nHint"></div>
       <div class="row"><button class="btn ok" id="nAdd">➕ 추가하고 바로 확인</button><button class="btn ghost hide" id="qbtn">🔍 지오팜에서 찾기</button></div>
       <div class="sr" id="sr"></div>
@@ -539,12 +540,12 @@ details summary{cursor:pointer;font-weight:800}
     var qty = Math.max(1, Math.round(+$('nQ').value) || 1);
     if (!pTxt) { $('nHint').textContent = '거래처를 적어 주세요.'; $('nP').focus(); return; }
     if (!pr) { $('nHint').textContent = '제품을 목록에서 고르거나 “지오팜에서 찾기”로 골라 주세요.'; $('nN').focus(); return; }
-    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: +$('nE').value };
+    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: +$('nE').value, memo: $('nM').value.trim() };
     var btn = $('nAdd'); btn.disabled = true;
     saveNeeds((data.needs || []).concat([n])).then(function (j) {
       btn.disabled = false;
       if (j.error) { $('nMsg').textContent = j.error; return; }
-      $('nN').value = ''; $('nQ').value = 1; picked = null; hint();
+      $('nN').value = ''; $('nQ').value = 1; $('nM').value = ''; picked = null; hint();
       renderNeeds();
       checkNow([n.id]);
     });
@@ -583,16 +584,26 @@ details summary{cursor:pointer;font-weight:800}
         sub.push(everyLabel(n.every) + '마다');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (s && s.ok && s.at) sub.push('들어온 시각 ' + when(s.at));
+        if (n.memo) sub.push('📝 ' + esc(n.memo));
         return '<div class="ni' + (s && s.ok ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<small>' + sub.join(' · ') + '</small></div>' +
-          '<button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
+          '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
     }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 필요 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
   }
   $('nF').oninput = renderNeeds;
   $('nNow').onclick = function () { var ids = (data.needs || []).map(function (n) { return n.id; }); if (ids.length) checkNow(ids, $('nNow')); };
   $('nList').onclick = function (e) {
-    var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel');
+    var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo');
     if (c) return checkNow([c], e.target);
+    if (mo) {
+      var it = (data.needs || []).filter(function (x) { return x.id === mo; })[0];
+      if (!it) return;
+      var v = prompt('알림 메모 (재고 들어오면 알림에 같이 와요)\n[' + it.pn + '] ' + it.name, it.memo || '');
+      if (v == null) return;
+      saveNeeds(data.needs.map(function (x) { return x.id === mo ? Object.assign({}, x, { memo: v.trim().slice(0, 100) }) : x; }))
+        .then(function (j) { $('nMsg').textContent = j.error || '메모를 저장했어요.'; renderNeeds(); });
+      return;
+    }
     if (!d) return;
     var n = (data.needs || []).filter(function (x) { return x.id === d; })[0];
     if (!n || !confirm('기다리는 목록에서 뺄까요?\n[' + n.pn + '] ' + n.name)) return;
