@@ -160,9 +160,22 @@ object Seats {
     private val mem = HashMap<String, Pair<Long, List<Sch>>>()
     private const val KEEP = 10 * 60 * 1000L
 
-    private fun get(url: String): String =
-        if (isTfUrl(url) && url.startsWith("https://")) try { get0(url) } catch (e: Exception) { try { get0("http://" + url.removePrefix("https://")) } catch (_: Exception) { throw e } }
+    // v7.00 (412): 선단 홈페이지는 중계기(talla-relay · Cloudflare · 5분 같이 기억)로 먼저 · 안 되면 예전처럼 폰이 직접
+    private const val RELAY = "https://talla-relay.jonginzz33.workers.dev/?u="
+    @Volatile private var relayBadUntil = 0L
+    private fun relayable(url: String): Boolean {
+        val h = try { URL(url).host.lowercase() } catch (_: Exception) { return false }
+        if (h.substringBefore('.') in setOf("www", "api", "m", "imga", "img")) return false
+        return isS24Fleet(h) || isTf(h) || h == "hunter-booking.onrender.com"
+    }
+    private fun get(url: String): String {
+        if (relayable(url) && System.currentTimeMillis() > relayBadUntil) {
+            try { return get0(RELAY + java.net.URLEncoder.encode(url, "UTF-8")) }
+            catch (e: Exception) { if (e.message?.contains("HTTP 4") != true) relayBadUntil = System.currentTimeMillis() + 10 * 60_000L }
+        }
+        return if (isTfUrl(url) && url.startsWith("https://")) try { get0(url) } catch (e: Exception) { try { get0("http://" + url.removePrefix("https://")) } catch (_: Exception) { throw e } }
         else get0(url)
+    }
     private fun get0(url: String): String {
         val cn = URL(url).openConnection() as HttpURLConnection
         // 개인 사이트(무료 서버)는 처음 깨어나는 데 오래 걸려서 넉넉히
