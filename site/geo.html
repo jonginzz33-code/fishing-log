@@ -99,25 +99,16 @@ details summary{cursor:pointer;font-weight:800}
 <div id="app" class="hide">
   <div class="card">
     <h2>📊 지금 상태</h2>
-    <div class="lead" id="cycle" style="margin:0">불러오는 중…</div>
+    <div class="lead" id="sLine" style="margin:0">불러오는 중…</div>
     <div id="problem" class="warn hide" style="margin-top:10px"></div>
     <div class="tiles">
-      <div class="tile">품절<b id="tSold">-</b></div>
-      <div class="tile g">재고 있음<b id="tIn">-</b></div>
-      <div class="tile f">실패<b id="tFail">-</b></div>
-      <div class="tile">확인 전<b id="tNew">-</b></div>
-    </div>
-    <div class="row" style="margin-bottom:12px">
-      <span style="font-size:14px">⏱ 확인 간격</span>
-      <select id="every" style="background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:8px 10px;font-size:15px;font-family:inherit">
-        <option value="1">1분마다</option><option value="2">2분마다</option><option value="3">3분마다</option><option value="5">5분마다</option>
-        <option value="10">10분마다</option><option value="15">15분마다</option><option value="30">30분마다</option><option value="60">1시간마다</option>
-      </select>
-      <button class="btn ok sm" id="refreshAll">🔄 지금 새로고침</button>
-      <button class="btn ghost sm" id="pause">⏸ 잠시 멈춤</button>
+      <div class="tile">필요 제품<b id="sAll">-</b></div>
+      <div class="tile g">재고 들어옴<b id="sOk">-</b></div>
+      <div class="tile f">아직 부족<b id="sShort">-</b></div>
+      <div class="tile">확인 전 · 실패<b id="sNew">-</b></div>
     </div>
     <div class="row">
-      <button class="btn ok" onclick="act('run', this)">🔄 지금 한 묶음 확인</button>
+      <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
       <button class="btn ghost" onclick="act('test', this)">🔔 테스트 알림</button>
       <button class="btn ghost" onclick="load()">새로고침</button>
     </div>
@@ -144,11 +135,9 @@ details summary{cursor:pointer;font-weight:800}
   </div>
 
   <div class="card">
-    <h2>⏳ 기다리는 제품 <span id="nCnt" style="color:var(--sub);font-size:14px"></span></h2>
-    <div class="row" style="margin-bottom:8px">
-      <input id="nF" placeholder="거래처 · 제품으로 찾기" style="flex:1">
-      <button class="btn ok sm" id="nNow">🔄 전부 지금 확인</button>
-    </div>
+    <h2>📋 필요재고목록 <span id="nCnt" style="color:var(--sub);font-size:14px"></span></h2>
+    <p class="lead" style="margin:0 0 8px">거래처가 주문한 제품마다 <b>필요 수량</b>과 지오팜 <b>지금 재고</b>를 보여줘요.</p>
+    <input id="nF" placeholder="거래처 · 제품으로 찾기" style="margin-bottom:8px">
     <div class="msg" id="nMsg" style="margin:0 0 6px"></div>
     <div id="nList"></div>
   </div>
@@ -168,20 +157,26 @@ details summary{cursor:pointer;font-weight:800}
   <datalist id="dlP"></datalist>
 
   <div class="card">
-    <h2>📋 필요재고목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
+    <details>
+    <summary>🗂 예전 품절 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></summary>
+    <div class="lead" id="cycle" style="margin:8px 0 0"></div>
+    <div class="row" style="margin:10px 0">
+      <span style="font-size:14px">⏱ 확인 간격</span>
+      <select id="every" style="background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:8px 10px;font-size:15px;font-family:inherit">
+        <option value="1">1분마다</option><option value="2">2분마다</option><option value="3">3분마다</option><option value="5">5분마다</option>
+        <option value="10">10분마다</option><option value="15">15분마다</option><option value="30">30분마다</option><option value="60">1시간마다</option>
+      </select>
+      <button class="btn ok sm" id="refreshAll">🔄 전체 확인</button>
+      <button class="btn ghost sm" id="pause">⏸ 잠시 멈춤</button>
+    </div>
     <div class="filter" id="filter">
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
     <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
     <table class="list" id="list"></table>
-  </div>
-
-  <div class="card">
-    <details>
-      <summary>✏️ 목록 통째로 고치기 (엑셀 붙여넣기)</summary>
-      <p class="lead" style="margin:8px 0">한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b> (공급처가 여러 개면 쉼표로)</p>
-      <textarea id="bulk"></textarea>
-      <div class="row" style="margin-top:8px"><button class="btn ok" onclick="saveBulk(this)">이대로 저장</button></div>
+    <p class="lead" style="margin:14px 0 6px">✏️ 통째로 고치기 — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b></p>
+    <textarea id="bulk"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn ok sm" onclick="saveBulk(this)">이대로 저장</button></div>
     </details>
   </div>
 </div>
@@ -248,14 +243,11 @@ details summary{cursor:pointer;font-weight:800}
   var BADGE = { in: '<span class="b g">재고 있음</span>', sold: '<span class="b s">품절</span>', fail: '<span class="b f">실패</span>', new: '<span class="b u">확인 전</span>' };
 
   window.load = function () {
-    $('cycle').textContent = '불러오는 중…';
+    $('sLine').textContent = '불러오는 중…';
     call('status').then(function (j) {
       if (j.denied) { show('deny'); return; }
-      if (j.error) { $('cycle').textContent = j.error; return; }
+      if (j.error) { $('sLine').textContent = j.error; return; }
       data = j;
-      var c = { in: 0, sold: 0, fail: 0, new: 0 };
-      j.watch.forEach(function (w) { c[state(w[0])]++; });
-      $('tSold').textContent = c.sold; $('tIn').textContent = c.in; $('tFail').textContent = c.fail; $('tNew').textContent = c.new;
       var last = j.lastCycle ? new Date(j.lastCycle.t).toLocaleString('ko-KR') : '아직 없음';
       var st = j.settings || { every: 1, paused: false };
       $('every').value = String(st.every);
@@ -278,7 +270,9 @@ details summary{cursor:pointer;font-weight:800}
     var rows = data.watch.map(function (w, i) { return { w: w, i: i, s: state(w[0]) }; })
       .filter(function (r) { return (filt === 'all' || r.s === filt) && (!q || r.w[0].toLowerCase().indexOf(q) >= 0 || r.w[1].indexOf(q) >= 0); });
     rows.sort(function (a, b) { var o = { in: 0, fail: 1, new: 2, sold: 3 }; return o[a.s] - o[b.s] || a.i - b.i; });
-    $('cnt').textContent = '(' + data.watch.length + '개)';
+    var c = { in: 0, sold: 0, fail: 0, new: 0 };
+    data.watch.forEach(function (w) { c[state(w[0])]++; });
+    $('cnt').textContent = '(' + data.watch.length + '개 · 재고 있음 ' + c.in + ' · 품절 ' + c.sold + ')';
     $('list').innerHTML = rows.map(function (r) {
       var it = data.items[r.w[0]], n = it && it.lv === 1 ? ' ' + it.n + '개' : '';
       return '<tr><td>' + BADGE[r.s] + '<small style="color:var(--sub)">' + n + '</small></td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
@@ -490,10 +484,10 @@ details summary{cursor:pointer;font-weight:800}
   }
   function checkNow(ids, btn) {
     if (btn) btn.disabled = true;
-    $('nMsg').textContent = '지오팜에서 확인 중…';
+    $('nMsg').textContent = $('msg').textContent = '지오팜에서 확인 중…';
     return call('checkNeeds', { method: 'POST', body: { ids: ids } }).then(function (j) {
       if (btn) btn.disabled = false;
-      $('nMsg').textContent = j.msg || j.error || '';
+      $('nMsg').textContent = $('msg').textContent = j.msg || j.error || '';
       load();
     });
   }
@@ -516,28 +510,40 @@ details summary{cursor:pointer;font-weight:800}
 
   function renderNeeds() {
     var ns = data.needs || [], st = data.needState || {}, q = $('nF').value.trim().toLowerCase();
-    var cameN = 0;
-    ns.forEach(function (n) { if (st[n.id] && st[n.id].ok) cameN++; });
-    $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cameN + ')' : '';
+    // 위 '지금 상태' 칸: 거래처 필요 제품 기준
+    var cnt = { ok: 0, short: 0, none: 0 }, ph = {}, next = 0;
+    ns.forEach(function (n) {
+      var s = st[n.id];
+      ph[n.pn || n.p] = 1;
+      if (!s || !s.t || s.n == null) cnt.none++; else if (s.ok) cnt.ok++; else cnt.short++;
+      var due = s && s.t ? s.t + n.every * 60000 : Date.now();
+      if (!next || due < next) next = due;
+    });
+    $('sAll').textContent = ns.length; $('sOk').textContent = cnt.ok; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
+    $('sLine').textContent = ns.length
+      ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · 다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next))
+      : '아직 필요 제품이 없어요. 아래에서 거래처 · 제품 · 필요 수량을 넣어 주세요.';
+    $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cnt.ok + ')' : '';
     var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name).toLowerCase().indexOf(q) >= 0; });
     var groups = {}, order = [];
     rows.forEach(function (n) { var k = n.pn || '(거래처 없음)'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(n); });
     order.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
     $('nList').innerHTML = order.map(function (k) {
-      return '<div class="ph">🏥 ' + esc(k) + '</div>' + groups[k].map(function (n) {
+      var g = groups[k], gOk = g.filter(function (n) { return st[n.id] && st[n.id].ok; }).length;
+      return '<div class="ph">🏥 ' + esc(k) + ' <small style="color:var(--sub);font-weight:400">주문 ' + g.length + '개 · 들어옴 ' + gOk + '</small></div>' + g.map(function (n) {
         var s = st[n.id], badge, sub = [];
         if (!s || !s.t) badge = '<span class="b u">확인 전</span>';
         else if (s.n == null) badge = '<span class="b f">조회 실패</span>';
-        else if (s.ok) badge = '<span class="b g">✅ 들어옴 ' + s.n + '개</span>';
-        else badge = '<span class="b s">⏳ 재고 ' + s.n + '개</span>';
-        sub.push('필요 ' + n.qty + '개');
+        else if (s.ok) badge = '<span class="b g">✅ 들어옴</span>';
+        else badge = '<span class="b s">⏳ 부족 ' + (n.qty - s.n) + '개</span>';
+        sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && s.t && s.n != null ? s.n + '개' : '?'));
         sub.push(everyLabel(n.every) + '마다');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (s && s.ok && s.at) sub.push('들어온 시각 ' + when(s.at));
         return '<div class="ni' + (s && s.ok ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<small>' + sub.join(' · ') + '</small></div>' +
           '<button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
-    }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 기다리는 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
+    }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 필요 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
   }
   $('nF').oninput = renderNeeds;
   $('nNow').onclick = function () { var ids = (data.needs || []).map(function (n) { return n.id; }); if (ids.length) checkNow(ids, $('nNow')); };
