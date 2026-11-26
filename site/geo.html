@@ -160,7 +160,7 @@ details summary{cursor:pointer;font-weight:800}
   <datalist id="dlP"></datalist><datalist id="dlN"></datalist>
 
   <div class="card">
-    <h2>📋 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
+    <h2>📋 필요재고목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></h2>
     <div class="filter" id="filter">
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
@@ -312,7 +312,7 @@ details summary{cursor:pointer;font-weight:800}
   $('list').onclick = function (e) {
     var i = e.target.getAttribute('data-del'); if (i == null) return;
     var w = data.watch[+i];
-    if (!confirm('감시 목록에서 뺄까요?\n' + w[0])) return;
+    if (!confirm('필요재고목록에서 뺄까요?\n' + w[0])) return;
     var next = data.watch.filter(function (_, k) { return k !== +i; });
     save(next, e.target);
   };
