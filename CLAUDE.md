@@ -37,7 +37,8 @@
 - ⚠ 물때 계산(Tide.kt · TideDialog.kt) · 물세기 % · 물흐름 막대는 절대 건드리지 말 것.
 
 ## 남은 메모
-- **규칙 게시 상태:** ✅ 2026-11-24 v6.86 firestore.rules 전체(shipVotes 👍👎 · rules-test 192개) 사용자 콘솔 게시 완료.
+- **규칙 게시 상태:** ✅ 2026-11-26 v6.91 firestore.rules 전체(포인트 5km · extraShips · adminNotes · rules-test 200개) 사용자 콘솔 게시 완료 (홈피 talla.co.kr/rules 복사 페이지로 · 서비스 계정은 규칙 · 도메인 권한 없음(403) → 권한 주면 Actions 'Firestore Rules' · 'Auth Domains' 로 자동). 남은 사용자 손: Firebase 웹 앱 추가 · 승인된 도메인 talla.co.kr.
+- **규칙 게시 상태(예전):** ✅ 2026-11-24 v6.86 firestore.rules 전체(shipVotes 👍👎 · rules-test 192개) 사용자 콘솔 게시 완료.
 - **규칙 게시 상태(예전):** ✅ 2026-11-24 v6.68 firestore.rules 전체(크기 제한 · 포인트 핀 · rules-test 184개) 사용자 콘솔 게시 완료 — 그 전 모든 '게시 필요'(310 · 327 · 343 · 353 · 356 · 360 포함) 끝.
 - **칩 · 탭 버튼 (v6.68 · 359):** 새 칩/탭은 `Ui.pill(…, small)` (40dp / 32dp) · 같은 줄은 같은 높이 · 그룹 그림은 칩 안 16dp · 큰 줄 24dp.
 - **규칙 게시 상태:** ✅ 2026-11-18 v6.43 firestore.rules 전체(rules-test 108개) 콘솔 게시 완료 — 그 전 모든 '게시 필요' 포함.
