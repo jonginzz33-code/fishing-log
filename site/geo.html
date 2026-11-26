@@ -63,6 +63,9 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.alarm{border:0;border-radius:10px;padding:3px 10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
+.alarm.done{background:#1E4F3E;color:#9FF0CF}
+.alarm.wait{background:#4A3B12;color:#FDE7A8}
 .quiet{font-size:14px;gap:6px}
 .quiet label{display:flex;align-items:center;gap:5px;cursor:pointer}
 .quiet input[type=checkbox]{width:18px;height:18px;accent-color:var(--ok)}
@@ -107,8 +110,8 @@ details summary{cursor:pointer;font-weight:800}
     <div id="problem" class="warn hide" style="margin-top:10px"></div>
     <div class="tiles">
       <div class="tile">필요 제품<b id="sAll">-</b></div>
-      <div class="tile g">재고 들어옴<b id="sOk">-</b></div>
-      <div class="tile f">아직 부족<b id="sShort">-</b></div>
+      <div class="tile g">알람전송완료<b id="sOk">-</b></div>
+      <div class="tile f">알람전송대기중<b id="sShort">-</b></div>
       <div class="tile">확인 전 · 실패<b id="sNew">-</b></div>
     </div>
     <div class="row quiet" style="margin-bottom:12px">
@@ -558,35 +561,41 @@ details summary{cursor:pointer;font-weight:800}
     ns.forEach(function (n) {
       var s = st[n.id];
       ph[n.pn || n.p] = 1;
-      if (!s || !s.t || s.n == null) cnt.none++; else if (s.ok) cnt.ok++; else cnt.short++;
-      if (s && s.ok) return; // 들어온 건 자동 확인 끝
+      if (s && s.sent) cnt.ok++; else if (!s || !s.t || s.n == null) cnt.none++; else cnt.short++;
+      if (s && s.sent) return; // 알람전송완료는 자동 확인 끝
       var due = s && s.t ? s.t + n.every * 60000 : Date.now();
       if (!next || due < next) next = due;
     });
     $('sAll').textContent = ns.length; $('sOk').textContent = cnt.ok; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
     $('sLine').textContent = ns.length
       ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · ' +
-        (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : !next ? '기다리는 제품이 다 들어왔어요' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
+        (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : !next ? '모든 제품 알람 전송 완료' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
       : '아직 필요 제품이 없어요. 아래에서 거래처 · 제품 · 필요 수량을 넣어 주세요.';
-    $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cnt.ok + ')' : '';
+    $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 알람 보냄 ' + cnt.ok + ')' : '';
     var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name + ' ' + n.code).toLowerCase().indexOf(q) >= 0; });
     var groups = {}, order = [];
     rows.forEach(function (n) { var k = n.pn || '(거래처 없음)'; if (!groups[k]) { groups[k] = []; order.push(k); } groups[k].push(n); });
     order.sort(function (a, b) { return a.localeCompare(b, 'ko'); });
     $('nList').innerHTML = order.map(function (k) {
-      var g = groups[k], gOk = g.filter(function (n) { return st[n.id] && st[n.id].ok; }).length;
-      return '<div class="ph">🏥 ' + esc(k) + ' <small style="color:var(--sub);font-weight:400">주문 ' + g.length + '개 · 들어옴 ' + gOk + '</small></div>' + g.map(function (n) {
-        var s = st[n.id], badge, sub = [];
-        if (!s || !s.t) badge = '<span class="b u">확인 전</span>';
+      var g = groups[k], gOk = g.filter(function (n) { return st[n.id] && st[n.id].sent; }).length;
+      return '<div class="ph">🏥 ' + esc(k) + ' <small style="color:var(--sub);font-weight:400">주문 ' + g.length + '개 · 알람 보냄 ' + gOk + '</small></div>' + g.map(function (n) {
+        var s = st[n.id], badge, sub = [], has = s && s.t && typeof s.n === 'number';
+        // 재고 상태
+        if (!s || (!s.t && !has)) badge = '<span class="b u">확인 전</span>';
         else if (s.n == null) badge = '<span class="b f">조회 실패</span>';
-        else if (s.ok) badge = '<span class="b g">✅ 들어옴</span>';
-        else badge = '<span class="b s">⏳ 부족 ' + (n.qty - s.n) + '개</span>';
-        sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && s.t && s.n != null ? s.n + '개' : '?'));
-        sub.push(s && s.ok ? '🔕 알림 보냄 · 자동 확인 끝' : everyLabel(n.every) + '마다');
+        else if (s.n >= n.qty) badge = '<span class="b g">✅ 충분</span>';
+        else if (s.n > 0) badge = '<span class="b s">⚠ 부족 ' + (n.qty - s.n) + '개</span>';
+        else badge = '<span class="b s">⏳ 재고 없음</span>';
+        // 알람 상태 (누르면 바뀜)
+        var sent = !!(s && s.sent);
+        var alarm = '<button class="alarm ' + (sent ? 'done' : 'wait') + '" data-alarm="' + esc(n.id) + '" data-sent="' + (sent ? 1 : 0) + '" title="누르면 바뀌어요">' +
+          (sent ? '✅ 알람전송완료!' : '🔔 알람전송대기중') + '</button>';
+        sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && typeof s.n === 'number' ? s.n + '개' : '?'));
+        sub.push(sent ? '자동 확인 쉼' : everyLabel(n.every) + '마다');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
-        if (s && s.ok && s.at) sub.push('들어온 시각 ' + when(s.at));
+        if (sent && s.at) sub.push('알람 ' + when(s.at));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
-        return '<div class="ni' + (s && s.ok ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<small>' + sub.join(' · ') + '</small></div>' +
+        return '<div class="ni' + (sent ? ' came' : '') + '"><div>' + badge + ' ' + esc(n.name) + '<div style="margin:4px 0 2px">' + alarm + '</div><small>' + sub.join(' · ') + '</small></div>' +
           '<button class="btn ghost sm" data-memo="' + esc(n.id) + '">메모</button><button class="btn ghost sm" data-chk="' + esc(n.id) + '">확인</button><button class="btn bad sm" data-ndel="' + esc(n.id) + '">삭제</button></div>';
       }).join('');
     }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 필요 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
@@ -594,8 +603,19 @@ details summary{cursor:pointer;font-weight:800}
   $('nF').oninput = renderNeeds;
   $('nNow').onclick = function () { var ids = (data.needs || []).map(function (n) { return n.id; }); if (ids.length) checkNow(ids, $('nNow')); };
   $('nList').onclick = function (e) {
-    var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo');
+    var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo'), al = e.target.getAttribute('data-alarm');
     if (c) return checkNow([c], e.target);
+    if (al) {
+      // 알람전송완료 ↔ 알람전송대기중
+      var toSent = e.target.getAttribute('data-sent') !== '1';
+      e.target.disabled = true;
+      call('needAlarm', { method: 'POST', body: { id: al, sent: toSent } }).then(function (j) {
+        e.target.disabled = false;
+        $('nMsg').textContent = j.msg || j.error || '';
+        if (j.state) { data.needState = data.needState || {}; data.needState[al] = j.state; renderNeeds(); }
+      });
+      return;
+    }
     if (mo) {
       var it = (data.needs || []).filter(function (x) { return x.id === mo; })[0];
       if (!it) return;
