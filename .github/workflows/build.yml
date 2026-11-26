@@ -79,7 +79,7 @@ jobs:
           python3 -c "t=open('README.md',encoding='utf-8').read().split('\n## ')[-1].splitlines()[1:]; open('whatsnew/whatsnew-ko-KR','w',encoding='utf-8').write('\n'.join(l.lstrip('- ').strip() for l in t if l.strip())[:500])"
           cat whatsnew/whatsnew-ko-KR
 
-      - name: Upload to Play internal testing (2026-11-26 사용자: 내부 테스트 먼저 · 업로드해줘 = store.yml closed)
+      - name: Upload to Play internal testing   # 2026-11-26 내부 테스트 먼저 · 업로드해줘 = store.yml closed
         if: ${{ steps.playkey.outputs.ok == '1' }}
         continue-on-error: true
         uses: r0adkll/upload-google-play@v1
