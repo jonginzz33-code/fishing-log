@@ -7,5 +7,15 @@ jobs:
     steps:
       - run: |
           set +e
-          for d in 2026-12-02 2026-12-03 2026-12-05; do echo "DAY $d $(curl -s -m 60 "https://talla-relay.jonginzz33.workers.dev/day?d=$d&h=poseidon.sunsang24.com" | head -c 600)"; done
-          echo "MON $(curl -s -m 60 'https://talla-relay.jonginzz33.workers.dev/?u=https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F202612' | grep -o 'data-sdate="[^"]*"' | sort | uniq -c | head -12 | tr '\n' ' ')"
+          R="https://talla-relay.jonginzz33.workers.dev/?u="
+          curl -s -m 60 "${R}https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F2026-12-02%2F0%2Fsimple_day1" -o /tmp/d.html
+          curl -s -m 60 "${R}https%3A%2F%2Fposeidon.sunsang24.com%2Fship%2Fschedule_fleet%2F202612" -o /tmp/m.html
+          python3 - <<'Q'
+          import re
+          d=open('/tmp/d.html',encoding='utf-8',errors='ignore').read(); m=open('/tmp/m.html',encoding='utf-8',errors='ignore').read()
+          print("DSIZE",len(d),"blocks",d.count('ship_unit_ship_no_'),"title",re.findall(r'<title>([^<]*)',d)[:1])
+          print("DTXT",re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',d))[:600])
+          i=m.find('data-sdate="2026-12-02"')
+          print("MSEG",re.sub(r'\s+',' ',m[max(0,i-1500):i+1200]))
+          print("MLINKS",sorted(set(re.findall(r'schedule_fleet/[^"\' ]+',m)))[:15])
+          Q
