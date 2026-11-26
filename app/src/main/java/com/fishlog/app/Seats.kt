@@ -327,6 +327,30 @@ object Seats {
     /** 마지막 조황 날짜 (오늘 받은 것만 · 정렬용) */
     fun lastBoardAny(c: Context, shipNo: String): String? = prefs(c).getString("seat_lb_$shipNo", null)?.substringBefore('|')
 
+    // v6.97 (414): 선단 홈페이지 대표 사진 — prefs seat_img_<host> = 주소|yyyyMMdd (못 찾음 = 빈 주소 · 7일)
+    private val OG_IMG = Regex("<meta[^>]+property=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']|<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+property=[\"']og:image[\"']", RegexOption.IGNORE_CASE)
+    private val WEB_MAIN = Regex("https?://imga\\.sunsang24\\.com/ship_img/[^\"'\\s)]+ship_web_main/[^\"'\\s)]+\\.(?:jpg|jpeg|png)", RegexOption.IGNORE_CASE)
+    /** null = 아직 모름 · "" = 없음 */
+    fun fleetImg(c: Context, host: String): String? {
+        val v = prefs(c).getString("seat_img_$host", null) ?: return null
+        val u = v.substringBefore('|'); val d = v.substringAfterLast('|')
+        val age = try { ((System.currentTimeMillis() - SimpleDateFormat("yyyyMMdd", Locale.KOREA).parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { 99 }
+        return if (age < (if (u.isBlank()) 7 else 30)) u else null
+    }
+    fun findFleetImg(c: Context, host: String) {
+        var u = ""
+        try {
+            val h = get("https://$host/")
+            u = OG_IMG.find(h)?.let { m -> m.groupValues[1].ifBlank { m.groupValues[2] } }?.trim() ?: ""
+            if (u.isBlank()) u = WEB_MAIN.find(h)?.value ?: ""
+            if (u.startsWith("//")) u = "https:$u" else if (u.startsWith("/")) u = "https://$host$u"
+            if (!u.startsWith("http")) u = ""
+            // 사이트 기본 로고 · 아이콘은 빼기
+            if (Regex("favicon|logo|icon|kakao|naver", RegexOption.IGNORE_CASE).containsMatchIn(u.substringAfterLast('/'))) u = ""
+        } catch (_: Exception) { return }   // 못 읽음 → 다음에 다시
+        prefs(c).edit().putString("seat_img_$host", u + "|" + SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(Date())).apply()
+    }
+
     // v6.86 (395): 배 사진 (작은 사진 · 메모리 + 폰 파일)
     private val imgMem = android.util.LruCache<String, android.graphics.Bitmap>(60)
     private val imgBusy = HashSet<String>()
@@ -444,7 +468,10 @@ object Seats {
         l.forEach { s ->
             val src = srcOf(s.host); val n = normShip(s.ship)
             val p = out.firstOrNull { o -> o.date == s.date && n.isNotBlank() && normShip(o.ship) == n &&
-                srcOf(o.host) != src && o.also.none { srcOf(it.host) == src } && portsOk(portOf(c, o), portOf(c, s)) }
+                o.host != s.host && o.also.none { it.host == s.host } && (
+                (srcOf(o.host) != src && o.also.none { srcOf(it.host) == src } && portsOk(portOf(c, o), portOf(c, s))) ||
+                // v6.97 (416): 같은 배를 다른 선단 두 곳이 올림 (구라미끼호 · 뉴나성호) — 항구를 둘 다 알고 같을 때만
+                (srcOf(o.host) == src && o.host != S24 && s.host != S24 && portOf(c, o).isNotBlank() && portOf(c, s).isNotBlank() && portsOk(portOf(c, o), portOf(c, s)))) }
             if (p != null) p.also = p.also + s else out.add(s)
         }
         return out
@@ -727,7 +754,7 @@ object Seats {
     // ─────────────── v6.82 (390): 배 선단 사이트 · 밴드 · 전화 ───────────────
     // talla.co.kr/data/seat_sites.json (GitHub 'Seat sites' 가 하루 한 번 조황 글에서 모음) → 폰 파일 · 하루 한 번 새로
     // 파일에 없는 배만 폰이 직접 조황 글을 읽어 찾음 (prefs seat_site_<no> = host|band|tel|yyyyMMdd) · 직접 넣은 주소 = seat_site_m_<no>
-    class ShipSite(val host: String?, val band: String?, val tel: String?, val name: String = "", val port: String = "")
+    class ShipSite(val host: String?, val band: String?, val tel: String?, val name: String = "", val port: String = "", val posts: Int = -1)
     private const val SITES_URL = "https://talla.co.kr/data/seat_sites.json"
     @Volatile private var sitesMem: Map<String, ShipSite>? = null
     private val siteTried = HashSet<String>()
@@ -736,7 +763,7 @@ object Seats {
         val o = JSONObject(t).optJSONObject("ships") ?: return emptyMap()
         val m = HashMap<String, ShipSite>()
         o.keys().forEach { k -> val v = o.optJSONObject(k) ?: return@forEach
-            m[k] = ShipSite(v.optString("h").ifBlank { null }, v.optString("b").ifBlank { null }, v.optString("t").ifBlank { null }, v.optString("n"), v.optString("p")) }
+            m[k] = ShipSite(v.optString("h").ifBlank { null }, v.optString("b").ifBlank { null }, v.optString("t").ifBlank { null }, v.optString("n"), v.optString("p"), v.optInt("c", -1)) }
         return m
     }
     fun sites(c: Context): Map<String, ShipSite> {
@@ -1149,6 +1176,12 @@ object Seats {
             }
             val ss = if (s.host == S24 || isS24Fleet(s.host)) siteOf(a, s.shipNo) else null
             val fleetName = if (s.host == S24) s.place.ifBlank { "선상24" } else fleets(a).firstOrNull { it.host == s.host }?.name?.ifBlank { null } ?: dirName(s.host) ?: s.host.substringBefore('.')
+            // v6.97 (414): 사진 없으면 선단 홈페이지 대표 사진(og:image) · 30일 기억
+            if (s.img.isBlank()) (if (s.host == S24) ss?.host else s.host)?.let { hh ->
+                val u = fleetImg(a, hh)
+                if (u == null) { if (synchronized(extraBusy) { extraBusy.add("i:$hh") }) pool.execute { findFleetImg(a, hh); a.runOnUiThread { later() } } }
+                else if (u.isNotBlank()) s.img = u
+            }
             val head = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
             // 배 사진 (선상24 작은 사진 · 없으면 🚤)
             val picBox = android.widget.FrameLayout(a).apply { background = Ui.bg(a, Color.parseColor("#1B3A52"), 12, Color.parseColor("#2C4F66")); clipToOutline = true }
@@ -1157,7 +1190,7 @@ object Seats {
                 val iv = android.widget.ImageView(a).apply { scaleType = android.widget.ImageView.ScaleType.CENTER_CROP }
                 picBox.addView(iv, android.widget.FrameLayout.LayoutParams(MATCH, MATCH))
                 shipImg(a, s.img, iv)
-                picBox.setOnClickListener { showPhoto(a, s.img.replace("_smini.", "_mini."), s.ship) }
+                picBox.setOnClickListener { showPhoto(a, if (s.img.contains("ship_web_main")) s.img else s.img.replace("_smini.", "_mini."), s.ship) }
             }
             head.addView(picBox, LinearLayout.LayoutParams(dp(62), dp(62)).apply { rightMargin = dp(10) })
             val info = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
@@ -1229,28 +1262,31 @@ object Seats {
                 if (allowed(a)) r.addView(Ui.pill(a, if (openSet(a, s)) "🔔 알림 걸림" else "🔔 열리면 알림", openSet(a, s), Color.parseColor("#F2C14E"), small = true) { toggleOpen(a, s); render() })
                 box.addView(r)
             }
-            // v6.92 (411): 📝 선단 홈페이지 최근 조과 (이 배 글 · 없으면 선단 최근 글)
+            // v6.97 (416): 선단 홈페이지 조과 글 (이 배 글 · 없으면 선단 글) → 아래 '📝 조과 N · +N일' 버튼 · 🧭 탐사 꼬리표
+            var fpMine: List<Post> = emptyList(); var fpAll: List<Post>? = null
             if (isS24Fleet(s.host)) {
-                val ps = postsCached(s.host)
-                if (ps == null) { if (synchronized(extraBusy) { extraBusy.add("p:" + s.host) }) pool.execute { fleetPosts(s.host); a.runOnUiThread { later() } } }
-                else {
-                    val mine = postsOf(ps, s.ship)
-                    (mine.firstOrNull() ?: ps.firstOrNull())?.let { lp0 ->
-                        box.addView(Ui.text(a, 12f, if (mine.isNotEmpty()) Color.parseColor("#7FD6FF") else Ui.SUB, false,
-                            (if (mine.isNotEmpty()) "📝 최근 조과" else "📝 선단 조과") + (lp0.date.takeIf { it.isNotBlank() }?.let { " · " + agoLabel(it) } ?: "") + " · " + lp0.title).apply {
-                            maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(6), 0, 0)
-                            setOnClickListener { openFleetBoards(a, s.host, s.ship) }
-                        })
-                    }
-                }
+                fpAll = postsCached(s.host)
+                if (fpAll == null) { if (synchronized(extraBusy) { extraBusy.add("p:" + s.host) }) pool.execute { fleetPosts(s.host); a.runOnUiThread { later() } } }
+                else fpMine = postsOf(fpAll, s.ship)
             }
-            // 막대
-            val bar = LinearLayout(a).apply { background = Ui.bg(a, Color.parseColor("#22384A"), 99) }
-            val frac = if (s.cap > 0) s.remain.toFloat() / s.cap else 0f
+            val fpUse = fpMine.ifEmpty { fpAll ?: emptyList() }
+            fpUse.firstOrNull { isScout(it) && daysAgo(it.date) in 0..14 }?.let { sp ->
+                box.addView(Ui.text(a, 11.5f, Color.parseColor("#FFD36E"), true, "🧭 탐사 " + plusDays(sp.date) + " · " + sp.title).apply {
+                    maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(6), 0, 0)
+                    setOnClickListener { openFleetBoards(a, s.host, s.ship) }
+                })
+            }
             val col = when { !s.open -> Color.parseColor("#4A5966"); s.remain <= 3 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#2FBF8F") }
-            bar.addView(View(a).apply { background = Ui.bg(a, col, 99) }, LinearLayout.LayoutParams(0, MATCH, frac.coerceIn(0f, 1f)))
-            bar.addView(View(a), LinearLayout.LayoutParams(0, MATCH, (1f - frac).coerceIn(0f, 1f) + 0.0001f))
-            box.addView(bar, LinearLayout.LayoutParams(MATCH, dp(7)).apply { topMargin = dp(8); bottomMargin = dp(5) })
+            // v6.97 (417): 막대 대신 선단 주소 한 줄 (누르면 홈페이지 · 꾹 = 주소 복사)
+            val homeHost = if (s.host == S24) ss?.host else s.host
+            if (homeHost != null) box.addView(Ui.text(a, 11.5f, Color.parseColor("#7FD6FF"), false, "🌐 " + homeHost.removePrefix("www.")).apply {
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(0, dp(6), 0, dp(2))
+                setOnClickListener { Boats.openUrl(a, "https://$homeHost") }
+                setOnLongClickListener {
+                    (a.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText("site", "https://$homeHost"))
+                    Ui.toast(a, "주소를 복사했어요"); true
+                }
+            })
             val bot = Ui.row(a)
             bot.addView(TextView(a).apply {
                 val sb = android.text.SpannableStringBuilder()
@@ -1270,7 +1306,6 @@ object Seats {
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             val canBook = s.open && s.remain >= need
             // v6.96: 🏠 홈피 = 그 배 선단 홈페이지 첫 화면 (예약 › 옆)
-            val homeHost = if (s.host == S24) ss?.host else s.host
             if (homeHost != null) bot.addView(Ui.pill(a, "🏠 홈피", false, Ui.TEXT, small = true) { Boats.openUrl(a, "https://$homeHost") }.apply { setTextColor(Color.parseColor("#7FD6FF")) },
                 LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) })
             if (canBook) {
@@ -1295,9 +1330,19 @@ object Seats {
             ss?.tel?.let { t -> link("📞 전화") { dial(a, t) } }
             ss?.band?.let { b -> link("밴드") { Boats.openUrl(a, b) } }
             if (s.host == S24) link("📝 조황") { openBoards(a, s) }
-            if (isS24Fleet(s.host)) link("📝 조과") { openFleetBoards(a, s.host, s.ship) }
+            if (isS24Fleet(s.host)) {
+                // v6.97 (416): [📝 조과 1,204 · +3일] (글 수 = talla.co.kr 매일 · 날짜 = 선단 홈페이지 첫 글 · 초록 3일 · 노랑 14일 · 회색)
+                val cnt = sites(a)[s.shipNo]?.posts ?: -1
+                val last = fpUse.firstOrNull()?.date ?: ""
+                val dn = daysAgo(last)
+                val t = "📝 조과" + (if (cnt > 0) " %,d".format(cnt) else "") + (if (last.isNotBlank() && dn >= 0) " · " + plusDays(last) else "")
+                val tc = when { dn < 0 -> Color.parseColor("#7FD6FF"); dn <= 3 -> Color.parseColor("#2FBF8F"); dn <= 14 -> Color.parseColor("#F2C14E"); else -> Color.parseColor("#8A99A6") }
+                left.addView(Ui.pill(a, t, false, Ui.TEXT, small = true) { openFleetBoards(a, s.host, s.ship) }.apply {
+                    setTextColor(tc); setPadding(dp(9), 0, dp(9), 0); if (dn in 0..14) background = Ui.bg(a, Color.TRANSPARENT, 99, tc)
+                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(5) })
+            }
             // v6.90 (399): 같은 배가 다른 곳에도 있으면 그쪽 예약 버튼 (남은 자리 같이)
-            s.also.forEach { o -> link("${srcOf(o.host)} " + (if (o.open) "${o.remain}자리 ›" else "${o.stName} ›")) { Boats.openUrl(a, bookUrlOf(a, o)) } }
+            s.also.forEach { o -> link((if (srcOf(o.host) == srcOf(s.host) && o.host != S24) (dirName(o.host) ?: o.host.substringBefore('.')) else srcOf(o.host)) + " " + (if (o.open) "${o.remain}자리 ›" else "${o.stName} ›")) { Boats.openUrl(a, bookUrlOf(a, o)) } }
             if (ss?.host != null && s.host == S24 && !canBook) link("🌐 사이트") { Boats.openUrl(a, siteUrl(ss.host, s.date)) }
             links.addView(android.widget.HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(left) }, LinearLayout.LayoutParams(0, WRAP, 1f))
             if (vv == null && synchronized(voteAsked) { voteAsked.add(vk) }) loadVotes(vk) { a.runOnUiThread { later() } }
@@ -1928,6 +1973,11 @@ object Seats {
         val n = try { ((ymd.parse(ymd.format(Date()))!!.time - ymd.parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { return "" }
         return when { n < 0 -> ""; n == 0 -> "오늘"; n == 1 -> "어제"; n < 30 -> "${n}일 전"; else -> "${n / 30}달 전" }
     }
+    fun daysAgo(d: String): Int = try { ((ymd.parse(ymd.format(Date()))!!.time - ymd.parse(d)!!.time) / 86400000L).toInt() } catch (_: Exception) { -1 }
+    /** '오늘' · '+3일' */
+    fun plusDays(d: String): String { val n = daysAgo(d); return when { n < 0 -> ""; n == 0 -> "오늘"; else -> "+${n}일" } }
+    /** 416: 탐사 글 (제목 또는 앞부분에 '탐사') */
+    fun isScout(p: Post) = p.title.contains("탐사") || p.text.take(80).contains("탐사")
     /** 📝 선단 조과 글 목록 — 이 배 글 먼저 · 누르면 선단 홈페이지 원래 글 */
     private fun openFleetBoards(a: Activity, host: String, ship: String) {
         fun dp(v: Int) = Ui.dp(a, v)
@@ -1942,7 +1992,10 @@ object Seats {
             a.runOnUiThread {
                 box.removeAllViews()
                 if (l == null || l.isEmpty()) { box.addView(Ui.text(a, 13f, Ui.SUB, false, if (l == null) "못 불러왔어요 · 인터넷을 확인해 주세요" else "아직 조과 글이 없어요")); return@runOnUiThread }
-                val mine = postsOf(l, ship); val rest = l.filter { it !in mine }
+                val mine0 = postsOf(l, ship); val rest0 = l.filter { it !in mine0 }
+                // 416: 최근 2주 탐사 글은 맨 위
+                fun top(x: List<Post>) = x.filter { isScout(it) && daysAgo(it.date) in 0..14 } + x.filterNot { isScout(it) && daysAgo(it.date) in 0..14 }
+                val mine = top(mine0); val rest = top(rest0)
                 box.addView(Ui.text(a, 11.5f, Ui.SUB, false, "선단 홈페이지(${host}) 조과 글 최근 ${l.size}개 · 누르면 원래 글"))
                 fun row(o: Post) {
                     val r = LinearLayout(a).apply {
@@ -1956,6 +2009,8 @@ object Seats {
                         r.addView(iv, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(10) })
                     }
                     val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    if (isScout(o)) col.addView(Ui.text(a, 11f, Color.parseColor("#1B1206"), true, "🧭 탐사").apply { setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(a, Color.parseColor("#FFD36E"), 6) },
+                        LinearLayout.LayoutParams(WRAP, WRAP).apply { bottomMargin = dp(3) })
                     col.addView(Ui.text(a, 14f, Ui.TEXT, true, o.title).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })
                     col.addView(Ui.text(a, 11.5f, Ui.SUB, false, listOf(o.date.takeIf { it.isNotBlank() }?.let { "$it (${agoLabel(it)})" } ?: "", o.ship, o.fish).filter { it.isNotBlank() }.joinToString(" · ")))
                     if (o.text.isNotBlank()) col.addView(Ui.text(a, 12f, Color.parseColor("#B8CAD6"), false, o.text).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END })

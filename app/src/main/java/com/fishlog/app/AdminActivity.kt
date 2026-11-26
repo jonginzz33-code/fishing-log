@@ -151,6 +151,7 @@ class AdminActivity : Activity() {
         renderGroupFill()
         renderTfCollect()
         renderUsage()
+        renderGroups()
         renderCatAdmin()
         renderLimit()
         renderReports()
@@ -239,6 +240,64 @@ class AdminActivity : Activity() {
         tg.addView(tToday, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(6) }); tg.addView(tWeek)
         c.addView(tg, Ui.lp(this, MATCH, WRAP, top = 8))
         c.addView(Ui.button(this, "불러오기", true) { cache = null; load() }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(box)
+        listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
+    }
+
+    // ---------------- v6.97 (374): 👥 그룹 현황 (그룹 문서 + 사용자 목록만 · 채팅 · 기록 내용은 안 봄) ----------------
+    private fun renderGroups() {
+        section("👥 그룹 현황", "그룹 · 멤버 · 마지막 접속")
+        val c = Ui.card(this)
+        c.addView(Ui.text(this, 12.5f, Ui.SUB, false, "그룹 이름 · 그룹장 · 멤버 · 만든 날 · 멤버 마지막 접속만 보여요 (채팅 · 출조 기록 내용은 안 봐요)."))
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        class G(val id: String, val name: String, val owner: String, val members: List<String>, val created: Long, val code: String, val types: List<String>)
+        var all: List<G> = emptyList(); var q = ""
+        fun last(g: G) = g.members.maxOfOrNull { m -> users.firstOrNull { it.uid == m }?.lastSeen ?: 0L } ?: 0L
+        fun nm(uid: String) = users.firstOrNull { it.uid == uid }?.let { it.nick ?: it.name } ?: nameOf(uid)
+        val df = java.text.SimpleDateFormat("yyyy.MM.dd", java.util.Locale.KOREA)
+        fun draw() {
+            box.removeAllViews()
+            val wk = System.currentTimeMillis() - 7 * 86400_000L
+            val shown = all.filter { q.isBlank() || it.name.contains(q, true) || nm(it.owner).contains(q, true) }.sortedByDescending { last(it) }
+            box.addView(Ui.text(this, 13f, Ui.TEXT, true, "그룹 ${all.size}개 · 멤버 합계 ${all.sumOf { it.members.size }}명 · 이번 주 접속 있는 그룹 ${all.count { last(it) > wk }}곳"), Ui.lp(this, MATCH, WRAP, top = 6))
+            shown.forEach { g ->
+                val r = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(10), dp(8), dp(10), dp(8))
+                    background = Ui.bg(this@AdminActivity, android.graphics.Color.parseColor("#12283A"), 10, Ui.GROUP)
+                }
+                r.addView(Ui.text(this, 14.5f, Ui.TEXT, true, g.name.ifBlank { "(이름 없음)" } + "  ·  ${g.members.size}명"))
+                r.addView(Ui.text(this, 12f, Ui.SUB, false, "👑 ${nm(g.owner)} · 만든 날 ${if (g.created > 0) df.format(java.util.Date(g.created)) else "-"} · 마지막 접속 ${ago(last(g))}"))
+                r.setOnClickListener {
+                    val ms = g.members.sortedByDescending { m -> users.firstOrNull { it.uid == m }?.lastSeen ?: 0L }
+                    val lines = ms.joinToString("\n") { m -> (if (m == g.owner) "👑 " else "· ") + nm(m) + "  —  " + ago(users.firstOrNull { it.uid == m }?.lastSeen ?: 0L) }
+                    android.app.AlertDialog.Builder(this, R.style.FlAlert).setTitle("👥 ${g.name}")
+                        .setMessage("멤버 ${g.members.size}명\n$lines\n\n초대 코드: ${g.code.ifBlank { "-" }}" + (if (g.types.isNotEmpty()) "\n출조 종류: " + g.types.joinToString(" · ") else ""))
+                        .setPositiveButton("닫기", null).show()
+                }
+                box.addView(r, Ui.lp(this, MATCH, WRAP, top = 6))
+            }
+        }
+        c.addView(EditText(this).apply {
+            hint = "🔍 그룹 이름 · 그룹장 찾기"; setSingleLine(); setTextColor(Ui.TEXT); setHintTextColor(Ui.SUB); textSize = 14f
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(x: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(x: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) { q = e?.toString()?.trim() ?: ""; if (all.isNotEmpty()) draw() }
+            })
+        }, Ui.lp(this, MATCH, WRAP, top = 8))
+        c.addView(Ui.button(this, "불러오기", true) {
+            box.removeAllViews(); box.addView(Ui.text(this, 12.5f, Ui.SUB, false, "불러오는 중…"))
+            com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("groups").get()
+                .addOnSuccessListener { qs ->
+                    all = qs.documents.map { d ->
+                        @Suppress("UNCHECKED_CAST")
+                        G(d.id, d.getString("name") ?: "", d.getString("owner") ?: "", (d.get("members") as? List<String>) ?: emptyList(),
+                            d.getLong("created") ?: 0L, d.getString("code") ?: "", (d.get("types") as? List<String>) ?: emptyList())
+                    }
+                    draw()
+                }
+                .addOnFailureListener { e -> box.removeAllViews(); box.addView(Ui.text(this, 12.5f, Ui.ORANGE, false, "못 불러왔어요: ${e.message}")) }
+        }.apply { minHeight = dp(44); textSize = 13f }, Ui.lp(this, MATCH, WRAP, top = 8))
         c.addView(box)
         listBox.addView(c, Ui.lp(this, MATCH, WRAP, top = 8))
     }

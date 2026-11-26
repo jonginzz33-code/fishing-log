@@ -59,6 +59,11 @@ def scan(no):
     failed = False
     try:
         bl = get(f"{API}/ship/fish_board_list?ship_no={no}&page=1")
+        try:
+            c = int(bl.get("total") or 0)
+            if c > 0: r["c"] = c   # 416: 조과 글 수
+        except Exception:
+            pass
         for it in (bl.get("list") or [])[:3]:
             try:
                 det = get(f"{API}/ship/fish_board_detail/{it.get('no')}")
@@ -111,7 +116,7 @@ def main():
         for i, (no, r) in enumerate(ex.map(scan, todo)):
             prev = ships.get(str(no), {})
             # 이번에 못 찾은 칸은 예전 값 그대로
-            for k in ("h", "b", "t", "p", "n"):
+            for k in ("h", "b", "t", "p", "n", "c"):
                 if k not in r and k in prev: r[k] = prev[k]
             ships[str(no)] = r
             if i % 100 == 0: print(i, no, r.get("n"), r.get("h"), flush=True)
