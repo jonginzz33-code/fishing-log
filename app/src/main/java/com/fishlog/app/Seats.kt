@@ -285,7 +285,7 @@ object Seats {
 
     // ─────────────── v6.78: 🌐 선상24 전체 (선상24 목록 주소 api.sunsang24.com · 공개 문서 없는 주소라 바뀌면 멈출 수 있음) ───────────────
     const val S24 = "s24"
-    val SORTS = arrayOf("자리 많은 순", "출항 빠른 순", "이름 순", "📝 조황 많은 순", "🕘 최근 조황 순")
+    val SORTS = arrayOf("자리 많은 순", "출항 빠른 순", "이름 순", "📝 조황 많은 순", "🕘 최근 조황 순", "📝 최근 조과 순")
     private const val API = "https://api.sunsang24.com"
     class S24Page(val total: Int, val list: List<Sch>)
 
@@ -1190,7 +1190,28 @@ object Seats {
             if (durSel != 0 && h > 0 && when (durSel) { 1 -> h > 5.0; 2 -> h < 5.0 || h > 9.0; else -> h < 9.0 }) return false
             return true
         }
-        fun fishMatch(s: Sch) = timeMatch(s) && (fishSel.isEmpty() || fishSel.any { f -> s.fish.split(',', '/', '·', ' ').any { it.trim() == f } || s.fish.contains(f) })
+        // v7.03 (427): 최근 조과 = 선단 홈페이지 조과 글 마지막 날짜 (이 배 글 · 없으면 선단 글) · null = 아직 모름 · "" = 글 없음
+        var postDays = p.getInt("seat_pdays", 0)   // 0 = 거르지 않음 · N = 최근 N일 안 조과 있는 배만
+        val postAsked = HashSet<String>()
+        fun lastPost(x: Sch): String? {
+            if (x.host == S24) return lastBoardAny(a, x.shipNo) ?: siteOf(a, x.shipNo)?.host?.let { h -> postsCached(h)?.let { ps -> (postsOf(ps, x.ship).firstOrNull() ?: ps.firstOrNull())?.date ?: "" } }
+            if (!isS24Fleet(x.host) && !isTf(x.host)) return ""
+            val ps = postsCached(x.host) ?: return null
+            return (postsOf(ps, x.ship).firstOrNull() ?: ps.firstOrNull())?.date ?: ""
+        }
+        /** 모르는 선단 조과 글을 6곳씩 받아 오기 (1시간 기억) */
+        fun askPosts(l: List<Sch>) {
+            l.mapNotNull { x -> if (x.host == S24) siteOf(a, x.shipNo)?.host else x.host.takeIf { isS24Fleet(it) || isTf(it) } }
+                .distinct().filter { postsCached(it) == null && synchronized(postAsked) { postAsked.add(it) } }.take(6)
+                .forEach { h -> pool.execute { fleetPosts(h); a.runOnUiThread { later() } } }
+        }
+        fun postMatch(x: Sch): Boolean {
+            if (postDays <= 0) return true
+            if (lastPost(x) == null) askPosts(listOf(x))
+            val d = lastPost(x) ?: return true          // 아직 모르면 보여 주고 받아 오는 중
+            return d.isNotBlank() && daysAgo(d) in 0..postDays
+        }
+        fun fishMatch(s: Sch) = postMatch(s) && timeMatch(s) && (fishSel.isEmpty() || fishSel.any { f -> s.fish.split(',', '/', '·', ' ').any { it.trim() == f } || s.fish.contains(f) })
         fun fishList(s: Sch) = s.fish.split(',', '/', '·').map { it.trim() }.filter { it.isNotBlank() }
         // v6.91 (404): 정렬 5가지 · 최근 조황 순은 모르는 배의 마지막 조황 날짜를 3척씩 받아 오며 다시 정렬
         val lbAsked = HashSet<String>()
@@ -1207,6 +1228,10 @@ object Seats {
                 val miss = l.filter { it.host == S24 && lastBoardAny(a, it.shipNo) == null && synchronized(lbAsked) { lbAsked.add(it.shipNo) } }.take(40)
                 miss.forEach { x -> pool.execute { lastBoard(a, x.shipNo, true); a.runOnUiThread { later() } } }
                 l.sortedWith(compareBy({ -(lastBoardAny(a, it.shipNo)?.replace("-", "")?.toIntOrNull() ?: 0) }, { !(it.open && it.remain >= need) }, { it.ship }))
+            }
+            5 -> {
+                askPosts(l)
+                l.sortedWith(compareBy({ x -> lastPost(x)?.takeIf { it.isNotBlank() }?.let { -(it.replace("-", "").toIntOrNull() ?: 0) } ?: 0 }, { !(it.open && it.remain >= need) }, { it.ship }))
             }
             else -> l.sortedWith(compareBy({ !(it.open && it.remain >= need) }, { -it.remain }, { it.ship }))
         }
@@ -1509,7 +1534,7 @@ object Seats {
             chipLook(s24Chip, useS24, Color.parseColor("#3D7BD9")); chipLook(tfChip, useTf, Color.parseColor("#2FA06F"))
             needBtn.text = "👥 ${need}자리 이상 ▾"
             needBtn.setTextColor(if (need > 1) Color.parseColor("#7FD6FF") else Ui.TEXT)
-            val nFilt = (if (openOnly) 1 else 0) + (if (todSel.isNotEmpty()) 1 else 0) + (if (durSel != 0) 1 else 0)
+            val nFilt = (if (openOnly) 1 else 0) + (if (todSel.isNotEmpty()) 1 else 0) + (if (durSel != 0) 1 else 0) + (if (postDays > 0) 1 else 0) + (if (sort == 5) 1 else 0)
             filtBtn.text = "⚙ 필터" + (if (nFilt > 0) " · $nFilt" else "")
             filtBtn.setTextColor(if (nFilt > 0) Color.parseColor("#7FD6FF") else Ui.TEXT)
             sortBtn.text = "↕ " + SORTS[sort] + " ▾"
@@ -1680,7 +1705,7 @@ object Seats {
             fun section(t: String, c: Int) = list.addView(Ui.text(a, 12f, c, true, t).apply { setPadding(dp(4), dp(8), 0, dp(2)) })
             val favL = if (favTop) day0.filter { it.key in fv } else emptyList()
             val rest = day0.filter { it !in favL }
-            pageReset("m|$day|${areaSel.sorted()}|${fishSel.sorted()}|$sort|$openOnly|$favTop|${todSel.sorted()}|$durSel|$need|$useS24")
+            pageReset("m|$day|${areaSel.sorted()}|${fishSel.sorted()}|$sort|$openOnly|$favTop|${todSel.sorted()}|$durSel|$need|$useS24|$postDays")
             val restShown = rest.take(maxOf(0, shownN - favL.size))
             if (favL.isNotEmpty()) { section("⭐ 즐겨찾기", Color.parseColor("#F2C14E")); favL.forEach { list.addView(card(it, true), Ui.lp(a, MATCH, WRAP, top = 6)) } }
             if (restShown.isNotEmpty()) {
@@ -1941,6 +1966,17 @@ object Seats {
             }
             sw("빈자리 있는 배만", "마감 · 필요한 자리보다 적은 배는 숨겨요", openOnly) { openOnly = it; savePrefs() }
             sw("⭐ 즐겨찾기 배 맨 위", "☆ 를 눌러 넣은 배를 먼저 보여 줘요", favTop) { favTop = it; savePrefs() }
+            // v7.03 (427): 📝 최근 조과 순 · 최근 N일 안 조과 있는 배만
+            sw("📝 최근 조과 순으로 보기", "선단 홈페이지에 조과 글이 최근에 올라온 배부터 (받아 오며 순서가 바뀌어요)", sort == 5) { sort = if (it) 5 else 0; savePrefs() }
+            sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "📝 최근 조과 있는 배만").apply { setPadding(0, dp(12), 0, dp(6)) })
+            val pw = FlowLayout(a)
+            fun paintPd() {
+                pw.removeAllViews()
+                listOf(0 to "전체", 3 to "3일 안", 7 to "7일 안", 14 to "14일 안", 30 to "한 달 안").forEach { (n, t) ->
+                    pw.addView(Ui.pill(a, t, n == postDays, Ui.MINE, small = true) { postDays = n; p.edit().putInt("seat_pdays", n).apply(); paintPd(); render() })
+                }
+            }
+            paintPd(); sh.body.addView(pw)
             // v6.86 (395): 출항 시간대(여러 개) · 운항 시간
             sh.body.addView(Ui.text(a, 13.5f, Ui.TEXT, true, "🕐 출항 시간대 (여러 개)").apply { setPadding(0, dp(12), 0, dp(6)) })
             val tw = FlowLayout(a)
@@ -1972,7 +2008,7 @@ object Seats {
             SORTS.forEachIndexed { i, t ->
                 sh.body.addView(Ui.pill(a, (if (i == sort) "✓ " else "") + t, i == sort, Ui.MINE) { sort = i; savePrefs(); sh.close(); render() }, Ui.lp(a, MATCH, WRAP, top = 6))
             }
-            sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "조황 순은 선상24 배만 알아요 · 더피싱 · 개인 사이트 배는 맨 뒤 · 최근 조황 순은 날짜를 받아 오며 순서가 바뀌어요").apply { setPadding(0, dp(10), 0, 0) })
+            sh.body.addView(Ui.text(a, 11.5f, Ui.SUB, false, "조황 순은 선상24 배만 알아요 · 📝 최근 조과 순 = 선단 홈페이지 조과 글 날짜 (선상24 선단 · 더피싱 선단 · 받아 오며 순서가 바뀌어요)").apply { setPadding(0, dp(10), 0, 0) })
             sh.show()
         }
         fleetBtn.setOnClickListener { openFleets(a) { load(true) } }
