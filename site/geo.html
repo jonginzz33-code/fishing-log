@@ -559,13 +559,14 @@ details summary{cursor:pointer;font-weight:800}
       var s = st[n.id];
       ph[n.pn || n.p] = 1;
       if (!s || !s.t || s.n == null) cnt.none++; else if (s.ok) cnt.ok++; else cnt.short++;
+      if (s && s.ok) return; // 들어온 건 자동 확인 끝
       var due = s && s.t ? s.t + n.every * 60000 : Date.now();
       if (!next || due < next) next = due;
     });
     $('sAll').textContent = ns.length; $('sOk').textContent = cnt.ok; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
     $('sLine').textContent = ns.length
       ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · ' +
-        (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
+        (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : !next ? '기다리는 제품이 다 들어왔어요' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
       : '아직 필요 제품이 없어요. 아래에서 거래처 · 제품 · 필요 수량을 넣어 주세요.';
     $('nCnt').textContent = ns.length ? '(' + ns.length + '개 · 들어옴 ' + cnt.ok + ')' : '';
     var rows = ns.filter(function (n) { return !q || (n.pn + ' ' + n.name + ' ' + n.code).toLowerCase().indexOf(q) >= 0; });
@@ -581,7 +582,7 @@ details summary{cursor:pointer;font-weight:800}
         else if (s.ok) badge = '<span class="b g">✅ 들어옴</span>';
         else badge = '<span class="b s">⏳ 부족 ' + (n.qty - s.n) + '개</span>';
         sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && s.t && s.n != null ? s.n + '개' : '?'));
-        sub.push(everyLabel(n.every) + '마다');
+        sub.push(s && s.ok ? '🔕 알림 보냄 · 자동 확인 끝' : everyLabel(n.every) + '마다');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (s && s.ok && s.at) sub.push('들어온 시각 ' + when(s.at));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
