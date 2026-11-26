@@ -282,6 +282,11 @@ details summary{cursor:pointer;font-weight:800}
       showQuiet(st.quiet);
       $('problem').classList.toggle('hide', !j.problem);
       if (j.problem === 'login') $('problem').textContent = '⚠ 서버가 지오팜에 로그인하지 못하고 있어요. Cloudflare 비밀값(아이디 · 비밀번호 · 지역)을 확인해 주세요.';
+      var ln = j.lastNotify;
+      if (!j.problem && ln && !ln.ok) {
+        $('problem').classList.remove('hide');
+        $('problem').textContent = '⚠ 휴대폰 알림이 안 나갔어요 (' + when(ln.t) + ' · ' + (ln.status === 429 ? '알림 서비스 하루 한도 초과' : (ln.status || '') + ' ' + String(ln.why || '').slice(0, 80)) + '). 알람은 다음 확인 때 다시 보내요.';
+      }
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
       render();
       fillLists(); hint(); renderNeeds(); loadProducts(j.productsV);
