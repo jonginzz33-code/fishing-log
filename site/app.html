@@ -60,10 +60,11 @@ nav{display:flex;align-items:center;justify-content:space-between;gap:10px;paddi
 .big .b{background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:8px 12px;font-size:14px}
 .big .b b{color:#FFD36E;font-size:18px;margin-left:4px}
 h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
-#map{height:320px;border-radius:14px;border:1.5px solid var(--line);margin-top:6px;background:#12283A}
+#map{position:relative;z-index:0;isolation:isolate;height:320px;border-radius:14px;border:1.5px solid var(--line);margin-top:6px;background:#12283A}
 .bars{display:flex;align-items:flex-end;gap:3px;height:110px;margin-top:6px;padding-top:16px}
 .bars .c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
-.bars .c i{display:block;width:100%;border-radius:4px 4px 0 0;background:var(--mine)}
+.bars .c i{display:block;width:100%}.bars .c i:first-of-type{border-radius:4px 4px 0 0}
+.leg{display:flex;flex-wrap:wrap;gap:10px;font-size:12.5px;margin-top:2px}.leg i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .bars .c span{font-size:10px;color:var(--sub);margin-top:2px}.bars .c em{font-size:10px;color:#FFD36E;font-style:normal}
 .rows div{display:flex;justify-content:space-between;border-top:1px solid #1E3446;padding:6px 0;font-size:14px}
 .rows div:first-child{border-top:0}
@@ -74,6 +75,11 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
 .hg summary b{color:var(--sky);width:34px}.hg .hs{flex:1;min-width:0;color:#DDEAF2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hg .hn{color:#FFD36E;font-weight:800;font-size:13px}
 .hg[open] .hn{color:var(--sub)}
 .hg .rows{padding:0 12px 6px}
+.mk{position:relative;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.mk img{pointer-events:none}.mk b{color:#1B0E02;font-size:12px}
+.mk .tg{position:absolute;top:-9px;left:50%;transform:translateX(-50%);color:#fff;font-size:10px;font-weight:800;padding:0 5px;border-radius:7px;white-space:nowrap;line-height:14px}
+.mk .ct{position:absolute;top:-8px;right:-10px;background:#0B1A26;color:#fff;font-size:11px;font-weight:800;min-width:19px;height:19px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.more2{position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;background:#0B1A26;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:7px;white-space:nowrap}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
 .wxt{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
 .wxt th{color:var(--sub);font-weight:700;font-size:11.5px;text-align:left;padding:4px 6px;border-bottom:1px solid #2C4F66}
@@ -267,9 +273,20 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
       '<div class="note">수온 하늘색 = 실측 · 나머지는 예보</div>';
   }
 
-  // 어종 색 = 앱과 같게 (1번 주황 · 2번 하늘 · 그 밖)
-  var SLOTC = ['#F28C38', '#5BC8DF', '#5FD39A', '#F07AA0', '#B9A6FF', '#F2C14E', '#FF7B5C', '#9ADBFF'];
-  function slotCol(s) { return SLOTC[(s - 1) % SLOTC.length] || '#F28C38'; }
+  // 어종 색 = 앱과 같게 (1번 주황 · 2번 하늘 · 3번부터 퀵 버튼 색)
+  var QUICK = ['#7C6BD6', '#4CAF7A', '#C9A43A', '#B5567E', '#3F8FD6', '#D9604A', '#5A8F8A', '#8A6A4F'];
+  function slotCol(s) { return s === 1 ? '#F28C38' : s === 2 ? '#5BC8DF' : QUICK[((s - 3) % QUICK.length + QUICK.length) % QUICK.length]; }
+  // 시간대별 막대 = 앱 BarView 와 같게: 많이 잡힌 순 5색 (6종 넘으면 4색 + 회색 '그 밖')
+  var BARC = ['#F28C38', '#5BC8DF', '#6BD08A', '#B48CF0', '#F2D45C'], OTHERC = '#7C8C99';
+  // 어종 그림 (앱 그림판 그림 그대로 · img/sp)
+  var SP = {"주꾸미": "sp_jukkumi", "문어": "sp_muneo", "낙지": "sp_nakji", "갑오징어": "sp_gabo", "오징어": "sp_ojingeo", "한치": "sp_hanchi", "군소": "sp_gunso", "우럭": "sp_ureok", "광어": "sp_gwangeo", "도다리": "sp_dodari", "참돔": "sp_chamdom", "감성돔": "sp_gamseong", "돌돔": "sp_doldom", "노래미": "sp_noraemi", "쥐노래미": "sp_jwinoraemi", "놀래기": "sp_nollaegi", "볼락": "sp_bollak", "농어": "sp_nongeo", "삼치": "sp_samchi", "학꽁치": "sp_hakkong", "갈치": "sp_galchi", "쥐치": "sp_jwichi", "전갱이": "sp_jeongaeng", "복어": "sp_bogeo", "숭어": "sp_sungeo", "게르치": "sp_gereuchi", "대구": "sp_daegu", "부시리": "sp_busiri", "방어": "sp_bangeo", "붉바리": "sp_bulbari", "능성어": "sp_neungseong", "민어": "sp_mineo", "옥돔": "sp_okdom", "열기": "sp_yeolgi", "성대": "sp_seongdae", "양태": "sp_yangtae", "보리멸": "sp_borimyeol", "뱅어": "sp_baengeo", "갯장어": "sp_gaetjangeo", "붕장어": "sp_bungjangeo", "붕어": "sp_bungeo", "잉어": "sp_ingeo", "배스": "sp_bass", "메기": "sp_megi", "가물치": "sp_gamulchi", "맛조개": "sp_matjogae", "조개": "sp_gaejogae", "백합": "sp_baekhap", "피조개": "sp_pijogae", "바지락": "sp_bajirak", "동죽": "sp_dongjuk", "홍합": "sp_honghap", "키조개": "sp_kijogae", "굴": "sp_gul", "가리비": "sp_garibi", "전복": "sp_jeonbok", "소라": "sp_sora", "꽃게": "sp_kkotge", "박하지": "sp_bakhaji", "작은게": "sp_smallcrab", "칠게": "sp_chilge", "대게": "sp_daege", "홍게": "sp_hongge", "대하": "sp_daeha", "보리새우": "sp_borisaeu", "갯가재": "sp_gatgajae", "쏙": "sp_ssok", "성게": "sp_seongge", "멍게": "sp_meongge", "해삼": "sp_haesam"};
+  var SPK = Object.keys(SP).sort(function (a, b) { return b.length - a.length; });
+  function artOf(n) {
+    n = String(n || '').replace(/\s/g, '');
+    if (/쭈꾸미|주꾸미/.test(n)) return SP['주꾸미']; if (/갑오/.test(n)) return SP['갑오징어']; if (/무늬/.test(n)) return SP['오징어'];
+    for (var i = 0; i < SPK.length; i++) if (n.indexOf(SPK[i]) >= 0) return SP[SPK[i]];
+    return '';
+  }
   var CATN = { boat: '선상낚시', night: '해루질', walk: '워킹낚시', fresh: '민물낚시' };
   function catName(c) { return CATN[c] || c; }
 
@@ -293,16 +310,30 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
   function detail(t) {
     var cs = counts(t), tot = t.catches.length;
     var dim = document.createElement('div'); dim.className = 'dim';
-    var hrs = {}; t.catches.forEach(function (c) { var h = new Date(c.t).getHours(); hrs[h] = (hrs[h] || 0) + 1; });
-    var hk = Object.keys(hrs).map(Number); var h0 = Math.min.apply(null, hk.concat([new Date(t.start).getHours()])), h1 = Math.max.apply(null, hk.concat([new Date(t.end || t.start).getHours()]));
-    var mx = Math.max.apply(null, Object.keys(hrs).map(function (k) { return hrs[k]; }).concat([1]));
-    var bars = ''; for (var h = h0; h <= h1 && h - h0 < 24; h++) bars += '<div class="c">' + (hrs[h] ? '<em>' + hrs[h] + '</em>' : '') + '<i style="height:' + ((hrs[h] || 0) / mx * 80) + '%"></i><span>' + h + '</span></div>';
+    // 시간대별 막대 (어종별로 쌓기 · 앱과 같은 색)
+    var rank = cs.map(function (x) { return x[0]; });
+    var many = rank.length > 5;
+    function bcol(n) { var i = rank.indexOf(n); return many ? (i < 4 ? BARC[i] : OTHERC) : BARC[i] || OTHERC; }
+    // 출조 시작 시각부터 1시간 칸 (자정 넘겨도 순서대로)
+    var base = new Date(t.start || 0); base.setMinutes(0, 0, 0); base = base.getTime();
+    var hrs = {}; t.catches.forEach(function (c) { var h = Math.floor((c.t - base) / 3600000), n = nameOf(t.names, c.s); hrs[h] = hrs[h] || {}; hrs[h][n] = (hrs[h][n] || 0) + 1; });
+    function hsum(h) { var o = hrs[h] || {}; return Object.keys(o).reduce(function (a, k) { return a + o[k]; }, 0); }
+    var hk = Object.keys(hrs).map(Number);
+    var h0 = Math.min.apply(null, hk.concat([0])), h1 = Math.max.apply(null, hk.concat([Math.floor(((t.end || t.start) - base) / 3600000)]));
+    var mx = Math.max.apply(null, hk.map(hsum).concat([1]));
+    var bars = ''; for (var h = h0; h <= h1 && h - h0 < 30; h++) {
+      var o = hrs[h] || {}, n0 = hsum(h), stack = '', clock = new Date(base + h * 3600000).getHours();
+      rank.slice().reverse().forEach(function (n) { if (o[n]) stack += '<i style="height:' + (o[n] / mx * 80) + '%;background:' + bcol(n) + '" title="' + esc(n) + ' ' + o[n] + '"></i>'; });
+      bars += '<div class="c" title="' + clock + '시: ' + esc(Object.keys(o).map(function (k) { return k + ' ' + o[k]; }).join(' · ')) + '">' + (n0 ? '<em>' + n0 + '</em>' : '') + stack + '<span>' + clock + '</span></div>';
+    }
+    var legend = '<div class="leg">' + (many ? rank.slice(0, 4) : rank).map(function (n) { return '<span><i style="background:' + bcol(n) + '"></i>' + esc(n) + ' ' + cs.filter(function (x) { return x[0] === n; })[0][1] + '</span>'; }).join('') +
+      (many ? '<span><i style="background:' + OTHERC + '"></i>그 밖 ' + cs.slice(4).reduce(function (a, x) { return a + x[1]; }, 0) + '</span>' : '') + '</div>';
     var hasPts = t.catches.some(function (c) { return c.la != null; });
     dim.innerHTML = '<div class="sheet"><div class="hd"><h2>' + esc(d8(t.start)) + (t.src !== 'mine' ? ' · ' + esc(t.who) : '') + '</h2><button class="btn ghost sm" id="x">닫기</button></div>' +
       '<div class="note">' + esc([catName(t.cat), t.boat, t.port, hm(t.start) + (t.end ? ' ~ ' + hm(t.end) : ''), dur(t.start, t.end), t.gname].filter(Boolean).join(' · ')) + '</div>' +
       '<div class="big"><div class="b">총<b>' + (tot || t.total || 0) + '</b>마리</div>' + cs.map(function (x) { var sl = (t.names || []).indexOf(x[0]) + 1; return '<div class="b"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;background:' + (sl > 0 ? slotCol(sl) : '#9FB4C2') + '"></span>' + esc(x[0]) + '<b>' + x[1] + '</b></div>'; }).join('') + '</div>' +
       (t.thumb ? '<h3>📷 대표 사진</h3><img class="photo" src="data:image/jpeg;base64,' + t.thumb + '">' : '') +
-      (tot ? '<h3>⏰ 시간대별</h3><div class="bars">' + bars + '</div>' : '') +
+      (tot ? '<h3>⏰ 시간대별</h3>' + legend + '<div class="bars">' + bars + '</div>' : '') +
       '<h3>🗺 지도</h3><div id="map"></div><div class="note" id="mapNote">' + (t.src === 'all' && t.prec !== 'exact' && t.prec !== true ? '게시판 글은 위치가 대략일 수 있어요' : '') + '</div>' +
       wxTable(t) +
       (tot ? '<h3>🐟 잡은 시각 <small class="note">· 시간을 누르면 펼쳐져요</small></h3>' + hourGroups(t) : '') +
@@ -323,17 +354,43 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
     var b = [];
     function drawTrack(pts) {
       if (!pts || pts.length < 2) return;
-      L.polyline(pts, { color: '#7FD6FF', weight: 3, opacity: .8 }).addTo(map); pts.forEach(function (p) { b.push(p); });
+      // 이동 경로 = 앱과 같은 분홍 선 (어두운 테두리)
+      L.polyline(pts, { color: '#5A0F3A', weight: 6, opacity: .9 }).addTo(map);
+      L.polyline(pts, { color: '#FF3EA5', weight: 3.5, opacity: 1 }).addTo(map); pts.forEach(function (p) { b.push(p); });
+      if (mk) mk.eachLayer(function (l) { l.setZIndexOffset && l.setZIndexOffset(1000); });
       fit();
     }
-    t.catches.forEach(function (c, i) {
-      if (c.la == null) return;
-      L.circleMarker([c.la, c.lo], { radius: 7, color: '#fff', weight: 2, fillColor: slotCol(c.s), fillOpacity: .95 }).addTo(map).bindPopup(esc(nameOf(t.names, c.s)) + ' · ' + hm(c.t));
-      b.push([c.la, c.lo]);
-    });
-    // 점이 한 곳에 몰려 있으면 해안이 보이게 덜 확대 (최대 12)
+    // 잡은 자리 = 앱 지도와 같게: 가까운 점은 묶어서 어종 그림 + 이마 이름표 + 마릿수
+    var pts = t.catches.filter(function (c) { return c.la != null; });
+    pts.forEach(function (c) { b.push([c.la, c.lo]); });
+    var mk = L.layerGroup().addTo(map);
+    function drawDots() {
+      mk.clearLayers();
+      var cl = [];
+      pts.forEach(function (c) {
+        var p = map.latLngToLayerPoint([c.la, c.lo]);
+        var g = null; for (var i = 0; i < cl.length; i++) if (Math.abs(cl[i].p.x - p.x) < 34 && Math.abs(cl[i].p.y - p.y) < 34) { g = cl[i]; break; }
+        if (g) g.l.push(c); else cl.push({ p: p, l: [c] });
+      });
+      cl.forEach(function (g) {
+        var cnt = {}; g.l.forEach(function (c) { var n = nameOf(t.names, c.s); cnt[n] = cnt[n] || { n: 0, s: c.s }; cnt[n].n++; });
+        var top = Object.keys(cnt).sort(function (a, b) { return cnt[b].n - cnt[a].n; });
+        var n = g.l.length, rad = Math.round(17 + Math.min(n, 60) * 0.12), bg = slotCol(cnt[top[0]].s);
+        var blue = /^#5B|^#3F|^#9A/i.test(bg);
+        var art = artOf(top[0]);
+        var html = '<div class="mk" style="width:' + rad * 2 + 'px;height:' + rad * 2 + 'px;background:' + bg + '">' +
+          (art ? '<img src="img/sp/' + art + '.webp" style="width:' + rad * 1.6 + 'px">' : '<b>' + esc(top[0].slice(0, 2)) + '</b>') +
+          '<span class="tg" style="background:' + (blue ? '#0B6E86' : '#E8505B') + '">' + esc(top[0]) + '</span><span class="ct">' + n + '</span></div>' +
+          (top.length >= 2 ? '<div class="more2">' + esc(top[0]) + ' 외 ' + (top.length - 1) + '종</div>' : '');
+        var la = g.l.reduce(function (a, c) { return a + c.la; }, 0) / n, lo = g.l.reduce(function (a, c) { return a + c.lo; }, 0) / n;
+        L.marker([la, lo], { icon: L.divIcon({ className: '', html: html, iconSize: [rad * 2, rad * 2], iconAnchor: [rad, rad] }) }).addTo(mk)
+          .bindPopup('<b>' + top.map(function (k) { return esc(k) + ' ' + cnt[k].n; }).join(' · ') + '</b><br>' + g.l.map(function (c) { return hm(c.t); }).slice(0, 30).join(' · '));
+      });
+    }
+    map.on('zoomend', drawDots);
     function fit() { if (b.length) map.fitBounds(b, { padding: [30, 30], maxZoom: 12 }); }
     fit();
+    drawDots();
     if (t.track) drawTrack(t.track);
     else if (t.hasTrack && t.ref) {
       var tr = t.src === 'group' ? t.ref.collection('detail').doc('track') : t.ref.collection('photos').doc('track');
