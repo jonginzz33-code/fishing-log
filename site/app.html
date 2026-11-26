@@ -68,6 +68,13 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
 .rows div{display:flex;justify-content:space-between;border-top:1px solid #1E3446;padding:6px 0;font-size:14px}
 .rows div:first-child{border-top:0}
 .wx{font-size:13px;color:#B8CAD6;white-space:pre-wrap}
+.hg{border:1.5px solid var(--line);border-radius:12px;margin-top:6px;background:var(--card)}
+.hg summary{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;list-style:none;font-size:14px}
+.hg summary::-webkit-details-marker{display:none}
+.hg summary b{color:var(--sky);width:34px}.hg .hs{flex:1;min-width:0;color:#DDEAF2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hg .hn{color:#FFD36E;font-weight:800;font-size:13px}
+.hg[open] .hn{color:var(--sub)}
+.hg .rows{padding:0 12px 6px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
 .wxt{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
 .wxt th{color:var(--sub);font-weight:700;font-size:11.5px;text-align:left;padding:4px 6px;border-bottom:1px solid #2C4F66}
 .wxt td{padding:5px 6px;border-bottom:1px solid #1E3446}
@@ -266,6 +273,21 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
   var CATN = { boat: '선상낚시', night: '해루질', walk: '워킹낚시', fresh: '민물낚시' };
   function catName(c) { return CATN[c] || c; }
 
+  // 🐟 잡은 시각: 1시간씩 접어서 ('07시 · 주꾸미 5 · 갑오징어 1 · 6마리 ▾')
+  function hourGroups(t) {
+    var g = {}, order = [];
+    t.catches.slice().sort(function (a, b) { return a.t - b.t; }).forEach(function (c, i) {
+      var h = new Date(c.t).getHours(); if (!g[h]) { g[h] = []; order.push(h); } g[h].push([i + 1, c]);
+    });
+    return order.map(function (h) {
+      var l = g[h], m = {};
+      l.forEach(function (x) { var n = nameOf(t.names, x[1].s); m[n] = (m[n] || 0) + 1; });
+      var sum = Object.keys(m).sort(function (a, b) { return m[b] - m[a]; }).map(function (n) { return esc(n) + ' ' + m[n]; }).join(' · ');
+      return '<details class="hg"><summary><b>' + ('0' + h).slice(-2) + '시</b><span class="hs">' + sum + '</span><span class="hn">' + l.length + '마리 ▾</span></summary><div class="rows">' +
+        l.map(function (x) { return '<div><span><span class="dot" style="background:' + slotCol(x[1].s) + '"></span>' + x[0] + '. ' + esc(nameOf(t.names, x[1].s)) + '</span><span class="note">' + hm(x[1].t) + '</span></div>'; }).join('') + '</div></details>';
+    }).join('');
+  }
+
   // 상세 (밑에서 올라오는 창)
   var map = null;
   function detail(t) {
@@ -283,7 +305,7 @@ h3{font-size:15px;margin:16px 0 6px;color:var(--sky)}
       (tot ? '<h3>⏰ 시간대별</h3><div class="bars">' + bars + '</div>' : '') +
       '<h3>🗺 지도</h3><div id="map"></div><div class="note" id="mapNote">' + (t.src === 'all' && t.prec !== 'exact' && t.prec !== true ? '게시판 글은 위치가 대략일 수 있어요' : '') + '</div>' +
       wxTable(t) +
-      (tot ? '<h3>🐟 잡은 시각</h3><div class="rows">' + t.catches.slice().sort(function (a, b) { return a.t - b.t; }).map(function (c, i) { return '<div><span>' + (i + 1) + '. ' + esc(nameOf(t.names, c.s)) + '</span><span class="note">' + hm(c.t) + '</span></div>'; }).join('') + '</div>' : '') +
+      (tot ? '<h3>🐟 잡은 시각 <small class="note">· 시간을 누르면 펼쳐져요</small></h3>' + hourGroups(t) : '') +
       '</div>';
     document.body.appendChild(dim); document.body.style.overflow = 'hidden';
     function close() { if (map) { map.remove(); map = null; } dim.remove(); document.body.style.overflow = ''; }
