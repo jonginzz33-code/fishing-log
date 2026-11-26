@@ -38,6 +38,21 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+    // v6.91 (402): 관리자가 홈피(talla.co.kr/admin)에서 넣는 배 · 모든 앱이 읽어 선상 빈자리에
+    match /extraShips/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin() && (request.resource == null || (
+        request.resource.data.keys().hasOnly(['name', 'url', 'port', 'tel', 'memo', 't'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 40
+        && request.resource.data.url is string && request.resource.data.url.size() >= 4 && request.resource.data.url.size() <= 200
+        && (!('port' in request.resource.data) || (request.resource.data.port is string && request.resource.data.port.size() <= 30))
+        && (!('tel' in request.resource.data) || (request.resource.data.tel is string && request.resource.data.tel.size() <= 30))
+        && (!('memo' in request.resource.data) || (request.resource.data.memo is string && request.resource.data.memo.size() <= 200))));
+    }
+    // v6.91 (388): 관리자만 보는 메모 (홈피)
+    match /adminNotes/{id} {
+      allow read, write: if isAdmin();
+    }
     // v3.7 🦀 해루질 참고 구역 (모두 읽기 · 관리자만 쓰기)
     match /haeruZones/{doc} {
       allow read: if signedIn();

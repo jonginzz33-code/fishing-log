@@ -107,6 +107,37 @@ object Seats {
         return if (h.contains('.') && h.matches(Regex("[a-z0-9.-]+")) && !h.endsWith("sunsang24.com")) h else null
     }
     fun isS24Fleet(host: String) = host.endsWith(".sunsang24.com")
+
+    // ─────────────── v6.91 (402): 관리자가 홈피(talla.co.kr/admin)에서 넣은 배 → 모든 앱에 기본 선단처럼 ───────────────
+    // Firestore extraShips/{id} {name, url, port, tel, memo, t} · 폰 prefs 에 6시간 기억 · 내 선단 목록엔 안 넣음(따로 붙여 읽기)
+    class Extra(val name: String, val host: String, val port: String, val tel: String, val memo: String)
+    @Volatile private var exShips: List<Extra>? = null
+    @Volatile private var extraAt = 0L
+    fun extras(c: Context): List<Extra> {
+        exShips?.let { return it }
+        val l = try { val arr = JSONArray(prefs(c).getString("seat_extra", "[]") ?: "[]")
+            (0 until arr.length()).map { arr.getJSONObject(it).let { o -> Extra(o.optString("n"), o.optString("h"), o.optString("p"), o.optString("t"), o.optString("m")) } } } catch (_: Exception) { emptyList() }
+        exShips = l; extraAt = prefs(c).getLong("seat_extra_at", 0L); return l
+    }
+    fun refreshExtras(c: Context, done: (Boolean) -> Unit) {
+        extras(c)
+        if (System.currentTimeMillis() - extraAt < 6 * 3600_000L) { done(false); return }
+        com.google.firebase.firestore.FirebaseFirestore.getInstance().collection("extraShips").get()
+            .addOnSuccessListener { q ->
+                val l = q.documents.mapNotNull { d -> anyHostOf(d.getString("url") ?: "")?.let { h ->
+                    Extra((d.getString("name") ?: "").trim(), h, (d.getString("port") ?: "").trim(), (d.getString("tel") ?: "").trim(), (d.getString("memo") ?: "").trim()) } }
+                val arr = JSONArray(); l.forEach { arr.put(JSONObject().put("n", it.name).put("h", it.host).put("p", it.port).put("t", it.tel).put("m", it.memo)) }
+                prefs(c).edit().putString("seat_extra", arr.toString()).putLong("seat_extra_at", System.currentTimeMillis()).apply()
+                val changed = l.map { it.host + it.name } != (exShips ?: emptyList()).map { it.host + it.name }
+                exShips = l; extraAt = System.currentTimeMillis(); done(changed)
+            }.addOnFailureListener { done(false) }
+    }
+    /** 내 선단(켠 것) + 관리자가 넣은 배(내 목록에 없는 것 · 끈 건 빼고) */
+    fun activeFleets(c: Context): List<Fleet> {
+        val mine = fleets(c)
+        val off = prefs(c).getStringSet("seat_extra_off", emptySet()) ?: emptySet()
+        return mine.filter { it.on } + extras(c).filter { e -> mine.none { it.host == e.host } && e.host !in off }.distinctBy { it.host }.map { Fleet(it.host, it.name) }
+    }
     /** 개인 사이트 미리 넣어 둔 것 (사용자가 알려 준 곳) */
     val PRESETS = listOf("hunter-booking.onrender.com" to "거북섬 헌터호")
 
@@ -381,6 +412,7 @@ object Seats {
     fun portOf(c: Context, s: Sch): String = when {
         s.host == S24 -> if (s.place.contains(" · ")) s.place.substringAfterLast(" · ").trim() else sites(c)[s.shipNo]?.port ?: ""
         isS24Fleet(s.host) -> sites(c)[s.shipNo]?.port ?: ""
+        exShips?.any { it.host == s.host && it.port.isNotBlank() } == true -> exShips!!.first { it.host == s.host && it.port.isNotBlank() }.port
         isTf(s.host) -> tfMem?.filter { it.host == s.host }?.let { l -> (l.firstOrNull { normShip(it.ship) == normShip(s.ship) } ?: l.firstOrNull())?.area?.substringAfterLast(" > ")?.substringAfterLast(" ") } ?: ""
         else -> ""
     }.trim().let { if (looksPort(it)) it else "" }
@@ -823,6 +855,7 @@ object Seats {
         lateinit var loadS24: (Boolean) -> Unit
         laterFn = { if (!rerender) { rerender = true; list.postDelayed({ rerender = false; if (dlg.isShowing) render() }, 500) } }
         refreshSites(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
+        refreshExtras(a) { ch -> if (ch) a.runOnUiThread { if (dlg.isShowing) load(false) } }
 
         fun savePrefs() = p.edit().putBoolean("seat_s24", useS24).putStringSet("seat_area", HashSet(areaSel)).putString("seat_day", day).putInt("seat_need", need).putInt("seat_sort", sort)
             .putBoolean("seat_open", openOnly).putBoolean("seat_favtop", favTop).putStringSet("seat_fish", HashSet(fishSel)).apply()
@@ -1127,7 +1160,7 @@ object Seats {
             alarmBtn.text = if (ws.any { it.hit }) "🔔 ${ws.size} · 자리 남!" else "🔔 ${ws.size}"
             alarmBtn.setTextColor(if (ws.any { it.hit }) Color.parseColor("#FF6B6B") else Ui.TEXT)
             list.removeAllViews()
-            val fl = fleets(a).filter { it.on }
+            val fl = activeFleets(a)
             // v6.85 (393): 🔎 배 이름 찾기 — 날짜 · 지역 · 어종과 상관없이 이름으로
             qBtn.background = if (qRow.visibility == View.VISIBLE) Ui.bg(a, Ui.MINE, 99) else Ui.bg(a, Color.TRANSPARENT, 99, Ui.LINE)
             if (q.isBlank() && qRow.visibility == View.VISIBLE) {
@@ -1182,7 +1215,7 @@ object Seats {
                 // 더피싱 (기본 목록 678척)
                 val tf = tfMem
                 if (tf == null && synchronized(foundBusy) { foundBusy.add("tf") }) tfShips(a) { a.runOnUiThread { if (dlg.isShowing) render() } }
-                val have = fleets(a).filter { it.on }.map { it.host }.toSet()
+                val have = activeFleets(a).map { it.host }.toSet()
                 // v6.91 (401 · 403): 더피싱 = 항구로 찾으면 그 항구 선단의 그 날 배 전부 · 이름으로 찾으면 그 배 · 선단 일정을 바로 읽어 카드로
                 val tfPortHosts = if (byPort) (tf ?: emptyList()).filter { it.host.isNotBlank() && it.host !in have && portHit(it.area.substringAfterLast(" > ")) }
                     .groupBy { it.host }.entries.take(10).map { it.key to it.value } else emptyList()
@@ -1228,7 +1261,7 @@ object Seats {
                 if (cards.isEmpty() && notes.isEmpty()) list.addView(Ui.text(a, 13.5f, Ui.SUB, false, "'$q' 배 · 항구를 못 찾았어요 · 띄어쓰기 없이 몇 글자만 쳐 보세요").apply { setPadding(dp(6), dp(20), dp(6), 0) })
                 return@render
             }
-            if (fleets(a).isEmpty() && !useS24) {
+            if (activeFleets(a).isEmpty() && !useS24) {
                 list.addView(Ui.text(a, 14f, Ui.TEXT, false, "아직 볼 선단이 없어요.\n\n[⚙ 선단]에서 선상24 선단 주소를 넣어 주세요.\n예) sungbin.sunsang24.com").apply { setPadding(dp(6), dp(20), dp(6), dp(10)) })
                 list.addView(Ui.button(a, "＋ 선단 추가") { openFleets(a) { load(true) } }, Ui.lp(a, MATCH, WRAP, top = 8))
                 sum.text = ""; return@render
@@ -1302,7 +1335,7 @@ object Seats {
 
         load = { fresh ->
             loadS24(fresh)
-            val fl = fleets(a).filter { it.on }
+            val fl = activeFleets(a)
             val months = linkedSetOf(day.replace("-", "").take(6), ymF.format(Date()))
             if (fl.isNotEmpty()) {
                 loading = true; render()
@@ -1545,6 +1578,23 @@ object Seats {
             if (pre.isNotEmpty()) {
                 sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, true, "🛥 개인 배 사이트").apply { setPadding(0, dp(14), 0, dp(6)) })
                 pre.forEach { (h, n) -> sh.body.addView(Ui.button(a, "＋ $n ($h)") { addFleet(a, h, n) { dirty = true; draw() } }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 6)) }
+            }
+            // v6.91 (402): 관리자가 홈피에서 넣은 배 (모든 사람에게 기본으로 보임 · 끄기 가능)
+            val ex = extras(a).filter { e -> have.none { it == e.host } }.distinctBy { it.host }
+            if (ex.isNotEmpty()) {
+                val pp = prefs(a)
+                sh.body.addView(Ui.text(a, 12.5f, Ui.SUB, true, "📌 관리자가 넣은 배 (기본으로 같이 보여요)").apply { setPadding(0, dp(14), 0, dp(6)) })
+                ex.forEach { e ->
+                    val r = Ui.row(a).apply { setPadding(dp(10), dp(6), dp(6), dp(6)); background = Ui.bg(a, Color.parseColor("#12283A"), 12, Color.parseColor("#2C4F66")) }
+                    val col = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+                    col.addView(Ui.text(a, 14f, Ui.TEXT, true, e.name.ifBlank { e.host }))
+                    col.addView(Ui.text(a, 11.5f, Ui.SUB, false, listOf(e.port, e.host, e.memo).filter { it.isNotBlank() }.joinToString(" · ")))
+                    r.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+                    val off = pp.getStringSet("seat_extra_off", emptySet()) ?: emptySet()
+                    r.addView(android.widget.Switch(a).apply { isChecked = e.host !in off
+                        setOnCheckedChangeListener { _, v -> val m = HashSet(pp.getStringSet("seat_extra_off", emptySet()) ?: emptySet()); if (v) m.remove(e.host) else m.add(e.host); pp.edit().putStringSet("seat_extra_off", m).apply(); dirty = true } })
+                    sh.body.addView(r, Ui.lp(a, MATCH, WRAP, top = 6))
+                }
             }
             // v6.85 (394): 🎣 더피싱 선단 고르기 (관리자가 모아 둔 목록)
             sh.body.addView(Ui.button(a, "🎣 더피싱 선단 고르기") { openTfPicker(a) { dirty = true; draw() } }.apply { minHeight = dp(44); textSize = 13.5f }, Ui.lp(a, MATCH, WRAP, top = 14))

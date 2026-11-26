@@ -248,6 +248,17 @@ console.log('[v6.68 크기 제한 · 포인트 핀]');
   await no('남의 배 표 지우기', deleteDoc(doc(A, 'shipVotes/s24_2685/v/B')));
   await ok('내 배 표 지우기', deleteDoc(doc(B, 'shipVotes/s24_2685/v/B')));
 }
+// v6.91 (402 · 388)
+{
+  const ship = { name: '테티스호', url: 'https://ssfish.thefishing.kr', port: '무창포항', tel: '010', memo: '', t: now };
+  await ok('관리자 배 넣기', setDoc(doc(ADM, 'extraShips/e1'), ship));
+  await ok('사용자 배 목록 읽기', getDoc(doc(B, 'extraShips/e1')));
+  await no('사용자가 배 넣기', setDoc(doc(B, 'extraShips/e2'), ship));
+  await no('관리자도 이상한 칸', setDoc(doc(ADM, 'extraShips/e3'), { ...ship, x: 1 }));
+  await ok('관리자 배 지우기', deleteDoc(doc(ADM, 'extraShips/e1')));
+  await ok('관리자 메모', setDoc(doc(ADM, 'adminNotes/main'), { text: '메모', t: now }));
+  await no('남이 관리자 메모 보기', getDoc(doc(B, 'adminNotes/main')));
+}
 console.log(`\n결과: ${pass} 통과 · ${fail} 문제`);
 await env.cleanup();
 process.exit(fail ? 1 : 0);
