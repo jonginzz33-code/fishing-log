@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>자주 가는 링크</title>
+<link rel="icon" href="img/jogwa.png">
+<style>
+/* 자주 가는 링크 (나만 · ☰ 메뉴 켠 브라우저에서만 보여요) — 칸을 더하려면 아래 LINKS 에 한 줄 */
+:root{--bg:#0A1620;--card:#12283A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.5}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px 40px}
+nav{display:flex;align-items:center;gap:10px;padding:16px 58px 16px 0;border-bottom:1px solid #1E3446}
+.logo{font-size:20px;font-weight:900;text-decoration:none;color:inherit}.logo span{color:var(--sky)}
+h1{font-size:20px;margin:18px 0 4px}
+.note{font-size:13px;color:var(--sub)}
+input{width:100%;background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:10px 12px;font-size:15px;font-family:inherit;margin:12px 0 4px}
+.g{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:6px 14px;margin-top:14px}
+.g h2{font-size:15px;margin:10px 0 4px;color:var(--sky)}
+.it{display:flex;align-items:center;gap:10px;border-top:1px solid #1E3446;padding:10px 0}
+.it:first-of-type{border-top:0}
+.it a{flex:1;min-width:0;text-decoration:none;color:inherit}
+.it .i{width:28px;text-align:center;font-size:20px}
+.it b{display:block;font-size:15px}.it small{display:block;color:var(--sub);font-size:12px;word-break:break-all}
+.cp{border:1.5px solid #3A6A88;background:transparent;color:#DDEAF2;border-radius:99px;padding:5px 11px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}
+.cp.ok{background:#2FBF8F;color:#04222A;border-color:#2FBF8F}
+.no{margin-top:40px;text-align:center;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><a class="logo" href="/">🎣 <span>talla</span>.co.kr</a></nav>
+<div id="box"></div>
+</div>
+<script>
+// [아이콘, 이름, 주소, 설명(없으면 '')]
+var LINKS = [
+  { t: '📱 플레이 콘솔', items: [
+    ['🏠', '플레이 콘솔 홈', 'https://play.google.com/console/u/0/developers/7087559415015330997/home', ''],
+    ['🧪', '조과일지 내부 테스트', 'https://play.google.com/console/u/0/developers/7087559415015330997/app/4973437766947210735/tracks/internal-testing', '새 버전 확인'],
+    ['🔗', '테스터 참여 링크 (그룹원에게)', 'https://play.google.com/apps/internaltest/4700601757102863820', '복사해서 보내기'],
+    ['🔗', '비공개 테스트 참여', 'https://play.google.com/apps/testing/kr.jogwailji.app', ''],
+    ['🎣', '스토어 앱 화면', 'https://play.google.com/store/apps/details?id=kr.jogwailji.app', ''],
+    ['👥', '테스터 구글 그룹', 'https://groups.google.com/g/mytoilet-testers', '']] },
+  { t: '🔥 Firebase', items: [
+    ['⚙', '프로젝트 설정', 'https://console.firebase.google.com/project/fishing-log-9109d/settings/general', 'SHA-1 · 앱 등록'],
+    ['📋', 'Firestore 규칙', 'https://console.firebase.google.com/project/fishing-log-9109d/firestore/rules', '규칙 게시'],
+    ['🗂', 'Firestore 데이터', 'https://console.firebase.google.com/project/fishing-log-9109d/firestore/data', ''],
+    ['🔐', '로그인 설정 (승인된 도메인)', 'https://console.firebase.google.com/project/fishing-log-9109d/authentication/settings', ''],
+    ['📊', '사용량 · 요금', 'https://console.firebase.google.com/project/fishing-log-9109d/usage', '']] },
+  { t: '🐙 GitHub', items: [
+    ['📦', '저장소', 'https://github.com/jonginzz33-code/fishing-log', ''],
+    ['▶', 'Actions (빌드 · 올리기)', 'https://github.com/jonginzz33-code/fishing-log/actions', ''],
+    ['🔑', '비밀값', 'https://github.com/jonginzz33-code/fishing-log/settings/secrets/actions', ''],
+    ['🏷', 'Releases', 'https://github.com/jonginzz33-code/fishing-log/releases', '']] },
+  { t: '🔑 API 키', items: [
+    ['🌊', '공공데이터포털 (물때 · 지진)', 'https://www.data.go.kr', '마이페이지 → 활용신청'],
+    ['🌀', '기상청 API허브 (부이 · 태풍)', 'https://apihub.kma.go.kr', ''],
+    ['🗺', '카카오 개발자 (지도)', 'https://developers.kakao.com', ''],
+    ['🔒', '구글 클라우드 API 키 제한', 'https://console.cloud.google.com/apis/credentials?project=fishing-log-9109d', '']] },
+  { t: '🌐 내 홈피', items: [
+    ['🔐', '관리 (배 추가 · 메모)', '/admin', ''],
+    ['📋', '서버 규칙 복사', '/rules', ''],
+    ['🚤', '배 선단 보기 (시험)', '/fleets', ''],
+    ['📄', '조과일지 개인정보처리방침', '/jogwa/privacy.html', ''],
+    ['🚪', '조과일지 계정 삭제 안내', '/jogwa/delete-account.html', '']] },
+  { t: '🧑‍💻 작업', items: [
+    ['🤖', 'Claude Code', 'https://claude.ai/code', ''],
+    ['🌍', '가비아 (도메인)', 'https://www.gabia.com', '']] }
+];
+var me = false; try { me = localStorage.getItem('talla_me') === '1'; } catch (e) {}
+var box = document.getElementById('box');
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function full(u) { return /^https?:/.test(u) ? u : location.origin + u; }
+function draw(q) {
+  var h = '';
+  LINKS.forEach(function (g) {
+    var rows = g.items.filter(function (x) { return !q || (x[1] + ' ' + x[2] + ' ' + x[3] + ' ' + g.t).toLowerCase().indexOf(q) >= 0; });
+    if (!rows.length) return;
+    h += '<div class="g"><h2>' + g.t + '</h2>';
+    rows.forEach(function (x) {
+      var ext = /^https?:/.test(x[2]);
+      h += '<div class="it"><span class="i">' + x[0] + '</span><a href="' + esc(x[2]) + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '><b>' + esc(x[1]) + '</b><small>' +
+        (x[3] ? esc(x[3]) + ' · ' : '') + esc(x[2].replace(/^https?:\/\//, '')) + '</small></a><button class="cp" data-u="' + esc(full(x[2])) + '">복사</button></div>';
+    });
+    h += '</div>';
+  });
+  document.getElementById('list').innerHTML = h || '<p class="note">찾는 링크가 없어요</p>';
+}
+if (!me) { box.innerHTML = '<p class="no">🔒 이 페이지는 관리자만 볼 수 있어요</p>'; }
+else {
+  box.innerHTML = '<h1>🔗 자주 가는 링크</h1><p class="note">누르면 새 창으로 열려요 · [복사] = 주소 복사</p><input id="q" placeholder="🔍 찾기 (예: 규칙 · 테스트 · 키)"><div id="list"></div>';
+  draw('');
+  document.getElementById('q').addEventListener('input', function (e) { draw(e.target.value.trim().toLowerCase()); });
+  document.getElementById('list').addEventListener('click', function (e) {
+    var b = e.target.closest('.cp'); if (!b) return;
+    var u = b.getAttribute('data-u');
+    function ok() { b.textContent = '✓ 복사됨'; b.classList.add('ok'); setTimeout(function () { b.textContent = '복사'; b.classList.remove('ok'); }, 1500); }
+    if (navigator.clipboard) navigator.clipboard.writeText(u).then(ok, function () { prompt('주소', u); });
+    else prompt('주소', u);
+  });
+}
+</script>
+<script src="menu.js"></script>
+</body>
+</html>
