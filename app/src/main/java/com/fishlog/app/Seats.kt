@@ -1211,10 +1211,7 @@ object Seats {
                 val sb = android.text.SpannableStringBuilder(s.ship)
                 sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, sb.length, 0)
                 if (hot) { val h = sb.length; sb.append(" 🔥"); sb.setSpan(android.text.style.RelativeSizeSpan(0.8f), h, sb.length, 0) }
-                sb.append("  ")
-                val st = sb.length; sb.append(fleetName)
-                sb.setSpan(android.text.style.ForegroundColorSpan(Ui.SUB), st, sb.length, 0)
-                sb.setSpan(android.text.style.RelativeSizeSpan(0.78f), st, sb.length, 0)
+                // v6.99 (418): 이름 옆 회색 선단 · 배 이름 글자 없앰 (아래 🌐 주소 줄로 충분)
                 text = sb; textSize = 15.5f; setTextColor(Ui.TEXT); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, WRAP, 1f))
             top.addView(Ui.text(a, 22f, if (fav) Color.parseColor("#F2C14E") else Color.parseColor("#4A5966"), false, if (fav) "★" else "☆").apply {
@@ -1254,7 +1251,7 @@ object Seats {
                     setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(a, srcCol(src), 6)
                 }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(4) })
             }
-            portOf(a, s).takeIf { it.isNotBlank() && !fleetName.contains(it) }?.let { pt ->
+            portOf(a, s).takeIf { it.isNotBlank() }?.let { pt ->
                 l3.addView(Ui.text(a, 11f, Ui.SUB, false, "⚓ $pt"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
             }
             if (l3.childCount > 0) info.addView(l3, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) })
