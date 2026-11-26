@@ -5,3 +5,6 @@ local.properties
 *.iml
 .idea/
 .kotlin/
+rules-test/node_modules/
+rules-test/package*.json
+rules-test/*.log

@@ -1172,11 +1172,14 @@ object MapDialog {
         fun tab(btn: TextView, on: Boolean) {
             val g = btn.background as? GradientDrawable ?: return
             val r = dp(a, 16).toFloat()
-            if (on) { g.setColor(BOX); g.setStroke(dp(a, 2), SKY); g.cornerRadii = floatArrayOf(r, r, 0f, 0f, 0f, 0f, r, r); btn.setTextColor(SKY); btn.typeface = Typeface.DEFAULT_BOLD }
-            else { g.cornerRadius = r; g.setStroke(dp(a, 1), Color.parseColor("#3A5A70")); setOn(btn, false); btn.setTextColor(Color.WHITE); btn.typeface = Typeface.DEFAULT }
-            (btn.layoutParams as? LinearLayout.LayoutParams)?.let { it.width = dp(a, if (on) 76 else 66); btn.layoutParams = it }
+            // v6.91 (400): 상자는 아래에서 올라오는 바 → 버튼은 하늘 테두리로 켜짐만 표시
+            g.cornerRadius = r
+            if (on) { g.setColor(BOX); g.setStroke(dp(a, 2), SKY); btn.setTextColor(SKY); btn.typeface = Typeface.DEFAULT_BOLD }
+            else { g.setStroke(dp(a, 1), Color.parseColor("#3A5A70")); setOn(btn, false); btn.setTextColor(Color.WHITE); btn.typeface = Typeface.DEFAULT }
         }
         fun cover(btn: TextView?) {
+            tabCover.visibility = android.view.View.GONE
+            if (true) return
             if (btn == null) { tabCover.visibility = android.view.View.GONE; return }
             btn.post {
                 (tabCover.layoutParams as? FrameLayout.LayoutParams)?.let { lp ->
@@ -1188,7 +1191,7 @@ object MapDialog {
         fun showGroupFly(open: Boolean) {
             flyout.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
             tab(groupBtn, open)
-            if (open) { flyScroll.translationY = groupBtn.top.toFloat(); cover(groupBtn) } else if (pinFly.visibility != android.view.View.VISIBLE) cover(null)
+            if (open) { cover(groupBtn) } else if (pinFly.visibility != android.view.View.VISIBLE) cover(null)
         }
         var closeSearch: () -> Unit = {}
         openPinBox = { toggle ->
@@ -1196,7 +1199,7 @@ object MapDialog {
             if (open) closeSearch()
             pinFly.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
             if (!pinOv.placing) tab(pinBtn, open)
-            if (open) { showGroupFly(false); pinFly.translationY = pinBtn.top.toFloat(); cover(pinBtn) } else if (flyout.visibility != android.view.View.VISIBLE) cover(null)
+            if (open) { showGroupFly(false); cover(pinBtn) } else if (flyout.visibility != android.view.View.VISIBLE) cover(null)
         }
         placingLook = { on ->
             val g = pinBtn.background as? GradientDrawable
@@ -1266,12 +1269,31 @@ object MapDialog {
         // v6.73 (370): 왼쪽 세로 줄 + 🗂 묶음 펼침 (지도 위에 떠 있음 · 길면 위아래로 밀기)
         frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; clipToPadding = false; addView(rail) },
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 8); topMargin = dp(a, 8) })
-        flyScroll = android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(flyout) }
-        frame.addView(flyScroll,
-            FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
-        frame.addView(pinFly, FrameLayout.LayoutParams(dp(a, 232), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
-        frame.addView(android.widget.ScrollView(a).apply { isVerticalScrollBarEnabled = false; addView(searchFly) },
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); rightMargin = dp(a, 10); topMargin = dp(a, 8) })
+        // v6.91 (400): 세 상자(🗂 지도 표시 · 📌 포인트 · 🔍 장소) = 지도 맨 아래에서 올라오는 바 (가로 꽉 · 최대 화면 45% · 넘치면 바 안에서 밀기)
+        fun barOf(box: LinearLayout, onClose: () -> Unit): android.widget.ScrollView {
+            val r = dp(a, 18).toFloat()
+            (box.background as? GradientDrawable)?.cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            box.setPadding(dp(a, 14), dp(a, 4), dp(a, 14), dp(a, 14))
+            // 위 손잡이 (누르면 내려감)
+            box.addView(android.widget.FrameLayout(a).apply {
+                addView(android.view.View(a).apply { background = GradientDrawable().apply { setColor(Color.parseColor("#5F7F96")); cornerRadius = dp(a, 3).toFloat() } },
+                    FrameLayout.LayoutParams(dp(a, 40), dp(a, 5), Gravity.CENTER))
+                setOnClickListener { onClose() }
+            }, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(a, 18)))
+            box.isClickable = true
+            return object : android.widget.ScrollView(a) {
+                override fun onMeasure(w: Int, h: Int) {
+                    val mh = (a.resources.displayMetrics.heightPixels * 0.45f).toInt()
+                    val avail = android.view.View.MeasureSpec.getSize(h)
+                    super.onMeasure(w, android.view.View.MeasureSpec.makeMeasureSpec(if (avail > 0) minOf(mh, avail) else mh, android.view.View.MeasureSpec.AT_MOST))
+                }
+            }.apply { isVerticalScrollBarEnabled = false; addView(box) }
+        }
+        flyScroll = barOf(flyout) { showGroupFly(false) }
+        val barLp = { FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM) }
+        frame.addView(flyScroll, barLp())
+        frame.addView(barOf(pinFly) { openPinBox(false) }, barLp())
+        frame.addView(barOf(searchFly) { showSearch(false) }, barLp())
         // 버튼과 상자 사이 테두리를 가려 한 덩어리로 (B안)
         frame.addView(tabCover, FrameLayout.LayoutParams(dp(a, 4), dp(a, 40), Gravity.TOP or Gravity.START).apply { leftMargin = dp(a, 82); topMargin = dp(a, 8) })
         // v3.9.1: 출조 기록을 볼 때만 (빈 지도 · 내 위치 지도에서는 안 띄움)

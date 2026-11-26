@@ -29,7 +29,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * v6.68 (360): 📌 지도 포인트 핀 — [📌 포인트] 누르면 가운데 핀 → 끌어 옮기고 [💾 저장] (v6.72 · 꾹 누르기 없앰) · 이름 · 설명 · 반경(50m~3km) · 어종
+ * v6.68 (360): 📌 지도 포인트 핀 — [📌 포인트] 누르면 가운데 핀 → 끌어 옮기고 [💾 저장] (v6.72 · 꾹 누르기 없앰) · 이름 · 설명 · 반경(50m~5km) · 어종
  *  공유: 🔒 나만(users/{uid}/pins) · 👥 그룹(groups/{gid}/pins) · 🌐 전체(pins)
  *  색: 내 것 주황 · 그룹 하늘 · 전체 보라 (Ui.MINE/GROUP/ALL)
  */
@@ -111,7 +111,7 @@ object Pins {
         }
         if (old != null && old.owner != me && (gids.size > 1 || old.scope != GROUP)) return done("남의 핀은 공유 범위를 못 바꿔요")
         val m = hashMapOf<String, Any>("name" to p.name.take(30), "memo" to p.memo.take(200), "lat" to p.lat, "lon" to p.lon,
-            "r" to p.r.coerceIn(50.0, 3000.0), "sp" to p.sp.take(10), "owner" to (old?.owner ?: me),
+            "r" to p.r.coerceIn(50.0, 5000.0), "sp" to p.sp.take(10), "owner" to (old?.owner ?: me),
             "ownerName" to (old?.ownerName ?: Cloud.displayName.take(30)), "t" to (old?.t ?: System.currentTimeMillis()))
         if (old != null) m["edited"] = System.currentTimeMillis()
         val id = old?.id ?: db.collection("pins").document().id
@@ -139,7 +139,7 @@ object Pins {
     fun save(p: Pin, old: Pin?, done: (String?) -> Unit) {
         val me = Cloud.uid ?: return done("로그인이 필요해요")
         val m = hashMapOf<String, Any>("name" to p.name.take(30), "memo" to p.memo.take(200), "lat" to p.lat, "lon" to p.lon,
-            "r" to p.r.coerceIn(50.0, 3000.0), "sp" to p.sp.take(10), "owner" to (old?.owner ?: me),
+            "r" to p.r.coerceIn(50.0, 5000.0), "sp" to p.sp.take(10), "owner" to (old?.owner ?: me),
             "ownerName" to (old?.ownerName ?: Cloud.displayName.take(30)), "t" to (old?.t ?: System.currentTimeMillis()))
         if (old != null) m["edited"] = System.currentTimeMillis()
         val moved = old != null && (old.scope != p.scope || old.gid != p.gid)
@@ -148,7 +148,7 @@ object Pins {
         target.set(m).addOnSuccessListener {
             if (moved) ref(old!!.scope, old.gid).document(old.id).delete()
             done(null)
-        }.addOnFailureListener { done(if (it.message?.contains("PERMISSION") == true) "저장 못 했어요 (서버 규칙 업데이트 전일 수 있어요)" else it.message ?: "저장 못 했어요") }
+        }.addOnFailureListener { done(if (it.message?.contains("PERMISSION") == true) (if (p.r > 3000) "3km 넘는 반경은 서버 규칙 게시 뒤에 저장돼요 · 3km 이하로 줄여 저장해 주세요" else "저장 못 했어요 (서버 규칙 업데이트 전일 수 있어요)") else it.message ?: "저장 못 했어요") }
     }
 
     fun delete(p: Pin, done: (String?) -> Unit) {
@@ -288,7 +288,7 @@ object Pins {
                     }
                 }
                 MotionEvent.ACTION_MOVE -> if (resizing && e.pointerCount >= 2) {
-                    val nr = (r0 * span(e) / span0).coerceIn(50.0, 3000.0)
+                    val nr = (r0 * span(e) / span0).coerceIn(50.0, 5000.0)
                     val rounded = if (nr < 1000) Math.round(nr / 10.0) * 10.0 else Math.round(nr / 50.0) * 50.0
                     draft = Pin(dp0.id, dp0.scope, dp0.gid, dp0.name, dp0.memo, dp0.lat, dp0.lon, rounded, dp0.sp, dp0.owner, dp0.ownerName, dp0.t)
                     map.invalidate(); return true
@@ -368,8 +368,8 @@ object Pins {
         })
         sh.body.addView(label("이름"), Ui.lp(a, -1, -2, top = 4)); sh.body.addView(nameE, Ui.lp(a, -1, -2, top = 4))
         sh.body.addView(label("설명"), Ui.lp(a, -1, -2, top = 10)); sh.body.addView(memoE, Ui.lp(a, -1, -2, top = 4))
-        // 반경 50m ~ 3km (칸: 50 · 100 · 200 · 300 · 500 · 700 · 1km · 1.5 · 2 · 3)
-        val steps = doubleArrayOf(50.0, 100.0, 200.0, 300.0, 500.0, 700.0, 1000.0, 1500.0, 2000.0, 3000.0)
+        // 반경 50m ~ 5km (칸: 50 · 100 · 200 · 300 · 500 · 700 · 1km · 1.5 · 2 · 3 · 4 · 5 · v6.91 406)
+        val steps = doubleArrayOf(50.0, 100.0, 200.0, 300.0, 500.0, 700.0, 1000.0, 1500.0, 2000.0, 3000.0, 4000.0, 5000.0)
         val rTxt = label("반경 · ${rLabel(r)}")
         sh.body.addView(rTxt, Ui.lp(a, -1, -2, top = 12))
         sh.body.addView(SeekBar(a).apply {
