@@ -573,6 +573,23 @@ object Seats {
         synchronized(mem) { mem[k] = System.currentTimeMillis() to l }
         return l
     }
+    /** v7.01 (425): 중계기 /day — 선단 40곳 그 날 일정을 한 번에 (정리된 JSON) · 받은 건 s24Day/tfDay 기억(mem)에 넣음 · 실패하면 null */
+    fun dayBatch(hosts: List<String>, date: String): Map<String, List<Sch>>? {
+        if (hosts.isEmpty() || System.currentTimeMillis() < relayBadUntil) return null
+        val t = try { get0(RELAY.removeSuffix("/?u=") + "/day?d=$date&h=" + hosts.joinToString(",")) } catch (_: Exception) { return null }
+        val o = try { JSONObject(t) } catch (_: Exception) { return null }
+        val out = HashMap<String, List<Sch>>()
+        hosts.forEach { h ->
+            val arr = o.optJSONArray(h) ?: return@forEach   // null = 그 선단 못 읽음 → 나중에 한 곳씩
+            val l = (0 until arr.length()).map { i -> val x = arr.getJSONObject(i)
+                Sch(h, x.optString("shipNo"), x.optString("schNo"), x.optString("ship").ifBlank { "배" }, x.optString("date"), x.optString("fish"), x.optString("way"),
+                    x.optString("time"), x.optInt("remain"), x.optInt("reserved"), x.optString("status", "ING"), x.optString("tide")) }
+            synchronized(mem) { mem["${h}_d$date"] = System.currentTimeMillis() to l }
+            if (isTf(h)) rememberTfShips(h, l.map { it.shipNo to it.ship })
+            out[h] = l
+        }
+        return out
+    }
     class AreaC(val name: String, val lat: Double, val lon: Double, val group: String)
     val AREAS = listOf(
         AreaC("인천인근", 37.45, 126.55, "서해안"), AreaC("평택인근", 36.98, 126.80, "서해안"), AreaC("태안인근", 36.70, 126.25, "서해안"),
@@ -1259,11 +1276,7 @@ object Seats {
                 })
             }
             // v6.90 (399): 출처 꼬리표 [선상24] [더피싱] [개인 사이트] (같은 배가 여러 곳이면 다)
-            (listOf(srcOf(s.host)) + s.also.map { srcOf(it.host) }).distinct().forEach { src ->
-                l3.addView(Ui.text(a, 10.5f, Color.WHITE, true, src).apply {
-                    setPadding(dp(6), dp(1), dp(6), dp(1)); background = Ui.bg(a, srcCol(src), 6)
-                }, LinearLayout.LayoutParams(WRAP, WRAP).apply { rightMargin = dp(4) })
-            }
+            // v7.01 (423): 출처 꼬리표 [선상24] [더피싱] 없앰 (선단은 아래 🌐 주소 줄로)
             portOf(a, s).takeIf { it.isNotBlank() }?.let { pt ->
                 l3.addView(Ui.text(a, 11f, Ui.SUB, false, "⚓ $pt"), LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(2) })
             }
@@ -1655,11 +1668,22 @@ object Seats {
                 areaTotal = fl.size; areaLeft = fl.size; render()
                 val d0 = day
                 val ex = java.util.concurrent.Executors.newFixedThreadPool(6); areaEx = ex
-                fl.forEach { f -> ex.execute {
+                fun one(f: DirF) = ex.execute {
                     val r = try { if (isTf(f.host)) tfDay(f.host, d0) else s24Day(f.host, d0) } catch (_: Exception) { emptyList() }
-                    a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) render() else later() }
+                    a.runOnUiThread { if (gen != areaGen || !dlg.isShowing) return@runOnUiThread; areaAll.addAll(r); areaLeft--; if (areaLeft <= 0) { render(); ex.shutdown() } else later() }
+                }
+                // v7.01 (425): 중계기로 40곳씩 한 번에 → 못 읽은 선단만 한 곳씩
+                fl.chunked(40).forEach { part -> ex.execute {
+                    val got = dayBatch(part.map { it.host }, d0)
+                    if (got == null) { part.forEach { one(it) }; return@execute }
+                    val miss = part.filter { it.host !in got }
+                    a.runOnUiThread {
+                        if (gen != areaGen || !dlg.isShowing) return@runOnUiThread
+                        got.values.forEach { areaAll.addAll(it) }; areaLeft -= got.size
+                        if (areaLeft <= 0) { render(); ex.shutdown() } else later()
+                    }
+                    miss.forEach { one(it) }
                 } }
-                ex.shutdown()
             } }
         }
         load = { fresh ->

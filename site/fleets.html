@@ -285,7 +285,7 @@ h1{font-size:21px;margin:14px 0 8px}
     var tail = !op ? (cap ? ' · 예약 ' + s.reserved + '/' + cap : '') : s.remain <= 3 ? ' 남음 · 곧 마감' : (s.reserved ? ' 남음 · 예약 ' + s.reserved + '/' + cap : ' 남음');
     return '<div class="card' + (fav ? ' fav' : '') + (op ? '' : ' closed') + '"><div class="hd"><div class="nm">' + esc(s.ship) + '</div><button class="star' + (fav ? ' on' : '') + '" data-k="' + esc(fk) + '">' + (fav ? '★' : '☆') + '</button></div>' +
       '<div class="ln">' + esc(line) + '</div>' +
-      '<div class="tags"><span class="tag" style="background:' + (s.f[4] === '더피싱' ? '#2FA06F' : '#3D7BD9') + '">' + s.f[4] + '</span>' + (s.f[2] ? '⚓ ' + esc(s.f[2]) : '') + ' · ' + esc(s.f[3]) + '</div>' +
+      '<div class="tags">' + (s.f[2] ? '⚓ ' + esc(s.f[2]) + ' · ' : '') + esc(s.f[3]) + '</div>' +
       '<a class="site" href="https://' + esc(s.host) + '" target="_blank" rel="noopener">🌐 ' + esc(s.host.replace(/^www\./, '')) + '</a>' +
       '<div class="bot"><div class="rm"><b style="color:' + col + '">' + (op ? s.remain + '자리' : stName(s)) + '</b>' + tail + '</div>' +
       (op && s.remain >= need ? '<a class="btn go" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">예약 ›</a>' : '<a class="btn" href="' + esc(bookUrl(s)) + '" target="_blank" rel="noopener">일정 ›</a>') + '</div>' +
