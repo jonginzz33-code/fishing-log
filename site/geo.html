@@ -98,6 +98,15 @@ td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .cp span{flex:1;min-width:0;word-break:break-all;user-select:all;-webkit-user-select:all}
 .noTest{display:flex;align-items:center;gap:5px;font-size:13px;color:#DDEAF2;cursor:pointer;white-space:nowrap;margin-left:auto}
 .noTest input{width:18px;height:18px;accent-color:var(--ok)}
+.hs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+.hs div{background:#0F2231;border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12.5px;color:var(--sub)}
+.hs b{display:block;font-size:20px;color:var(--text)}
+.hh{font-weight:800;color:var(--sky);margin:12px 0 4px;font-size:13.5px}
+.bar2{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:2px 0}
+.bar2 span:first-child{width:110px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar2 i{display:block;height:10px;background:var(--ok);border-radius:4px;min-width:2px}
+.hl{width:100%;border-collapse:collapse;font-size:12.5px}
+.hl td{border-top:1px solid #1E3446;padding:6px 4px;vertical-align:top}
 .modal{position:fixed;inset:0;z-index:50;background:rgba(4,10,16,.72);display:flex;align-items:center;justify-content:center;padding:16px}
 .log{background:#12283A;border:1.5px solid var(--ok);border-radius:18px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;font-size:13.5px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .log .lhead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #1E3446}
@@ -156,6 +165,17 @@ body.noscroll{overflow:hidden}
   <button class="btn ghost" onclick="logout()">로그아웃</button>
 </div>
 
+<!-- 입고 · 품절 기록 전체보기 (지우지 않고 쌓은 기록) -->
+<div class="modal hide" id="histBox" role="dialog" aria-modal="true" aria-label="입고 기록">
+  <div class="log" style="max-width:760px">
+    <div class="lhead"><b>📊 입고 기록</b>
+      <select id="histDays" style="background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:10px;padding:4px 6px;font-family:inherit"><option value="7">최근 7일</option><option value="30" selected>최근 30일</option><option value="90">최근 90일</option><option value="400">전체</option></select>
+      <button class="btn ghost sm" id="histCsv">⬇ 엑셀(CSV)</button>
+      <button class="btn ghost sm" id="histClose">닫기 ✕</button></div>
+    <div class="lbody" id="histBody"></div>
+  </div>
+</div>
+
 <!-- 알림을 누르면 뜨는 제품명 복사 창 -->
 <div class="modal hide" id="copyBox" role="dialog" aria-modal="true" aria-label="제품명 복사">
   <div class="log">
@@ -183,6 +203,7 @@ body.noscroll{overflow:hidden}
       <div class="log">
         <div class="lhead"><b>📜 알람 기록 <small style="color:var(--sub);font-weight:400">(최근 20개 · 최신 순)</small></b>
           <label class="noTest"><input type="checkbox" id="logNoTest" checked> 테스트 제거</label>
+          <button class="btn ok sm" id="histOpen">📊 입고 기록 전체보기</button>
           <button class="btn ghost sm" id="logClose">닫기 ✕</button></div>
         <div id="logList" class="lbody"></div>
       </div>
@@ -1185,6 +1206,63 @@ body.noscroll{overflow:hidden}
   function logOpen() { renderLog(); $('logBox').classList.remove('hide'); document.body.classList.add('noscroll'); $('logList').scrollTop = 0; }
   function logShut() { $('logBox').classList.add('hide'); document.body.classList.remove('noscroll'); }
   $('logTile').onclick = logOpen;
+  // ───── 📊 입고 기록 전체보기 (서버에 날짜별로 쌓인 입고 · 품절 기록) ─────
+  var hist = [];
+  function makerOf(name) { // 제품명 끝의 제약회사 (예: "… 30T 중외제약(일반)" → 중외제약)
+    var w = String(name).trim().split(/\s+/).pop() || '';
+    return w.replace(/\(.*?\)|_.*$/g, '').replace(/[()]/g, '') || '?';
+  }
+  function bars(map, top, keepOrder) {
+    var rows = Object.keys(map).map(function (k) { return [k, map[k]]; });
+    if (!keepOrder) rows.sort(function (a, b) { return b[1] - a[1]; });
+    rows = rows.slice(0, top || 99);
+    var mx = Math.max.apply(null, rows.map(function (r) { return r[1]; }).concat([1]));
+    return rows.map(function (r) { return '<div class="bar2"><span>' + esc(r[0]) + '</span><i style="width:' + Math.round(r[1] / mx * 60) + '%"></i><span>' + r[1] + '</span></div>'; }).join('') || '<div style="color:var(--sub)">아직 없어요</div>';
+  }
+  function histRender() {
+    var ins = hist.filter(function (e) { return e.ev === 'in'; }), outs = hist.filter(function (e) { return e.ev === 'out'; });
+    var byMaker = {}, byHour = {}, byDay = {}, DAY = '일월화수목금토';
+    ins.forEach(function (e) {
+      var d = new Date(e.t), m = makerOf(e.name);
+      byMaker[m] = (byMaker[m] || 0) + 1;
+      var h = d.getHours() + '시'; byHour[h] = (byHour[h] || 0) + 1;
+      var w = DAY[d.getDay()] + '요일'; byDay[w] = (byDay[w] || 0) + 1;
+    });
+    var hourOrdered = {}; for (var h = 0; h < 24; h++) if (byHour[h + '시']) hourOrdered[h + '시'] = byHour[h + '시'];
+    var list = hist.slice().sort(function (a, b) { return b.t - a.t; });
+    $('histBody').innerHTML =
+      '<div class="hs"><div>입고<b>' + ins.length + '건</b></div><div>품절<b>' + outs.length + '건</b></div><div>제품<b>' + Object.keys(ins.reduce(function (o, e) { o[e.code] = 1; return o; }, {})).length + '개</b></div><div>제약회사<b>' + Object.keys(byMaker).length + '곳</b></div></div>' +
+      '<div class="hh">🏭 제약회사별 입고 (많은 순)</div>' + bars(byMaker, 15) +
+      '<div class="hh">🕘 시간대별 입고</div>' + bars(hourOrdered, 24, true) +
+      '<div class="hh">📅 요일별 입고</div>' + bars('월화수목금토일'.split('').reduce(function (o, d) { if (byDay[d + '요일']) o[d + '요일'] = byDay[d + '요일']; return o; }, {}), 7, true) +
+      '<div class="hh">📜 전체 기록 (최신 순 · ' + list.length + '건)</div>' +
+      '<table class="hl">' + list.map(function (e) {
+        return '<tr><td style="white-space:nowrap">' + whenDate(e.t) + '</td><td>' + (e.ev === 'in' ? '<span class="b g">입고</span>' : '<span class="b s">품절</span>') + '</td><td>' + esc(e.name) + (e.pn ? '<br><small style="color:var(--sub)">' + esc(e.pn) + '</small>' : '') + '</td><td style="text-align:right">' + (e.ev === 'in' ? e.n + '개' : '') + '</td></tr>';
+      }).join('') + '</table>' +
+      '<p style="color:var(--sub);font-size:12px;margin-top:10px">※ 전체 감시는 몇 분마다 한 묶음씩 확인해서, 실제 입고 시각과 최대 한 바퀴(지금 약 ' + ((data.groups || 1) * ((data.settings && data.settings.every) || 10)) + '분)만큼 차이 날 수 있어요. 기록은 지우지 않고 계속 쌓여요.</p>';
+  }
+  function histLoad() {
+    $('histBody').textContent = '불러오는 중…';
+    call('history?days=' + $('histDays').value).then(function (j) {
+      if (j.error) { $('histBody').textContent = j.error; return; }
+      hist = j.events || []; histRender();
+    });
+  }
+  $('histOpen').onclick = function () { $('histBox').classList.remove('hide'); document.body.classList.add('noscroll'); histLoad(); };
+  $('histClose').onclick = function () { $('histBox').classList.add('hide'); if ($('logBox').classList.contains('hide')) document.body.classList.remove('noscroll'); };
+  $('histBox').onclick = function (e) { if (e.target === $('histBox')) $('histClose').onclick(); };
+  $('histDays').onchange = histLoad;
+  $('histCsv').onclick = function () { // 엑셀에서 열 수 있는 파일로 저장
+    var q = function (s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; };
+    var rows = [['날짜', '시각', '요일', '구분', '제품명', '제약회사', '제품코드', '재고', '거래처', '출처']].concat(hist.slice().sort(function (a, b) { return a.t - b.t; }).map(function (e) {
+      var d = new Date(e.t);
+      return [d.toLocaleDateString('ko-KR'), d.toLocaleTimeString('ko-KR'), '일월화수목금토'[d.getDay()], e.ev === 'in' ? '입고' : '품절', e.name, makerOf(e.name), e.code, e.n, e.pn || '', e.src === 'need' ? '거래처 필요 제품' : '전체 감시'];
+    }));
+    var blob = new Blob(['﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '지오팜_입고기록_' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
   // 테스트 제거 체크 상태는 이 기기에 기억 (기본: 체크)
   try { if (localStorage.getItem('logNoTest') === '0') $('logNoTest').checked = false; } catch (e) {}
   $('logNoTest').onchange = function () {
