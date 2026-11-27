@@ -82,6 +82,8 @@ details summary{cursor:pointer;font-weight:800}
 tr.pick{cursor:pointer}
 tr.pick.sel td{background:rgba(255,138,138,.10)}
 td.ck{width:26px}
+td.st{width:84px;text-align:center;white-space:nowrap}
+td.st .qty{display:block;margin-top:4px;font-size:15px;font-weight:800;color:var(--ok)}
 td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .wadd{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 10px;font-size:14px}
 .acl div.have{color:var(--sub)}
@@ -487,8 +489,9 @@ body.noscroll{overflow:hidden}
     Object.keys(wSel).forEach(function (k) { if (!codes[k]) delete wSel[k]; });
     visibleCodes = rows.map(function (r) { return r.w[1]; });
     $('list').innerHTML = rows.map(function (r) {
-      var it = data.items[r.w[0]], n = it && it.lv === 1 ? ' ' + it.n + '개' : '', on = !!wSel[r.w[1]];
-      return '<tr class="pick' + (on ? ' sel' : '') + '" data-code="' + esc(r.w[1]) + '"><td class="ck"><input type="checkbox"' + (on ? ' checked' : '') + ' tabindex="-1"></td><td>' + BADGE[r.s] + '<small style="color:var(--sub)">' + n + '</small></td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
+      var it = data.items[r.w[0]], n = it && it.lv === 1 ? it.n + '개' : '', on = !!wSel[r.w[1]];
+      // 재고 개수는 배지 바로 아래 한 줄로 (줄바꿈 없이)
+      return '<tr class="pick' + (on ? ' sel' : '') + '" data-code="' + esc(r.w[1]) + '"><td class="ck"><input type="checkbox"' + (on ? ' checked' : '') + ' tabindex="-1"></td><td class="st">' + BADGE[r.s] + (n ? '<span class="qty">' + n + '</span>' : '') + '</td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
         '</td><td class="x"><button class="btn bad sm" data-del="' + r.i + '">삭제</button></td></tr>';
     }).join('') || '<tr><td style="color:var(--sub)">해당하는 제품이 없어요</td></tr>';
     selBar();
