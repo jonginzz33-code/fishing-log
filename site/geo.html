@@ -1308,7 +1308,7 @@ body.noscroll{overflow:hidden}
           '<td style="text-align:right;white-space:nowrap">' + (p.inCnt ? p.inCnt + '번 · ' + p.inQty + '개' : (p.inQty ? '+' + p.inQty + '개' : '')) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#FFD27A">' + (p.sold ? p.sold + '개' : '') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#FF9B8A">' + (p.outCnt ? p.outCnt + '번' : '') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap">' + (p.cur == null ? '?' : p.cur === 0 ? '<span class="b s">품절</span>' : p.cur + '개') + '</td></tr>';
+          '<td style="text-align:right;white-space:nowrap">' + (p.cur == null ? '<small style="color:var(--sub)" title="지금은 감시 · 필요 목록에 없어서 재고를 조회하지 않아요">목록에서 뺌</small>' : p.cur === 0 ? '<span class="b s">품절</span>' : p.cur + '개') + '</td></tr>';
       }).join('') + '</table>';
     $('histBody').innerHTML =
       '<div class="hs"><div>입고<b>' + ins.length + '건 · ' + inQtyAll + '개</b></div><div>소진<b>' + soldAll + '개</b></div><div>품절<b>' + outs.length + '건</b></div><div>제품<b>' + prods.length + '개</b></div><div>제약회사<b>' + Object.keys(byMaker).length + '곳</b></div></div>' +
