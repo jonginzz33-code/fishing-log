@@ -71,6 +71,8 @@ nav{justify-content:flex-start!important}
 .parts{font-size:12.5px;margin:6px 0}
 .parts div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dotted #22404F}
 .hide{display:none!important}
+.fold{display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;user-select:none;min-height:36px}
+.fold .arr{margin-left:auto;font-size:12.5px;font-weight:800;color:var(--sky);border:1.3px solid #3A6A88;border-radius:14px;padding:3px 10px}
 .picbox{max-height:45vh;overflow:auto;margin-top:6px;border:1px solid var(--line);border-radius:10px;background:#fff}
 .picbox img{width:100%;display:block}
 .savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(10,22,32,.94);border-top:1px solid #2C4F66;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;justify-content:center}
@@ -322,8 +324,13 @@ function sheetHtml() {
   S.ags.forEach(function (a, ai) {
     var nRows = 0; a.sections.forEach(function (s) { nRows += s.rows.length; });
     var ch = changedCount(a);
-    h += '<div class="card" data-ag="' + ai + '"><h2><span class="dot" style="background:' + agColor(a) + '"></span><input type="text" value="' + esc(a.name) + '" data-agname="' + ai + '" style="width:auto;flex:1;min-width:110px;font-weight:800">' +
-      '<input type="text" value="' + esc(a.date) + '" data-agdate="' + ai + '" placeholder="날짜 11/27" style="width:96px"></h2>' +
+    var open = !!(S.open || {})[a.id];
+    h += '<div class="card" data-ag="' + ai + '"><div class="fold" data-fold="' + a.id + '"><span class="dot" style="background:' + agColor(a) + '"></span><b style="font-size:16px">' + esc(a.name) + '</b>' +
+      '<span class="sub">' + (a.date ? '📅 ' + esc(a.date) + ' · ' : '') + (a.sections.length ? '모델 ' + nRows + '줄' : '표 없음') + (IMG_DIRTY[a.id] ? ' · <b style="color:var(--yel)">사진 저장 안 됨</b>' : '') + '</span>' +
+      '<span class="arr">' + (open ? '▲ 접기' : '▼ 펼치기') + '</span></div>';
+    if (!open) { h += '</div>'; return; }
+    h += '<div class="row" style="margin-top:10px"><input type="text" value="' + esc(a.name) + '" data-agname="' + ai + '" style="flex:1;min-width:110px;font-weight:800" placeholder="업체 이름">' +
+      '<input type="text" value="' + esc(a.date) + '" data-agdate="' + ai + '" placeholder="날짜 11/27" style="width:96px"></div>' +
       '<p class="sub">모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' + (a.prev ? ' · 바뀐 칸 <b style="color:var(--yel)" id="chg' + ai + '">' + ch + '</b>개 (노란 칸 · 이전 ' + esc(a.prevDate || '') + ' 대비)' : '') + '</p>' +
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
       '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
@@ -613,7 +620,7 @@ document.getElementById('modal').addEventListener('click', function (e) { if (e.
 function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
 var view = document.getElementById('view');
 view.addEventListener('click', function (e) {
-  var t = e.target.closest('button,[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],summary'); if (!t) return;
+  var t = e.target.closest('button,[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
   if (d.go) { S.tab = d.go; save(); render(); return; }
@@ -630,6 +637,7 @@ view.addEventListener('click', function (e) {
   if (d.roff) { var q4 = ruleRef(d.roff); q4.r.off = !q4.r.off; save(); render(); return; }
   if (d.rdel) { var q5 = ruleRef(d.rdel); if (confirm('"' + q5.r.name + '" 지울까요?')) { S.ags[q5.ai][q5.kind].splice(q5.ri, 1); S.editRule = null; save(); render(); } return; }
   if (d.radd) { var pp = d.radd.split(','), lst = S.ags[+pp[1]][pp[0]]; lst.push({ id: uid(), name: pp[0] === 'verbal' ? '구두' : '정책', amt: 0, types: [], bands: [], models: [], ex: [], cond: [] }); S.editRule = pp[0] + pp[1] + '_' + (lst.length - 1); if (pp[0] === 'rules') S.openRules = S.ags[+pp[1]].id; save(); render(); return; }
+  if (d.fold) { S.open = S.open || {}; S.open[d.fold] = !S.open[d.fold]; save(); render(); return; }
   if (d.vparse) { verbalParse(+d.vparse); return; }
   if (d.rowed) { var pr = d.rowed.split(',').map(Number); rowEditor(pr[0], pr[1], pr[2]); return; }
   if (d.coled) { var pc = d.coled.split(',').map(Number); colEditor(pc[0], pc[1], pc[2]); return; }
@@ -643,7 +651,7 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-logout')) { firebase.auth().signOut().then(function () { location.reload(); }); return; }
   if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 표의 숫자를 모두 비울까요? (모델 · 열 · 정책 · 구두는 남아요)')) { a.sections.forEach(function (s) { s.rows.forEach(function (r) { r.v = s.cols.map(function () { return [null, null, null]; }); }); }); save(); render(); } return; }
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
-  if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { S.ags.push(blankAg(nm)); save(); render(); } return; }
+  if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
 });
