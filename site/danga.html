@@ -173,6 +173,15 @@ function fixData() {
     });
     a.fixV = 2;
   });
+  // 3: 구두 '95군미만' · '95군초과' 를 예전엔 95군으로 잘못 읽음 → 다시 읽기 (미만 · 초과는 그 숫자 안 들어감)
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 3) return;
+    (a.verbal || []).concat(a.rules || []).forEach(function (r) {
+      if (!/미만|초과/.test(r.name || '')) return;
+      var n = parseVerbal(r.name); if (n && !n.err && n.bands.join() !== (r.bands || []).join()) { r.bands = n.bands; msgs.push(a.name + ' · 구두 "' + r.name + '" 요금제 바로잡음'); }
+    });
+    a.fixV = 3;
+  });
   return msgs;
 }
 // 모델 이름(코드)이 하나도 없는 빈 표('새 모델' 줄만) → 그 업체 양식으로 바꿈
@@ -614,8 +623,9 @@ function parseVerbal(line) {
   if (/MNP|번이|번호이동/.test(t)) r.types.push('mnp');
   if (/기변|재가입/.test(t)) r.types.push('chg');
   // 요금제
-  var up = t.match(/(\d{2,3})군?이상/), dn = t.match(/(\d{2,3})군?이하/);
-  if (up || dn) Object.keys(BAND_MAX).forEach(function (b) { if ((!up || BAND_MAX[b] >= +up[1]) && (!dn || BAND_MIN[b] <= +dn[1])) r.bands.push(b); });
+  // 이상 · 이하 = 그 숫자 들어감 / 초과 · 미만 = 그 숫자 안 들어감 (예: 95군미만 = 85·75군부터 아래)
+  var up = t.match(/(\d{2,3})군?(?:요금제)?이상/), dn = t.match(/(\d{2,3})군?(?:요금제)?이하/), gt = t.match(/(\d{2,3})군?(?:요금제)?초과/), lt = t.match(/(\d{2,3})군?(?:요금제)?미만/);
+  if (up || dn || gt || lt) Object.keys(BAND_MAX).forEach(function (b) { if ((!up || BAND_MAX[b] >= +up[1]) && (!dn || BAND_MIN[b] <= +dn[1]) && (!gt || BAND_MIN[b] > +gt[1]) && (!lt || BAND_MAX[b] < +lt[1])) r.bands.push(b); });
   else (t.match(/\d{2,3}(?=군|요금|\/|,|·|$|[^\d])/g) || []).forEach(function (n) { var b = NUM_BAND[+n]; if (b && r.bands.indexOf(b) < 0) r.bands.push(b); });
   // 조건
   if (/선약|선택약정/.test(t)) r.cond.push('sel');
