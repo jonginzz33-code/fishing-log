@@ -270,11 +270,11 @@ function scHtml() {
   return '<details class="card" ' + (S.scOpen ? 'open' : '') + ' id="scBox"><summary style="cursor:pointer;font-weight:800">⚙ 그 밖 조건 <span class="sub">— ' + esc(scSummary(true)) + '</span></summary>' +
     '<div class="lbl">약정</div>' + seg('yak', [['sel', '선택약정'], ['gong', '공시지원금']]) +
     '<div class="lbl">유통망지원금</div>' + seg('sup', [['hi', '20만↑'], ['mid', '10~20만'], ['low', '10만↓']]) +
-    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + tg('dongpan', '유선 동시판매') + '</div>' +
+    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + '</div>' +
     '</details>';
 }
 // 부가서비스 체크박스 (폰교체 · 폰안심은 둘 중 하나)
-var VAS = [['vas1', '교보문고SAM+구글원'], ['vas2', 'V컬러링+벨링'], ['insSwap', '폰교체패스'], ['insSafe', '폰안심패스'], ['disney', '디즈니+']];
+var VAS = [['vas1', '교보문고SAM+구글원'], ['vas2', 'V컬러링+벨링'], ['insSwap', '폰교체패스'], ['insSafe', '폰안심패스'], ['disney', '디즈니+'], ['dongpan', '🏠 유선 동시판매 (인터넷+TV)']];
 function vasOn(k) { var sc = S.sc; return k === 'insSwap' ? sc.ins === 'swap' : k === 'insSafe' ? sc.ins === 'safe' : !!sc[k]; }
 function vasHtml() {
   return '<div class="row">' + VAS.map(function (v) {
