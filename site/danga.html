@@ -270,7 +270,7 @@ function scHtml() {
   return '<details class="card" ' + (S.scOpen ? 'open' : '') + ' id="scBox"><summary style="cursor:pointer;font-weight:800">⚙ 그 밖 조건 <span class="sub">— ' + esc(scSummary(true)) + '</span></summary>' +
     '<div class="lbl">약정</div>' + seg('yak', [['sel', '선택약정'], ['gong', '공시지원금']]) +
     '<div class="lbl">유통망지원금</div>' + seg('sup', [['hi', '20만↑'], ['mid', '10~20만'], ['low', '10만↓']]) +
-    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + '</div>' +
+    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + tg('dongpan', '유선 동시판매') + '</div>' +
     '</details>';
 }
 // 부가서비스 체크박스 (폰교체 · 폰안심은 둘 중 하나)
@@ -312,7 +312,7 @@ function scSummary(noVas) {
   a.push({ hi: '지원금 20만↑', mid: '지원금 10~20만', low: '지원금 10만↓' }[sc.sup]);
   var v = []; if (sc.vas1) v.push('교보'); if (sc.vas2) v.push('V컬러링'); if (sc.ins !== 'none') v.push(sc.ins === 'swap' ? '폰교체' : '폰안심');
   if (!noVas) a.push(v.length ? '부가 ' + v.join('+') : '부가 없음');
-  [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
+  [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30', 'dongpan'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
   return a.join(' · ');
 }
 
@@ -661,6 +661,8 @@ function parseVerbal(line) {
   if (/V컬러링|벨링/.test(t)) r.cond.push(/미유치/.test(t) ? '!vas2' : 'vas2');
   if (/폰교체/.test(t)) r.cond.push('insSwap');
   if (/폰안심/.test(t)) r.cond.push('insSafe');
+  if (/동판|동시판매|인터넷\+?TV|모\+인터넷/.test(t)) r.cond.push('dongpan');
+  if (/U\+?ONE미로그인|유플원미로그인/.test(t)) r.cond.push('uoneNo');
   return r;
 }
 function verbalParse(ai) {
@@ -896,6 +898,17 @@ function importHash() {
   var s = new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Response(s).text().then(function (txt) {
     var j = JSON.parse(txt);
+    // 규칙만 더하기 (업체 표 · 다른 규칙은 그대로 · 같은 이름 규칙은 새것으로)
+    if (j.add && confirm('링크에 담긴 정책 ' + j.add.map(function (x) { return x.ag + ' ' + x.rules.length + '개'; }).join(' · ') + ' 를 더할까요? (단가표 숫자 · 다른 정책 · 구두는 그대로)')) {
+      var miss = [];
+      j.add.forEach(function (x) {
+        var ag = S.ags.filter(function (a) { return tplName(a.name) === tplName(x.ag); })[0]; if (!ag) { miss.push(x.ag); return; }
+        var names = x.rules.map(function (r) { return r.name; });
+        ag.rules = ag.rules.filter(function (r) { return names.indexOf(r.name) < 0; }).concat(x.rules.map(function (r) { return Object.assign({ id: uid(), types: [], bands: [], models: [], ex: [], cond: [] }, r); }));
+        (x.notes || []).forEach(function (n) { if ((ag.notes || []).indexOf(n) < 0) (ag.notes = ag.notes || []).push(n); });
+      });
+      load2(); save(); if (miss.length) alert('이 업체가 없어요: ' + miss.join(', '));
+    }
     if (j.ags && confirm('링크에 담긴 단가표 ' + j.ags.map(function (a) { return a.name; }).join(' · ') + ' 를 불러올까요? (지금 자료는 바뀌어요 · 구두는 그대로)')) {
       j.ags.forEach(function (na) {
         var old = S.ags.filter(function (a) { return a.name === na.name; })[0];

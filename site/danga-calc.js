@@ -33,9 +33,10 @@
     senior: { label: '시니어 요금제', f: function (s) { return !!s.senior; } },
     combo: { label: '당월 유무선 결합', f: function (s) { return !!s.combo; } },
     kids: { label: '키즈폰 결합', f: function (s) { return !!s.kids; } },
-    d30: { label: '30일 이내 기변', f: function (s) { return !!s.d30; } }
+    d30: { label: '30일 이내 기변', f: function (s) { return !!s.d30; } },
+    dongpan: { label: '유선 동시판매 (인터넷+TV)', f: function (s) { return !!s.dongpan; } }
   };
-  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false };
+  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false, dongpan: false };
 
   function norm(s) { return String(s || '').toUpperCase().replace(/\s+/g, ''); }
   function normSt(s) {
