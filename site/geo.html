@@ -63,6 +63,12 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub)}
+.selbar #selN{flex:1;min-width:120px}
+tr.pick{cursor:pointer}
+tr.pick.sel td{background:rgba(255,138,138,.10)}
+td.ck{width:26px}
+td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .wadd{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 10px;font-size:14px}
 .acl div.have{color:var(--sub)}
 .prog{margin:0 0 6px}
@@ -235,6 +241,12 @@ body.noscroll{overflow:hidden}
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
     <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
+    <div class="selbar">
+      <span id="selN">줄을 눌러서 고르세요</span>
+      <button class="btn ghost sm" id="selAll">보이는 것 모두 고르기</button>
+      <button class="btn ghost sm" id="selClear" disabled>고르기 풀기</button>
+      <button class="btn bad sm" id="selDel" disabled>🗑 고른 0개 빼기</button>
+    </div>
     <table class="list" id="list"></table>
     <p class="lead" style="margin:14px 0 6px">✏️ 통째로 고치기 — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b></p>
     <textarea id="bulk"></textarea>
@@ -342,12 +354,37 @@ body.noscroll{overflow:hidden}
     var c = { in: 0, sold: 0, fail: 0, new: 0 };
     data.watch.forEach(function (w) { c[state(w[0])]++; });
     $('cnt').textContent = '(' + data.watch.length + '개 · 재고 있음 ' + c.in + ' · 품절 ' + c.sold + ')';
+    // 고른 것 중 목록에서 사라진 건 정리
+    var codes = {}; data.watch.forEach(function (w) { codes[w[1]] = 1; });
+    Object.keys(wSel).forEach(function (k) { if (!codes[k]) delete wSel[k]; });
+    visibleCodes = rows.map(function (r) { return r.w[1]; });
     $('list').innerHTML = rows.map(function (r) {
-      var it = data.items[r.w[0]], n = it && it.lv === 1 ? ' ' + it.n + '개' : '';
-      return '<tr><td>' + BADGE[r.s] + '<small style="color:var(--sub)">' + n + '</small></td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
+      var it = data.items[r.w[0]], n = it && it.lv === 1 ? ' ' + it.n + '개' : '', on = !!wSel[r.w[1]];
+      return '<tr class="pick' + (on ? ' sel' : '') + '" data-code="' + esc(r.w[1]) + '"><td class="ck"><input type="checkbox"' + (on ? ' checked' : '') + ' tabindex="-1"></td><td>' + BADGE[r.s] + '<small style="color:var(--sub)">' + n + '</small></td><td>' + esc(r.w[0]) + '</td><td class="c">' + esc(r.w[1]) +
         '</td><td class="x"><button class="btn bad sm" data-del="' + r.i + '">삭제</button></td></tr>';
     }).join('') || '<tr><td style="color:var(--sub)">해당하는 제품이 없어요</td></tr>';
+    selBar();
   }
+  // ───── 감시 목록에서 눌러서 고르기 · 고른 것 한꺼번에 빼기 ─────
+  var wSel = {}, visibleCodes = [];
+  function selBar() {
+    var n = Object.keys(wSel).length;
+    $('selN').textContent = n ? n + '개 고름' : '줄을 눌러서 고르세요';
+    $('selDel').disabled = !n; $('selClear').disabled = !n;
+    $('selDel').textContent = '🗑 고른 ' + n + '개 빼기';
+  }
+  $('selAll').onclick = function () { visibleCodes.forEach(function (c) { wSel[c] = 1; }); render(); };
+  $('selClear').onclick = function () { wSel = {}; render(); };
+  $('selDel').onclick = function () {
+    var ks = Object.keys(wSel); if (!ks.length) return;
+    var names = data.watch.filter(function (w) { return wSel[w[1]]; }).map(function (w) { return '· ' + w[0]; });
+    if (!confirm('감시 목록에서 ' + ks.length + '개를 뺄까요?\n' + names.slice(0, 12).join('\n') + (names.length > 12 ? '\n… 외 ' + (names.length - 12) + '개' : ''))) return;
+    var btn = $('selDel'); btn.disabled = true;
+    save(data.watch.filter(function (w) { return !wSel[w[1]]; })).then(function (j) {
+      if (!j.error) { $('wMsg').textContent = '🗑 ' + ks.length + '개를 뺐어요. (남은 ' + j.count + '개)'; wSel = {}; load(); }
+      else { btn.disabled = false; $('wMsg').textContent = '⚠ ' + j.error; }
+    });
+  };
   function setCfg(body, out) {
     out = out || 'msg';
     $(out).textContent = '저장 중…';
@@ -454,9 +491,19 @@ body.noscroll{overflow:hidden}
     render();
   };
   $('list').onclick = function (e) {
-    var i = e.target.getAttribute('data-del'); if (i == null) return;
+    var i = e.target.getAttribute('data-del');
+    if (i == null) {
+      // 줄을 누르면 고르기 / 풀기
+      var tr = e.target.closest('tr[data-code]'); if (!tr) return;
+      var code = tr.getAttribute('data-code');
+      if (wSel[code]) delete wSel[code]; else wSel[code] = 1;
+      tr.classList.toggle('sel', !!wSel[code]);
+      tr.querySelector('input').checked = !!wSel[code];
+      selBar();
+      return;
+    }
     var w = data.watch[+i];
-    if (!confirm('필요재고목록에서 뺄까요?\n' + w[0])) return;
+    if (!confirm('감시 목록에서 뺄까요?\n' + w[0])) return;
     var next = data.watch.filter(function (_, k) { return k !== +i; });
     save(next, e.target);
   };
@@ -834,12 +881,48 @@ body.noscroll{overflow:hidden}
     e.preventDefault(); e.stopPropagation();
     $('pBox').open = true; $('pAdd').classList.remove('hide'); $('pQ').focus();
   };
+  // 제품 목록 넣기 ↔ 빼기 버튼 (넣은 건 바로 뺄 수도 있게)
+  function prodEntry(key) { for (var i = 0; i < prods.length; i++) if (prods[i][1].split(',').indexOf(key) >= 0) return prods[i]; return null; }
+  function saveProdsLocal() { try { localStorage.setItem('geoProducts', JSON.stringify({ v: 'local', products: prods })); } catch (e) {} prodsV = null; }
+  function prodToggle(name, key) {
+    var b = document.createElement('button');
+    var paint = function () { var on = !!prodEntry(key); b.className = 'btn sm ' + (on ? 'bad' : 'ok'); b.textContent = on ? '빼기' : '추가'; };
+    paint();
+    b.onclick = function () {
+      var ent = prodEntry(key);
+      b.disabled = true;
+      if (ent) {
+        if (!confirm('제품 목록(자동완성)에서 뺄까요?\n' + ent[0])) { b.disabled = false; return; }
+        call('removeProduct', { method: 'POST', body: { code: ent[1] } }).then(function (r) {
+          b.disabled = false;
+          if (r.error) { $('cMsg').textContent = r.error; return; }
+          setProds(prods.filter(function (p) { return p !== ent; })); saveProdsLocal(); paint();
+          $('cMsg').textContent = '“' + ent[0] + '” 를 제품 목록에서 뺐어요.';
+        });
+      } else {
+        call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function (r) {
+          b.disabled = false;
+          if (r.error) { $('cMsg').textContent = r.error; return; }
+          var nm = r.name || name; // 제품상세 화면의 정확한 이름
+          setProds(prods.concat([[nm, key]])); saveProdsLocal(); paint();
+          $('cMsg').textContent = '“' + nm + '” 를 제품 목록에 넣었어요.';
+        });
+      }
+    };
+    return b;
+  }
   function pFind() {
     var q = $('pQ').value.trim(), box = $('pSr');
     if (q.length < 2) { box.textContent = '두 글자 이상 입력해 주세요.'; return; }
     if (isCode(q)) {
       var r0 = codeRows(q);
-      box.textContent = r0.length ? '“' + q + '” 는 이미 제품 목록에 있어요: ' + r0.map(function (x) { return x.name; }).join(' / ') : '이 제품코드는 목록에 없어요. 제품 이름으로 검색해 주세요.';
+      box.innerHTML = '';
+      if (!r0.length) { box.textContent = '이 제품코드는 목록에 없어요. 제품 이름으로 검색해 주세요.'; return; }
+      r0.forEach(function (x) {
+        var d = document.createElement('div'), s = document.createElement('span');
+        s.innerHTML = esc(x.name) + '<br><small>' + esc(x.key) + ' · 제품 목록에 있음</small>';
+        d.append(s, prodToggle(x.name, x.key.split(',')[0])); box.append(d);
+      });
       return;
     }
     $('pQbtn').disabled = true; box.textContent = '지오팜에서 검색 중…';
@@ -852,21 +935,8 @@ body.noscroll{overflow:hidden}
       j.rows.forEach(function (x) {
         var key = x.code + ':' + x.sup, d = document.createElement('div'), s = document.createElement('span'), b = document.createElement('button');
         s.innerHTML = esc(x.text) + '<br><small>' + key + (x.stock != null ? ' · 지금 재고 ' + x.stock : '') + '</small>';
-        b.className = 'btn sm ' + (have[key] ? 'ghost' : 'ok'); b.textContent = have[key] ? '목록에 있음' : '추가'; b.disabled = !!have[key];
-        b.onclick = function () {
-          var name = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
-          b.disabled = true;
-          call('addProduct', { method: 'POST', body: { name: name, code: key } }).then(function (r) {
-            if (r.error) { b.disabled = false; $('cMsg').textContent = r.error; return; }
-            name = r.name || name; // 제품상세 화면의 정확한 이름
-            setProds(prods.concat([[name, key]]));
-            try { localStorage.setItem('geoProducts', JSON.stringify({ v: 'local', products: prods })); } catch (e) {}
-            prodsV = null;
-            b.textContent = '추가됨'; b.className = 'btn sm ghost';
-            $('cMsg').textContent = '“' + name + '” 를 제품 목록에 넣었어요.';
-          });
-        };
-        d.append(s, b); box.append(d);
+        var name0 = (x.name.replace(/…$/, '') + ' ' + x.spec + ' ' + x.maker).replace(/\s+/g, ' ').trim();
+        d.append(s, prodToggle(name0, key)); box.append(d);
       });
     });
   }
