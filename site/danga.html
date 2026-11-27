@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>단가 비교 · talla</title>
+<link rel="icon" href="img/jogwa.png">
+<style>
+:root{--bg:#0A1620;--card:#12283A;--card2:#16324A;--line:#2C4F66;--text:#EAF2F6;--sub:#9FB4C2;--sky:#7FD6FF;--good:#2FBF8F;--bad:#FF7A7A;--yel:#FFD36E}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.5;-webkit-text-size-adjust:100%}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+.wrap{max-width:1100px;margin:0 auto;padding:0 14px 80px}
+nav{display:flex;align-items:center;gap:10px;padding:14px 0;padding-right:52px;border-bottom:1px solid #1E3446}
+.logo{font-size:19px;font-weight:900}.logo span{color:var(--sky)}
+nav h1{font-size:17px;margin:0 0 0 4px}
+.tabs{display:flex;gap:6px;margin:14px 0 10px;overflow-x:auto}
+.tab{flex:0 0 auto;min-height:40px;padding:0 16px;border-radius:20px;border:1.5px solid var(--line);background:transparent;font-weight:800;font-size:14px;cursor:pointer}
+.tab.on{background:var(--card2);border-color:var(--sky);color:var(--sky)}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.card h2{font-size:16px;margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sub{color:var(--sub);font-size:12.5px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chip{min-height:32px;padding:0 11px;border-radius:16px;border:1.3px solid var(--line);background:transparent;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}
+.chip.on{background:#16324A;border-color:var(--sky);color:var(--sky)}
+.chip.neg{background:#3A1A1A;border-color:var(--bad);color:var(--bad)}
+.btn{min-height:40px;padding:0 16px;border-radius:12px;border:1.5px solid #3A6A88;background:#16324A;font-weight:800;font-size:14px;cursor:pointer}
+.btn.pri{background:var(--good);border-color:var(--good);color:#04222A}
+.btn.sm{min-height:32px;padding:0 11px;font-size:12.5px;border-radius:10px}
+.btn.del{border-color:#6A3A3A;background:#2A1616;color:#FFB0B0}
+.btn:disabled{opacity:.5}
+input[type=text],input[type=number],input[type=password],textarea,select{background:#0D1F2D;border:1.3px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;font-size:14px}
+textarea{min-height:90px;resize:vertical}
+.lbl{font-size:12px;color:var(--sub);margin:8px 0 3px;font-weight:700}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:8px 0}
+.stat{background:var(--card2);border-radius:12px;padding:10px 12px;border-left:4px solid var(--line)}
+.stat b{display:block;font-size:20px}.stat span{font-size:12px;color:var(--sub)}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{position:sticky;top:0;background:#0F2333;color:var(--sub);font-size:12px;font-weight:700;padding:7px 6px;text-align:right;border-bottom:1px solid var(--line)}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:8px 6px;border-bottom:1px solid #1C3546;text-align:right;white-space:nowrap}
+.tbl td.m{white-space:normal;min-width:110px}
+.tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:#122C40}
+.win{font-weight:900;border-radius:6px}
+.mx td{text-align:center;padding:6px 3px;font-size:12.5px}
+.mx td .d{display:block;font-size:10.5px;color:var(--sub);font-weight:600}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.rule{border:1px solid #244257;border-radius:12px;padding:9px 11px;margin:6px 0;background:#0F2333}
+.rule.off{opacity:.45}
+.rule .top{display:flex;gap:8px;align-items:center;cursor:pointer}
+.rule .nm{flex:1;font-size:13.5px;font-weight:700}
+.rule .am{font-weight:900;font-size:15px}
+.rule .meta{font-size:11.5px;color:var(--sub);margin-top:2px}
+.plus{color:var(--good)}.minus{color:var(--bad)}
+.edit{margin-top:8px;border-top:1px dashed #2C4F66;padding-top:8px}
+.grid2{display:grid;grid-template-columns:1fr 110px;gap:8px}
+.drop{border:2px dashed #3A6A88;border-radius:14px;padding:16px;text-align:center;cursor:pointer;background:#0D1F2D}
+.drop.busy{border-color:var(--yel)}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.thumbs img{height:84px;border-radius:8px;border:1px solid var(--line)}
+.ed{width:46px;text-align:right;padding:3px 4px;border-radius:6px;font-size:12.5px}
+.secTbl td,.secTbl th{padding:3px 3px;font-size:12px}
+.note{background:#2A2410;border:1px solid #5A4A20;color:#FFE3A0;border-radius:10px;padding:8px 10px;font-size:12.5px;margin:8px 0}
+.err{background:#2A1616;border:1px solid #6A3A3A;color:#FFC0C0}
+.parts{font-size:12.5px;margin:6px 0}
+.parts div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dotted #22404F}
+.hide{display:none!important}
+.qbar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+@media (min-width:760px){.qbar{flex-wrap:wrap}}
+.chk{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1.3px solid var(--line);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#0D1F2D}
+.chk input{width:18px;height:18px;accent-color:#2FBF8F;margin:0}
+.chk:has(input:checked){border-color:var(--good);color:#9FF0CF}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.sheet{background:var(--card);border-radius:18px 18px 0 0;width:100%;max-width:760px;max-height:88vh;overflow:auto;padding:16px;border-top:2px solid var(--sky)}
+.sheet h3{margin:0 0 6px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
+@media (min-width:760px){.modal{align-items:center}.sheet{border-radius:18px;border:2px solid var(--sky)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><a class="logo" href="/"><span>talla</span>.co.kr</a><h1>· 💰 단가 비교</h1></nav>
+
+<div class="tabs" id="tabs"></div>
+<div id="view"></div>
+</div>
+
+<div id="modal" class="modal hide"><div class="sheet" id="sheet"></div></div>
+
+<script src="/danga-calc.js"></script>
+<script src="/menu.js"></script>
+<script>
+(function () {
+var D = window.Danga;
+var LS = 'danga_v1', LSK = 'danga_key';
+var COLORS = ['#2FBF8F', '#FFC24B', '#FF8A8A', '#B79CFF'];
+var MODEL = 'claude-opus-5-5';
+
+function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fmt(v) { return v == null ? '-' : (Math.round(v * 10) / 10).toString(); }
+function sgn(v) { v = Math.round(v * 10) / 10; return (v > 0 ? '+' : '') + v; }
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+var S;
+function blankAg(name) { return { id: uid(), name: name, date: '', sections: [], rules: [], verbal: [], notes: [] }; }
+function load() {
+  try { S = JSON.parse(ls(LS) || 'null'); } catch (e) { S = null; }
+  if (!S || !S.ags) S = { ags: [blankAg('경기모바일'), blankAg('드림4')] };
+  S.sc = Object.assign({}, D.DEFAULT_SC, S.sc || {});
+  S.band = S.band || 'B115'; S.type = S.type || 'mnp'; S.tab = S.tab || 'cmp'; S.mode = S.mode || 'list'; S.sort = S.sort || 'diff';
+  S.ags.forEach(function (a) { a.sections = a.sections || []; a.rules = a.rules || []; a.verbal = a.verbal || []; a.notes = a.notes || []; });
+}
+function save() { try { ls(LS, JSON.stringify(S)); } catch (e) { alert('저장 공간이 부족해요'); } }
+var IMGS = {}; // 업로드한 이미지 미리보기 (저장 안 함)
+var BUSY = {};
+
+// ── 탭 ──
+var TABS = [['cmp', '📊 비교'], ['sheet', '📷 단가표'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
+function renderTabs() {
+  document.getElementById('tabs').innerHTML = TABS.map(function (t) {
+    return '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>';
+  }).join('');
+}
+document.getElementById('tabs').onclick = function (e) { var t = e.target.closest('[data-t]'); if (!t) return; S.tab = t.dataset.t; save(); render(); };
+
+function render() {
+  renderTabs();
+  var v = document.getElementById('view');
+  if (S.tab === 'cmp') v.innerHTML = cmpHtml();
+  else if (S.tab === 'sheet') v.innerHTML = sheetHtml();
+  else if (S.tab === 'verbal') v.innerHTML = verbalHtml();
+  else v.innerHTML = setHtml();
+}
+
+function agsWithData() { return S.ags.filter(function (a) { return a.sections.length; }); }
+function agColor(a) { return COLORS[S.ags.indexOf(a) % COLORS.length]; }
+
+// ── 비교 탭 ──
+function scHtml() {
+  var sc = S.sc;
+  function seg(k, opts) { return '<div class="row">' + opts.map(function (o) { return '<button class="chip' + (sc[k] === o[0] ? ' on' : '') + '" data-sc="' + k + '" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>'; }
+  function tg(k, label) { return '<button class="chip' + (sc[k] ? ' on' : '') + '" data-sc="' + k + '" data-v="!">' + label + '</button>'; }
+  return '<details class="card" ' + (S.scOpen ? 'open' : '') + ' id="scBox"><summary style="cursor:pointer;font-weight:800">⚙ 그 밖 조건 <span class="sub">— ' + esc(scSummary(true)) + '</span></summary>' +
+    '<div class="lbl">약정</div>' + seg('yak', [['sel', '선택약정'], ['gong', '공시지원금']]) +
+    '<div class="lbl">유통망지원금</div>' + seg('sup', [['hi', '20만↑'], ['mid', '10~20만'], ['low', '10만↓']]) +
+    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + '</div>' +
+    '</details>';
+}
+// 부가서비스 체크박스 (폰교체 · 폰안심은 둘 중 하나)
+var VAS = [['vas1', '교보문고SAM+구글원'], ['vas2', 'V컬러링+벨링'], ['insSwap', '폰교체패스'], ['insSafe', '폰안심패스'], ['disney', '디즈니+']];
+function vasOn(k) { var sc = S.sc; return k === 'insSwap' ? sc.ins === 'swap' : k === 'insSafe' ? sc.ins === 'safe' : !!sc[k]; }
+function vasHtml() {
+  return '<div class="row">' + VAS.map(function (v) {
+    return '<label class="chk"><input type="checkbox" data-vas="' + v[0] + '"' + (vasOn(v[0]) ? ' checked' : '') + '> ' + v[1] + '</label>';
+  }).join('') + '</div>';
+}
+// 모델 퀵바 (단가표에 있는 모델 · 여러 개 고르기)
+function modelChips(ags) {
+  var seen = {}, list = [];
+  D.items(ags).forEach(function (it) {
+    if (seen[it.key]) return; seen[it.key] = 1;
+    var nm = String(it.name || it.key).replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+(64|128|256|512|1T|1TB|\d+\s*(GB|G|TB))$/i, '').trim() || it.key;
+    list.push({ key: it.key, label: nm });
+  });
+  function rank(k) { return /^SM-S/.test(k) ? 0 : /^SM-F/.test(k) ? 1 : /^UIP/.test(k) ? 2 : 3; }
+  return list.sort(function (a, b) { return rank(a.key) - rank(b.key) || (a.key < b.key ? -1 : 1); });
+}
+function selModels() { return S.models || []; }
+function scSummary(noVas) {
+  var sc = S.sc, a = [sc.yak === 'sel' ? '선택약정' : '공시'];
+  a.push({ hi: '지원금 20만↑', mid: '지원금 10~20만', low: '지원금 10만↓' }[sc.sup]);
+  var v = []; if (sc.vas1) v.push('교보'); if (sc.vas2) v.push('V컬러링'); if (sc.ins !== 'none') v.push(sc.ins === 'swap' ? '폰교체' : '폰안심');
+  if (!noVas) a.push(v.length ? '부가 ' + v.join('+') : '부가 없음');
+  [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
+  return a.join(' · ');
+}
+
+function cmpHtml() {
+  var ags = agsWithData();
+  var h = '';
+  if (!ags.length) return '<div class="card"><h2>📷 먼저 단가표를 올려 주세요</h2><p class="sub">[📷 단가표] 탭에서 업체마다 단가표 사진을 올리면 AI 가 읽어서 표로 바꿔요. 그다음 여기서 업체끼리 비교해요.</p><button class="btn pri" data-go="sheet">📷 단가표 올리러 가기</button></div>';
+  var sel = selModels();
+  h += '<div class="card">';
+  h += '<div class="lbl" style="margin-top:0">① 가입 유형</div><div class="row">' + D.TYPES.map(function (t) { return '<button class="tab' + (S.type === t.id ? ' on' : '') + '" data-type="' + t.id + '" style="flex:1">' + t.label + '</button>'; }).join('') + '</div>';
+  h += '<div class="lbl">② 요금제</div><div class="row"><button class="chip' + (S.mode === 'mx' ? ' on' : '') + '" data-mode="mx">▦ 전체 한눈에</button>' + D.BANDS.map(function (b) { return '<button class="chip' + (S.mode === 'list' && S.band === b.id ? ' on' : '') + '" data-band="' + b.id + '">' + b.label + '</button>'; }).join('') + '</div>';
+  h += '<div class="lbl">③ 부가서비스</div>' + vasHtml();
+  h += '<div class="lbl">④ 모델 <span class="sub">(여러 개 고르기 · 안 고르면 전체)</span></div><div class="qbar"><button class="chip' + (sel.length ? '' : ' on') + '" data-mdl="*">전체</button>' +
+    modelChips(ags).map(function (m) { return '<button class="chip' + (sel.indexOf(m.key) >= 0 ? ' on' : '') + '" data-mdl="' + esc(m.key) + '">' + esc(m.label) + '</button>'; }).join('') + '</div>';
+  if (S.mode === 'list') h += '<div class="row" style="margin-top:10px"><span class="sub">정렬</span><select id="sort" style="width:auto"><option value="diff"' + (S.sort === 'diff' ? ' selected' : '') + '>차이 큰 순</option><option value="best"' + (S.sort === 'best' ? ' selected' : '') + '>단가 높은 순</option><option value="name"' + (S.sort === 'name' ? ' selected' : '') + '>모델 순</option></select></div>';
+  h += '</div>';
+  h += scHtml();
+  h += '<div class="row" style="margin:4px 0 0">' + ags.map(function (a) { return '<span class="sub"><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + (a.date ? ' (' + esc(a.date) + ')' : '') + (a.verbal.length ? ' · 구두 ' + a.verbal.filter(function (r) { return !r.off; }).length : '') + '</span>'; }).join(' ') + '</div>';
+  h += S.mode === 'list' ? listHtml(ags) : mxHtml(ags);
+  h += '<p class="sub">단위: 만원 · 최종 = 단가표 + 정책(추가 · 차감) + 🗣 구두. 줄을 누르면 계산 내역이 보여요. 표를 잘못 읽었으면 [📷 단가표] 탭에서 고칠 수 있어요.</p>';
+  return h;
+}
+
+function filterQ(list) {
+  var sel = selModels();
+  if (!sel.length) return list;
+  return list.filter(function (r) { var it = r.it || r; return sel.indexOf(it.key) >= 0; });
+}
+
+function listHtml(ags) {
+  var rows = filterQ(D.compare(ags, S.band, S.type, S.sc)).filter(function (r) { return r.cnt; });
+  var wins = ags.map(function () { return 0; }), tie = 0, one = 0, sumD = 0, nD = 0;
+  rows.forEach(function (r) {
+    if (r.cnt < 2) { one++; return; }
+    if (r.tie) tie++; else wins[r.best]++;
+    if (ags.length === 2 && r.vals[0] && r.vals[1]) { sumD += r.vals[0].v - r.vals[1].v; nD++; }
+  });
+  function diff(r) { var vs = r.vals.filter(Boolean).map(function (p) { return p.v; }); return vs.length > 1 ? Math.max.apply(0, vs) - Math.min.apply(0, vs) : -1; }
+  if (S.sort === 'diff') rows.sort(function (a, b) { return diff(b) - diff(a); });
+  else if (S.sort === 'best') rows.sort(function (a, b) { return (b.best >= 0 ? b.vals[b.best].v : -99) - (a.best >= 0 ? a.vals[a.best].v : -99); });
+  var h = '<div class="sum">' + ags.map(function (a, i) { return '<div class="stat" style="border-left-color:' + agColor(a) + '"><b>' + wins[i] + '</b><span>' + esc(a.name) + ' 우세</span></div>'; }).join('') +
+    '<div class="stat"><b>' + tie + '</b><span>같음</span></div>' +
+    (nD ? '<div class="stat"><b>' + sgn(sumD / nD) + '</b><span>평균 (' + esc(ags[0].name) + ' − ' + esc(ags[1].name) + ')</span></div>' : '') + '</div>';
+  h += '<div class="card scroll" style="padding:6px"><table class="tbl"><tr><th>모델 · ' + esc(D.bandLabel(S.band)) + ' ' + esc(typeLabel(S.type)) + '</th>' +
+    ags.map(function (a) { return '<th><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + '</th>'; }).join('') + '<th>차이</th></tr>';
+  rows.forEach(function (r) {
+    var d = diff(r);
+    h += '<tr class="click" data-it="' + esc(r.it.key + '|' + r.it.st) + '"><td class="m">' + esc(r.it.label) + '</td>' +
+      r.vals.map(function (p, i) {
+        if (!p) return '<td class="sub">-</td>';
+        var w = r.cnt > 1 && !r.tie && r.best === i;
+        var vb = p.parts.some(function (x) { return x.verbal; });
+        return '<td><span class="' + (w ? 'win' : '') + '" style="' + (w ? 'color:' + agColor(ags[i]) : '') + '">' + fmt(p.v) + (vb ? '<sup>🗣</sup>' : '') + '</span></td>';
+      }).join('') + '<td>' + (d >= 0 ? (d ? '<b>' + fmt(d) + '</b>' : '<span class="sub">0</span>') : '<span class="sub">한쪽만</span>') + '</td></tr>';
+  });
+  if (!rows.length) h += '<tr><td colspan="9" class="sub" style="text-align:center;padding:20px">이 요금제 · 유형에 단가가 있는 모델이 없어요</td></tr>';
+  return h + '</table></div>';
+}
+
+function mxHtml(ags) {
+  var its = filterQ(D.items(ags));
+  var h = '<div class="card scroll" style="padding:6px"><table class="tbl mx"><tr><th>모델 · ' + esc(typeLabel(S.type)) + '</th>' + D.BANDS.map(function (b) { return '<th style="text-align:center">' + b.label + '</th>'; }).join('') + '</tr>';
+  its.forEach(function (it) {
+    var cells = D.BANDS.map(function (b) {
+      var vals = ags.map(function (a) { return D.price(a, it.key, it.st, b.id, S.type, S.sc); });
+      var best = -1, bv = null, n = 0;
+      vals.forEach(function (p, i) { if (p) { n++; if (bv === null || p.v > bv) { bv = p.v; best = i; } } });
+      if (!n) return '<td class="sub">·</td>';
+      var tie = n > 1 && vals.filter(function (p) { return p && p.v === bv; }).length > 1;
+      var others = vals.filter(function (p, i) { return p && i !== best; }).map(function (p) { return p.v; });
+      var d = others.length ? bv - Math.max.apply(0, others) : null;
+      var col = tie ? 'var(--text)' : agColor(ags[best]);
+      return '<td><b style="color:' + col + '">' + fmt(bv) + '</b><span class="d">' + (n < 2 ? esc(ags[best].name.slice(0, 2)) + '만' : tie ? '같음' : '+' + fmt(d)) + '</span></td>';
+    }).join('');
+    h += '<tr class="click" data-it="' + esc(it.key + '|' + it.st) + '"><td class="m">' + esc(it.label) + '</td>' + cells + '</tr>';
+  });
+  return h + '</table></div><p class="sub">칸 숫자 = 더 높은 업체 단가 (색 = 그 업체) · 아래 작은 글자 = 다른 업체보다 얼마 더.</p>';
+}
+function typeLabel(t) { for (var i = 0; i < D.TYPES.length; i++) if (D.TYPES[i].id === t) return D.TYPES[i].label; return t; }
+
+// 모델 상세 (모든 요금제 × 유형 · 계산 내역)
+function showItem(id) {
+  var ags = agsWithData(), p = id.split('|'), key = p[0], st = p[1] || '';
+  var it = D.items(ags).filter(function (x) { return x.key === key && x.st === st; })[0];
+  var h = '<h3><span>' + esc(it ? it.label : key) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(key) + (st ? ' · ' + esc(st) : '') + (it && it.price ? ' · 출고가 ' + Number(it.price).toLocaleString() + '원' : '') + ' · ' + esc(scSummary()) + '</p>';
+  h += '<div class="scroll"><table class="tbl mx"><tr><th>요금제</th>' + D.TYPES.map(function (t) { return '<th style="text-align:center" colspan="' + ags.length + '">' + t.label + '</th>'; }).join('') + '</tr><tr><th></th>' +
+    D.TYPES.map(function () { return ags.map(function (a) { return '<th style="text-align:center"><span class="dot" style="background:' + agColor(a) + '"></span></th>'; }).join(''); }).join('') + '</tr>';
+  D.BANDS.forEach(function (b) {
+    h += '<tr><td>' + b.label + '</td>' + D.TYPES.map(function (t) {
+      var vals = ags.map(function (a) { return D.price(a, key, st, b.id, t.id, S.sc); });
+      var bv = null; vals.forEach(function (p) { if (p && (bv === null || p.v > bv)) bv = p.v; });
+      var n = vals.filter(Boolean).length;
+      return vals.map(function (p, i) { if (!p) return '<td class="sub">·</td>'; var w = n > 1 && p.v === bv; return '<td style="cursor:pointer" data-bd="' + b.id + '|' + t.id + '"><b style="' + (w ? 'color:' + agColor(ags[i]) : 'color:#9FB4C2;font-weight:600') + '">' + fmt(p.v) + '</b></td>'; }).join('');
+    }).join('') + '</tr>';
+  });
+  h += '</table></div><div id="bd"></div>';
+  openSheet(h, function (sh) {
+    function bd(band, type) {
+      var o = '<div class="lbl">계산 내역 · ' + esc(D.bandLabel(band)) + ' ' + esc(typeLabel(type)) + '</div>';
+      ags.forEach(function (a) {
+        var p = D.price(a, key, st, band, type, S.sc);
+        o += '<div class="card" style="margin:6px 0;padding:10px"><b><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + ' · ' + (p ? fmt(p.v) : '단가 없음') + '</b>' +
+          (p ? '<div class="parts">' + p.parts.map(function (x) { return '<div><span>' + esc(x.name) + '</span><b class="' + (x.amt < 0 ? 'minus' : x.amt > 0 && x !== p.parts[0] ? 'plus' : '') + '">' + (x === p.parts[0] ? fmt(x.amt) : sgn(x.amt)) + '</b></div>'; }).join('') + '</div>' : '') + '</div>';
+      });
+      sh.querySelector('#bd').innerHTML = o;
+    }
+    bd(S.mode === 'list' ? S.band : 'B115', S.type);
+    sh.addEventListener('click', function (e) { var c = e.target.closest('[data-bd]'); if (c) { var q = c.dataset.bd.split('|'); bd(q[0], q[1]); } });
+  });
+}
+
+// ── 단가표 탭 ──
+function sheetHtml() {
+  var h = '';
+  if (!ls(LSK)) h += '<div class="note">🔑 AI 가 사진을 읽으려면 Claude API 키가 필요해요 → [⚙ 설정] 탭에서 한 번만 넣어 주세요. 키는 이 브라우저에만 저장돼요.</div>';
+  S.ags.forEach(function (a, ai) {
+    var nRows = 0; a.sections.forEach(function (s) { nRows += s.rows.length; });
+    h += '<div class="card" data-ag="' + ai + '"><h2><span class="dot" style="background:' + agColor(a) + '"></span><input type="text" value="' + esc(a.name) + '" data-agname="' + ai + '" style="width:auto;flex:1;min-width:120px;font-weight:800"></h2>' +
+      '<p class="sub">' + (a.sections.length ? '📅 ' + esc(a.date || '날짜 모름') + ' · 모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' : '아직 단가표가 없어요') + '</p>' +
+      '<label class="drop' + (BUSY[a.id] ? ' busy' : '') + '">' + (BUSY[a.id] ? '⏳ ' + esc(BUSY[a.id]) : '📷 <b>' + esc(a.name) + ' 단가표 올리기</b><br><span class="sub">사진 · 캡처 (여러 장 가능) → AI 가 숫자 · 정책을 읽어요 · 1~2분</span>') +
+      '<input type="file" accept="image/*" multiple class="hide" data-up="' + ai + '"' + (BUSY[a.id] ? ' disabled' : '') + '></label>' +
+      (IMGS[a.id] ? '<div class="thumbs">' + IMGS[a.id].map(function (u) { return '<img src="' + u + '">'; }).join('') + '</div>' : '');
+    if (a.err) h += '<div class="note err">' + esc(a.err) + '</div>';
+    if (a.notes.length) h += '<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">📝 메모 · 따로 정책 ' + a.notes.length + '개</summary><ul class="sub">' + a.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></details>';
+    if (a.sections.length) {
+      h += '<details style="margin-top:8px"><summary style="cursor:pointer;font-weight:700">📋 읽은 단가표 보기 · 고치기</summary>' + a.sections.map(function (s, si) { return secHtml(ai, si, s); }).join('') + '</details>';
+      h += '<details style="margin-top:8px"' + (S.openRules === a.id ? ' open' : '') + '><summary style="cursor:pointer;font-weight:700">📜 정책 (추가 · 차감) ' + a.rules.length + '개</summary>' + rulesHtml(ai, 'rules') + '</details>';
+      h += '<div class="row" style="margin-top:10px"><button class="btn sm del" data-clear="' + ai + '">🗑 이 업체 단가표 비우기</button>' + (S.ags.length > 1 ? '<button class="btn sm del" data-rmag="' + ai + '">업체 빼기</button>' : '') + '</div>';
+    }
+    h += '</div>';
+  });
+  h += '<button class="btn" data-addag>＋ 업체 추가</button>';
+  return h;
+}
+function secHtml(ai, si, s) {
+  var h = '<div class="scroll" style="margin-top:8px"><table class="tbl secTbl"><tr><th>모델</th>' + s.cols.map(function (c) {
+    var b = Object.keys(c.bands || {}).map(function (k) { return D.bandLabel(k).replace('군', '') + (c.bands[k] ? '(' + sgn(c.bands[k]) + ')' : ''); }).join(',');
+    return '<th colspan="3" style="text-align:center">' + esc(c.label) + '<br><span style="font-weight:400">→ ' + esc(b) + '</span></th>';
+  }).join('') + '</tr><tr><th></th>' + s.cols.map(function () { return '<th>신</th><th>M</th><th>기</th>'; }).join('') + '</tr>';
+  s.rows.forEach(function (r, ri) {
+    h += '<tr><td class="m">' + esc(r.name || r.key) + '<br><span class="sub">' + esc(r.key) + (r.st && r.st.length ? ' ' + esc(r.st.join(',')) : '') + '</span></td>' + s.cols.map(function (c, ci) {
+      var cell = (r.v && r.v[ci]) || [null, null, null];
+      return [0, 1, 2].map(function (ti) { return '<td><input class="ed" inputmode="decimal" value="' + (cell[ti] == null ? '' : cell[ti]) + '" data-cell="' + [ai, si, ri, ci, ti].join(',') + '"></td>'; }).join('');
+    }).join('') + '</tr>';
+  });
+  return h + '</table></div>';
+}
+
+// 규칙(정책 · 구두) 목록
+function ruleMeta(r) {
+  var a = [];
+  a.push(r.types && r.types.length ? r.types.map(typeLabel).join('/') : '전유형');
+  a.push(r.bands && r.bands.length ? r.bands.map(function (b) { return D.bandLabel(b).replace('군', ''); }).join(',') + '군' : '전요금제');
+  a.push(r.models && r.models.length ? r.models.join(', ') : '전모델');
+  if (r.ex && r.ex.length) a.push('제외 ' + r.ex.join(', '));
+  if (r.cond && r.cond.length) a.push('조건: ' + r.cond.map(function (c) { var n = c[0] === '!', k = n ? c.slice(1) : c; return (n ? '안 함 ' : '') + (D.CONDS[k] ? D.CONDS[k].label : k); }).join(' + '));
+  return a.join(' · ');
+}
+function rulesHtml(ai, kind) {
+  var a = S.ags[ai], list = a[kind];
+  var h = list.map(function (r, ri) {
+    var open = S.editRule === kind + ai + '_' + ri;
+    return '<div class="rule' + (r.off ? ' off' : '') + '"><div class="top" data-rtog="' + kind + ',' + ai + ',' + ri + '"><span class="nm">' + esc(r.name || '(이름 없음)') + '</span><span class="am ' + (r.amt < 0 ? 'minus' : 'plus') + '">' + sgn(+r.amt || 0) + '</span></div>' +
+      '<div class="meta">' + esc(ruleMeta(r)) + (r.off ? ' · <b>꺼짐</b>' : '') + '</div>' + (open ? ruleEdit(kind, ai, ri, r) : '') + '</div>';
+  }).join('');
+  if (!list.length) h += '<p class="sub">' + (kind === 'verbal' ? '아직 구두단가가 없어요.' : '정책이 없어요.') + '</p>';
+  h += '<button class="btn sm" data-radd="' + kind + ',' + ai + '" style="margin-top:6px">＋ 직접 추가</button>';
+  return h;
+}
+function ruleEdit(kind, ai, ri, r) {
+  var id = kind + ',' + ai + ',' + ri;
+  function chips(field, opts) { return '<div class="row">' + opts.map(function (o) { var on = (r[field] || []).indexOf(o.id) >= 0; return '<button class="chip' + (on ? ' on' : '') + '" data-rf="' + id + ',' + field + ',' + o.id + '">' + o.label + '</button>'; }).join('') + '</div>'; }
+  var conds = Object.keys(D.CONDS).map(function (k) {
+    var st = (r.cond || []).indexOf(k) >= 0 ? 1 : (r.cond || []).indexOf('!' + k) >= 0 ? 2 : 0;
+    return '<button class="chip' + (st === 1 ? ' on' : st === 2 ? ' neg' : '') + '" data-rc="' + id + ',' + k + '">' + (st === 2 ? '✕ ' : '') + D.CONDS[k].label + '</button>';
+  }).join('');
+  return '<div class="edit"><div class="grid2"><div><div class="lbl">이름</div><input type="text" data-rv="' + id + ',name" value="' + esc(r.name) + '"></div><div><div class="lbl">금액(만원)</div><input type="number" step="0.5" data-rv="' + id + ',amt" value="' + esc(r.amt) + '"></div></div>' +
+    '<div class="lbl">유형 (안 고르면 전체)</div>' + chips('types', D.TYPES) +
+    '<div class="lbl">요금제 (안 고르면 전체)</div>' + chips('bands', D.BANDS) +
+    '<div class="lbl">모델 (쉼표 · 앞부분만 써도 돼요 · 예: SM-S94, UIP18 · 용량은 SM-S948N:1T)</div><input type="text" data-rv="' + id + ',models" value="' + esc((r.models || []).join(', ')) + '" placeholder="비우면 전모델">' +
+    '<div class="lbl">제외 모델</div><input type="text" data-rv="' + id + ',ex" value="' + esc((r.ex || []).join(', ')) + '">' +
+    '<div class="lbl">조건 (한 번 = 그럴 때 · 두 번 = 아닐 때 ✕ · 세 번 = 끔)</div><div class="row">' + conds + '</div>' +
+    '<div class="row" style="margin-top:10px"><button class="btn sm" data-roff="' + id + '">' + (r.off ? '✅ 켜기' : '⏸ 끄기') + '</button><button class="btn sm del" data-rdel="' + id + '">🗑 지우기</button><span style="flex:1"></span><button class="btn sm" data-rtog="' + id + '">접기</button></div></div>';
+}
+
+// ── 구두 탭 ──
+function verbalHtml() {
+  var h = '<p class="sub">구두단가 = 단가표 밖에서 따로 말로 받은 추가 · 차감 금액. 업체마다 적어 두면 비교에 바로 더해져요. 바뀌면 고치거나 꺼 두고 다시 비교하세요.</p>';
+  S.ags.forEach(function (a, ai) {
+    h += '<div class="card"><h2><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + ' 구두 <span class="sub">' + a.verbal.filter(function (r) { return !r.off; }).length + '개 켬</span></h2>' +
+      '<div class="lbl">글로 쓰기 → AI 가 규칙으로 바꿔요</div><textarea data-vtext="' + ai + '" placeholder="예)\nS26 울트라 MNP 115군 +5\n아이폰17 기변 전체 -2\n폴드8 85군 이상 선택약정이면 +3">' + esc(S['vt' + ai] || '') + '</textarea>' +
+      '<div class="row" style="margin-top:6px"><button class="btn sm pri" data-vai="' + ai + '"' + (BUSY['v' + a.id] ? ' disabled' : '') + '>' + (BUSY['v' + a.id] ? '⏳ 바꾸는 중…' : '🤖 규칙으로 바꾸기') + '</button></div>' +
+      '<div style="margin-top:10px">' + rulesHtml(ai, 'verbal') + '</div></div>';
+  });
+  return h;
+}
+
+// ── 설정 탭 ──
+function setHtml() {
+  var k = ls(LSK);
+  return '<div class="card"><h2>🔑 Claude API 키</h2><p class="sub">단가표 사진 읽기 · 구두 글 바꾸기에 써요. <b>이 브라우저에만</b> 저장되고 서버(talla.co.kr)로는 안 가요 (Anthropic 으로만 바로 감). 키 만들기: console.anthropic.com → API Keys. 단가표 한 장 읽기 약 50~150원.</p>' +
+    '<input type="password" id="key" placeholder="sk-ant-..." value="' + esc(k || '') + '"><div class="row" style="margin-top:8px"><button class="btn pri" data-savekey>저장</button>' + (k ? '<button class="btn del" data-delkey>지우기</button><span class="sub">✅ 저장됨</span>' : '') + '</div></div>' +
+    '<div class="card"><h2>💾 내보내기 · 가져오기</h2><p class="sub">단가표 · 구두는 이 브라우저에만 저장돼요. 다른 기기로 옮기거나 백업할 때 써요.</p>' +
+    '<div class="row"><button class="btn" data-export>📤 파일로 내보내기</button><label class="btn" style="display:inline-flex;align-items:center">📥 파일 가져오기<input type="file" accept=".json,application/json" class="hide" id="imp"></label></div></div>' +
+    '<div class="card"><h2>🧹 처음부터</h2><button class="btn del" data-reset>전부 지우기</button></div>';
+}
+
+// ── AI ──
+var BANDS_TXT = D.BANDS.map(function (b) { return b.id + ' = ' + b.label + '군'; }).join(', ');
+var CONDS_TXT = Object.keys(D.CONDS).map(function (k) { return k + ' = ' + D.CONDS[k].label; }).join('\n');
+var SCHEMA_TXT = [
+  '{',
+  ' "name": "업체 이름(보이면)", "date": "적용일 예: 11/27",',
+  ' "sections": [ { "cols": [ { "label": "표의 열 이름 그대로 예: 115군", "bands": { "B115": 0, "B105": -6 } } ],',
+  '   "rows": [ { "key": "모델코드(용량 빼고)", "st": ["256","512"], "name": "펫네임", "price": 1254000, "v": [ [신규, MNP, 재가입/기변], ...열 순서대로 ] } ] } ],',
+  ' "rules": [ { "name": "정책 이름", "amt": 3, "types": ["mnp","chg"], "bands": ["B115","B105"], "models": ["SM-S94"], "ex": ["SM-S741"], "cond": ["sel","sup20"] } ],',
+  ' "notes": [ "규칙으로 못 넣은 정책 · 주의사항 한 줄씩" ]',
+  '}'].join('\n');
+var SHEET_PROMPT = [
+  '이 이미지는 한국 휴대폰 대리점의 LG U+ 단가표(정책표)입니다. 표의 모든 숫자와 정책을 빠짐없이 정확히 읽어 아래 JSON 으로만 답하세요. 설명 글 없이 JSON 하나만.',
+  '',
+  'JSON 모양:', SCHEMA_TXT, '',
+  '규칙:',
+  '- 숫자 단위는 만원(표 그대로). 빈칸 · 검은 칸 · "-" 는 null. 음수는 음수로.',
+  '- 가입유형 순서는 늘 [신규(010), MNP(번호이동), 재가입/기변]. 표에 "기변"이라 써 있으면 재가입 자리에.',
+  '- 요금제 구간(band) id: ' + BANDS_TXT + '.',
+  '- 각 열(요금제군)이 어떤 band 에 해당하는지 cols[].bands 에 {band id: 조정 금액} 으로. 예: "115군 (105군 유지시 -6만)" → {"B115":0,"B105":-6}. "105/95 그룹 (95요금제 유치시 -3만)" → {"B105":0,"B95":-3}. "55,47,44군" → {"B55":0,"B44":0}. "37,33군" → {"B37":0}. 시니어 전용 열은 넣지 마세요.',
+  '- 표가 위아래로 나뉘어 열 구성이 다르면 sections 를 여러 개로.',
+  '- 모델: key 는 용량 뺀 모델코드 대문자(예: SM-S942N, SM-F776N, SM-A176L, AT-M140L, UIP18PR, UIP18PM, UIP17, UIP17PR, UIP17PM, UIP17E, UIPD, UIP16E, UIP16). "SM-S931(6,8)" 같은 묶음은 key "SM-S93" 처럼 공통 앞부분. st 는 용량 목록 "128","256","512","1T" (모델코드나 이름에 있으면 · "(256, 512, 1T)" 면 셋 다 · 모르면 []). price = 출고가(원 · 없으면 null).',
+  '- 추가정책 · 차감정책 · 부가서비스 · 선택약정 차감 등 금액이 붙는 정책은 rules 로. amt 는 만원(차감은 음수).',
+  '  types: "new"=신규/010, "mnp"=MNP, "chg"=재가입/기변 (전유형이면 []). bands: 해당 요금제 구간(전체면 []). "75군 이상" = B115,B105,B95,B85. "85군 이상" = B115,B105,B95,B85. "47군 이상" = 위 + B61,B55.',
+  '  models: 대상 모델 key 앞부분 목록(전모델이면 []). 예: S26류(FE제외) = ["SM-S942","SM-S947","SM-S948"], 아이폰16류 = ["UIP16"], 폴더블8류 = ["SM-F776","SM-F971","SM-F976"]. 특정 용량만이면 "SM-S948N:1T". ex: 제외 모델.',
+  '  cond: 아래 조건 이름 목록에서만 고르기(모두 만족할 때 적용 · "!이름" = 아닐 때). 조건 없이 늘 붙으면 [].',
+  CONDS_TXT,
+  '  예: "유통망지원금 10만원 미만 -2" → cond ["supLow"]. "85군 이상 선택약정 + 유통망지원금 20만원 이상 +3" → cond ["sel","sup20"]. "이동사지원금약정(공시) 개통" → "gong". "VAS 유치 +3 / 미유치 -1" → 규칙 두 개 (["vas1"] +3, ["!vas1"] -1). "MNP 선택약정 차감 -5" → types ["mnp"], cond ["sel"]. "기변 C등급 -5" → cond ["cgrade"]. "디즈니 유치시 -1" → cond ["disney"].',
+  '- 중고 · 2nd 번들 · 유심단독 · 워치 같은 별도 상품 정책, 요금제/회선 유지기간, 환수 조건 등은 rules 가 아니라 notes 에 한 줄씩.',
+  '- 숫자 하나하나 다시 확인하세요. 비슷한 행(같은 숫자 반복)도 그대로 적으세요.'
+].join('\n');
+
+function apiCall(content, maxTok) {
+  var key = ls(LSK);
+  if (!key) return Promise.reject(new Error('API 키가 없어요 → [⚙ 설정] 탭에서 넣어 주세요'));
+  return fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-dangerous-direct-browser-access': 'true', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTok || 32000, output_config: { effort: 'high' }, fallbacks: 'default', messages: [{ role: 'user', content: content }] })
+  }).then(function (r) {
+    return r.json().then(function (j) {
+      if (!r.ok) throw new Error('API 오류 ' + r.status + ': ' + ((j.error && j.error.message) || ''));
+      if (j.stop_reason === 'refusal') throw new Error('AI 가 이 요청을 거절했어요');
+      if (j.stop_reason === 'max_tokens') throw new Error('답이 너무 길어 잘렸어요 · 사진을 나눠 올려 보세요');
+      var t = (j.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+      return parseJson(t);
+    });
+  });
+}
+function parseJson(t) {
+  var s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if (s < 0 || e < s) throw new Error('AI 답에서 표를 못 찾았어요');
+  return JSON.parse(t.slice(s, e + 1));
+}
+function shrink(file) {
+  return new Promise(function (res, rej) {
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var max = 2400, w = img.width, h = img.height, k = Math.min(1, max / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      var q = 0.92, d = c.toDataURL('image/jpeg', q);
+      while (d.length > 6.5e6 && q > 0.5) { q -= 0.1; d = c.toDataURL('image/jpeg', q); }
+      URL.revokeObjectURL(url); res(d);
+    };
+    img.onerror = function () { rej(new Error('사진을 못 열었어요')); };
+    img.src = url;
+  });
+}
+function cleanRule(r) {
+  return { id: uid(), name: String(r.name || ''), amt: +r.amt || 0, types: arr(r.types), bands: arr(r.bands), models: arr(r.models), ex: arr(r.ex), cond: arr(r.cond), off: false };
+}
+function arr(x) { return Array.isArray(x) ? x.map(String).filter(Boolean) : []; }
+
+function uploadSheet(ai, files) {
+  var a = S.ags[ai]; if (!files.length) return;
+  BUSY[a.id] = '사진 줄이는 중…'; a.err = ''; render();
+  Promise.all([].map.call(files, shrink)).then(function (urls) {
+    IMGS[a.id] = urls;
+    BUSY[a.id] = 'AI 가 단가표 읽는 중… (1~2분)'; render();
+    var content = urls.map(function (u) { return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: u.split(',')[1] } }; });
+    content.push({ type: 'text', text: SHEET_PROMPT + '\n\n업체: ' + a.name });
+    return apiCall(content);
+  }).then(function (j) {
+    a.sections = (j.sections || []).map(function (s) {
+      return { cols: (s.cols || []).map(function (c) { return { label: String(c.label || ''), bands: c.bands || {} }; }),
+        rows: (s.rows || []).map(function (r) { return { key: D.norm(r.key), st: arr(r.st).map(D.normSt), name: r.name || '', price: r.price || null, v: (r.v || []).map(function (c) { return Array.isArray(c) ? [0, 1, 2].map(function (i) { return c[i] == null || c[i] === '' ? null : +c[i]; }) : [null, null, null]; }) }; }) };
+    });
+    a.rules = (j.rules || []).map(cleanRule);
+    a.notes = arr(j.notes);
+    a.date = j.date || a.date;
+    delete BUSY[a.id]; save(); render();
+  }).catch(function (e) { delete BUSY[a.id]; a.err = '❌ ' + e.message; render(); });
+}
+
+function verbalAi(ai) {
+  var a = S.ags[ai], txt = (S['vt' + ai] || '').trim();
+  if (!txt) return alert('구두 내용을 먼저 써 주세요');
+  var keys = []; a.sections.forEach(function (s) { s.rows.forEach(function (r) { keys.push(r.key + (r.st.length ? '(' + r.st.join(',') + ')' : '') + ' ' + r.name); }); });
+  BUSY['v' + a.id] = 1; render();
+  var prompt = [
+    '휴대폰 대리점 "' + a.name + '" 의 구두단가(단가표 밖에서 말로 받은 추가/차감) 메모를 규칙 JSON 으로 바꿔 주세요. JSON 만 답하세요.',
+    '모양: {"rules":[{"name":"짧은 이름","amt":만원(차감은 음수),"types":[],"bands":[],"models":[],"ex":[],"cond":[]}]}',
+    'types: "new"(신규/010) "mnp" "chg"(기변/재가입), 전체면 []. bands id: ' + BANDS_TXT + ' (전체면 [] · "85군 이상" = B115,B105,B95,B85).',
+    'models: 아래 모델 key 의 앞부분(전모델이면 []). 용량 지정은 "KEY:256".',
+    'cond (조건이 있을 때만 · "!이름" = 아닐 때):', CONDS_TXT,
+    '이 업체 단가표 모델 목록:', keys.join('\n') || '(아직 없음 · 흔한 코드로: 갤럭시 S26 = SM-S942, S26+ = SM-S947, S26울트라 = SM-S948, 플립8 = SM-F776, 폴드8 = SM-F971, 폴드8울트라 = SM-F976, 아이폰18프로 = UIP18PR, 아이폰17 = UIP17)',
+    '', '메모:', txt
+  ].join('\n');
+  apiCall([{ type: 'text', text: prompt }], 8000).then(function (j) {
+    (j.rules || []).forEach(function (r) { a.verbal.push(cleanRule(r)); });
+    delete BUSY['v' + a.id]; S['vt' + ai] = ''; save(); render();
+  }).catch(function (e) { delete BUSY['v' + a.id]; render(); alert('❌ ' + e.message); });
+}
+
+// ── 시트 ──
+function openSheet(html, after) {
+  var m = document.getElementById('modal'), sh = document.getElementById('sheet');
+  sh.innerHTML = html; m.classList.remove('hide');
+  var n = sh.cloneNode(true); sh.parentNode.replaceChild(n, sh); n.id = 'sheet';
+  if (after) after(n);
+}
+document.getElementById('modal').addEventListener('click', function (e) { if (e.target.id === 'modal' || e.target.closest('[data-close]')) this.classList.add('hide'); });
+
+// ── 이벤트 ──
+function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
+var view = document.getElementById('view');
+view.addEventListener('click', function (e) {
+  var t = e.target.closest('button,[data-rtog],[data-it],summary'); if (!t) return;
+  var d = t.dataset;
+  if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
+  if (d.go) { S.tab = d.go; save(); render(); return; }
+  if (d.sc) { var k = d.sc; S.sc[k] = d.v === '!' ? !S.sc[k] : d.v; S.scOpen = true; save(); render(); return; }
+  if (d.type) { S.type = d.type; save(); render(); return; }
+  if (d.band) { S.band = d.band; S.mode = 'list'; save(); render(); return; }
+  if (d.mdl) { var sl = S.models = S.models || []; if (d.mdl === '*') S.models = []; else { var mi = sl.indexOf(d.mdl); if (mi >= 0) sl.splice(mi, 1); else sl.push(d.mdl); } var qx = document.querySelector('.qbar'), sx = qx ? qx.scrollLeft : 0; save(); render(); var q2x = document.querySelector('.qbar'); if (q2x) q2x.scrollLeft = sx; return; }
+  if (d.mode) { S.mode = d.mode; save(); render(); return; }
+  if (d.it) { showItem(d.it); return; }
+  if (d.rtog) { var q = ruleRef(d.rtog), key = q.kind + q.ai + '_' + q.ri; S.editRule = S.editRule === key ? null : key; if (q.kind === 'rules') S.openRules = S.ags[q.ai].id; render(); return; }
+  if (d.rf) { var q2 = ruleRef(d.rf), f = q2.rest[0], v = q2.rest[1], l = q2.r[f] = q2.r[f] || []; var i = l.indexOf(v); if (i >= 0) l.splice(i, 1); else l.push(v); save(); render(); return; }
+  if (d.rc) { var q3 = ruleRef(d.rc), c = q3.rest[0], cl = q3.r.cond = q3.r.cond || []; var p = cl.indexOf(c), n = cl.indexOf('!' + c);
+    if (p >= 0) cl[p] = '!' + c; else if (n >= 0) cl.splice(n, 1); else cl.push(c); save(); render(); return; }
+  if (d.roff) { var q4 = ruleRef(d.roff); q4.r.off = !q4.r.off; save(); render(); return; }
+  if (d.rdel) { var q5 = ruleRef(d.rdel); if (confirm('"' + q5.r.name + '" 지울까요?')) { S.ags[q5.ai][q5.kind].splice(q5.ri, 1); S.editRule = null; save(); render(); } return; }
+  if (d.radd) { var pp = d.radd.split(','), lst = S.ags[+pp[1]][pp[0]]; lst.push({ id: uid(), name: pp[0] === 'verbal' ? '구두' : '정책', amt: 0, types: [], bands: [], models: [], ex: [], cond: [] }); S.editRule = pp[0] + pp[1] + '_' + (lst.length - 1); if (pp[0] === 'rules') S.openRules = S.ags[+pp[1]].id; save(); render(); return; }
+  if (d.vai) { verbalAi(+d.vai); return; }
+  if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 단가표 · 정책을 비울까요? (구두는 남아요)')) { a.sections = []; a.rules = []; a.notes = []; a.date = ''; delete IMGS[a.id]; save(); render(); } return; }
+  if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
+  if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { S.ags.push(blankAg(nm)); save(); render(); } return; }
+  if (t.hasAttribute('data-savekey')) { var kv = document.getElementById('key').value.trim(); ls(LSK, kv || null); render(); return; }
+  if (t.hasAttribute('data-delkey')) { ls(LSK, null); render(); return; }
+  if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
+  if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 구두를 전부 지울까요?')) { ls(LS, null); load(); render(); } return; }
+});
+view.addEventListener('change', function (e) {
+  var t = e.target, d = t.dataset;
+  if (d.up) { uploadSheet(+d.up, t.files); return; }
+  if (d.vas) { var k = d.vas, on = t.checked; if (k === 'insSwap') S.sc.ins = on ? 'swap' : 'none'; else if (k === 'insSafe') S.sc.ins = on ? 'safe' : 'none'; else S.sc[k] = on; save(); render(); return; }
+  if (t.id === 'imp') { var f = t.files[0]; if (!f) return; f.text().then(function (s) { var j = JSON.parse(s); if (!j.ags) throw 0; S.ags = j.ags; load2(); save(); render(); alert('가져왔어요'); }).catch(function () { alert('파일을 못 읽었어요'); }); return; }
+  if (t.id === 'sort') { S.sort = t.value; save(); render(); return; }
+  if (d.agname) { S.ags[+d.agname].name = t.value.trim() || '업체'; save(); return; }
+  if (d.cell) { var p = d.cell.split(',').map(Number), row = S.ags[p[0]].sections[p[1]].rows[p[2]]; row.v[p[3]] = row.v[p[3]] || [null, null, null]; row.v[p[3]][p[4]] = t.value.trim() === '' ? null : +t.value; save(); return; }
+  if (d.rv) { var q = ruleRef(d.rv), f2 = q.rest[0]; if (f2 === 'amt') q.r.amt = +t.value || 0; else if (f2 === 'name') q.r.name = t.value; else q.r[f2] = t.value.split(/[,\n]/).map(function (s) { return s.trim(); }).filter(Boolean); save(); render(); return; }
+});
+function load2() { S.ags.forEach(function (a) { a.id = a.id || uid(); a.sections = a.sections || []; a.rules = a.rules || []; a.verbal = a.verbal || []; a.notes = a.notes || []; }); }
+var qT;
+view.addEventListener('input', function (e) {
+  var t = e.target;
+  if (t.id === 'q') { clearTimeout(qT); qT = setTimeout(function () { S.q = t.value; var pos = t.selectionStart; render(); var n = document.getElementById('q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }, 250); }
+  if (t.dataset.vtext != null) S['vt' + t.dataset.vtext] = t.value;
+});
+
+// 링크로 받은 자료 (#data=… · 브라우저 안에서만 풀림 · 서버로 안 감)
+function importHash() {
+  var m = location.hash.match(/data=([A-Za-z0-9_\-]+)/);
+  if (!m || !window.DecompressionStream) return Promise.resolve();
+  var b = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(b.length);
+  for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+  var s = new Blob([u]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Response(s).text().then(function (txt) {
+    var j = JSON.parse(txt);
+    if (j.ags && confirm('링크에 담긴 단가표 ' + j.ags.map(function (a) { return a.name; }).join(' · ') + ' 를 불러올까요? (지금 자료는 바뀌어요 · 구두는 그대로)')) {
+      j.ags.forEach(function (na) {
+        var old = S.ags.filter(function (a) { return a.name === na.name; })[0];
+        if (old) { old.sections = na.sections; old.rules = na.rules; old.notes = na.notes || []; old.date = na.date; if (!old.verbal.length && na.verbal) old.verbal = na.verbal; }
+        else S.ags.push(na);
+      });
+      load2(); save();
+    }
+    history.replaceState(null, '', location.pathname);
+  }).catch(function () {});
+}
+
+load();
+importHash().then(render);
+})();
+</script>
+</body>
+</html>
