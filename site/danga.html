@@ -122,6 +122,17 @@ function fmt(v) { return v == null ? '-' : (Math.round(v * 10) / 10).toString();
 function sgn(v) { v = Math.round(v * 10) / 10; return (v > 0 ? '+' : '') + v; }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
+// 기본 양식 (모델 · 요금제 열만 · 숫자 없음) — 업체 이름이 같으면 그 단가표 모양 그대로, 아니면 기본 모델 목록
+var TEMPLATES = {"경기모바일":[{"cols":[{"label":"115군","bands":{"B115":0,"B105":-6}},{"label":"95군","bands":{"B95":0}},{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47,44군","bands":{"B55":0,"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-F776N",["256"],"플립8 256"],["SM-F776N",["512"],"플립8 512"],["SM-F971N",["256"],"폴드8 256"],["SM-F976N",["256"],"폴드8울트라 256"],["SM-F976N",["512"],"폴드8울트라 512"],["SM-S942N",[],"갤S26"],["SM-S948N",[],"갤S26 울트라"],["SM-S93",[],"갤S25류"],["SM-S937N",[],"갤S25엣지"],["SM-S741N",[],"갤26 FE"],["UIP18PR",["256","512","1T"],"아이폰18 프로"],["UIP18PM",["256","512","1T"],"아이폰18 프로맥스"],["UIPD",["256","512","1T"],"아이폰듀오"],["UIP17",["256","512"],"아이폰17"],["UIP17PR",["256","512","1T"],"아이폰17프로"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"]]},{"cols":[{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47군","bands":{"B55":0}},{"label":"44군","bands":{"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-A176L",[],"버디5"],["SM-A175N",[],"키즈폰 무너2"],["AT-M140L",[],"스타일폴더2"]]}],"드림4":[{"cols":[{"label":"1그룹 115/130","bands":{"B115":0}},{"label":"2그룹 105/95","bands":{"B105":0,"B95":-3}},{"label":"3그룹 75/85","bands":{"B85":0}},{"label":"4그룹 70/61","bands":{"B61":0}},{"label":"5그룹 44/47/55","bands":{"B55":0,"B44":0}},{"label":"6그룹 33/37","bands":{"B37":0}}],"rows":[["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"]]}]};
+var BASE_MODELS = [["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"],["SM-S93",[],"갤S25류"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"],["SM-A175N",[],"키즈폰 무너2"]];
+function tplFor(name) {
+  var src = TEMPLATES[name] || [{ cols: stdCols(), rows: BASE_MODELS }];
+  return src.map(function (sec) {
+    var cols = JSON.parse(JSON.stringify(sec.cols));
+    return { cols: cols, rows: sec.rows.map(function (r) { return { key: r[0], st: r[1].slice(), name: r[2], price: null, v: cols.map(function () { return [null, null, null]; }) }; }) };
+  });
+}
+function fillEmpty() { var n = 0; S.ags.forEach(function (a) { if (!a.sections.length) { a.sections = tplFor(a.name); n++; } }); return n; }
 var S;
 function blankAg(name) { return { id: uid(), name: name, date: '', sections: [], rules: [], verbal: [], notes: [] }; }
 function load() {
@@ -337,7 +348,7 @@ function sheetHtml() {
       (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
         IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
         : a.imgN ? '<p class="sub">⏳ 사진 불러오는 중…</p>' : '');
-    if (!a.sections.length) h += '<div class="note">아직 표가 없어요. <button class="btn sm" data-tpl="' + ai + '">＋ 기본 양식 만들기</button> (115 · 95 · 85/75 · 70/61 · 55/47/44 · 37/33군 열)</div>';
+    if (!a.sections.length) h += '<div class="note">아직 표가 없어요. <button class="btn sm" data-tpl="' + ai + '">＋ 기본 양식 만들기</button> (기본 모델 목록 · 요금제 열)</div>';
     a.sections.forEach(function (s, si) { h += secHtml(ai, si, s); });
     if (a.notes.length) h += '<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">📝 메모 ' + a.notes.length + '개</summary><ul class="sub">' + a.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></details>';
     h += '<details style="margin-top:8px"' + (S.openRules === a.id ? ' open' : '') + '><summary style="cursor:pointer;font-weight:700">📜 정책 (추가 · 차감) ' + a.rules.length + '개</summary>' + rulesHtml(ai, 'rules') + '</details>';
@@ -642,7 +653,7 @@ view.addEventListener('click', function (e) {
   if (d.rowed) { var pr = d.rowed.split(',').map(Number); rowEditor(pr[0], pr[1], pr[2]); return; }
   if (d.coled) { var pc = d.coled.split(',').map(Number); colEditor(pc[0], pc[1], pc[2]); return; }
   if (d.zoom) { var pz = d.zoom.split(','); openSheet('<h3><span>사진</span><span><button class="btn sm" id="zIn">＋ 크게</button> <button class="btn sm" data-close>닫기</button></span></h3><div style="overflow:auto"><img id="zImg" src="' + IMGS[pz[0]][+pz[1]] + '" style="width:100%"></div>', function (sh) { var w = 100; sh.querySelector('#zIn').onclick = function () { w = w >= 300 ? 100 : w + 100; sh.querySelector('#zImg').style.width = w + '%'; }; }); return; }
-  if (d.tpl) { var at = S.ags[+d.tpl]; at.sections = [{ cols: stdCols(), rows: [blankRow(6)] }]; save(); render(); return; }
+  if (d.tpl) { var at = S.ags[+d.tpl]; at.sections = tplFor(at.name); save(); render(); return; }
   if (d.addsec) { var as = S.ags[+d.addsec]; as.sections.push({ cols: stdCols(), rows: [blankRow(6)] }); save(); render(); return; }
   if (d.delsec) { var ps = d.delsec.split(',').map(Number); if (confirm('이 표를 통째로 지울까요?')) { S.ags[ps[0]].sections.splice(ps[1], 1); save(); render(); } return; }
   if (d.addrow) { var pa = d.addrow.split(',').map(Number), sec = S.ags[pa[0]].sections[pa[1]]; sec.rows.push(blankRow(sec.cols.length)); save(); render(); rowEditor(pa[0], pa[1], sec.rows.length - 1); return; }
@@ -651,7 +662,7 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-logout')) { firebase.auth().signOut().then(function () { location.reload(); }); return; }
   if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 표의 숫자를 모두 비울까요? (모델 · 열 · 정책 · 구두는 남아요)')) { a.sections.forEach(function (s) { s.rows.forEach(function (r) { r.v = s.cols.map(function () { return [null, null, null]; }); }); }); save(); render(); } return; }
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
-  if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
+  if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); na.sections = tplFor(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
 });
@@ -731,7 +742,7 @@ function importHash() {
 function gate(html) { document.getElementById('tabs').innerHTML = ''; document.getElementById('view').innerHTML = '<div class="card" style="text-align:center;padding:28px">' + html + '</div>'; }
 function start() {
   load();
-  if (!window.firebase || !firebase.apps || !firebase.apps.length) { setCloud('⚠ 로그인 없이 이 브라우저에만 저장 중'); importHash().then(render); return; }
+  if (!window.firebase || !firebase.apps || !firebase.apps.length) { setCloud('⚠ 로그인 없이 이 브라우저에만 저장 중'); importHash().then(function () { fillEmpty(); render(); }); return; }
   var auth = firebase.auth();
   gate('⏳ 확인 중…');
   auth.onAuthStateChanged(function (u) {
@@ -748,7 +759,7 @@ function start() {
       else setCloud('☁ 아직 클라우드에 자료가 없어요');
       CLOUD = ref; loadImgs();
       return importHash();
-    }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { save(); render(); });
+    }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { fillEmpty(); save(); render(); });
   });
 }
 window.addEventListener('beforeunload', function (e) { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
