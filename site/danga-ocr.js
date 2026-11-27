@@ -25,6 +25,16 @@
     workerP.catch(function () { workerP = null; });
     return workerP;
   }
+  // 글자인식 2개를 같이 돌려 빠르게 (폰도 CPU 가 여럿 · 메모리 아끼려고 2개까지)
+  var extraP = null;
+  function getWorkers(log) {
+    var n = Math.min(2, Math.max(1, (navigator.hardwareConcurrency || 2) - 1));
+    return getWorker(log).then(function (w0) {
+      if (n < 2) return [w0];
+      if (!extraP) { extraP = root.Tesseract.createWorker('eng', 1, { workerPath: CDN.worker, corePath: CDN.core, langPath: CDN.lang }).then(function (w) { return w.setParameters({ tessedit_char_whitelist: '0123456789-.', preserve_interword_spaces: '1' }).then(function () { return w; }); }); extraP.catch(function () { extraP = null; }); }
+      return extraP.then(function (w1) { return [w0, w1]; }, function () { return [w0]; });
+    });
+  }
 
   // 회색조 · 밝기 배열
   function gray(img, x0, y0, w, h) {
@@ -138,12 +148,14 @@
       } }
     }
     cg.putImageData(cid, 0, 0);
-    return getWorker(log).then(function (worker) {
-      var out = [], miss = [], unsure = [];
-      var chain = Promise.resolve();
+    return getWorkers(log).then(function (ws) {
+      var worker = ws[0], NW = ws.length;
+      var out = [], miss = [], unsure = [], doneRows = 0;
+      var chains = ws.map(function () { return Promise.resolve(); });
       for (var r = 0; r < nRows; r++) (function (r) {
-        chain = chain.then(function () {
-          if (log) log('줄 읽는 중', r / nRows);
+        var wk = ws[r % NW];
+        chains[r % NW] = chains[r % NW].then(function () {
+          if (log) log('줄 읽는 중', doneRows / nRows);
           var ya = Math.round(gd.rows[r]), yb = Math.round(gd.rows[r + 1]), hh = Math.max(4, yb - ya);
           var colDark = [];
           for (var k = 0; k < nCols3; k++) {
@@ -160,7 +172,7 @@
           g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
           for (var kb = 0; kb < nCols3; kb++) if (colDark[kb] <= 0.55) g.drawImage(CLEAN, offs[kb][2], ya, offs[kb][3], hh, offs[kb][0], 20, offs[kb][3] * scale, hh * scale);
           var pc = c; 
-          return worker.setParameters({ tessedit_pageseg_mode: '7' }).then(function () { return worker.recognize(pc); }).then(function (res) {
+          return wk.setParameters({ tessedit_pageseg_mode: '7' }).then(function () { return wk.recognize(pc); }).then(function (res) {
             var cells = [], confs = []; for (var k3 = 0; k3 < nCols3; k3++) { cells.push(colDark[k3] > 0.55 ? 'X' : ''); confs.push(100); }
             (res.data.words || []).forEach(function (wd) {
               var cx = ((wd.bbox.x0 + wd.bbox.x1) / 2 - 20) / scale, ci = col(cx);
@@ -191,10 +203,11 @@
               if (why) { miss.push([r, k4]); if (root.DANGA_DEBUG) { var W2 = root.DANGA_WHY = root.DANGA_WHY || {}; var kk = why.replace(/:.*/, ''); W2[kk] = (W2[kk] || 0) + 1; if (/^blob/.test(why) && Math.random() < 0.05) console.log('why', why, confs[k4]); } }
               row.push(n);
             }
-            out.push(row);
+            out[r] = row; doneRows++;
           });
         });
       })(r);
+      var chain = Promise.all(chains);
       // 칸 하나를 여러 방법으로 읽을 때까지 (확대 · 굵기 · 대비 · 읽기 방식) → 숫자 개수 맞는 답 · 여럿이면 많이 나온 답
       var VARIANTS = [
         { sc: 4, psm: '8', mode: 'clean' }, { sc: 5, psm: '7', mode: 'clean' }, { sc: 3, psm: '8', mode: 'bold' },
@@ -218,7 +231,7 @@
         g.putImageData(id, 0, 0);
         return c;
       }
-      function retryCell(r, k) {
+      function retryCell(r, k, worker) {
         var bl = cellBlobs(G, gd, r, k, lineR), mi = minusOf(bl), cut = mi ? mi.x1 + 2 : null;
         var want = mi ? bl.length - 1 : blobs(G, gd, r, k, lineR), votes = {}, i = 0, cur = out[r][k];
         if (mi && cur !== null) cur = -Math.abs(cur);
@@ -248,14 +261,14 @@
       }
       // 놓친 칸은 칸 하나씩 다시
       return chain.then(function () {
-        var c2 = Promise.resolve();
+        var c2s = ws.map(function () { return Promise.resolve(); }), doneC = 0;
         var seen = {}, todo = [];
         miss.forEach(function (m) { var key = m[0] + '_' + m[1]; if (seen[key]) return; seen[key] = 1; todo.push(m); });
         if (root.DANGA_DEBUG) { console.log('miss', todo.length, JSON.stringify(root.DANGA_WHY), 'span-nosym', root.DANGA_SPAN || 0); root.DANGA_SPAN = 0; root.DANGA_WHY = {}; }
         todo.forEach(function (m, ix) {
-          c2 = c2.then(function () { if (log) log('칸 다시 읽기', ix / todo.length, todo.length); return retryCell(m[0], m[1]); });
+          c2s[ix % NW] = c2s[ix % NW].then(function () { if (log) log('칸 다시 읽기', doneC / todo.length, todo.length); return retryCell(m[0], m[1], ws[ix % NW]); }).then(function () { doneC++; });
         });
-        return c2.then(function () {
+        return Promise.all(c2s).then(function () {
           // ① 자신 있게 읽은 칸에서 숫자 모양 모으기
           var bad = {}; unsure.forEach(function (u) { bad[u[0] + '_' + u[1]] = 1; });
           var proto = {}, cnt = {};
@@ -332,6 +345,15 @@
     }
     return best;
   }
+  // 표 선이 한두 개 안 보일 때(색칠된 줄 · 흐린 선) 두 칸 간격 사이에 선 하나 채워 넣기
+  function fillGaps(cs) {
+    if (cs.length < 4) return cs;
+    var g = []; for (var i = 1; i < cs.length; i++) g.push(cs[i] - cs[i - 1]);
+    var sg = g.filter(function (x) { return x >= 6; }).sort(function (a, b) { return a - b; }); if (!sg.length) return cs;
+    var med = sg[Math.floor(sg.length / 2)], out = [cs[0]];
+    for (var j = 1; j < cs.length; j++) { var d = cs[j] - cs[j - 1]; if (d > med * 1.75 && d < med * 2.3) out.push(cs[j - 1] + d / 2); out.push(cs[j]); }
+    return out;
+  }
   function autoRegion(img, hint, nRows, nCols3) {
     var W = img.naturalWidth, H = img.naturalHeight, G = gray(img, 0, 0, W, H), cb = contentBox(G);
     var cw = cb.x1 - cb.x0, ch = cb.y1 - cb.y0;
@@ -341,12 +363,12 @@
     var bx0 = Math.max(0, Math.round(hx0 - cw * 0.05)), bx1 = Math.min(W, Math.round(hx1 + cw * 0.02));
     var GH = gray(img, bx0, 0, bx1 - bx0, H);
     var hc = lines(GH, 'y', 0.5).map(function (l) { return (l.a + l.b) / 2; });
-    var rows = evenRun(hc, nRows, hy0, hy1);
+    var rows = evenRun(hc, nRows, hy0, hy1) || evenRun(fillGaps(hc), nRows, hy0, hy1);
     if (!rows) return null;
     var y0 = rows[0], y1 = rows[nRows];
     var GV = gray(img, 0, Math.round(y0), W, Math.max(4, Math.round(y1 - y0)));
     var vc = lines(GV, 'x', 0.7).map(function (l) { return (l.a + l.b) / 2; });
-    var cols = evenRun(vc, nCols3, hx0, hx1);
+    var cols = evenRun(vc, nCols3, hx0, hx1) || evenRun(fillGaps(vc), nCols3, hx0, hx1);
     if (!cols) return null;
     return { x0: cols[0] / W, x1: cols[nCols3] / W, y0: y0 / H, y1: y1 / H, auto: true };
   }
