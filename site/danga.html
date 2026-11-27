@@ -103,6 +103,8 @@ nav{justify-content:flex-start!important}
 .tfold{display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;padding:12px;border-radius:12px;border:1.5px solid #3A6A88;background:#12283A;color:inherit;font:inherit;font-size:14px;text-align:left;cursor:pointer}.tfold.on{border-color:#7FD6FF}.tfold b{color:#7FD6FF;white-space:nowrap}
 .cellpop .cpsum{color:#9FB4C2;font-size:12px;border-top:1px dotted rgba(159,180,194,.3)}
 .cellpop .cphint{margin-top:6px;padding:6px 8px;border-radius:8px;background:rgba(232,180,40,.12);color:#FFD36E;font-size:12px;line-height:1.5}
+.polsum{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}.polsum>summary{cursor:pointer;font-weight:800;font-size:15px}
+.rule .top .cbx{flex:none;width:24px;height:24px;margin-right:8px;border-radius:6px;border:2px solid #5B7C99;background:transparent;color:#fff;font-weight:900;font-size:14px;line-height:1;padding:0;cursor:pointer}.rule .top .cbx.on{background:#2FB67C;border-color:#2FB67C}.rule .top{align-items:center}
 </style>
 </head>
 <body>
@@ -672,7 +674,7 @@ function rulesHtml(ai, kind) {
   var a = S.ags[ai], list = a[kind];
   var h = list.map(function (r, ri) {
     var open = S.editRule === kind + ai + '_' + ri;
-    return '<div class="rule' + (r.off ? ' off' : '') + '"><div class="top" data-rtog="' + kind + ',' + ai + ',' + ri + '"><span class="nm">' + esc(r.name || '(이름 없음)') + '</span><span class="am ' + (r.amt < 0 ? 'minus' : 'plus') + '">' + sgn(+r.amt || 0) + '</span></div>' +
+    return '<div class="rule' + (r.off ? ' off' : '') + '"><div class="top" data-rtog="' + kind + ',' + ai + ',' + ri + '"><button class="cbx' + (r.off ? '' : ' on') + '" data-roff="' + kind + ',' + ai + ',' + ri + '" title="켜기 · 끄기">' + (r.off ? '' : '✓') + '</button><span class="nm">' + esc(r.name || '(이름 없음)') + '</span><span class="am ' + (r.amt < 0 ? 'minus' : 'plus') + '">' + sgn(+r.amt || 0) + '</span></div>' +
       '<div class="meta">' + esc(ruleMeta(r)) + (r.off ? ' · <b>꺼짐</b>' : '') + '</div>' + (open ? ruleEdit(kind, ai, ri, r) : '') + '</div>';
   }).join('');
   if (!list.length) h += '<p class="sub">' + (kind === 'verbal' ? '아직 구두단가가 없어요.' : '정책이 없어요.') + '</p>';
@@ -702,9 +704,33 @@ function verbalHtml() {
     h += '<div class="card"><h2><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + ' 구두 <span class="sub">' + a.verbal.filter(function (r) { return !r.off; }).length + '개 켬</span></h2>' +
       '<textarea data-vtext="' + ai + '" placeholder="한 줄에 하나씩 예)\nS26 울트라 MNP 115군 +5\n아이폰17 기변 -2\n폴더블8 85군 이상 선택약정 +3\n전모델 신규 +1">' + esc(S['vt' + ai] || '') + '</textarea>' +
       '<div class="row" style="margin-top:6px"><button class="btn sm pri" data-vparse="' + ai + '">⚡ 규칙 만들기</button><span class="sub">쓸 수 있는 말: 모델(S26 · 울트라 · 플립8 · 폴드8 · 아이폰17 · 18프로 …) · 신규/MNP/기변 · 115군 · 85군 이상 · 선약/공시 · 디즈니 · C등급 · +3 / -2</span></div>' +
-      '<div style="margin-top:10px">' + rulesHtml(ai, 'verbal') + '</div></div>';
+      '<div style="margin-top:10px">' + rulesHtml(ai, 'verbal') + '</div>' + polSummary(ai) + '</div>';
   });
   return h;
+}
+// 📜 정책 정리 (단가표 · 부가 사진에서 넣은 추가 · 차감) — 구두 탭에서 한눈에 · 누르면 고치기
+function polSummary(ai) {
+  var a = S.ags[ai], rs = a.rules || [];
+  if (!rs.length) return '<div class="note" style="margin-top:12px">📜 이 업체는 정책(부가 · 추가 · 차감)이 아직 없어요.</div>';
+  var VAS = /^!?(vas1|vas2|insSwap|insSafe|ins|disney|u14)$/, SUP = /^!?(sup20|supLow)$/;
+  var G = [['🎁 부가 (유치 + / 미유치 −)', []], ['💵 유통망지원금', []], ['➕ 추가', []], ['➖ 차감', []]];
+  rs.forEach(function (r, ri) {
+    var c = r.cond || [], g = c.some(function (x) { return VAS.test(x); }) ? 0 : c.some(function (x) { return SUP.test(x); }) ? 1 : (+r.amt > 0 && r.set == null) ? 2 : 3;
+    G[g][1].push([r, ri]);
+  });
+  var on = rs.filter(function (r) { return !r.off; }).length;
+  var h = '<details class="polsum" open><summary>📜 정책 정리 (단가표 · 부가 사진) <span class="sub">' + on + '개 켬 · 누르면 고치기</span></summary>';
+  G.forEach(function (g) {
+    if (!g[1].length) return;
+    h += '<div class="lbl" style="margin-top:10px">' + g[0] + ' · ' + g[1].length + '</div>';
+    h += g[1].map(function (x) {
+      var r = x[0], ri = x[1], open = S.editRule === 'rules' + ai + '_' + ri;
+      var am = r.set != null ? '= ' + fmt(+r.set) : sgn(+r.amt || 0);
+      return '<div class="rule' + (r.off ? ' off' : '') + '"><div class="top" data-rtog="rules,' + ai + ',' + ri + '"><button class="cbx' + (r.off ? '' : ' on') + '" data-roff="rules,' + ai + ',' + ri + '" title="켜기 · 끄기">' + (r.off ? '' : '✓') + '</button><span class="nm">' + esc(r.name || '(이름 없음)') + '</span><span class="am ' + (r.set != null ? '' : +r.amt < 0 ? 'minus' : 'plus') + '">' + am + '</span></div>' +
+        '<div class="meta">' + esc(ruleMeta(r)) + (r.off ? ' · <b>꺼짐</b>' : '') + '</div>' + (open ? ruleEdit('rules', ai, ri, r) : '') + '</div>';
+    }).join('');
+  });
+  return h + '</details>';
 }
 
 // 구두 한 줄 → 규칙 (AI 없이 · 낱말 규칙)
