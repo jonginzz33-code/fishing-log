@@ -51,10 +51,12 @@
   }
   var DARK = 150, LINE = 205;   // 글자 = 150 아래 · 표 선 = 205 아래 (연한 회색 선도)
   // 선 찾기: 가로(축='y') 또는 세로 줄의 어두운 비율이 높은 곳 → [{a,b}] (시작 · 끝 픽셀)
-  function lines(G, axis, minFrac) {
+  function lines(G, axis, minFrac, dotted) {
     // 선 = 양옆(2px)보다 눈에 띄게 어두운 픽셀 · 또는 아주 어두운 픽셀(두꺼운 검은 띠) — 연한 바탕색은 선으로 안 봄
+    // dotted: 엑셀 점선 테두리 → 선 방향으로 앞뒤 2px 안에 어두운 점이 있으면 이어진 것으로 봄
     var n = axis === 'y' ? G.h : G.w, m = axis === 'y' ? G.w : G.h, out = [], cur = null, W = G.w, L = G.L;
-    function at(i, k) { return axis === 'y' ? L[i * W + k] : L[k * W + i]; }
+    function at0(i, k) { return axis === 'y' ? L[i * W + k] : L[k * W + i]; }
+    function at(i, k) { if (!dotted) return at0(i, k); var v = at0(i, k); for (var d = -2; d <= 2; d++) { var kk = k + d; if (d && kk >= 0 && kk < m) { var u = at0(i, kk); if (u < v) v = u; } } return v; }
     for (var i = 0; i < n; i++) {
       var dark = 0;
       for (var k = 0; k < m; k++) {
@@ -102,6 +104,9 @@
     var X0 = Math.round(rg.x0 * W), Y0 = Math.round(rg.y0 * H), w = Math.round((rg.x1 - rg.x0) * W), h = Math.round((rg.y1 - rg.y0) * H);
     var G = gray(img, X0, Y0, w, h);
     var rb = bounds(lines(G, 'y', 0.45), h, nRows), cb = bounds(lines(G, 'x', 0.7), w, nCols);
+    if (!rb.exact) { var rb2 = bounds(lines(G, 'y', 0.45, true), h, nRows); if (rb2.exact) rb = rb2; }   // 점선 테두리
+    if (!cb.exact) { var cb2 = bounds(lines(G, 'x', 0.7, true), w, nCols); if (cb2.exact) cb = cb2; }
+    if (rg.colsAbs && rg.colsAbs.length === nCols + 1) cb = { b: rg.colsAbs.map(function (x) { return x * W - X0; }), exact: true };   // 위 표와 같은 칸
     return { X0: X0, Y0: Y0, w: w, h: h, G: G, rows: rb.b, cols: cb.b, exact: rb.exact && cb.exact };
   }
 
@@ -306,7 +311,7 @@
             var f = tt ? cc / tt : 0;
             if (f > 0.04 && f < 0.6) unsure.push([r2, k2]);   // 칸 일부에 색 글씨가 겹침 = 워터마크
           }
-          return { v: out, exact: gd.exact, missed: Object.keys(seen).length, unsure: unsure };
+          return { v: out, colsAbs: gd.cols.map(function (x) { return (x + gd.X0) / img.naturalWidth; }), exact: gd.exact, missed: Object.keys(seen).length, unsure: unsure };
         });
       });
     });
@@ -354,7 +359,7 @@
     for (var j = 1; j < cs.length; j++) { var d = cs[j] - cs[j - 1]; if (d > med * 1.75 && d < med * 2.3) out.push(cs[j - 1] + d / 2); out.push(cs[j]); }
     return out;
   }
-  function autoRegion(img, hint, nRows, nCols3) {
+  function autoRegion(img, hint, nRows, nCols3, fixX) {
     var W = img.naturalWidth, H = img.naturalHeight, G = gray(img, 0, 0, W, H), cb = contentBox(G);
     var cw = cb.x1 - cb.x0, ch = cb.y1 - cb.y0;
     if (cw < W * 0.3 || ch < H * 0.2) cb = { x0: 0, y0: 0, x1: W, y1: H }, cw = W, ch = H;
@@ -364,11 +369,14 @@
     var GH = gray(img, bx0, 0, bx1 - bx0, H);
     var hc = lines(GH, 'y', 0.5).map(function (l) { return (l.a + l.b) / 2; });
     var rows = evenRun(hc, nRows, hy0, hy1) || evenRun(fillGaps(hc), nRows, hy0, hy1);
+    if (!rows) { hc = lines(GH, 'y', 0.5, true).map(function (l) { return (l.a + l.b) / 2; }); rows = evenRun(hc, nRows, hy0, hy1) || evenRun(fillGaps(hc), nRows, hy0, hy1); }
     if (!rows) return null;
     var y0 = rows[0], y1 = rows[nRows];
     var GV = gray(img, 0, Math.round(y0), W, Math.max(4, Math.round(y1 - y0)));
     var vc = lines(GV, 'x', 0.7).map(function (l) { return (l.a + l.b) / 2; });
     var cols = evenRun(vc, nCols3, hx0, hx1) || evenRun(fillGaps(vc), nCols3, hx0, hx1);
+    if (!cols) { vc = lines(GV, 'x', 0.7, true).map(function (l) { return (l.a + l.b) / 2; }); cols = evenRun(vc, nCols3, hx0, hx1) || evenRun(fillGaps(vc), nCols3, hx0, hx1); }
+    if (!cols && fixX) return { x0: fixX[0], x1: fixX[1], y0: y0 / H, y1: y1 / H, auto: true };   // 위 표와 같은 칸 너비 (한두 줄짜리 표)
     if (!cols) return null;
     return { x0: cols[0] / W, x1: cols[nCols3] / W, y0: y0 / H, y1: y1 / H, auto: true };
   }

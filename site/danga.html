@@ -137,10 +137,11 @@ for (var tk in TEMPLATES2) TEMPLATES[tk] = TEMPLATES2[tk];
 function tplName(name) { var n = String(name || '').replace(/\s+/g, '').toLowerCase(); if (/dmb|디엠비/.test(n)) return 'dmb3'; if (/유안/.test(n)) return '유안'; if (/경기/.test(n)) return '경기모바일'; if (/드림/.test(n)) return '드림4'; return name; }
 function tplFor(name) {
   var src = TEMPLATES[tplName(name)] || [{ cols: stdCols(), rows: BASE_MODELS }];
-  return src.map(function (sec) {
+  var out = src.map(function (sec) {
     var cols = JSON.parse(JSON.stringify(sec.cols));
     return { cols: cols, rows: sec.rows.map(function (r) { return { key: r[0], st: r[1].slice(), name: r[2], price: null, v: cols.map(function () { return [null, null, null]; }) }; }) };
   });
+  var tmp = { name: name, sections: out }; splitD4(tmp); return tmp.sections;
 }
 // 저장된 자료 바로잡기 (한 번만 · 2026-11-27 점검)
 function fixData() {
@@ -179,8 +180,17 @@ function useTemplate(a) {
   var t = tplFor(a.name); if (!t.length || blankTable({ sections: t })) return false;
   a.sections = t; if (a.ocr) delete a.ocr.regs; delete a.prev; delete a.unsure; return true;
 }
+// 드림4: 맨 아래 LTE 줄(스타일폴더2)은 굵은 검은 띠 아래 따로 있음 → 표 두 개로 나눠 읽기
+function splitD4(a) {
+  if (tplName(a.name) !== '드림4' || a.sections.length !== 1) return false;
+  var sc = a.sections[0], last = sc.rows[sc.rows.length - 1];
+  if (sc.rows.length < 2 || !/^AT-M1/.test(last.key || '')) return false;
+  a.sections = [{ cols: sc.cols, rows: sc.rows.slice(0, -1) }, { cols: JSON.parse(JSON.stringify(sc.cols)), rows: [last] }];
+  if (a.ocr) delete a.ocr.regs; delete a.unsure; if (a.prev && a.prev.length === 1 && a.prev[0].rows.length === sc.rows.length) a.prev = [{ cols: a.prev[0].cols, rows: a.prev[0].rows.slice(0, -1) }, { cols: a.prev[0].cols, rows: a.prev[0].rows.slice(-1) }];
+  return true;
+}
 function fixTemplates() {
-  S.ags.forEach(function (a) { if (a.sections.length) useTemplate(a); });
+  S.ags.forEach(function (a) { if (a.sections.length) useTemplate(a); splitD4(a); });
   S.ags.forEach(function (a) {
     if (a.tplV >= 1) return;
     var t = tplName(a.name);
@@ -859,7 +869,7 @@ var OCRBUSY = {}, OCRMSG = {};
 // 받은 단가표 모양 기준 숫자 칸 영역 (사진 크기 비율) · 실제 표 선에 자동으로 맞춤
 var DEFAULT_REG = {
   '경기모바일': [{ img: 0, h: 1, x0: 0.282, y0: 0.1265, x1: 0.999, y1: 0.4155 }, { img: 0, h: 1, x0: 0.282, y0: 0.465, x1: 0.8806, y1: 0.515 }],
-  '드림4': [{ img: 0, h: 1, x0: 0.3495, y0: 0.1975, x1: 0.999, y1: 0.5925 }],
+  '드림4': [{ img: 0, h: 1, x0: 0.3537, y0: 0.1966, x1: 0.9993, y1: 0.5747 }, { img: 0, h: 1, x0: 0.3537, y0: 0.5751, x1: 0.9993, y1: 0.5957 }],
   'dmb3': [{ img: 0, h: 1, x0: 0.302, y0: 0.122, x1: 0.976, y1: 0.6015 }],
   '유안': [{ img: 0, h: 1, x0: 0.273, y0: 0.123, x1: 0.991, y1: 0.4755 }]
 };
@@ -874,7 +884,7 @@ function runOcr(ai, quiet) {
   var regs = regsOf(a);
   for (var si = 0; si < a.sections.length; si++) if (!regs[si]) { if (quiet) return Promise.resolve({ name: a.name, err: '표 ' + (si + 1) + ' 영역을 아직 안 맞춤 → 📐 영역 맞추기' }); setRegions(ai, si, false); return Promise.resolve(null); }
   OCRBUSY[a.id] = '글자인식 준비 중…'; render();
-  var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve(), warns = [];
+  var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve(), warns = [], lastFound = null, lastCols = null;
   a.sections.forEach(function (sec, si) {
     chain = chain.then(function () {
       var rg = regs[si], url = (ORIG[a.id] || IMGS[a.id] || [])[rg.img || 0];
@@ -882,7 +892,10 @@ function runOcr(ai, quiet) {
       return imgEl(url).then(function (img0) {
         var img = DangaOCR.fit(img0);
         var nR = sec.rows.length, nC = sec.cols.length * 3, hint = rg.h ? rg : DangaOCR.toHint(img, rg);
-        var found = DangaOCR.autoRegion(img, hint, nR, nC), use;
+        var pf = si > 0 && a.sections[si - 1].cols.length * 3 === nC && regs[si - 1] && (regs[si - 1].img || 0) === (rg.img || 0) ? lastFound : null;
+        var found = DangaOCR.autoRegion(img, hint, nR, nC, pf ? [pf.x0, pf.x1] : null), use;
+        if (found && pf && lastCols && Math.abs(found.x0 - pf.x0) < 0.003 && Math.abs(found.x1 - pf.x1) < 0.003) found.colsAbs = lastCols;
+        lastFound = found;
         if (found) { use = found; regs[si] = Object.assign({ img: rg.img || 0, h: 1 }, DangaOCR.toHint(img, found)); }
         else {
           var cnt = DangaOCR.rowCount(img, hint);
@@ -897,6 +910,7 @@ function runOcr(ai, quiet) {
           if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; var bm = document.querySelector('.ocrmsg.busy'); if (bm) bm.textContent = '⏳ ' + m + ' · 한 표에 10~40초 걸려요'; }
         });
       }).then(function (res) {
+        lastCols = res.colsAbs;
         sec.rows.forEach(function (row, ri) {
           var vals = res.v[ri] || [];
           row.v = sec.cols.map(function (c, ci) { return [vals[ci * 3], vals[ci * 3 + 1], vals[ci * 3 + 2]].map(function (x) { return x === undefined ? null : x; }); });
