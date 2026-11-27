@@ -1,7 +1,11 @@
 // 지오팜 재고조회 웹 알림 (talla.co.kr/geo 에서 '이 폰으로 알림 받기'를 누르면 등록됨)
 // 서버가 보낸 알림을 페이지가 닫혀 있어도 휴대폰 알림으로 띄움
+const VERSION = '5 (복사 버튼 · 띠링 2.5초)'; // 바꿀 때마다 올리기 → 홈페이지 '이 기기' 칸에 표시
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'ver' && e.source) e.source.postMessage({ type: 'geo-ver', v: VERSION });
+});
 
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 self.addEventListener('push', (e) => {
