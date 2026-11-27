@@ -99,6 +99,7 @@ nav{justify-content:flex-start!important}
 .tbl .tsep{border-left:2px solid #5B7C99!important}.tbl td.mxbest{background:rgba(127,214,255,.16);box-shadow:inset 0 0 0 1.5px #7FD6FF}.tbl td.mxbest b{color:#fff}
 .tbl.mx td,.tbl.mx th{padding:7px 3px}
 .cellpop{position:fixed;z-index:9999;min-width:200px;max-width:min(320px,92vw);background:#0E2233;border:2px solid #7FD6FF;border-radius:12px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px}.cellpop .cph{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.cellpop .cpx{cursor:pointer;color:#9FB4C2;padding:0 4px}.cellpop .cpr{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px dotted rgba(159,180,194,.3)}.cellpop .cpr b.plus{color:#3FCF8E}.cellpop .cpr b.minus{color:#FF6B6B}.cellpop .cpt{border-top:1.5px solid #7FD6FF;margin-top:2px}.cellpop .cpt b{color:#fff;font-size:15px}
+.picbox .pic{position:relative;display:block;border-bottom:3px solid #16324A}.picbox .pic i{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.65);color:#fff;font-style:normal;font-size:11px;border-radius:8px;padding:0 6px}.picbox .picx{position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:12px;border:0;background:rgba(0,0,0,.7);color:#fff;font-size:12px;cursor:pointer}.picbox .picadd{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;background:#0E2233;border:2px dashed #5B7C99;border-radius:10px;color:#7FD6FF;font-size:12px;cursor:pointer;text-align:center;vertical-align:top}
 </style>
 </head>
 <body>
@@ -460,10 +461,11 @@ function sheetHtml() {
       '<p class="sub">모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' + (a.prev ? ' · 바뀐 칸 <b style="color:var(--yel)" id="chg' + ai + '">' + ch + '</b>개 (노란 칸 · 이전 ' + esc(a.prevDate || '') + ' 대비)' : '') + '</p>' +
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
       (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 다시 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
-      '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
+      '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 전부 바꾸기' : '단가표 사진 올리기 (여러 장 가능)') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
       (OCRBUSY[a.id] ? '<div class="ocrmsg busy">⏳ ' + esc(OCRBUSY[a.id]) + ' · 한 표에 10~40초 걸려요</div>' : OCRMSG[a.id] ? '<div class="ocrmsg" id="ocrmsg' + ai + '">' + esc(OCRMSG[a.id]) + '</div>' : '') +
       (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
-        IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
+        IMGS[a.id].map(function (u, k) { return '<span class="pic"><img src="' + u + '" data-zoom="' + a.id + ',' + k + '"><button class="picx" data-picdel="' + ai + ',' + k + '">✕</button><i>' + (k + 1) + '</i></span>'; }).join('') +
+        '<label class="picadd">＋<br>사진 더하기<input type="file" accept="image/*" multiple class="hide" data-picadd="' + ai + '"></label></div><p class="sub" style="margin:4px 0 0">단가표 · 정책 · 부가 시트 사진을 여러 장 올려도 돼요. 숫자는 표가 있는 사진을 찾아 읽어요.</p></details>'
         : a.imgN ? '<p class="sub">⏳ 사진 불러오는 중…</p>' : '');
     if (!a.sections.length) h += '<div class="note">아직 표가 없어요. <button class="btn sm" data-tpl="' + ai + '">＋ 기본 양식 만들기</button> (기본 모델 목록 · 요금제 열)</div>';
     a.sections.forEach(function (s, si) { h += secHtml(ai, si, s); });
@@ -808,6 +810,12 @@ view.addEventListener('click', function (e) {
   if (d.addrow) { var pa = d.addrow.split(',').map(Number), sec = S.ags[pa[0]].sections[pa[1]]; sec.rows.push(blankRow(sec.cols.length)); save(); render(); rowEditor(pa[0], pa[1], sec.rows.length - 1); return; }
   if (d.addcol) { var pq = d.addcol.split(',').map(Number), sc2 = S.ags[pq[0]].sections[pq[1]]; sc2.cols.push({ label: '새 열', bands: {} }); sc2.rows.forEach(function (r) { r.v = r.v || []; r.v.push([null, null, null]); }); save(); render(); colEditor(pq[0], pq[1], sc2.cols.length - 1); return; }
   if (t.id === 'allBtn') { runAll(); return; }
+  if (d.picdel) { var pd = d.picdel.split(',').map(Number), ad = S.ags[pd[0]];
+    if (!confirm((pd[1] + 1) + '번 사진을 뺄까요?')) return;
+    if (ORIG[ad.id]) ORIG[ad.id].splice(pd[1], 1); IMGS[ad.id].splice(pd[1], 1);
+    if (!IMGS[ad.id].length) { delete IMGS[ad.id]; delete ORIG[ad.id]; }
+    if (ad.ocr && ad.ocr.regs) ad.ocr.regs.forEach(function (rg) { if (rg && (rg.img || 0) >= pd[1] && rg.img > 0) rg.img--; });
+    IMG_DIRTY[ad.id] = 1; save(); render(); paintSave(); return; }
   if (d.ocr) { runOcr(+d.ocr); return; }
   if (d.ocrgo) { var og = S.ags[+d.ocrgo]; S.tab = 'sheet'; S.open = S.open || {}; S.open[og.id] = true; save(); render();
     var waitImg = function (n) { if (IMGS[og.id] || n > 40) runOcr(+d.ocrgo); else setTimeout(function () { waitImg(n + 1); }, 250); }; waitImg(0); return; }
@@ -822,6 +830,10 @@ view.addEventListener('click', function (e) {
 });
 view.addEventListener('change', function (e) {
   var t = e.target, d = t.dataset;
+  if (d.picadd) { var aq = S.ags[+d.picadd]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
+    var fl = [].slice.call(t.files);
+    ORIG[aq.id] = (ORIG[aq.id] || IMGS[aq.id] || []).concat(fl.map(function (f) { return URL.createObjectURL(f); }));
+    Promise.all(fl.map(shrink)).then(function (u) { IMGS[aq.id] = (IMGS[aq.id] || []).concat(u); IMG_DIRTY[aq.id] = 1; render(); paintSave(); toast('📷 사진 ' + u.length + '장 더함 · 💾 저장을 눌러 주세요'); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
   if (d.pic) { var ap = S.ags[+d.pic]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
     var files = [].slice.call(t.files);
     ORIG[ap.id] = files.map(function (f) { return URL.createObjectURL(f); });
@@ -920,9 +932,20 @@ function runOcr(ai, quiet) {
   var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve(), warns = [], lastFound = null, lastCols = null;
   a.sections.forEach(function (sec, si) {
     chain = chain.then(function () {
-      var rg = regs[si], url = (ORIG[a.id] || IMGS[a.id] || [])[rg.img || 0];
-      if (!url) throw new Error('사진 ' + ((rg.img || 0) + 1) + '번이 없어요');
-      return imgEl(url).then(function (img0) {
+      var rg = regs[si], list = ORIG[a.id] || IMGS[a.id] || [];
+      if (!list.length) throw new Error('사진이 없어요');
+      // 사진이 여러 장(단가표 + 정책 · 부가 시트)이면 표가 있는 사진을 찾아 읽음
+      var nR0 = sec.rows.length, nC0 = sec.cols.length * 3, k0 = Math.min(rg.img || 0, list.length - 1), order = [k0];
+      if (si > 0 && regs[si - 1]) k0 = order[0] = Math.min(regs[si - 1].img || 0, list.length - 1);   // 아래 표는 위 표와 같은 사진
+      else for (var q = 0; q < list.length; q++) if (q !== k0) order.push(q);
+      function pick(i) {
+        if (i >= order.length || order.length === 1) return Promise.resolve(k0);
+        return imgEl(list[order[i]]).then(function (im0) {
+          var im = DangaOCR.fit(im0), hn = rg.h ? rg : DangaOCR.toHint(im, rg);
+          return DangaOCR.autoRegion(im, hn, nR0, nC0, null) ? order[i] : pick(i + 1);
+        }, function () { return pick(i + 1); });
+      }
+      return pick(0).then(function (k) { rg = Object.assign({}, rg, { img: k }); regs[si] = rg; return imgEl(list[k]); }).then(function (img0) {
         var img = DangaOCR.fit(img0);
         var nR = sec.rows.length, nC = sec.cols.length * 3, hint = rg.h ? rg : DangaOCR.toHint(img, rg);
         var pf = si > 0 && a.sections[si - 1].cols.length * 3 === nC && regs[si - 1] && (regs[si - 1].img || 0) === (rg.img || 0) ? lastFound : null;
