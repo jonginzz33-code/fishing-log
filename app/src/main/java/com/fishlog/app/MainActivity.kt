@@ -1890,15 +1890,24 @@ class MainActivity : Activity() {
             pr.addView(fieldCol("⚓ 항구 · 주요 장소", port), LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(10) })
             box.addView(pr, Ui.lp(this, MATCH, WRAP, top = 14))
             box.addView(Ui.text(this, 11f, Ui.SUB, false, "한 번 적은 이름은 목록에 저장돼서 다음부터 눌러서 골라요"), Ui.lp(this, MATCH, WRAP, top = 2))
-            // ③ 출조 종류
+            // ③ 출조 종류 — v7.18 (446): '그룹에 알리기'로 체크한 그룹들의 종류만 (아니면 지금 그룹 종류)
             val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false; gravity = Gravity.CENTER_VERTICAL }
-            val g = if (Cloud.user == null) null else Cloud.active
-            if (g != null) head.addView(GroupIcon.view(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(8) })
-            head.addView(Ui.text(this, 14f, Ui.TEXT, true, "출조 종류"))
-            head.addView(Ui.text(this, 12f, Ui.SUB, false, if (g != null) "  · ${g.title}의 종류" else "  · 전체 종류"))
             box.addView(head, Ui.lp(this, MATCH, WRAP, top = 14))
-            val cats = visibleCats()
+            var cats = visibleCats()
             val chipBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            fun drawHead() {
+                head.removeAllViews()
+                val sel = startGroups()
+                val g = sel.firstOrNull() ?: (if (Cloud.user == null) null else Cloud.active)
+                if (g != null) head.addView(GroupIcon.view(this, g, 24, GroupBand.catIcon(GroupBand.currentCat(g))), LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(8) })
+                head.addView(Ui.text(this, 14f, Ui.TEXT, true, "출조 종류"))
+                val label = when {
+                    sel.size > 1 -> "  · 체크한 그룹 ${sel.size}곳의 종류"
+                    g != null -> "  · ${groupLabel(g)}의 종류"
+                    else -> "  · 전체 종류"
+                }
+                head.addView(Ui.text(this, 12f, Ui.SUB, false, label).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            }
             fun drawChips() {
                 chipBox.removeAllViews()
                 var line: LinearLayout? = null
@@ -1915,7 +1924,12 @@ class MainActivity : Activity() {
                 val rest = cats.size % 3
                 if (rest != 0) repeat(3 - rest) { line?.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { leftMargin = dp(6) }) }
             }
-            drawChips()
+            fun refreshCats() {
+                cats = startCats()
+                if (Store.category !in cats) Store.category = cats.first()
+                drawHead(); drawChips()
+            }
+            refreshCats()
             box.addView(chipBox, Ui.lp(this, MATCH, WRAP, top = 2))
             // ④ 🟢 내 출조 알리기
             if (Cloud.user != null && Cloud.groups.isNotEmpty()) {
@@ -1926,7 +1940,7 @@ class MainActivity : Activity() {
                 fun drawScope() {
                     scopeBox.removeAllViews()
                     scopeBox.addView(Ui.text(this, 14f, Color.parseColor("#9FE7C1"), true, "🟢 내 출조 알리기"))
-                    liveScopeViews(scopeBox) { drawScope() }
+                    liveScopeViews(scopeBox) { drawScope(); refreshCats() }
                     scopeBox.addView(Ui.text(this, 11f, Ui.SUB, false,
                         (if (saved) "지난번 출조 때 고른 대로 맞춰 놨어요" else "처음엔 그룹에 알리기 · 내 그룹 모두 체크") +
                             " · 출조 시작을 누르면 다음에도 이대로 · 출조 중에 메인에서 바로 바꾸기"), Ui.lp(this, MATCH, WRAP, top = 6))
@@ -1934,9 +1948,11 @@ class MainActivity : Activity() {
                 drawScope()
                 box.addView(scopeBox, Ui.lp(this, MATCH, WRAP, top = 14))
             }
+            startOpen = true
             dlg = AlertDialog.Builder(this, R.style.FlAlert)
                 .setTitle("🎣 출조 시작")
                 .setView(ScrollView(this).apply { addView(box) })
+                .setOnDismissListener { startOpen = false; renderCats() }
                 .show()
             return
         }
@@ -2039,15 +2055,32 @@ class MainActivity : Activity() {
         Cloud.saveSpecies { err -> showMessage(err ?: "어종 목록을 모두에게 저장했어요") }
     }
 
+    /** v7.18 (446): 출조 시작 창 — '그룹에 알리기'로 체크한 그룹들 (없으면 빈 목록) */
+    private fun startGroups(): List<Cloud.Group> {
+        if (Cloud.user == null || !Consent.shareLive(this) || Store.liveScope != "groups") return emptyList()
+        val ids = Live.checkedGroupIds()
+        return Cloud.groups.filter { it.id in ids }
+    }
+    /** 체크한 그룹들 종류를 합친 것 (그룹 하나라도 종류를 안 정했으면 전부) · 체크한 그룹이 없으면 지금 그룹 종류 */
+    private fun startCats(): List<String> {
+        val sel = startGroups()
+        if (sel.isEmpty()) return visibleCats()
+        if (sel.any { g -> g.types.none { it in Store.CATS } }) return Store.CATS
+        val all = sel.flatMap { it.types }.toSet()
+        return Store.CATS.filter { it in all }.ifEmpty { Store.CATS }
+    }
+
     /** 그룹에 정해진 출조 종류만 보여줌 (그룹·로그인 없으면 전부) */
     private fun visibleCats(): List<String> {
         val types = Cloud.active?.types.orEmpty().filter { it in Store.CATS }
         return if (Cloud.user == null || types.isEmpty()) Store.CATS else Store.CATS.filter { it in types }
     }
 
+    /** 출조 시작 창이 열려 있는 동안은 체크한 그룹 종류 기준 (메인이 종류를 되돌리지 않게) */
+    private var startOpen = false
     private fun renderCats() {
         val tripCat = Store.current?.cat?.ifBlank { null }
-        val cats = visibleCats()
+        val cats = if (startOpen && tripCat == null) startCats() else visibleCats()
         if (tripCat == null && Store.category !in cats) { Store.category = cats.first(); return } // 바꾸면 화면이 다시 그려짐
         catRow.removeAllViews()
         val sel = tripCat ?: Store.category
