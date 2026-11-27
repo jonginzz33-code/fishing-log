@@ -48,7 +48,8 @@
   function matchPat(p, key, st) {
     p = norm(p); if (!p) return false;
     var i = p.indexOf(':'), kp = i < 0 ? p : p.slice(0, i), sp = i < 0 ? '' : normSt(p.slice(i + 1));
-    if (key.indexOf(kp) !== 0) return false;
+    if (kp.slice(-1) === '$') { if (key !== kp.slice(0, -1)) return false; }   // 'UIP17$' = 그 모델만
+    else if (key.indexOf(kp) !== 0) return false;
     return !sp || sp === st;
   }
 
