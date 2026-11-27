@@ -192,7 +192,8 @@ function save() {
 }
 function setCloud(m) { cloudMsg = m; var el = document.getElementById('cloud'); if (el) el.textContent = m; if (typeof paintSave === 'function') paintSave(); }
 document.getElementById('saveBtn').onclick = function () { var a = document.activeElement; if (a && a.blur) a.blur(); setTimeout(saveNow, 50); };
-var IMGS = {}; // 참고용 사진 (이 기기에서만 · 저장 안 함)
+var IMGS = {}; // 참고용 사진 (줄여서 클라우드에 저장)
+var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기는 원본으로
 
 // ── 탭 ──
 var TABS = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
@@ -636,7 +637,7 @@ function shrink(file) {
   return new Promise(function (res, rej) {
     var img = new Image(), url = URL.createObjectURL(file);
     img.onload = function () {
-      var max = 2000, d, q, k;
+      var max = 3000, d, q, k;
       for (;;) {
         k = Math.min(1, max / Math.max(img.width, img.height));
         var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
@@ -741,7 +742,9 @@ view.addEventListener('click', function (e) {
 view.addEventListener('change', function (e) {
   var t = e.target, d = t.dataset;
   if (d.pic) { var ap = S.ags[+d.pic]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
-    Promise.all([].map.call(t.files, shrink)).then(function (u) { IMGS[ap.id] = u; IMG_DIRTY[ap.id] = 1; render(); paintSave();
+    var files = [].slice.call(t.files);
+    ORIG[ap.id] = files.map(function (f) { return URL.createObjectURL(f); });
+    Promise.all(files.map(shrink)).then(function (u) { IMGS[ap.id] = u; IMG_DIRTY[ap.id] = 1; render(); paintSave();
       if (!ap.sections.length) ap.sections = tplFor(ap.name);
       toast('📷 사진 넣음 · 바로 숫자 읽는 중…'); runOcr(+d.pic); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
   if (d.agdate) { S.ags[+d.agdate].date = t.value.trim(); save(); return; }
@@ -817,8 +820,8 @@ function importHash() {
 var OCRBUSY = {};
 // 받은 단가표 모양 기준 숫자 칸 영역 (사진 크기 비율) · 실제 표 선에 자동으로 맞춤
 var DEFAULT_REG = {
-  '경기모바일': [{ img: 0, x0: 0.282, y0: 0.1265, x1: 0.999, y1: 0.4155 }, { img: 0, x0: 0.282, y0: 0.465, x1: 0.8806, y1: 0.515 }],
-  '드림4': [{ img: 0, x0: 0.3495, y0: 0.1975, x1: 0.999, y1: 0.5925 }]
+  '경기모바일': [{ img: 0, h: 1, x0: 0.282, y0: 0.1265, x1: 0.999, y1: 0.4155 }, { img: 0, h: 1, x0: 0.282, y0: 0.465, x1: 0.8806, y1: 0.515 }],
+  '드림4': [{ img: 0, h: 1, x0: 0.3495, y0: 0.1975, x1: 0.999, y1: 0.5925 }]
 };
 function imgEl(url) { return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = url; }); }
 function regsOf(a) {
@@ -830,13 +833,23 @@ function runOcr(ai) {
   var a = S.ags[ai], regs = regsOf(a);
   for (var si = 0; si < a.sections.length; si++) if (!regs[si]) { setRegions(ai, si, false); return; }
   OCRBUSY[a.id] = '글자인식 준비 중…'; render();
-  var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve();
+  var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve(), warns = [];
   a.sections.forEach(function (sec, si) {
     chain = chain.then(function () {
-      var rg = regs[si], url = (IMGS[a.id] || [])[rg.img || 0];
+      var rg = regs[si], url = (ORIG[a.id] || IMGS[a.id] || [])[rg.img || 0];
       if (!url) throw new Error('사진 ' + ((rg.img || 0) + 1) + '번이 없어요');
       return imgEl(url).then(function (img) {
-        return DangaOCR.readSection(img, rg, sec.rows.length, sec.cols.length * 3, function (st, pr) {
+        var nR = sec.rows.length, nC = sec.cols.length * 3, hint = rg.h ? rg : DangaOCR.toHint(img, rg);
+        var found = DangaOCR.autoRegion(img, hint, nR, nC), use;
+        if (found) { use = found; regs[si] = Object.assign({ img: rg.img || 0, h: 1 }, DangaOCR.toHint(img, found)); }
+        else {
+          var cnt = DangaOCR.rowCount(img, hint);
+          if (cnt && cnt !== nR) warns.push('표 ' + (si + 1) + ': 사진은 ' + cnt + '줄인데 내 표는 ' + nR + '줄이에요 → 📋 표에서 모델 줄을 사진과 같게 맞춰 주세요 (줄 추가 · 지우기)');
+          else warns.push('표 ' + (si + 1) + ': 표를 자동으로 못 찾아 저장된 영역으로 읽었어요');
+          var cb = DangaOCR.contentBox(img), W = img.naturalWidth, H = img.naturalHeight;
+          use = rg.h ? DangaOCR.snap(img, { x0: (cb.x0 + rg.x0 * (cb.x1 - cb.x0)) / W, x1: (cb.x0 + rg.x1 * (cb.x1 - cb.x0)) / W, y0: (cb.y0 + rg.y0 * (cb.y1 - cb.y0)) / H, y1: (cb.y0 + rg.y1 * (cb.y1 - cb.y0)) / H }) : rg;
+        }
+        return DangaOCR.readSection(img, use, nR, nC, function (st, pr) {
           var m = st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…';
           if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; }
         });
@@ -857,6 +870,7 @@ function runOcr(ai) {
     a.unsure = unsure;
     var got = numCount(a);
     delete OCRBUSY[a.id]; save(); render();
+    if (warns.length) alert('⚠ 확인해 주세요\n' + warns.join('\n'));
     if (got < total * 0.3) { alert('숫자를 거의 못 찾았어요 (' + got + ' / ' + total + '칸).\n사진의 숫자 칸 위치가 달라서예요. 📐 영역 맞추기 화면에서 숫자 칸 왼쪽 위 → 오른쪽 아래를 눌러 주세요.'); setRegions(ai, 0, true); return; }
     toast('✅ ' + total + '칸 읽었어요' + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인해 주세요' : '') + ' · 💾 저장');
   }).catch(function (e) { delete OCRBUSY[a.id]; render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
@@ -865,7 +879,7 @@ function runOcr(ai) {
 function setRegions(ai, si, all) {
   var a = S.ags[ai], regs = regsOf(a), urls = IMGS[a.id] || [];
   if (!urls.length) return alert('먼저 단가표 사진을 올려 주세요');
-  var sec = a.sections[si], cur = regs[si] ? JSON.parse(JSON.stringify(regs[si])) : { img: 0 }, taps = [], zoom = 100;
+  var sec = a.sections[si], cur = { img: regs[si] ? regs[si].img || 0 : 0 }, taps = [], zoom = 100, saved = regs[si];
   function head() {
     return '<h3><span>📐 표 ' + (si + 1) + '/' + a.sections.length + ' 숫자 칸 영역</span><button class="btn sm" data-close>닫기</button></h3>' +
       '<p class="sub">숫자 칸 전체(모델 · 금액 칸 빼고)의 <b>첫 줄 첫 칸 왼쪽 위</b> → <b>마지막 줄 마지막 칸 오른쪽 아래</b>를 차례로 누르세요. 대충 눌러도 표 선에 맞춰져요. 초록 격자가 칸과 맞으면 저장.<br>이 표: 모델 ' + sec.rows.length + '줄 · 요금제 ' + sec.cols.length + '열(칸 ' + sec.cols.length * 3 + '개) · ' + esc(sec.rows[0] ? sec.rows[0].name : '') + ' ~ ' + esc(sec.rows.length ? sec.rows[sec.rows.length - 1].name : '') + '</p>' +
@@ -889,7 +903,12 @@ function setRegions(ai, si, all) {
       gd.cols.forEach(function (x, k) { g.lineWidth = k % 3 === 0 ? Math.max(3, W / 350) : Math.max(1.5, W / 700); g.beginPath(); g.moveTo(gd.X0 + x, gd.Y0); g.lineTo(gd.X0 + x, gd.Y0 + gd.h); g.stroke(); });
       sh.querySelector('#rmsg').textContent = gd.exact ? ' ✅ 표 선과 딱 맞아요' : ' 격자가 칸과 맞는지 확인해 주세요';
     }
-    if (img.complete) draw(); else img.onload = draw;
+    function fromSaved() {
+      if (!saved || cur.x1 != null || taps.length) return;
+      var f = DangaOCR.autoRegion(img, saved.h ? saved : DangaOCR.toHint(img, saved), sec.rows.length, sec.cols.length * 3);
+      if (f) cur = { img: cur.img, x0: f.x0, y0: f.y0, x1: f.x1, y1: f.y1 };
+    }
+    if (img.complete) { fromSaved(); draw(); } else img.onload = function () { fromSaved(); draw(); };
     cv.addEventListener('click', function (e) {
       var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
       if (taps.length >= 2) taps = [];
@@ -907,7 +926,7 @@ function setRegions(ai, si, all) {
       if (t.id === 'rreset') { taps = []; cur = { img: cur.img || 0 }; draw(); }
       if (t.id === 'rsave') {
         if (cur.x1 == null) return alert('두 군데를 눌러 영역을 정해 주세요');
-        regs[si] = cur; save(); document.getElementById('modal').classList.add('hide');
+        regs[si] = Object.assign({ img: cur.img || 0, h: 1 }, DangaOCR.toHint(img, cur)); save(); document.getElementById('modal').classList.add('hide');
         if (si + 1 < a.sections.length && (all || !regs[si + 1])) setRegions(ai, si + 1, all);
         else if (!all) runOcr(ai); else toast('영역 저장했어요 · 🔢 사진에서 숫자 읽기');
       }

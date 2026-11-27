@@ -163,7 +163,7 @@
               if (tx === 'X') { row.push(null); continue; }
               var n = num(tx);
               if (n === null && colDark[k4] > 0.015) miss.push([r, k4]);
-              else if (n !== null && (confs[k4] < 80 || blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-]/g, '').length)) miss.push([r, k4]);
+              else if (n !== null && (confs[k4] < 80 || Math.abs(n) > 150 || blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-]/g, '').length)) miss.push([r, k4]);
               row.push(n);
             }
             out.push(row);
@@ -173,7 +173,8 @@
       // 칸 하나를 여러 방법으로 읽을 때까지 (확대 · 굵기 · 대비 · 읽기 방식) → 숫자 개수 맞는 답 · 여럿이면 많이 나온 답
       var VARIANTS = [
         { sc: 4, psm: '8', mode: 'clean' }, { sc: 5, psm: '7', mode: 'clean' }, { sc: 3, psm: '8', mode: 'bold' },
-        { sc: 6, psm: '8', mode: 'hard' }, { sc: 4, psm: '13', mode: 'bold' }, { sc: 5, psm: '6', mode: 'hard' }
+        { sc: 6, psm: '8', mode: 'hard' }, { sc: 4, psm: '13', mode: 'bold' }, { sc: 5, psm: '6', mode: 'hard' },
+        { sc: 8, psm: '10', mode: 'clean', one: true }, { sc: 7, psm: '10', mode: 'bold', one: true }, { sc: 8, psm: '8', mode: 'clean' }, { sc: 6, psm: '7', mode: 'bold' }
       ];
       function cellCanvas(r, k, v) {
         var ya = Math.round(gd.rows[r]) + 1, yb = Math.round(gd.rows[r + 1]) - 1, xa = Math.round(gd.cols[k]) + 2, xb = Math.round(gd.cols[k + 1]) - 2;
@@ -198,9 +199,10 @@
         function next() {
           if (i >= VARIANTS.length) return Promise.resolve();
           var v = VARIANTS[i++];
+          if (v.one && want !== 1) return next();   // 한 글자 읽기는 한 자리 숫자 칸만
           return worker.setParameters({ tessedit_pageseg_mode: v.psm }).then(function () { return worker.recognize(cellCanvas(r, k, v)); }).then(function (res) {
             var t = String(res.data.text || '').replace(/[^\d\-]/g, '');
-            if (t.length < want && /^1+$/.test(t)) t = new Array(want + 1).join('1');   // '11' 을 '1' 로 읽는 버릇
+            if (t.length < want && want <= 2 && /^1+$/.test(t)) t = '11';   // '11' 을 '1' 로 읽는 버릇
             var n = num(t);
             if (n !== null && String(n).replace('-', '').length === want) {
               votes[n] = (votes[n] || 0) + 1;
@@ -213,6 +215,7 @@
           var best = null, bc = 0; Object.keys(votes).forEach(function (kk) { if (votes[kk] > bc) { bc = votes[kk]; best = +kk; } });
           if (best !== null) out[r][k] = best;
           if (best === null ? want > 0 : bc < 2) unsure.push([r, k]);
+          else if (Math.abs(out[r][k]) > 150) unsure.push([r, k]);
         });
       }
       // 놓친 칸은 칸 하나씩 다시
@@ -228,6 +231,79 @@
     });
   }
 
+  // ── 숫자 표 자동으로 찾기 ──
+  // 사진마다(카톡 캡처 · 잘린 사진 · 크기 다름) 위치가 달라도, 고르게 늘어선 표 선 묶음을 찾아 영역을 정해요.
+  // hint = 예전/기본 영역(사진 안 내용 상자 기준 비율) · nRows 줄 · nCols3 칸
+  function contentBox(G) {
+    // 밝은(종이) 부분 = 단가표 · 검은 테두리 · 상태바 빼기
+    function frac(i, axis) { var n = axis === 'y' ? G.w : G.h, b = 0; for (var k = 0; k < n; k++) { var v = axis === 'y' ? G.L[i * G.w + k] : G.L[k * G.w + i]; if (v > 170) b++; } return b / n; }
+    var y0 = 0, y1 = G.h - 1, x0 = 0, x1 = G.w - 1;
+    while (y0 < y1 && frac(y0, 'y') < 0.45) y0++;
+    while (y1 > y0 && frac(y1, 'y') < 0.45) y1--;
+    while (x0 < x1 && frac(x0, 'x') < 0.3) x0++;
+    while (x1 > x0 && frac(x1, 'x') < 0.3) x1--;
+    return { x0: x0, y0: y0, x1: x1 + 1, y1: y1 + 1 };
+  }
+  // 줄 목록에서 n 칸(n+1 선)이 고르게 늘어선 묶음 찾기 → 기대 시작 · 끝에 가장 가까운 것
+  function evenRun(cs, n, want0, want1) {
+    var best = null, bs = 1e18;
+    for (var i = 0; i + n < cs.length; i++) {
+      var seg = cs.slice(i, i + n + 1), gaps = [];
+      for (var k = 1; k < seg.length; k++) gaps.push(seg[k] - seg[k - 1]);
+      var sorted = gaps.slice().sort(function (a, b) { return a - b; }), med = sorted[Math.floor(sorted.length / 2)];
+      if (med < 6) continue;
+      var ok = gaps.every(function (g) { return g > med * 0.6 && g < med * 1.45; });
+      if (!ok) continue;
+      // 더 큰 표의 일부(위 · 아래로 같은 간격 줄이 더 이어짐)면 버림
+      var cont = function (g) { return g > med * 0.8 && g < med * 1.25; };
+      if (i > 0 && cont(seg[0] - cs[i - 1])) continue;
+      if (i + n + 1 < cs.length && cont(cs[i + n + 1] - seg[n])) continue;
+      var sc = Math.abs(seg[0] - want0) + Math.abs(seg[n] - want1);
+      if (sc < bs) { bs = sc; best = seg; }
+    }
+    return best;
+  }
+  function autoRegion(img, hint, nRows, nCols3) {
+    var W = img.naturalWidth, H = img.naturalHeight, G = gray(img, 0, 0, W, H), cb = contentBox(G);
+    var cw = cb.x1 - cb.x0, ch = cb.y1 - cb.y0;
+    if (cw < W * 0.3 || ch < H * 0.2) cb = { x0: 0, y0: 0, x1: W, y1: H }, cw = W, ch = H;
+    var hx0 = cb.x0 + hint.x0 * cw, hx1 = cb.x0 + hint.x1 * cw, hy0 = cb.y0 + hint.y0 * ch, hy1 = cb.y0 + hint.y1 * ch;
+    // 가로선: 기대 영역 가로 범위에서
+    var bx0 = Math.max(0, Math.round(hx0 - cw * 0.05)), bx1 = Math.min(W, Math.round(hx1 + cw * 0.02));
+    var GH = gray(img, bx0, 0, bx1 - bx0, H);
+    var hc = lines(GH, 'y', 0.5).map(function (l) { return (l.a + l.b) / 2; });
+    var rows = evenRun(hc, nRows, hy0, hy1);
+    if (!rows) return null;
+    var y0 = rows[0], y1 = rows[nRows];
+    var GV = gray(img, 0, Math.round(y0), W, Math.max(4, Math.round(y1 - y0)));
+    var vc = lines(GV, 'x', 0.7).map(function (l) { return (l.a + l.b) / 2; });
+    var cols = evenRun(vc, nCols3, hx0, hx1);
+    if (!cols) return null;
+    return { x0: cols[0] / W, x1: cols[nCols3] / W, y0: y0 / H, y1: y1 / H, auto: true };
+  }
+  // 기대 위치 근처 표의 실제 줄 수 (줄 수가 다를 때 알려 주기용)
+  function rowCount(img, hint) {
+    var W = img.naturalWidth, H = img.naturalHeight, G = gray(img, 0, 0, W, H), cb = contentBox(G), cw = cb.x1 - cb.x0, ch = cb.y1 - cb.y0;
+    if (cw < W * 0.3 || ch < H * 0.2) cb = { x0: 0, y0: 0, x1: W, y1: H }, cw = W, ch = H;
+    var hx0 = cb.x0 + hint.x0 * cw, hx1 = cb.x0 + hint.x1 * cw, hy0 = cb.y0 + hint.y0 * ch;
+    var bx0 = Math.max(0, Math.round(hx0 - cw * 0.05)), bx1 = Math.min(W, Math.round(hx1 + cw * 0.02));
+    var cs = lines(gray(img, bx0, 0, bx1 - bx0, H), 'y', 0.5).map(function (l) { return (l.a + l.b) / 2; });
+    var best = null, bd = 1e9;
+    for (var i = 0; i < cs.length - 3; i++) {
+      var j = i + 1, med = cs[i + 1] - cs[i];
+      if (med < 6) continue;
+      while (j + 1 < cs.length) { var g = cs[j + 1] - cs[j]; if (g > med * 0.6 && g < med * 1.45) j++; else break; }
+      if (j - i >= 3 && Math.abs(cs[i] - hy0) < bd) { bd = Math.abs(cs[i] - hy0); best = j - i; }
+    }
+    return best;
+  }
+  // 저장해 둔 영역(사진 비율)을 내용 상자 기준 비율로 (다음 사진에 힌트로)
+  function toHint(img, rg) {
+    var W = img.naturalWidth, H = img.naturalHeight, cb = contentBox(gray(img, 0, 0, W, H)), cw = cb.x1 - cb.x0, ch = cb.y1 - cb.y0;
+    if (cw < W * 0.3 || ch < H * 0.2) return { x0: rg.x0, x1: rg.x1, y0: rg.y0, y1: rg.y1 };
+    return { x0: (rg.x0 * W - cb.x0) / cw, x1: (rg.x1 * W - cb.x0) / cw, y0: (rg.y0 * H - cb.y0) / ch, y1: (rg.y1 * H - cb.y0) / ch };
+  }
+
   // 칸 안 글자 덩어리 수 (숫자 개수 확인용)
   function blobs(G, gd, r, k, skip) {
     var ya = Math.round(gd.rows[r]) + 2, yb = Math.round(gd.rows[r + 1]) - 2, xa = Math.round(gd.cols[k]) + 3, xb = Math.round(gd.cols[k + 1]) - 3, n = 0, prev = false;
@@ -240,5 +316,5 @@
     return n;
   }
   function debugGrid(img, rg, nR, nC) { var g = grid(img, rg, nR, nC); return { rows: g.rows.map(Math.round), cols: g.cols.map(Math.round), exact: g.exact, hy: lines(g.G, 'y', 0.45).length, vx: lines(g.G, 'x', 0.7).length }; }
-  root.DangaOCR = { _lines: lines, _gray: gray, debugGrid: debugGrid, CDN: CDN, readSection: readSection, snap: snap, grid: grid, getWorker: getWorker };
+  root.DangaOCR = { rowCount: rowCount, autoRegion: autoRegion, toHint: toHint, contentBox: function (img) { return contentBox(gray(img, 0, 0, img.naturalWidth, img.naturalHeight)); }, _lines: lines, _gray: gray, debugGrid: debugGrid, CDN: CDN, readSection: readSection, snap: snap, grid: grid, getWorker: getWorker };
 })(this);
