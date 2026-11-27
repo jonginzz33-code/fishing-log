@@ -100,6 +100,7 @@ nav{justify-content:flex-start!important}
 .tbl.mx td,.tbl.mx th{padding:7px 3px}
 .cellpop{position:fixed;z-index:9999;min-width:200px;max-width:min(320px,92vw);background:#0E2233;border:2px solid #7FD6FF;border-radius:12px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px}.cellpop .cph{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.cellpop .cpx{cursor:pointer;color:#9FB4C2;padding:0 4px}.cellpop .cpr{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px dotted rgba(159,180,194,.3)}.cellpop .cpr b.plus{color:#3FCF8E}.cellpop .cpr b.minus{color:#FF6B6B}.cellpop .cpt{border-top:1.5px solid #7FD6FF;margin-top:2px}.cellpop .cpt b{color:#fff;font-size:15px}
 .picbox .pic{position:relative;display:block;border-bottom:3px solid #16324A}.picbox .pic i{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.65);color:#fff;font-style:normal;font-size:11px;border-radius:8px;padding:0 6px}.picbox .picx{position:absolute;right:4px;top:4px;width:24px;height:24px;border-radius:12px;border:0;background:rgba(0,0,0,.7);color:#fff;font-size:12px;cursor:pointer}.picbox .picadd{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70px;background:#0E2233;border:2px dashed #5B7C99;border-radius:10px;color:#7FD6FF;font-size:12px;cursor:pointer;text-align:center;vertical-align:top}
+.tfold{display:flex;width:100%;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;padding:12px;border-radius:12px;border:1.5px solid #3A6A88;background:#12283A;color:inherit;font:inherit;font-size:14px;text-align:left;cursor:pointer}.tfold.on{border-color:#7FD6FF}.tfold b{color:#7FD6FF;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -463,15 +464,20 @@ function sheetHtml() {
       (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 다시 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
       '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 전부 바꾸기' : '단가표 사진 올리기 (여러 장 가능)') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
       (OCRBUSY[a.id] ? '<div class="ocrmsg busy">⏳ ' + esc(OCRBUSY[a.id]) + ' · 한 표에 10~40초 걸려요</div>' : OCRMSG[a.id] ? '<div class="ocrmsg" id="ocrmsg' + ai + '">' + esc(OCRMSG[a.id]) + '</div>' : '') +
-      (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
+      (IMGS[a.id] ? '<details class="pics"><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
         IMGS[a.id].map(function (u, k) { return '<span class="pic"><img src="' + u + '" data-zoom="' + a.id + ',' + k + '"><button class="picx" data-picdel="' + ai + ',' + k + '">✕</button><i>' + (k + 1) + '</i></span>'; }).join('') +
         '<label class="picadd">＋<br>사진 더하기<input type="file" accept="image/*" multiple class="hide" data-picadd="' + ai + '"></label></div><p class="sub" style="margin:4px 0 0">단가표 · 정책 · 부가 시트 사진을 여러 장 올려도 돼요. 숫자는 표가 있는 사진을 찾아 읽어요.</p></details>'
         : a.imgN ? '<p class="sub">⏳ 사진 불러오는 중…</p>' : '');
     if (!a.sections.length) h += '<div class="note">아직 표가 없어요. <button class="btn sm" data-tpl="' + ai + '">＋ 기본 양식 만들기</button> (기본 모델 목록 · 요금제 열)</div>';
-    a.sections.forEach(function (s, si) { h += secHtml(ai, si, s); });
+    if (a.sections.length) {
+      var tOpen = !!(S.tOpen || {})[a.id], tot = 0, got = numCount(a), un = (a.unsure || []).length;
+      a.sections.forEach(function (s) { tot += s.rows.length * s.cols.length * 3; });
+      h += '<button class="tfold' + (tOpen ? ' on' : '') + '" data-tfold="' + a.id + '"><span>📋 단가표 숫자 · 모델 ' + nRows + '줄 · ' + got + '/' + tot + '칸' + (un ? ' · <b style="color:#FF6B6B">빨간 칸 ' + un + '</b>' : '') + (a.prev && ch ? ' · <b style="color:var(--yel)">바뀐 칸 ' + ch + '</b>' : '') + '</span><b>' + (tOpen ? '▲ 접기' : '▼ 펼치기') + '</b></button>';
+      if (tOpen) a.sections.forEach(function (s, si) { h += secHtml(ai, si, s); });
+    }
     if (a.notes.length) h += '<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">📝 메모 ' + a.notes.length + '개</summary><ul class="sub">' + a.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></details>';
     h += '<details style="margin-top:8px"' + (S.openRules === a.id ? ' open' : '') + '><summary style="cursor:pointer;font-weight:700">📜 정책 (추가 · 차감) ' + a.rules.length + '개</summary>' + rulesHtml(ai, 'rules') + '</details>';
-    h += '<div class="row" style="margin-top:10px">' + (a.sections.length ? '<button class="btn sm" data-addsec="' + ai + '">＋ 표 하나 더 (열 구성이 다른 아래 표)</button>' : '') +
+    h += '<div class="row" style="margin-top:10px">' + (a.sections.length && (S.tOpen || {})[a.id] ? '<button class="btn sm" data-addsec="' + ai + '">＋ 표 하나 더 (열 구성이 다른 아래 표)</button>' : '') +
       '<span style="flex:1"></span><button class="btn sm del" data-clear="' + ai + '">🗑 숫자 비우기</button>' + (S.ags.length > 1 ? '<button class="btn sm del" data-rmag="' + ai + '">업체 빼기</button>' : '') + '</div>';
     h += '</div>';
   });
@@ -801,6 +807,7 @@ view.addEventListener('click', function (e) {
   if (d.roff) { var q4 = ruleRef(d.roff); q4.r.off = !q4.r.off; save(); render(); return; }
   if (d.rdel) { var q5 = ruleRef(d.rdel); if (confirm('"' + q5.r.name + '" 지울까요?')) { S.ags[q5.ai][q5.kind].splice(q5.ri, 1); S.editRule = null; save(); render(); } return; }
   if (d.radd) { var pp = d.radd.split(','), lst = S.ags[+pp[1]][pp[0]]; lst.push({ id: uid(), name: pp[0] === 'verbal' ? '구두' : '정책', amt: 0, types: [], bands: [], models: [], ex: [], cond: [] }); S.editRule = pp[0] + pp[1] + '_' + (lst.length - 1); if (pp[0] === 'rules') S.openRules = S.ags[+pp[1]].id; save(); render(); return; }
+  if (d.tfold) { S.tOpen = S.tOpen || {}; S.tOpen[d.tfold] = !S.tOpen[d.tfold]; save(); render(); return; }
   if (d.fold) { S.open = S.open || {}; S.open[d.fold] = !S.open[d.fold]; save(); render(); return; }
   if (d.vparse) { verbalParse(+d.vparse); return; }
   if (d.rowed) { var pr = d.rowed.split(',').map(Number); rowEditor(pr[0], pr[1], pr[2]); return; }
