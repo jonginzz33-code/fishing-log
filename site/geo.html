@@ -163,7 +163,7 @@ body.noscroll{overflow:hidden}
     <h2>🏥 거래처 필요 제품 재고 기다리기</h2>
     <p class="lead" style="margin:0 0 10px">거래처 · 제품은 저장해 둔 목록에서 자동완성돼요. 정한 간격마다 확인해서 재고가 필요 수량만큼 들어오면 휴대폰으로 알려줘요.</p>
     <div class="nf">
-      <label>거래처 <span class="cN"></span><input id="nP" list="dlP" placeholder="약국 이름 (예: 해솔)" autocomplete="off"></label>
+      <label>거래처 <span class="cN"></span><div class="ac"><input id="nP" placeholder="약국 이름 또는 거래처코드 (예: 해솔 · 97128)" autocomplete="off"><div class="acl hide" id="aclP"></div></div></label>
       <label>제품 <span class="pN"></span><div class="ac"><input id="nN" placeholder="제품 이름 또는 제품코드 (예: 리바로 2mg · 021753)" autocomplete="off"><div class="acl hide" id="acl"></div></div></label>
       <div class="nrow">
         <label>필요 수량<input id="nQ" type="number" min="1" value="1" inputmode="numeric"></label>
@@ -498,7 +498,36 @@ body.noscroll{overflow:hidden}
     $('nHint').className = 'hint' + (pr ? ' ok' : '');
     $('qbtn').classList.toggle('hide', !!pr || $('nN').value.trim().length < 2);
   }
-  $('nP').oninput = hint;
+  // 거래처 자동완성 (제품칸과 같은 방식: 띄어쓴 단어가 모두 들어간 거래처 · 거래처코드로도)
+  var acP = [], acPOn = -1;
+  function acPShow() {
+    var words = $('nP').value.toLowerCase().split(/\s+/).filter(Boolean), box = $('aclP'), cs = data.customers || [];
+    acP = []; acPOn = -1;
+    var exact = cs.some(function (c) { return c.name === $('nP').value.trim(); });
+    if (exact) { box.classList.add('hide'); return; }
+    acP = cs.filter(function (c) {
+      var s = (c.name + ' ' + c.code).toLowerCase();
+      return words.every(function (w) { return s.indexOf(w) >= 0; });
+    }).slice(0, 60);
+    box.innerHTML = acP.map(function (c, i) { return '<div data-i="' + i + '">' + esc(c.name) + '<small>' + esc(c.code) + '</small></div>'; }).join('');
+    box.classList.toggle('hide', !acP.length);
+  }
+  function acPPick(i) { var c = acP[i]; if (!c) return; $('nP').value = c.name; $('aclP').classList.add('hide'); hint(); $('nN').focus(); }
+  $('aclP').onmousedown = function (e) { var d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); acPPick(+d.getAttribute('data-i')); } };
+  $('nP').oninput = function () { acPShow(); hint(); };
+  $('nP').onfocus = acPShow; // 비어 있어도 누르면 전체 거래처 목록
+  $('nP').onblur = function () { setTimeout(function () { $('aclP').classList.add('hide'); }, 150); };
+  $('nP').onkeydown = function (e) {
+    var open = !$('aclP').classList.contains('hide');
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      acPOn = Math.max(0, Math.min(acP.length - 1, acPOn + (e.key === 'ArrowDown' ? 1 : -1)));
+      [].forEach.call($('aclP').children, function (d, i) { d.classList.toggle('on', i === acPOn); if (i === acPOn) d.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    if (e.key === 'Enter' && open && acP.length) { e.preventDefault(); acPPick(acPOn >= 0 ? acPOn : 0); }
+    if (e.key === 'Escape') $('aclP').classList.add('hide');
+  };
   $('nN').oninput = function () { $('sr').innerHTML = ''; acShow(); hint(); };
   $('nN').onkeydown = function (e) {
     var open = !$('acl').classList.contains('hide');
