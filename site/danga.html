@@ -271,6 +271,7 @@ function scHtml() {
   return '<details class="card" ' + (S.scOpen ? 'open' : '') + ' id="scBox"><summary style="cursor:pointer;font-weight:800">⚙ 그 밖 조건 <span class="sub">— ' + esc(scSummary(true)) + '</span></summary>' +
     '<div class="lbl">약정</div>' + seg('yak', [['sel', '선택약정'], ['gong', '공시지원금']]) +
     '<div class="lbl">유통망지원금</div>' + seg('sup', [['hi', '20만↑'], ['mid', '10~20만'], ['low', '10만↓']]) +
+    '<div class="row" style="align-items:center"><span class="sub">💵 금액으로 넣기</span><input type="number" inputmode="decimal" step="0.5" min="0" data-supamt value="' + (sc.supAmt != null ? sc.supAmt : '') + '" placeholder="예: 15" style="width:90px"><span class="sub">만원 → 20만↑ · 10~20만 · 10만↓ 자동 · 숫자 누르면 남는 돈도 보여요</span></div>' +
     '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + '</div>' +
     '</details>';
 }
@@ -310,7 +311,7 @@ function modelBox(ags, sel) {
 function selModels() { return S.models || []; }
 function scSummary(noVas) {
   var sc = S.sc, a = [sc.yak === 'sel' ? '선택약정' : '공시'];
-  a.push({ hi: '지원금 20만↑', mid: '지원금 10~20만', low: '지원금 10만↓' }[sc.sup]);
+  a.push(sc.supAmt != null ? '지원금 ' + sc.supAmt + '만' : { hi: '지원금 20만↑', mid: '지원금 10~20만', low: '지원금 10만↓' }[sc.sup]);
   var v = []; if (sc.vas1) v.push('교보'); if (sc.vas2) v.push('V컬러링'); if (sc.ins !== 'none') v.push(sc.ins === 'swap' ? '폰교체' : '폰안심');
   if (!noVas) a.push(v.length ? '부가 ' + v.join('+') : '부가 없음');
   [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30', 'dongpan'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
@@ -431,7 +432,9 @@ function showItem(id) {
       var box = document.createElement('div'); box.id = 'cellPop'; box.className = 'cellpop';
       box.innerHTML = '<div class="cph"><b>' + esc(agShort(a)) + ' · ' + esc(D.bandLabel(band)) + ' ' + esc(typeLabel(type)) + '</b><span class="cpx">✕</span></div>' +
         p.parts.map(function (x, k) { return '<div class="cpr"><span>' + (k === 0 ? '📋 ' : x.verbal ? '' : '📜 ') + esc(x.name) + '</span><b class="' + (k === 0 ? '' : x.amt < 0 ? 'minus' : 'plus') + '">' + (k === 0 ? fmt(x.amt) : sgn(x.amt)) + '</b></div>'; }).join('') +
-        '<div class="cpr cpt"><span>최종</span><b>' + fmt(p.v) + '</b></div>';
+        '<div class="cpr cpt"><span>최종 단가</span><b>' + fmt(p.v) + '</b></div>' +
+        (S.sc.supAmt > 0 ? '<div class="cpr"><span>💵 유통망지원금 (손님께)</span><b class="minus">-' + fmt(S.sc.supAmt) + '</b></div><div class="cpr cpt"><span>남는 돈</span><b>' + fmt(Math.round((p.v - S.sc.supAmt) * 10) / 10) + '</b></div>' +
+          (S.sc.supAmt > p.v ? '<div class="sub" style="color:#FF6B6B;margin-top:4px">⚠ 지원금이 단가보다 커요 · 정책서 액면 초과 설정 불가</div>' : '') : '');
       document.body.appendChild(box);
       var r = cell.getBoundingClientRect(), w = box.offsetWidth, hh = box.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
       var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8), top = r.bottom + 6;
@@ -791,7 +794,7 @@ view.addEventListener('click', function (e) {
   var d = t.dataset;
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
   if (d.go) { S.tab = d.go; save(); render(); return; }
-  if (d.sc) { var k = d.sc; S.sc[k] = d.v === '!' ? !S.sc[k] : d.v; S.scOpen = true; save(); render(); return; }
+  if (d.sc) { var k = d.sc; S.sc[k] = d.v === '!' ? !S.sc[k] : d.v; if (k === 'sup') S.sc.supAmt = null; S.scOpen = true; save(); render(); return; }
   if (d.type) { S.type = d.type; save(); render(); return; }
   if (d.band) { S.band = d.band; S.mode = 'list'; save(); render(); return; }
   if (d.mdl) { var sl = S.models = S.models || []; if (d.mdl === '*') S.models = []; else { var mi = sl.indexOf(d.mdl); if (mi >= 0) sl.splice(mi, 1); else sl.push(d.mdl); } var sy = window.scrollY; save(); render(); window.scrollTo(0, sy); return; }
@@ -843,6 +846,7 @@ view.addEventListener('change', function (e) {
     var fl = [].slice.call(t.files);
     ORIG[aq.id] = (ORIG[aq.id] || IMGS[aq.id] || []).concat(fl.map(function (f) { return URL.createObjectURL(f); }));
     Promise.all(fl.map(shrink)).then(function (u) { IMGS[aq.id] = (IMGS[aq.id] || []).concat(u); IMG_DIRTY[aq.id] = 1; render(); paintSave(); toast('📷 사진 ' + u.length + '장 더함 · 💾 저장을 눌러 주세요'); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
+  if (t.hasAttribute('data-supamt')) { var sv = t.value === '' ? null : Math.max(0, +t.value); S.sc.supAmt = sv; if (sv != null) S.sc.sup = sv >= 20 ? 'hi' : sv >= 10 ? 'mid' : 'low'; S.scOpen = true; save(); render(); return; }
   if (d.pic) { var ap = S.ags[+d.pic]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
     var files = [].slice.call(t.files);
     ORIG[ap.id] = files.map(function (f) { return URL.createObjectURL(f); });
