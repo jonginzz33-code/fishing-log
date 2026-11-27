@@ -5,7 +5,8 @@
     { id: 'B115', label: '115·130' },
     { id: 'B105', label: '105' },
     { id: 'B95', label: '95' },
-    { id: 'B85', label: '75·85' },
+    { id: 'B85', label: '85' },
+    { id: 'B75', label: '75' },
     { id: 'B61', label: '61·70' },
     { id: 'B55', label: '47·55' },
     { id: 'B44', label: '44' },
@@ -35,10 +36,11 @@
     kids: { label: '키즈폰 결합', f: function (s) { return !!s.kids; } },
     d30: { label: '30일 이내 기변', f: function (s) { return !!s.d30; } },
     dongpan: { label: '유선 동시판매 (인터넷+TV)', f: function (s) { return !!s.dongpan; } },
+    u14: { label: '만 14세 이하', f: function (s) { return !!s.u14; } },
     sel12: { label: '선택약정 12개월', f: function (s) { return s.yak === 'sel' && !!s.sel12; } },
     d180: { label: '180일 이하 재가입', f: function (s) { return !!s.d180 || !!s.d30; } }
   };
-  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false, dongpan: false, sel12: false, d180: false };
+  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false, dongpan: false, sel12: false, d180: false, u14: false };
 
   function norm(s) { return String(s || '').toUpperCase().replace(/\s+/g, ''); }
   function normSt(s) {

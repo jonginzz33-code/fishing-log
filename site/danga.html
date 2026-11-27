@@ -135,9 +135,9 @@ function sgn(v) { v = Math.round(v * 10) / 10; return (v > 0 ? '+' : '') + v; }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 // 기본 양식 (모델 · 요금제 열만 · 숫자 없음) — 업체 이름이 같으면 그 단가표 모양 그대로, 아니면 기본 모델 목록
-var TEMPLATES = {"경기모바일":[{"cols":[{"label":"115군","bands":{"B115":0,"B105":-6}},{"label":"95군","bands":{"B95":0}},{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47,44군","bands":{"B55":0,"B44":0}},{"label":"37,33군","bands":{"B37":0,"B28":0}}],"rows":[["SM-F776N",["256"],"플립8 256"],["SM-F776N",["512"],"플립8 512"],["SM-F971N",["256"],"폴드8 256"],["SM-F976N",["256"],"폴드8울트라 256"],["SM-F976N",["512"],"폴드8울트라 512"],["SM-S942N",[],"갤S26"],["SM-S948N",[],"갤S26 울트라"],["SM-S93",[],"갤S25류"],["SM-S937N",[],"갤S25엣지"],["SM-S741N",[],"갤26 FE"],["UIP18PR",["256","512","1T"],"아이폰18 프로"],["UIP18PM",["256","512","1T"],"아이폰18 프로맥스"],["UIPD",["256","512","1T"],"아이폰듀오"],["UIP17",["256","512"],"아이폰17"],["UIP17PR",["256","512","1T"],"아이폰17프로"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"]]},{"cols":[{"label":"85,75군","bands":{"B115":0,"B105":0,"B95":0,"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47군","bands":{"B55":0}},{"label":"44군","bands":{"B44":0}},{"label":"37,33군","bands":{"B37":0,"B28":0}},{"label":"시니어 37,33,28군","bands":{"B37":0,"B28":0},"cond":["senior"]}],"rows":[["SM-A176L",[],"버디5"],["SM-A175N",[],"키즈폰 무너2"],["AT-M140L",[],"스타일폴더2"]]}],"드림4":[{"cols":[{"label":"1그룹 115/130","bands":{"B115":0}},{"label":"2그룹 105/95","bands":{"B105":0,"B95":-3}},{"label":"3그룹 75/85","bands":{"B85":0}},{"label":"4그룹 70/61","bands":{"B61":0}},{"label":"5그룹 44/47/55","bands":{"B55":0,"B44":0}},{"label":"6그룹 33/37","bands":{"B37":0,"B28":0}}],"rows":[["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"]]}]};
+var TEMPLATES = {"경기모바일":[{"cols":[{"label":"115군","bands":{"B115":0,"B105":-6}},{"label":"95군","bands":{"B95":0}},{"label":"85,75군","bands":{"B85":0,"B75":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47,44군","bands":{"B55":0,"B44":0}},{"label":"37,33군","bands":{"B37":0,"B28":0}}],"rows":[["SM-F776N",["256"],"플립8 256"],["SM-F776N",["512"],"플립8 512"],["SM-F971N",["256"],"폴드8 256"],["SM-F976N",["256"],"폴드8울트라 256"],["SM-F976N",["512"],"폴드8울트라 512"],["SM-S942N",[],"갤S26"],["SM-S948N",[],"갤S26 울트라"],["SM-S93",[],"갤S25류"],["SM-S937N",[],"갤S25엣지"],["SM-S741N",[],"갤26 FE"],["UIP18PR",["256","512","1T"],"아이폰18 프로"],["UIP18PM",["256","512","1T"],"아이폰18 프로맥스"],["UIPD",["256","512","1T"],"아이폰듀오"],["UIP17",["256","512"],"아이폰17"],["UIP17PR",["256","512","1T"],"아이폰17프로"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"]]},{"cols":[{"label":"85,75군","bands":{"B115":0,"B105":0,"B95":0,"B85":0,"B75":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47군","bands":{"B55":0}},{"label":"44군","bands":{"B44":0}},{"label":"37,33군","bands":{"B37":0,"B28":0}},{"label":"시니어 37,33,28군","bands":{"B37":0,"B28":0},"cond":["senior"]}],"rows":[["SM-A176L",[],"버디5"],["SM-A175N",[],"키즈폰 무너2"],["AT-M140L",[],"스타일폴더2"]]}],"드림4":[{"cols":[{"label":"1그룹 115/130","bands":{"B115":0}},{"label":"2그룹 105/95","bands":{"B105":0,"B95":-3}},{"label":"3그룹 75/85","bands":{"B85":0,"B75":0}},{"label":"4그룹 70/61","bands":{"B61":0}},{"label":"5그룹 44/47/55","bands":{"B55":0,"B44":0}},{"label":"6그룹 33/37","bands":{"B37":0,"B28":0}}],"rows":[["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"]]}]};
 var BASE_MODELS = [["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"],["SM-S93",[],"갤S25류"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"],["SM-A175N",[],"키즈폰 무너2"]];
-var TEMPLATES2 = {"dmb3":[{"cols":[{"label":"A구간 115군/130군","bands":{"B115":0}},{"label":"A구간 105군","bands":{"B105":0}},{"label":"A구간 95군","bands":{"B95":0}},{"label":"B구간 85/75군","bands":{"B85":0}},{"label":"C구간 70/61군","bands":{"B61":0}},{"label":"D구간 55~44군","bands":{"B55":0,"B44":0}},{"label":"E구간 37/33군","bands":{"B37":0}}],"rows":[["SM-F976N",["1T"],"Z Fold8 Ultra 1TB"],["SM-F976N",["512"],"Z Fold8 Ultra 512GB"],["SM-F976N",["256"],"Z Fold8 Ultra 256GB"],["SM-F971N",["1T"],"Z Fold8 1TB"],["SM-F971N",["512"],"Z Fold8 512GB"],["SM-F971N",["256"],"Z Fold8 256GB"],["SM-F776N",["512"],"Z Flip8 512GB"],["SM-F776N",["256"],"Z Flip8 256GB"],["SM-S948N",["256"],"S26 Ultra 256GB"],["SM-S947N",["256"],"S26+ 256GB"],["SM-S942N",["512"],"S26 512GB"],["SM-S942N",["256"],"S26 256GB"],["SM-S937N",["256"],"S25 Edge 256GB"],["SM-S931N",["256"],"S25 256GB"],["SM-S741N",[],"갤럭시 S26 FE"],["SM-S731N",[],"갤럭시 S25 FE"],["SM-A176L",[],"갤럭시 버디5"],["SM-A165N",[],"U+키즈폰 무너에디션"],["AT-M140L",[],"스타일폴더2"],["UIPD",[],"아이폰듀오"],["UIP18PR",[],"아이폰18 Pro"],["UIP18PM",[],"아이폰18 Pro Max"],["UIP17",["512"],"아이폰17 512"],["UIP17",["256"],"아이폰17(가격변경)"],["UIPA",["1T"],"아이폰 Air 1TB"],["UIP17PR",["256"],"아이폰17 Pro 256"],["UIP17PM",[],"아이폰17 Pro Max"],["UIP16E",["512"],"아이폰16E 512"],["UIP13",["512"],"아이폰13 512"]]}],"유안":[{"cols":[{"label":"A구간 115군/130군","bands":{"B115":0}},{"label":"A구간 105군","bands":{"B105":0}},{"label":"A구간 95군","bands":{"B95":0}},{"label":"B구간 85/75군","bands":{"B85":0}},{"label":"C구간 70/61군","bands":{"B61":0}},{"label":"D구간 55~44군","bands":{"B55":0,"B44":0}},{"label":"E구간 37/33군","bands":{"B37":0}}],"rows":[["SM-F976N",["1T"],"Z Fold8 Ultra 1TB"],["SM-F976N",["512"],"Z Fold8 Ultra 512GB"],["SM-F976N",["256"],"Z Fold8 Ultra 256GB"],["SM-F971N",["256"],"Z Fold8 256GB"],["SM-F776N",["512"],"Z Flip8 512GB"],["SM-F776N",["256"],"Z Flip8 256GB"],["SM-F741N",["256"],"Z Flip6 256GB"],["SM-S948N",["256"],"S26 Ultra 256GB"],["SM-S947N",["256"],"S26+ 256GB"],["SM-S942N",["256"],"S26 256GB"],["SM-S938N",["256"],"S25 Ultra 256GB"],["SM-S937N",["256"],"S25 Edge 256GB"],["SM-S936N",["256"],"S25+ 256GB"],["SM-S931N",["256"],"S25 256GB"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"],["UIPD",[],"아이폰듀오"],["UIP18PR",[],"아이폰18 Pro"],["UIP18PM",[],"아이폰18 Pro Max"],["UIP17",["256"],"아이폰17(가격변경)"],["UIPA",[],"아이폰 Air"],["UIP17PR",[],"아이폰17 Pro"],["UIP17PM",[],"아이폰17 Pro Max"]]}]};
+var TEMPLATES2 = {"dmb3":[{"cols":[{"label":"A구간 115군/130군","bands":{"B115":0}},{"label":"A구간 105군","bands":{"B105":0}},{"label":"A구간 95군","bands":{"B95":0}},{"label":"B구간 85/75군","bands":{"B85":0,"B75":0}},{"label":"C구간 70/61군","bands":{"B61":0}},{"label":"D구간 55~44군","bands":{"B55":0,"B44":0}},{"label":"E구간 37/33군","bands":{"B37":0}}],"rows":[["SM-F976N",["1T"],"Z Fold8 Ultra 1TB"],["SM-F976N",["512"],"Z Fold8 Ultra 512GB"],["SM-F976N",["256"],"Z Fold8 Ultra 256GB"],["SM-F971N",["1T"],"Z Fold8 1TB"],["SM-F971N",["512"],"Z Fold8 512GB"],["SM-F971N",["256"],"Z Fold8 256GB"],["SM-F776N",["512"],"Z Flip8 512GB"],["SM-F776N",["256"],"Z Flip8 256GB"],["SM-S948N",["256"],"S26 Ultra 256GB"],["SM-S947N",["256"],"S26+ 256GB"],["SM-S942N",["512"],"S26 512GB"],["SM-S942N",["256"],"S26 256GB"],["SM-S937N",["256"],"S25 Edge 256GB"],["SM-S931N",["256"],"S25 256GB"],["SM-S741N",[],"갤럭시 S26 FE"],["SM-S731N",[],"갤럭시 S25 FE"],["SM-A176L",[],"갤럭시 버디5"],["SM-A165N",[],"U+키즈폰 무너에디션"],["AT-M140L",[],"스타일폴더2"],["UIPD",[],"아이폰듀오"],["UIP18PR",[],"아이폰18 Pro"],["UIP18PM",[],"아이폰18 Pro Max"],["UIP17",["512"],"아이폰17 512"],["UIP17",["256"],"아이폰17(가격변경)"],["UIPA",["1T"],"아이폰 Air 1TB"],["UIP17PR",["256"],"아이폰17 Pro 256"],["UIP17PM",[],"아이폰17 Pro Max"],["UIP16E",["512"],"아이폰16E 512"],["UIP13",["512"],"아이폰13 512"]]}],"유안":[{"cols":[{"label":"A구간 115군/130군","bands":{"B115":0}},{"label":"A구간 105군","bands":{"B105":0}},{"label":"A구간 95군","bands":{"B95":0}},{"label":"B구간 85/75군","bands":{"B85":0,"B75":0}},{"label":"C구간 70/61군","bands":{"B61":0}},{"label":"D구간 55~44군","bands":{"B55":0,"B44":0}},{"label":"E구간 37/33군","bands":{"B37":0}}],"rows":[["SM-F976N",["1T"],"Z Fold8 Ultra 1TB"],["SM-F976N",["512"],"Z Fold8 Ultra 512GB"],["SM-F976N",["256"],"Z Fold8 Ultra 256GB"],["SM-F971N",["256"],"Z Fold8 256GB"],["SM-F776N",["512"],"Z Flip8 512GB"],["SM-F776N",["256"],"Z Flip8 256GB"],["SM-F741N",["256"],"Z Flip6 256GB"],["SM-S948N",["256"],"S26 Ultra 256GB"],["SM-S947N",["256"],"S26+ 256GB"],["SM-S942N",["256"],"S26 256GB"],["SM-S938N",["256"],"S25 Ultra 256GB"],["SM-S937N",["256"],"S25 Edge 256GB"],["SM-S936N",["256"],"S25+ 256GB"],["SM-S931N",["256"],"S25 256GB"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"],["UIPD",[],"아이폰듀오"],["UIP18PR",[],"아이폰18 Pro"],["UIP18PM",[],"아이폰18 Pro Max"],["UIP17",["256"],"아이폰17(가격변경)"],["UIPA",[],"아이폰 Air"],["UIP17PR",[],"아이폰17 Pro"],["UIP17PM",[],"아이폰17 Pro Max"]]}]};
 for (var tk in TEMPLATES2) TEMPLATES[tk] = TEMPLATES2[tk];
 function tplName(name) { var n = String(name || '').replace(/\s+/g, '').toLowerCase(); if (/dmb|디엠비/.test(n)) return 'dmb3'; if (/유안/.test(n)) return '유안'; if (/경기/.test(n)) return '경기모바일'; if (/드림/.test(n)) return '드림4'; return name; }
 function tplFor(name) {
@@ -149,6 +149,14 @@ function tplFor(name) {
   var tmp = { name: name, sections: out }; splitD4(tmp); return tmp.sections;
 }
 // 저장된 자료 바로잡기 (한 번만 · 2026-11-27 점검)
+// 75군 · 85군 나눔 (2026-11-27): '85군 이상'(유통망 지원금 · 청소년 기변 85) 규칙은 85만 · 나머지 B85 규칙은 75도
+function fix75(r) {
+  var b = r.bands || []; if (b.indexOf('B85') < 0 || b.indexOf('B75') >= 0) return;
+  if ((r.cond || []).indexOf('sup20') >= 0 || /청소년 기변|85군\s*이상|85군↑|85↑/.test(r.name || '')) return;
+  b.splice(b.indexOf('B85') + 1, 0, 'B75');
+}
+// 만 14세 이하는 교보문고SAM+구글원 미유치 차감 제외 (4곳 공통)
+function fixU14(r) { var c = r.cond || []; if (c.indexOf('!vas1') >= 0 && c.indexOf('!u14') < 0) c.push('!u14'); }
 function fixData() {
   var msgs = [];
   S.ags.forEach(function (a) {
@@ -219,6 +227,13 @@ function fixData() {
     }
     if (t === 'dmb3') { var r6 = rule('별도모델 차감'); if (r6) { r6.bands = ['B44']; r6.name = '별도모델 차감 (A176 기변 · 44군)'; } }
     a.fixV = 4;
+  });
+  // 5: 75군 · 85군 나눔 · 만 14세 이하
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 5) return;
+    a.sections.forEach(function (sec) { sec.cols.forEach(function (c) { if (c.bands && 'B85' in c.bands && !('B75' in c.bands)) c.bands.B75 = c.bands.B85; }); });
+    (a.rules || []).concat(a.verbal || []).forEach(function (r) { fix75(r); fixU14(r); });
+    a.fixV = 5;
   });
   return msgs;
 }
@@ -307,7 +322,7 @@ function scHtml() {
     '<div class="lbl">약정</div>' + seg('yak', [['sel', '선택약정'], ['gong', '공시지원금']]) +
     '<div class="lbl">유통망지원금</div>' + seg('sup', [['hi', '20만↑'], ['mid', '10~20만'], ['low', '10만↓']]) +
     '<div class="row" style="align-items:center"><span class="sub">💵 금액으로 넣기</span><input type="number" inputmode="decimal" step="0.5" min="0" data-supamt value="' + (sc.supAmt != null ? sc.supAmt : '') + '" placeholder="예: 15" style="width:90px"><span class="sub">만원 → 20만↑ · 10~20만 · 10만↓ 자동 · 숫자 누르면 남는 돈도 보여요</span></div>' +
-    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + tg('d180', '180일 이하 재가입') + tg('sel12', '선택약정 12개월') + '</div>' +
+    '<div class="lbl">그 밖</div><div class="row">' + tg('uoneNo', 'U+ONE 미로그인') + tg('cgrade', '기변 C등급') + tg('edocNo', '전자서식 미접수') + tg('junior', '주니어') + tg('senior', '시니어') + tg('combo', '당월 결합') + tg('kids', '키즈폰 결합') + tg('d30', '30일내 기변') + tg('d180', '180일 이하 재가입') + tg('sel12', '선택약정 12개월') + tg('u14', '만 14세 이하') + '</div>' +
     '</details>';
 }
 // 부가서비스 체크박스 (폰교체 · 폰안심은 둘 중 하나)
@@ -349,7 +364,7 @@ function scSummary(noVas) {
   a.push(sc.supAmt != null ? '지원금 ' + sc.supAmt + '만' : { hi: '지원금 20만↑', mid: '지원금 10~20만', low: '지원금 10만↓' }[sc.sup]);
   var v = []; if (sc.vas1) v.push('교보'); if (sc.vas2) v.push('V컬러링'); if (sc.ins !== 'none') v.push(sc.ins === 'swap' ? '폰교체' : '폰안심');
   if (!noVas) a.push(v.length ? '부가 ' + v.join('+') : '부가 없음');
-  [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30', 'd180', 'sel12', 'dongpan'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
+  [noVas ? '' : 'disney', 'uoneNo', 'cgrade', 'edocNo', 'junior', 'senior', 'combo', 'kids', 'd30', 'd180', 'sel12', 'u14', 'dongpan'].forEach(function (k) { if (sc[k]) a.push(D.CONDS[k].label); });
   return a.join(' · ');
 }
 
@@ -554,7 +569,7 @@ function secHtml(ai, si, s) {
   return h;
 }
 function stdCols() {
-  return [{ label: '115군', bands: { B115: 0 } }, { label: '95군', bands: { B105: 0, B95: 0 } }, { label: '85,75군', bands: { B85: 0 } },
+  return [{ label: '115군', bands: { B115: 0 } }, { label: '95군', bands: { B105: 0, B95: 0 } }, { label: '85,75군', bands: { B85: 0, B75: 0 } },
     { label: '70,61군', bands: { B61: 0 } }, { label: '55,47,44군', bands: { B55: 0, B44: 0 } }, { label: '37,33군', bands: { B37: 0 } }];
 }
 function blankRow(n) { var v = []; for (var i = 0; i < n; i++) v.push([null, null, null]); return { key: '', st: [], name: '새 모델', price: null, v: v }; }
@@ -664,9 +679,9 @@ var ALIAS = [
   [/아이폰17류/, ['UIP17']], [/아이폰17/, ['UIP17$']], [/아이폰16E|16E/, ['UIP16E']], [/아이폰16류|아이폰16/, ['UIP16']], [/아이폰듀오|듀오/, ['UIPD']],
   [/버디5|버디/, ['SM-A176']], [/무너2|무너|키즈폰/, ['SM-A175']], [/스타일폴더2|스타일폴더|폴더2/, ['AT-M140']], [/A18/, ['SM-A185']]
 ];
-var BAND_MAX = { B115: 130, B105: 105, B95: 95, B85: 85, B61: 70, B55: 55, B44: 44, B37: 37, B28: 28 };
-var BAND_MIN = { B115: 115, B105: 105, B95: 95, B85: 75, B61: 61, B55: 47, B44: 44, B37: 33, B28: 0 };
-var NUM_BAND = { 130: 'B115', 115: 'B115', 105: 'B105', 95: 'B95', 85: 'B85', 75: 'B85', 70: 'B61', 61: 'B61', 55: 'B55', 47: 'B55', 44: 'B44', 37: 'B37', 33: 'B37', 28: 'B28' };
+var BAND_MAX = { B115: 130, B105: 105, B95: 95, B85: 85, B75: 75, B61: 70, B55: 55, B44: 44, B37: 37, B28: 28 };
+var BAND_MIN = { B115: 115, B105: 105, B95: 95, B85: 85, B75: 75, B61: 61, B55: 47, B44: 44, B37: 33, B28: 0 };
+var NUM_BAND = { 130: 'B115', 115: 'B115', 105: 'B105', 95: 'B95', 85: 'B85', 75: 'B75', 70: 'B61', 61: 'B61', 55: 'B55', 47: 'B55', 44: 'B44', 37: 'B37', 33: 'B37', 28: 'B28' };
 function parseVerbal(line) {
   var raw = line.trim(); if (!raw) return null;
   var t = raw.toUpperCase().replace(/\s+/g, '');
@@ -705,6 +720,7 @@ function parseVerbal(line) {
   if (/V컬러링|벨링/.test(t)) r.cond.push(/미유치/.test(t) ? '!vas2' : 'vas2');
   if (/폰교체/.test(t)) r.cond.push('insSwap');
   if (/폰안심/.test(t)) r.cond.push('insSafe');
+  if (/14세/.test(t)) r.cond.push('u14');
   if (/동판|동시판매|인터넷\+?TV|모\+인터넷/.test(t)) r.cond.push('dongpan');
   if (/U\+?ONE미로그인|유플원미로그인/.test(t)) r.cond.push('uoneNo');
   return r;
@@ -950,7 +966,7 @@ function importHash() {
       j.add.forEach(function (x) {
         var ag = S.ags.filter(function (a) { return tplName(a.name) === tplName(x.ag); })[0]; if (!ag) { miss.push(x.ag); return; }
         var names = x.rules.map(function (r) { return r.name; });
-        ag.rules = ag.rules.filter(function (r) { return names.indexOf(r.name) < 0; }).concat(x.rules.map(function (r) { return Object.assign({ id: uid(), types: [], bands: [], models: [], ex: [], cond: [] }, r); }));
+        ag.rules = ag.rules.filter(function (r) { return names.indexOf(r.name) < 0; }).concat(x.rules.map(function (r) { var o = Object.assign({ id: uid(), types: [], bands: [], models: [], ex: [], cond: [] }, r); fix75(o); fixU14(o); return o; }));
         (x.notes || []).forEach(function (n) { if ((ag.notes || []).indexOf(n) < 0) (ag.notes = ag.notes || []).push(n); });
       });
       load2(); save(); if (miss.length) alert('이 업체가 없어요: ' + miss.join(', '));
