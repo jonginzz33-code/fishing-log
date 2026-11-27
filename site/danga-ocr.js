@@ -20,7 +20,7 @@
     workerP = loadLib().then(function () {
       return root.Tesseract.createWorker('eng', 1, { workerPath: CDN.worker, corePath: CDN.core, langPath: CDN.lang, logger: function (m) { if (log && m.status) log(m.status, m.progress); } });
     }).then(function (w) {
-      return w.setParameters({ tessedit_char_whitelist: '0123456789-', preserve_interword_spaces: '1' }).then(function () { return w; });
+      return w.setParameters({ tessedit_char_whitelist: '0123456789-.', preserve_interword_spaces: '1' }).then(function () { return w; });
     });
     workerP.catch(function () { workerP = null; });
     return workerP;
@@ -30,9 +30,14 @@
   function gray(img, x0, y0, w, h) {
     var c = document.createElement('canvas'); c.width = w; c.height = h;
     var g = c.getContext('2d'); g.drawImage(img, x0, y0, w, h, 0, 0, w, h);
-    var d = g.getImageData(0, 0, w, h).data, L = new Uint8Array(w * h);
-    for (var i = 0, j = 0; i < d.length; i += 4, j++) L[j] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
-    return { L: L, w: w, h: h };
+    var d = g.getImageData(0, 0, w, h).data, L = new Uint8Array(w * h), C = new Uint8Array(w * h);
+    for (var i = 0, j = 0; i < d.length; i += 4, j++) {
+      var r = d[i], gg = d[i + 1], b = d[i + 2], l = (r * 299 + gg * 587 + b * 114) / 1000;
+      var mx = r > gg ? (r > b ? r : b) : (gg > b ? gg : b), mn = r < gg ? (r < b ? r : b) : (gg < b ? gg : b);
+      if (mx - mn > 35 && l < 235) C[j] = 1;   // 색 있는 픽셀(워터마크 · 색 바탕) 표시
+      L[j] = mx - mn > 35 && l > 110 ? 255 : l;   // 보라 '보안' 워터마크 · 색 바탕 = 배경 (검은 · 진한 빨강 글자는 남김)
+    }
+    return { L: L, C: C, w: w, h: h };
   }
   var DARK = 150, LINE = 205;   // 글자 = 150 아래 · 표 선 = 205 아래 (연한 회색 선도)
   // 선 찾기: 가로(축='y') 또는 세로 줄의 어두운 비율이 높은 곳 → [{a,b}] (시작 · 끝 픽셀)
@@ -91,11 +96,18 @@
   }
 
   function num(t) {
-    t = String(t || '').replace(/[^\d\-]/g, '');
-    if (!t || t === '-') return null;
-    var neg = t[0] === '-'; t = t.replace(/-/g, '');
-    if (!t) return null;
-    return (neg ? -1 : 1) * parseInt(t, 10);
+    t = String(t || '').replace(/[^\d\-.]/g, '');
+    var neg = t[0] === '-'; t = t.replace(/-/g, '').replace(/^\.+|\.+$/g, '');
+    if (!t || !/^\d+(\.\d)?$/.test(t)) { t = t.replace(/\./g, ''); if (!t) return null; }
+    return (neg ? -1 : 1) * parseFloat(t);
+  }
+  // 아주 큰 사진은 줄여서 (가로 2400px 넘으면 2000px로)
+  function fit(img) {
+    var W = img.naturalWidth, H = img.naturalHeight;
+    if (W <= 2400) return img;
+    var k = 2000 / W, c = document.createElement('canvas'); c.width = 2000; c.height = Math.round(H * k);
+    var g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, c.width, c.height);
+    c.naturalWidth = c.width; c.naturalHeight = c.height; return c;
   }
 
   // 한 표 읽기 → v[줄][열][신규·MNP·기변]
@@ -162,8 +174,10 @@
               var tx = cells[k4];
               if (tx === 'X') { row.push(null); continue; }
               var n = num(tx);
+              var mi = minusOf(cellBlobs(G, gd, r, k4, lineR));
               if (n === null && colDark[k4] > 0.015) miss.push([r, k4]);
-              else if (n !== null && (confs[k4] < 80 || Math.abs(n) > 150 || blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-]/g, '').length)) miss.push([r, k4]);
+              else if (mi && !(n < 0)) miss.push([r, k4]);
+              else if (n !== null && (confs[k4] < 80 || Math.abs(n) > 150 || blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-.]/g, '').length)) miss.push([r, k4]);
               row.push(n);
             }
             out.push(row);
@@ -176,8 +190,8 @@
         { sc: 6, psm: '8', mode: 'hard' }, { sc: 4, psm: '13', mode: 'bold' }, { sc: 5, psm: '6', mode: 'hard' },
         { sc: 8, psm: '10', mode: 'clean', one: true }, { sc: 7, psm: '10', mode: 'bold', one: true }, { sc: 8, psm: '8', mode: 'clean' }, { sc: 6, psm: '7', mode: 'bold' }
       ];
-      function cellCanvas(r, k, v) {
-        var ya = Math.round(gd.rows[r]) + 1, yb = Math.round(gd.rows[r + 1]) - 1, xa = Math.round(gd.cols[k]) + 2, xb = Math.round(gd.cols[k + 1]) - 2;
+      function cellCanvas(r, k, v, cut) {
+        var ya = Math.round(gd.rows[r]) + 1, yb = Math.round(gd.rows[r + 1]) - 1, xa = cut || Math.round(gd.cols[k]) + 2, xb = Math.round(gd.cols[k + 1]) - 2;
         var w = xb - xa, h = yb - ya, sc = v.sc, c = document.createElement('canvas'); c.width = w * sc + 60; c.height = h * sc + 60;
         var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
         if (v.mode === 'clean') { g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(CLEAN, xa, ya, w, h, 30, 30, w * sc, h * sc); return c; }
@@ -194,16 +208,19 @@
         return c;
       }
       function retryCell(r, k) {
-        var want = blobs(G, gd, r, k, lineR), votes = {}, i = 0, cur = out[r][k];
+        var bl = cellBlobs(G, gd, r, k, lineR), mi = minusOf(bl), cut = mi ? mi.x1 + 2 : null;
+        var want = mi ? bl.length - 1 : blobs(G, gd, r, k, lineR), votes = {}, i = 0, cur = out[r][k];
+        if (mi && cur !== null) cur = -Math.abs(cur);
         if (cur !== null && String(cur).replace('-', '').length === want) votes[cur] = 1;
         function next() {
           if (i >= VARIANTS.length) return Promise.resolve();
           var v = VARIANTS[i++];
           if (v.one && want !== 1) return next();   // 한 글자 읽기는 한 자리 숫자 칸만
-          return worker.setParameters({ tessedit_pageseg_mode: v.psm }).then(function () { return worker.recognize(cellCanvas(r, k, v)); }).then(function (res) {
-            var t = String(res.data.text || '').replace(/[^\d\-]/g, '');
+          return worker.setParameters({ tessedit_pageseg_mode: v.psm }).then(function () { return worker.recognize(cellCanvas(r, k, v, cut)); }).then(function (res) {
+            var t = String(res.data.text || '').replace(/[^\d\-.]/g, '');
             if (t.length < want && want <= 2 && /^1+$/.test(t)) t = '11';   // '11' 을 '1' 로 읽는 버릇
             var n = num(t);
+            if (mi && n !== null) n = -Math.abs(n);
             if (n !== null && String(n).replace('-', '').length === want) {
               votes[n] = (votes[n] || 0) + 1;
               if (votes[n] >= 2) return;   // 두 번 같게 읽으면 확정
@@ -226,7 +243,46 @@
           var key = m[0] + '_' + m[1]; if (seen[key]) return; seen[key] = 1;
           c2 = c2.then(function () { return retryCell(m[0], m[1]); });
         });
-        return c2.then(function () { return { v: out, exact: gd.exact, missed: Object.keys(seen).length, unsure: unsure }; });
+        return c2.then(function () {
+          // ① 자신 있게 읽은 칸에서 숫자 모양 모으기
+          var bad = {}; unsure.forEach(function (u) { bad[u[0] + '_' + u[1]] = 1; });
+          var proto = {}, cnt = {};
+          for (var r1 = 0; r1 < nRows; r1++) for (var k1 = 0; k1 < nCols3; k1++) {
+            var val = out[r1][k1]; if (val === null || bad[r1 + '_' + k1]) continue;
+            var bl1 = cellBlobs(G, gd, r1, k1, lineR), kd1 = kinds(bl1), digs = String(Math.abs(val)).replace('.', '').split(''), di = 0, ok1 = true, gl = [];
+            kd1.forEach(function (t, i) { if (t === 'd') { if (di < digs.length) gl.push([digs[di], glyph(G, bl1[i])]); di++; } else if (t === '?') ok1 = false; });
+            if (!ok1 || di !== digs.length) continue;
+            gl.forEach(function (x) { var ch = x[0]; if (!proto[ch]) { proto[ch] = new Float32Array(GW * GH); proto[ch].ar = 0; cnt[ch] = 0; } for (var q = 0; q < GW * GH; q++) proto[ch][q] += x[1].v[q]; proto[ch].ar += x[1].ar; cnt[ch]++; });
+          }
+          var P = Object.keys(proto).map(function (ch) { var v = proto[ch], n = cnt[ch]; for (var q = 0; q < v.length; q++) v[q] /= n; return { ch: ch, g: { v: v, ar: v.ar / n }, n: n }; });
+          // ② 모든 칸을 모양으로 읽어 보고 · 글자인식과 다르면 모양이 뚜렷할 때 모양으로
+          var fixedN = 0, still = [], sureSet = {};
+          if (P.length >= 6) for (var r3 = 0; r3 < nRows; r3++) for (var k3 = 0; k3 < nCols3; k3++) {
+            var bl3 = cellBlobs(G, gd, r3, k3, lineR); if (!bl3.length) continue;
+            var kd3 = kinds(bl3), str = '', sure = true;
+            kd3.forEach(function (t, i) {
+              if (t === '-') { str += '-'; return; } if (t === '.') { str += '.'; return; } if (t === '?') { sure = false; return; }
+              var g3 = glyph(G, bl3[i]), best = null, bd = 1e9, sd = 1e9;
+              P.forEach(function (p3) { var d3 = dist(g3, p3.g); if (d3 < bd) { sd = bd; bd = d3; best = p3.ch; } else if (d3 < sd) sd = d3; });
+              if (!best || bd > 0.045 || sd - bd < 0.012) sure = false;
+              str += best || '?';
+            });
+            var tv = sure && /^-?\d+(\.\d)?$/.test(str) ? parseFloat(str) : null;
+            var key3 = r3 + '_' + k3; if (tv !== null) sureSet[key3] = 1;
+            if (tv !== null && tv !== out[r3][k3]) { out[r3][k3] = tv; fixedN++; if (bad[key3]) delete bad[key3]; }
+            else if (tv !== null && tv === out[r3][k3] && bad[key3]) delete bad[key3];   // 두 방법이 같으면 확정
+          }
+          unsure = Object.keys(bad).map(function (k) { return k.split('_').map(Number); });
+          var have = {}; unsure.forEach(function (u) { have[u[0] + '_' + u[1]] = 1; });
+          for (var r2 = 0; r2 < nRows; r2++) for (var k2 = 0; k2 < nCols3; k2++) {
+            if (have[r2 + '_' + k2] || out[r2][k2] === null || sureSet[r2 + '_' + k2]) continue;
+            var ya = Math.round(gd.rows[r2]) + 2, yb = Math.round(gd.rows[r2 + 1]) - 2, xa = Math.round(gd.cols[k2]) + 3, xb = Math.round(gd.cols[k2 + 1]) - 3, cc = 0, tt = 0;
+            for (var y = ya; y < yb; y++) for (var x = xa; x < xb; x++) { tt++; if (G.C[y * G.w + x]) cc++; }
+            var f = tt ? cc / tt : 0;
+            if (f > 0.04 && f < 0.6) unsure.push([r2, k2]);   // 칸 일부에 색 글씨가 겹침 = 워터마크
+          }
+          return { v: out, exact: gd.exact, missed: Object.keys(seen).length, unsure: unsure };
+        });
       });
     });
   }
@@ -256,9 +312,10 @@
       if (!ok) continue;
       // 더 큰 표의 일부(위 · 아래로 같은 간격 줄이 더 이어짐)면 버림
       var cont = function (g) { return g > med * 0.8 && g < med * 1.25; };
-      if (i > 0 && cont(seg[0] - cs[i - 1])) continue;
-      if (i + n + 1 < cs.length && cont(cs[i + n + 1] - seg[n])) continue;
-      var sc = Math.abs(seg[0] - want0) + Math.abs(seg[n] - want1);
+      var pen = 0;
+      if (i > 0 && cont(seg[0] - cs[i - 1])) pen += med;
+      if (i + n + 1 < cs.length && cont(cs[i + n + 1] - seg[n])) pen += med;
+      var sc = Math.abs(seg[0] - want0) + Math.abs(seg[n] - want1) + pen;
       if (sc < bs) { bs = sc; best = seg; }
     }
     return best;
@@ -304,8 +361,73 @@
     return { x0: (rg.x0 * W - cb.x0) / cw, x1: (rg.x1 * W - cb.x0) / cw, y0: (rg.y0 * H - cb.y0) / ch, y1: (rg.y1 * H - cb.y0) / ch };
   }
 
+  // 칸 안 덩어리들 (가로 위치 · 세로 높이) → 맨 앞이 낮고 납작하면 마이너스
+  function cellBlobs(G, gd, r, k, skip) {
+    var ya = Math.round(gd.rows[r]) + 2, yb = Math.round(gd.rows[r + 1]) - 2, xa = Math.round(gd.cols[k]) + 3, xb = Math.round(gd.cols[k + 1]) - 3, out = [], cur = null;
+    for (var x = xa; x < xb; x++) {
+      var top = -1, bot = -1, tot = 0, ink = 0;
+      for (var y = ya; y < yb; y++) { if (skip && skip[y]) continue; tot++; if (G.L[y * G.w + x] < 110) { ink++; if (top < 0) top = y; bot = y; } }
+      var on = ink > 0 && ink < tot * 0.9;
+      if (on) { if (!cur) { cur = { x0: x, x1: x, y0: top, y1: bot }; out.push(cur); } else { cur.x1 = x; cur.y0 = Math.min(cur.y0, top); cur.y1 = Math.max(cur.y1, bot); } }
+      else cur = null;
+    }
+    var maxH = 0; out.forEach(function (b) { maxH = Math.max(maxH, b.y1 - b.y0 + 1); });
+    var res = [];
+    out.forEach(function (b) {
+      var w = b.x1 - b.x0 + 1, h = b.y1 - b.y0 + 1;
+      if (h < maxH * 0.6 || w <= h * 0.95) { res.push(b); return; }
+      var parts = Math.max(2, Math.round(w / (h * 0.62))), cuts = [], prevCut = b.x0;
+      for (var p = 1; p < parts; p++) {
+        var want = b.x0 + w * p / parts, bx = Math.round(want), bv = 1e9;
+        for (var x2 = Math.round(want - w * 0.15); x2 <= Math.round(want + w * 0.15); x2++) {
+          var ink2 = 0; for (var y2 = b.y0; y2 <= b.y1; y2++) if (G.L[y2 * G.w + x2] < 110) ink2++;
+          if (ink2 < bv) { bv = ink2; bx = x2; }
+        }
+        cuts.push(bx);
+      }
+      cuts.push(b.x1 + 1);
+      cuts.forEach(function (cx) {
+        var nb = { x0: prevCut, x1: cx - 1, y0: 1e9, y1: -1 };
+        for (var x3 = nb.x0; x3 <= nb.x1; x3++) for (var y3 = b.y0; y3 <= b.y1; y3++) if (G.L[y3 * G.w + x3] < 110) { nb.y0 = Math.min(nb.y0, y3); nb.y1 = Math.max(nb.y1, y3); }
+        if (nb.y1 >= 0 && nb.x1 >= nb.x0) res.push(nb);
+        prevCut = cx;
+      });
+    });
+    return res;
+  }
+  function minusOf(bl) {
+    if (bl.length < 2) return null;
+    var maxH = 0; bl.forEach(function (b) { maxH = Math.max(maxH, b.y1 - b.y0 + 1); });
+    var f = bl[0], h = f.y1 - f.y0 + 1, w = f.x1 - f.x0 + 1;
+    return h <= maxH * 0.35 && w >= h * 1.3 ? f : null;
+  }
+  // ── 같은 사진에서 숫자 모양 배우기 ──
+  var GW = 12, GH = 18;
+  function glyph(G, b) {
+    var w = b.x1 - b.x0 + 1, h = b.y1 - b.y0 + 1, v = new Float32Array(GW * GH);
+    for (var j = 0; j < GH; j++) for (var i = 0; i < GW; i++) {
+      var sx = b.x0 + (i + 0.5) * w / GW - 0.5, sy = b.y0 + (j + 0.5) * h / GH - 0.5;
+      var x0 = Math.max(b.x0, Math.floor(sx)), y0 = Math.max(b.y0, Math.floor(sy)), x1 = Math.min(b.x1, x0 + 1), y1 = Math.min(b.y1, y0 + 1), fx = sx - x0, fy = sy - y0;
+      if (fx < 0) fx = 0; if (fy < 0) fy = 0;
+      var a = G.L[y0 * G.w + x0], bb = G.L[y0 * G.w + x1], c = G.L[y1 * G.w + x0], d = G.L[y1 * G.w + x1];
+      v[j * GW + i] = 1 - ((a * (1 - fx) + bb * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy) / 255;
+    }
+    return { v: v, ar: w / h, h: h };
+  }
+  function dist(a, b) { var s = 0; for (var i = 0; i < a.v.length; i++) { var d = a.v[i] - b.v[i]; s += d * d; } var ad = Math.log(a.ar / b.ar); return s / a.v.length + ad * ad * 0.15; }
+  // 덩어리 → 글자 종류: 마이너스(낮고 가운데) · 점(낮고 아래) · 숫자
+  function kinds(bl) {
+    var maxH = 0; bl.forEach(function (b) { maxH = Math.max(maxH, b.y1 - b.y0 + 1); });
+    var top = 1e9, bot = -1; bl.forEach(function (b) { if (b.y1 - b.y0 + 1 > maxH * 0.6) { top = Math.min(top, b.y0); bot = Math.max(bot, b.y1); } });
+    return bl.map(function (b, i) {
+      var h = b.y1 - b.y0 + 1, w = b.x1 - b.x0 + 1;
+      if (h <= maxH * 0.35) { if (i === 0 && w >= h * 1.3 && b.y1 < bot - maxH * 0.15) return '-'; if (b.y0 > top + maxH * 0.55) return '.'; return '?'; }
+      return 'd';
+    });
+  }
   // 칸 안 글자 덩어리 수 (숫자 개수 확인용)
-  function blobs(G, gd, r, k, skip) {
+  function blobs(G, gd, r, k, skip) { return cellBlobs(G, gd, r, k, skip).length; }
+  function blobsOld(G, gd, r, k, skip) {
     var ya = Math.round(gd.rows[r]) + 2, yb = Math.round(gd.rows[r + 1]) - 2, xa = Math.round(gd.cols[k]) + 3, xb = Math.round(gd.cols[k + 1]) - 3, n = 0, prev = false;
     for (var x = xa; x < xb; x++) {
       var ink = 0, tot = 0;
@@ -316,5 +438,5 @@
     return n;
   }
   function debugGrid(img, rg, nR, nC) { var g = grid(img, rg, nR, nC); return { rows: g.rows.map(Math.round), cols: g.cols.map(Math.round), exact: g.exact, hy: lines(g.G, 'y', 0.45).length, vx: lines(g.G, 'x', 0.7).length }; }
-  root.DangaOCR = { rowCount: rowCount, autoRegion: autoRegion, toHint: toHint, contentBox: function (img) { return contentBox(gray(img, 0, 0, img.naturalWidth, img.naturalHeight)); }, _lines: lines, _gray: gray, debugGrid: debugGrid, CDN: CDN, readSection: readSection, snap: snap, grid: grid, getWorker: getWorker };
+  root.DangaOCR = { fit: fit, rowCount: rowCount, autoRegion: autoRegion, toHint: toHint, contentBox: function (img) { return contentBox(gray(img, 0, 0, img.naturalWidth, img.naturalHeight)); }, _lines: lines, _gray: gray, debugGrid: debugGrid, CDN: CDN, readSection: readSection, snap: snap, grid: grid, getWorker: getWorker };
 })(this);
