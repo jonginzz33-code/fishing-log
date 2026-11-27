@@ -98,7 +98,7 @@ td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .cp span{flex:1;min-width:0;word-break:break-all;user-select:all;-webkit-user-select:all}
 .noTest{display:flex;align-items:center;gap:5px;font-size:13px;color:#DDEAF2;cursor:pointer;white-space:nowrap;margin-left:auto}
 .noTest input{width:18px;height:18px;accent-color:var(--ok)}
-.hs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+.hs{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin:10px 0}
 .hs div{background:#0F2231;border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;font-size:12.5px;color:var(--sub)}
 .hs b{display:block;font-size:20px;color:var(--text)}
 .hh{font-weight:800;color:var(--sky);margin:12px 0 4px;font-size:13.5px}
@@ -1281,9 +1281,40 @@ body.noscroll{overflow:hidden}
     });
     var hourOrdered = {}; for (var h = 0; h < 24; h++) if (byHour[h + '시']) hourOrdered[h + '시'] = byHour[h + '시'];
     var list = hist.slice().sort(function (a, b) { return b.t - a.t; });
+    // 제품별 들어오고 나간 것 (같은 제품이 전체 감시 · 거래처 필요 제품 둘 다에 있으면 전체 감시 기록만 씀 → 두 번 세지 않게)
+    var srcOf = {};
+    hist.forEach(function (e) { if (!srcOf[e.name] || e.src !== 'need') srcOf[e.name] = e.src === 'need' ? 'need' : 'watch'; });
+    var prod = {}, soldMaker = {}, soldAll = 0, inQtyAll = 0;
+    hist.slice().sort(function (a, b) { return a.t - b.t; }).forEach(function (e) {
+      if ((e.src === 'need' ? 'need' : 'watch') !== srcOf[e.name]) return;
+      var p = prod[e.name] || (prod[e.name] = { name: e.name, pn: e.pn, src: srcOf[e.name], inCnt: 0, inQty: 0, sold: 0, outCnt: 0, last: null, inAt: 0, durs: [] });
+      if (e.ev === 'in') { p.inCnt++; p.inQty += e.n; p.last = e.n; p.inAt = e.t; }
+      else if (e.ev === 'chg') { if (e.was != null) p.last = e.was; if (e.n < p.last) p.sold += p.last - e.n; else p.inQty += e.n - p.last; p.last = e.n; }
+      else if (e.ev === 'out') { p.outCnt++; if (p.last) p.sold += p.last; p.last = 0; if (p.inAt) p.durs.push(e.t - p.inAt); p.inAt = 0; }
+    });
+    var prods = Object.keys(prod).map(function (k) { return prod[k]; });
+    prods.forEach(function (p) {
+      var cur = nowStock(p.name, p.src === 'need' ? (p.pn || '') : null);
+      if (cur != null && p.last != null && cur < p.last) p.sold += p.last - cur; // 마지막 기록 뒤 지금까지 나간 것
+      p.cur = cur;
+      soldAll += p.sold; inQtyAll += p.inQty;
+      if (p.sold) { var mk = makerOf(p.name); soldMaker[mk] = (soldMaker[mk] || 0) + p.sold; }
+    });
+    prods.sort(function (a, b) { return b.sold - a.sold || b.outCnt - a.outCnt || b.inCnt - a.inCnt; });
+    var prodTable = '<table class="hl"><tr style="color:var(--sub);font-size:12px"><td>제품</td><td style="text-align:right">입고</td><td style="text-align:right">소진</td><td style="text-align:right">품절</td><td style="text-align:right">지금</td></tr>' +
+      prods.map(function (p) {
+        var avg = p.durs.length ? dur(p.durs.reduce(function (s, x) { return s + x; }, 0) / p.durs.length) : '';
+        return '<tr' + (p.cur === 0 ? ' style="opacity:.75"' : '') + '><td>' + esc(p.name) + (p.pn && p.src === 'need' ? '<br><small style="color:var(--sub)">' + esc(p.pn) + '</small>' : '') + (avg ? '<br><small style="color:#FF9B8A">들어와서 품절까지 평균 ' + avg + '</small>' : '') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap">' + (p.inCnt ? p.inCnt + '번 · ' + p.inQty + '개' : (p.inQty ? '+' + p.inQty + '개' : '')) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#FFD27A">' + (p.sold ? p.sold + '개' : '') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#FF9B8A">' + (p.outCnt ? p.outCnt + '번' : '') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap">' + (p.cur == null ? '?' : p.cur === 0 ? '<span class="b s">품절</span>' : p.cur + '개') + '</td></tr>';
+      }).join('') + '</table>';
     $('histBody').innerHTML =
-      '<div class="hs"><div>입고<b>' + ins.length + '건</b></div><div>품절<b>' + outs.length + '건</b></div><div>제품<b>' + Object.keys(ins.reduce(function (o, e) { o[e.code] = 1; return o; }, {})).length + '개</b></div><div>제약회사<b>' + Object.keys(byMaker).length + '곳</b></div></div>' +
+      '<div class="hs"><div>입고<b>' + ins.length + '건 · ' + inQtyAll + '개</b></div><div>소진<b>' + soldAll + '개</b></div><div>품절<b>' + outs.length + '건</b></div><div>제품<b>' + prods.length + '개</b></div><div>제약회사<b>' + Object.keys(byMaker).length + '곳</b></div></div>' +
+      '<div class="hh">🔄 제품별 들어오고 나간 것 (소진 많은 순)</div>' + (prods.length ? prodTable : '<div style="color:var(--sub)">아직 없어요</div>') +
       '<div class="hh">🏭 제약회사별 입고 (많은 순)</div>' + bars(byMaker, 15) +
+      '<div class="hh">📉 제약회사별 소진 개수</div>' + bars(soldMaker, 15) +
       '<div class="hh">🕘 시간대별 입고</div>' + bars(hourOrdered, 24, true) +
       '<div class="hh">📅 요일별 입고</div>' + bars('월화수목금토일'.split('').reduce(function (o, d) { if (byDay[d + '요일']) o[d + '요일'] = byDay[d + '요일']; return o; }, {}), 7, true) +
       '<div class="hh">📜 전체 기록 (최신 순 · ' + list.length + '건)</div>' +
