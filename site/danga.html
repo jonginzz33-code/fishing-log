@@ -495,8 +495,7 @@ function showItem(id) {
           return '<div class="cpr cpsum"><span>액면 ' + fmt(p.parts[0].amt) + ' · 정책 ' + sgn(Math.round(pol * 10) / 10) + ' · 구두 ' + sgn(Math.round(vb * 10) / 10) + '</span></div>'; })() +
         '<div class="cpr cpt"><span>최종 단가</span><b>' + fmt(p.v) + '</b></div>' +
         (hints.length ? '<div class="cphint">' + hints.map(esc).join('<br>') + '</div>' : '') +
-        (S.sc.supAmt > 0 ? '<div class="cpr"><span>💵 유통망지원금 (손님께)</span><b class="minus">-' + fmt(S.sc.supAmt) + '</b></div><div class="cpr cpt"><span>남는 돈</span><b>' + fmt(Math.round((p.v - S.sc.supAmt) * 10) / 10) + '</b></div>' +
-          (S.sc.supAmt > p.v ? '<div class="sub" style="color:#FF6B6B;margin-top:4px">⚠ 지원금이 단가보다 커요 · 정책서 액면 초과 설정 불가</div>' : '') : '');
+        '';
       document.body.appendChild(box);
       var r = cell.getBoundingClientRect(), w = box.offsetWidth, hh = box.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
       var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8), top = r.bottom + 6;
