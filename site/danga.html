@@ -171,7 +171,15 @@ function fixData() {
   });
   return msgs;
 }
+// 모델 이름(코드)이 하나도 없는 빈 표('새 모델' 줄만) → 그 업체 양식으로 바꿈
+function blankTable(a) { return a.sections.every(function (sc) { return sc.rows.every(function (r) { return !r.key; }); }); }
+function useTemplate(a) {
+  if (!blankTable(a)) return false;
+  var t = tplFor(a.name); if (!t.length || blankTable({ sections: t })) return false;
+  a.sections = t; if (a.ocr) delete a.ocr.regs; delete a.prev; delete a.unsure; return true;
+}
 function fixTemplates() {
+  S.ags.forEach(function (a) { if (a.sections.length) useTemplate(a); });
   S.ags.forEach(function (a) {
     if (a.tplV >= 1) return;
     var t = tplName(a.name);
@@ -284,7 +292,7 @@ function cmpHtml() {
   h += '</div>';
   h += scHtml();
   h += '<div class="row" style="margin:4px 0 0">' + ags.map(function (a) { return '<span class="sub"><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + (a.date ? ' (' + esc(a.date) + ')' : '') + (a.verbal.length ? ' · 구두 ' + a.verbal.filter(function (r) { return !r.off; }).length : '') + '</span>'; }).join(' ') + '</div>';
-  h += emptyNote(ags);
+  h += allBtnHtml() + emptyNote(ags);
   h += S.mode === 'list' ? listHtml(ags) : mxHtml(ags);
   h += '<p class="sub">단위: 만원 · 최종 = 단가표 + 정책(추가 · 차감) + 🗣 구두. 줄을 누르면 계산 내역이 보여요. 숫자 · 정책은 [📋 단가표 입력] 탭에서 고쳐요.</p>';
   return h;
@@ -296,8 +304,8 @@ function emptyNote(ags) {
   if (!empty.length) return '';
   return '<div class="note">⚠ 숫자가 아직 없는 업체: ' + empty.map(function (a) {
     var ai = S.ags.indexOf(a), hasPic = IMGS[a.id] || a.imgN;
-    return '<b>' + esc(a.name) + '</b> ' + (hasPic ? '<button class="btn sm pri" data-ocrgo="' + ai + '">🔢 사진에서 숫자 읽기</button>' : '<button class="btn sm" data-go="sheet">📷 사진 올리기</button>');
-  }).join(' · ') + '<br><span class="sub">숫자가 있어야 비교돼요. 읽은 뒤 빨간 칸만 사진과 맞춰 보고 💾 저장.</span></div>';
+    return '<b>' + esc(a.name) + '</b>' + (hasPic ? ' 📷' : ' (사진 없음)');
+  }).join(' · ') + '<br><span class="sub">위 🔢 단가 수집을 누르면 사진 있는 업체를 한 번에 읽어요. 읽은 뒤 빨간 칸만 사진과 맞춰 보세요.</span></div>';
 }
 function filterQ(list) {
   var sel = selModels();
@@ -383,7 +391,7 @@ function showItem(id) {
 
 // ── 단가표 입력 탭 ──
 function sheetHtml() {
-  var h = '<p class="sub">업체마다 단가표 사진을 올려 두고(📷) 같은 모양의 표에 바뀐 숫자만 고치면 돼요. 다 하면 아래 💾 저장. 칸을 누르고 숫자 입력 → 다음 칸은 Enter. 엑셀 등에서 여러 칸 복사해 붙여 넣기도 돼요.</p>';
+  var h = '<p class="sub">업체마다 단가표 사진을 올려 두고(📷) 같은 모양의 표에 바뀐 숫자만 고치면 돼요. 다 하면 아래 💾 저장. 칸을 누르고 숫자 입력 → 다음 칸은 Enter. 엑셀 등에서 여러 칸 복사해 붙여 넣기도 돼요.</p>' + allBtnHtml();
   S.ags.forEach(function (a, ai) {
     var nRows = 0; a.sections.forEach(function (s) { nRows += s.rows.length; });
     var ch = changedCount(a);
@@ -740,6 +748,7 @@ view.addEventListener('click', function (e) {
   if (d.delsec) { var ps = d.delsec.split(',').map(Number); if (confirm('이 표를 통째로 지울까요?')) { S.ags[ps[0]].sections.splice(ps[1], 1); save(); render(); } return; }
   if (d.addrow) { var pa = d.addrow.split(',').map(Number), sec = S.ags[pa[0]].sections[pa[1]]; sec.rows.push(blankRow(sec.cols.length)); save(); render(); rowEditor(pa[0], pa[1], sec.rows.length - 1); return; }
   if (d.addcol) { var pq = d.addcol.split(',').map(Number), sc2 = S.ags[pq[0]].sections[pq[1]]; sc2.cols.push({ label: '새 열', bands: {} }); sc2.rows.forEach(function (r) { r.v = r.v || []; r.v.push([null, null, null]); }); save(); render(); colEditor(pq[0], pq[1], sc2.cols.length - 1); return; }
+  if (t.id === 'allBtn') { runAll(); return; }
   if (d.ocr) { runOcr(+d.ocr); return; }
   if (d.ocrgo) { var og = S.ags[+d.ocrgo]; S.tab = 'sheet'; S.open = S.open || {}; S.open[og.id] = true; save(); render();
     var waitImg = function (n) { if (IMGS[og.id] || n > 40) runOcr(+d.ocrgo); else setTimeout(function () { waitImg(n + 1); }, 250); }; waitImg(0); return; }
@@ -844,9 +853,10 @@ function regsOf(a) {
   if (!a.ocr.regs) a.ocr.regs = JSON.parse(JSON.stringify(DEFAULT_REG[tplName(a.name)] || []));
   return a.ocr.regs;
 }
-function runOcr(ai) {
-  var a = S.ags[ai], regs = regsOf(a);
-  for (var si = 0; si < a.sections.length; si++) if (!regs[si]) { setRegions(ai, si, false); return; }
+function runOcr(ai, quiet) {
+  var a = S.ags[ai]; if (useTemplate(a)) { save(); render(); toast('📋 ' + a.name + ' 기본 양식(모델 ' + a.sections.reduce(function (n, sc) { return n + sc.rows.length; }, 0) + '줄)으로 맞췄어요'); }
+  var regs = regsOf(a);
+  for (var si = 0; si < a.sections.length; si++) if (!regs[si]) { if (quiet) return Promise.resolve({ name: a.name, err: '표 ' + (si + 1) + ' 영역을 아직 안 맞춤 → 📐 영역 맞추기' }); setRegions(ai, si, false); return Promise.resolve(null); }
   OCRBUSY[a.id] = '글자인식 준비 중…'; render();
   var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve(), warns = [];
   a.sections.forEach(function (sec, si) {
@@ -866,7 +876,7 @@ function runOcr(ai) {
           use = rg.h ? DangaOCR.snap(img, { x0: (cb.x0 + rg.x0 * (cb.x1 - cb.x0)) / W, x1: (cb.x0 + rg.x1 * (cb.x1 - cb.x0)) / W, y0: (cb.y0 + rg.y0 * (cb.y1 - cb.y0)) / H, y1: (cb.y0 + rg.y1 * (cb.y1 - cb.y0)) / H }) : rg;
         }
         return DangaOCR.readSection(img, use, nR, nC, function (st, pr) {
-          var m = st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…';
+          var m = (st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…'); if (quiet) { var bb = document.getElementById('allBtn'); if (bb) bb.textContent = '⏳ ' + ALLSTEP + ' ' + m; }
           if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; var bm = document.querySelector('.ocrmsg.busy'); if (bm) bm.textContent = '⏳ ' + m + ' · 한 표에 10~40초 걸려요'; }
         });
       }).then(function (res) {
@@ -879,7 +889,7 @@ function runOcr(ai) {
       });
     });
   });
-  chain.then(function () {
+  return chain.then(function () {
     var hadNums = prevSnap.some(function (sc) { return sc.rows.some(function (r) { return (r.v || []).some(function (c) { return c && c.some(function (x) { return x != null; }); }); }); });
     var today = (new Date().getMonth() + 1) + '/' + new Date().getDate();
     // 같은 날 다시 읽기면 '이전 날짜 대비' 비교는 그대로 둠 (지난번엔 다시 읽을 때마다 비교 기준이 지워졌음)
@@ -891,11 +901,43 @@ function runOcr(ai) {
     var hm = new Date().toTimeString().slice(0, 5);
     OCRMSG[a.id] = '✅ ' + hm + ' 읽기 끝 · ' + got + '/' + total + '칸' + (hadNums ? (diff ? ' · 방금 바뀐 칸 ' + diff + '개' : ' · 지난번과 똑같아요 (바뀐 칸 없음)') : '') + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인' : '');
     delete OCRBUSY[a.id]; save(); render();
+    if (quiet) return { name: a.name, got: got, total: total, unsure: unsure.length, diff: hadNums ? diff : -1, warns: warns };
     var mEl = document.getElementById('ocrmsg' + ai); if (mEl) { mEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); mEl.classList.remove('flash'); void mEl.offsetWidth; mEl.classList.add('flash'); }
     if (warns.length) alert('⚠ 확인해 주세요\n' + warns.join('\n'));
     if (got < total * 0.3) { alert('숫자를 거의 못 찾았어요 (' + got + ' / ' + total + '칸).\n사진의 숫자 칸 위치가 달라서예요. 📐 영역 맞추기 화면에서 숫자 칸 왼쪽 위 → 오른쪽 아래를 눌러 주세요.'); setRegions(ai, 0, true); return; }
     toast('✅ ' + total + '칸 읽었어요' + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인해 주세요' : '') + ' · 💾 저장');
-  }).catch(function (e) { delete OCRBUSY[a.id]; OCRMSG[a.id] = '❌ 읽기 실패 · ' + (e.message || e); render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
+  }).catch(function (e) { delete OCRBUSY[a.id]; OCRMSG[a.id] = '❌ 읽기 실패 · ' + (e.message || e); render(); if (quiet) return { name: a.name, err: '읽기 실패 · ' + (e.message || e) }; alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
+}
+// 🔢 단가 수집: 사진 있는 업체를 차례로 한 번에 읽기 → 결과 한 번에 알림 → 💾 저장
+var ALLRUN = false, ALLSTEP = '';
+function picAgs() { return S.ags.filter(function (a) { return IMGS[a.id] || a.imgN; }); }
+function allBtnHtml() {
+  var n = picAgs().length;
+  if (!n) return '<div class="note">📷 [📋 단가표 입력] 탭에서 업체마다 단가표 사진을 올리면 여기 <b>🔢 단가 수집</b> 버튼 하나로 한 번에 읽어요. <button class="btn sm" data-go="sheet">📷 사진 올리러 가기</button></div>';
+  return '<button class="btn pri" id="allBtn" style="width:100%;margin:8px 0;padding:14px;font-size:16px"' + (ALLRUN ? ' disabled' : '') + '>' + (ALLRUN ? '⏳ ' + esc(ALLSTEP) + ' 읽는 중…' : '🔢 단가 수집 · 사진 있는 ' + n + '곳 한 번에 읽기') + '</button>';
+}
+function runAll() {
+  if (ALLRUN) return;
+  var list = picAgs(); if (!list.length) return alert('사진 올린 업체가 없어요');
+  ALLRUN = true; var res = [], i = 0;
+  function waitPic(a, n) { return new Promise(function (ok) { (function w(k) { if (IMGS[a.id] || k > 60) ok(); else setTimeout(function () { w(k + 1); }, 250); })(0); }); }
+  function next() {
+    if (i >= list.length) return finish();
+    var a = list[i++], ai = S.ags.indexOf(a); ALLSTEP = i + '/' + list.length + ' ' + a.name; render();
+    return waitPic(a).then(function () { if (!IMGS[a.id]) return { name: a.name, err: '사진을 못 불러왔어요' }; return runOcr(ai, true); })
+      .then(function (r) { res.push(r || { name: a.name, err: '읽기 안 됨' }); return next(); });
+  }
+  function finish() {
+    ALLRUN = false; ALLSTEP = ''; S.tab = 'cmp'; render();
+    var lines = res.map(function (r) {
+      if (r.err) return '❌ ' + r.name + ' · ' + r.err;
+      var low = r.got < r.total * 0.3;
+      return (low ? '⚠ ' : '✅ ') + r.name + ' · ' + r.got + '/' + r.total + '칸' + (r.unsure ? ' · 빨간 칸 ' + r.unsure : '') + (r.diff > 0 ? ' · 바뀐 칸 ' + r.diff : '') + (low ? ' · 숫자를 거의 못 찾음 → 📐 영역 맞추기' : '') + (r.warns.length ? '\n   ' + r.warns.join('\n   ') : '');
+    });
+    saveNow();
+    alert('🔢 단가 수집 끝 (' + res.length + '곳)\n' + lines.join('\n') + '\n\n💾 저장했어요. 빨간 칸만 사진과 맞춰 보세요.');
+  }
+  next();
 }
 // 영역 맞추기: 숫자 칸 전체의 왼쪽 위 → 오른쪽 아래 두 번 누르기 (표마다)
 function setRegions(ai, si, all) {
