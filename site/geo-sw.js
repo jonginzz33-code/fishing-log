@@ -8,8 +8,8 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: '지오팜 알림', body: e.data ? e.data.text() : '' }; }
   e.waitUntil(self.registration.showNotification(d.title || '지오팜 알림', {
     body: d.body || '',
-    icon: '/img/jogwa.png',
-    badge: '/img/jogwa.png',
+    icon: '/geo-icon.png',   // 알약 아이콘 (지오팜 전용)
+    badge: '/geo-badge.png', // 상태바에 뜨는 작은 흰 알약
     tag: 'geo-' + (d.t || Date.now()), // 알림마다 따로 (앞 알림을 덮어쓰지 않게)
     renotify: true,
     silent: false,
