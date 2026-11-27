@@ -85,6 +85,7 @@ nav{justify-content:flex-start!important}
 .savebar span{font-size:12px;color:var(--sub);max-width:50%}
 #toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#16324A;border:1px solid var(--sky);border-radius:12px;padding:9px 14px;font-size:14px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
+.mbox{display:flex;flex-direction:column;gap:8px}.mbox>.chip{align-self:flex-start}.mgrp{border:1px solid var(--line);border-radius:12px;padding:8px}.mglbl{background:none;border:0;color:inherit;font:inherit;font-weight:700;font-size:14px;padding:0 0 6px;cursor:pointer}.mglbl span{font-weight:500;font-size:12px;opacity:.65;margin-left:4px}.mglbl.on span{opacity:1;color:#7FD6FF}.mwrap{display:flex;flex-wrap:wrap;gap:6px}
 .qbar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
 @media (min-width:760px){.qbar{flex-wrap:wrap}}
 .chk{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1.3px solid var(--line);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#0D1F2D}
@@ -264,8 +265,21 @@ function modelChips(ags) {
     var nm = String(it.name || it.key).replace(/\s*\(.*?\)\s*/g, ' ').replace(/\s+(64|128|256|512|1T|1TB|\d+\s*(GB|G|TB))$/i, '').trim() || it.key;
     list.push({ key: it.key, label: nm });
   });
-  function rank(k) { return /^SM-S/.test(k) ? 0 : /^SM-F/.test(k) ? 1 : /^UIP/.test(k) ? 2 : 3; }
-  return list.sort(function (a, b) { return rank(a.key) - rank(b.key) || (a.key < b.key ? -1 : 1); });
+  return list.sort(function (a, b) { return mGroup(a.key) - mGroup(b.key) || mOrd(b.key) - mOrd(a.key) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) || (a.label < b.label ? -1 : 1); });
+}
+// 모델 묶음: 갤럭시 S · 폴드/플립 · 아이폰 · 저가 · 키즈 · 폴더 (묶음 안은 최신 먼저)
+var MGROUPS = ['📱 갤럭시 S', '📖 폴드 · 플립', '🍎 아이폰', '💰 저가 · 키즈 · 폴더'];
+function mGroup(k) { return /^SM-S/.test(k) ? 0 : /^SM-F/.test(k) ? 1 : /^UIP/.test(k) ? 2 : 3; }
+function mOrd(k) { var m = String(k).match(/(\d+)/); if (!m) return 0; return /^UIP/.test(k) ? +m[1] : /^SM-[SF]/.test(k) ? Math.floor(+m[1].slice(0, 3) / 10) : 0; }
+function modelBox(ags, sel) {
+  var ch = modelChips(ags), h = '<div class="mbox"><button class="chip' + (sel.length ? '' : ' on') + '" data-mdl="*">전체 모델</button>';
+  MGROUPS.forEach(function (g, gi) {
+    var l = ch.filter(function (m) { return mGroup(m.key) === gi; }); if (!l.length) return;
+    var allOn = l.every(function (m) { return sel.indexOf(m.key) >= 0; });
+    h += '<div class="mgrp"><button class="mglbl' + (allOn ? ' on' : '') + '" data-mgrp="' + gi + '">' + g + ' <span>' + (allOn ? '✓ 다 고름' : '다 고르기') + '</span></button><div class="mwrap">' +
+      l.map(function (m) { return '<button class="chip' + (sel.indexOf(m.key) >= 0 ? ' on' : '') + '" data-mdl="' + esc(m.key) + '">' + esc(m.label) + '</button>'; }).join('') + '</div></div>';
+  });
+  return h + '</div>';
 }
 function selModels() { return S.models || []; }
 function scSummary(noVas) {
@@ -286,8 +300,7 @@ function cmpHtml() {
   h += '<div class="lbl" style="margin-top:0">① 가입 유형</div><div class="row">' + D.TYPES.map(function (t) { return '<button class="tab' + (S.type === t.id ? ' on' : '') + '" data-type="' + t.id + '" style="flex:1">' + t.label + '</button>'; }).join('') + '</div>';
   h += '<div class="lbl">② 요금제</div><div class="row"><button class="chip' + (S.mode === 'mx' ? ' on' : '') + '" data-mode="mx">▦ 전체 한눈에</button>' + D.BANDS.map(function (b) { return '<button class="chip' + (S.mode === 'list' && S.band === b.id ? ' on' : '') + '" data-band="' + b.id + '">' + b.label + '</button>'; }).join('') + '</div>';
   h += '<div class="lbl">③ 부가서비스</div>' + vasHtml();
-  h += '<div class="lbl">④ 모델 <span class="sub">(여러 개 고르기 · 안 고르면 전체)</span></div><div class="qbar"><button class="chip' + (sel.length ? '' : ' on') + '" data-mdl="*">전체</button>' +
-    modelChips(ags).map(function (m) { return '<button class="chip' + (sel.indexOf(m.key) >= 0 ? ' on' : '') + '" data-mdl="' + esc(m.key) + '">' + esc(m.label) + '</button>'; }).join('') + '</div>';
+  h += '<div class="lbl">④ 모델 <span class="sub">(여러 개 고르기 · 안 고르면 전체)</span></div>' + modelBox(ags, sel);
   if (S.mode === 'list') h += '<div class="row" style="margin-top:10px"><span class="sub">정렬</span><select id="sort" style="width:auto"><option value="diff"' + (S.sort === 'diff' ? ' selected' : '') + '>차이 큰 순</option><option value="best"' + (S.sort === 'best' ? ' selected' : '') + '>단가 높은 순</option><option value="name"' + (S.sort === 'name' ? ' selected' : '') + '>모델 순</option></select></div>';
   h += '</div>';
   h += scHtml();
@@ -728,7 +741,10 @@ view.addEventListener('click', function (e) {
   if (d.sc) { var k = d.sc; S.sc[k] = d.v === '!' ? !S.sc[k] : d.v; S.scOpen = true; save(); render(); return; }
   if (d.type) { S.type = d.type; save(); render(); return; }
   if (d.band) { S.band = d.band; S.mode = 'list'; save(); render(); return; }
-  if (d.mdl) { var sl = S.models = S.models || []; if (d.mdl === '*') S.models = []; else { var mi = sl.indexOf(d.mdl); if (mi >= 0) sl.splice(mi, 1); else sl.push(d.mdl); } var qx = document.querySelector('.qbar'), sx = qx ? qx.scrollLeft : 0; save(); render(); var q2x = document.querySelector('.qbar'); if (q2x) q2x.scrollLeft = sx; return; }
+  if (d.mdl) { var sl = S.models = S.models || []; if (d.mdl === '*') S.models = []; else { var mi = sl.indexOf(d.mdl); if (mi >= 0) sl.splice(mi, 1); else sl.push(d.mdl); } var sy = window.scrollY; save(); render(); window.scrollTo(0, sy); return; }
+  if (d.mgrp) { var gl = modelChips(agsWithData()).filter(function (m) { return mGroup(m.key) === +d.mgrp; }).map(function (m) { return m.key; }), cur = S.models = S.models || [];
+    var all = gl.every(function (k) { return cur.indexOf(k) >= 0; }); S.models = all ? cur.filter(function (k) { return gl.indexOf(k) < 0; }) : cur.concat(gl.filter(function (k) { return cur.indexOf(k) < 0; }));
+    var sy2 = window.scrollY; save(); render(); window.scrollTo(0, sy2); return; }
   if (d.mode) { S.mode = d.mode; save(); render(); return; }
   if (d.it) { showItem(d.it); return; }
   if (d.rtog) { var q = ruleRef(d.rtog), key = q.kind + q.ai + '_' + q.ri; S.editRule = S.editRule === key ? null : key; if (q.kind === 'rules') S.openRules = S.ags[q.ai].id; render(); return; }
