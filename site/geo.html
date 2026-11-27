@@ -303,12 +303,19 @@ body.noscroll{overflow:hidden}
   var data = { watch: [], items: {} }, filt = 'in';
 
   // ───── 알림을 눌러서 열렸을 때: 제품명 복사 (?copy=… 또는 열린 화면으로 온 메시지) ─────
+  // 누를 때만 복사 (먼저 권한 창이 안 뜨는 방식 → 안 되면 클립보드 API)
   function copyText(t) {
-    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(function () { return true; }, function () { return oldCopy(t); });
-    return Promise.resolve(oldCopy(t));
+    if (oldCopy(t)) return Promise.resolve(true);
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(function () { return true; }, function () { return false; });
+    return Promise.resolve(false);
   }
   function oldCopy(t) {
-    try { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
+    try {
+      var ta = document.createElement('textarea'); ta.value = t; ta.readOnly = true; // readOnly → 휴대폰 키보드 안 뜸
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+      document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+      var ok = document.execCommand('copy'); ta.remove(); return ok;
+    } catch (e) { return false; }
   }
   function copyOpen(text) {
     var names = String(text || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
@@ -321,11 +328,8 @@ body.noscroll{overflow:hidden}
       copyText(names[+i]).then(function (ok) { $('copyMsg').textContent = ok ? '✅ 복사했어요: ' + names[+i] : '⚠ 복사가 막혔어요. 이름을 길게 눌러 복사해 주세요.'; });
     };
     $('copyBox').classList.remove('hide');
-    // 바로 복사해 보기 (휴대폰에 따라 막히면 📋 복사 버튼을 한 번 누르면 됨)
-    $('copyMsg').textContent = '복사하는 중…';
-    copyText(names.join('\n')).then(function (ok) {
-      $('copyMsg').textContent = ok ? '✅ 제품명을 복사했어요. 붙여넣기 하면 돼요.' : '👇 아래 📋 복사를 한 번 눌러 주세요.';
-    });
+    // 자동 복사는 안 함 (누르지 않고 복사하면 크롬이 클립보드 권한 창을 띄워서)
+    $('copyMsg').textContent = '👇 📋 복사를 누르면 제품명이 복사돼요.';
   }
   $('copyClose').onclick = function () { $('copyBox').classList.add('hide'); };
   $('copyBox').onclick = function (e) { if (e.target === $('copyBox')) $('copyBox').classList.add('hide'); };
