@@ -383,7 +383,7 @@ function sheetHtml() {
       '<input type="text" value="' + esc(a.date) + '" data-agdate="' + ai + '" placeholder="날짜 11/27" style="width:96px"></div>' +
       '<p class="sub">모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' + (a.prev ? ' · 바뀐 칸 <b style="color:var(--yel)" id="chg' + ai + '">' + ch + '</b>개 (노란 칸 · 이전 ' + esc(a.prevDate || '') + ' 대비)' : '') + '</p>' +
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
-      (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 사진에서 숫자 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
+      (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 다시 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
       '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
       (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
         IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
@@ -741,7 +741,9 @@ view.addEventListener('click', function (e) {
 view.addEventListener('change', function (e) {
   var t = e.target, d = t.dataset;
   if (d.pic) { var ap = S.ags[+d.pic]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
-    Promise.all([].map.call(t.files, shrink)).then(function (u) { IMGS[ap.id] = u; IMG_DIRTY[ap.id] = 1; render(); paintSave(); toast('사진을 넣었어요 · 아래 💾 저장을 눌러 주세요'); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
+    Promise.all([].map.call(t.files, shrink)).then(function (u) { IMGS[ap.id] = u; IMG_DIRTY[ap.id] = 1; render(); paintSave();
+      if (!ap.sections.length) ap.sections = tplFor(ap.name);
+      toast('📷 사진 넣음 · 바로 숫자 읽는 중…'); runOcr(+d.pic); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
   if (d.agdate) { S.ags[+d.agdate].date = t.value.trim(); save(); return; }
   if (d.vas) { var k = d.vas, on = t.checked; if (k === 'insSwap') S.sc.ins = on ? 'swap' : 'none'; else if (k === 'insSafe') S.sc.ins = on ? 'safe' : 'none'; else S.sc[k] = on; save(); render(); return; }
   if (t.id === 'imp') { var f = t.files[0]; if (!f) return; f.text().then(function (s) { var j = JSON.parse(s); if (!j.ags) throw 0; S.ags = j.ags; load2(); save(); render(); alert('가져왔어요'); }).catch(function () { alert('파일을 못 읽었어요'); }); return; }
