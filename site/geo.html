@@ -193,6 +193,11 @@ body.noscroll{overflow:hidden}
         <div class="seg" id="nR"><button data-r="1" class="on">1번</button><button data-r="2">2번</button><button data-r="3">3번</button><button data-r="4">4번</button><button data-r="5">5번</button></div>
         <button class="btn ghost sm" id="nRTest" title="정한 횟수만큼 테스트 알림">🔔 들어보기</button>
       </div>
+      <div class="rings" id="clipBox" style="margin:8px 0 0">
+        <span>📋 알림 누르면 제품명 바로 복사</span>
+        <button class="btn ghost sm" id="clipOn">켜기 (한 번만 허용)</button>
+        <span id="clipState" style="font-size:12.5px"></span>
+      </div>
       <div id="swVer" style="color:var(--sub);font-size:11.5px;margin-top:6px"></div>
     </div>
     <div class="row">
@@ -328,9 +333,41 @@ body.noscroll{overflow:hidden}
       copyText(names[+i]).then(function (ok) { $('copyMsg').textContent = ok ? '✅ 복사했어요: ' + names[+i] : '⚠ 복사가 막혔어요. 이름을 길게 눌러 복사해 주세요.'; });
     };
     $('copyBox').classList.remove('hide');
-    // 자동 복사는 안 함 (누르지 않고 복사하면 크롬이 클립보드 권한 창을 띄워서)
     $('copyMsg').textContent = '👇 📋 복사를 누르면 제품명이 복사돼요.';
+    // '바로 복사'를 켜 둔 기기(클립보드 허용됨)면 열리자마자 복사 · 아니면 권한 창이 뜨니까 안 함
+    clipGranted().then(function (ok) {
+      if (!ok) return;
+      navigator.clipboard.writeText(names.join('\n')).then(function () {
+        $('copyMsg').textContent = '✅ 제품명을 복사했어요. 바로 붙여넣기 하면 돼요.';
+      }, function () {});
+    });
   }
+  // 클립보드 권한이 허용돼 있는지 (허용돼 있으면 권한 창 없이 자동 복사 가능)
+  function clipGranted() {
+    if (!navigator.permissions || !navigator.clipboard) return Promise.resolve(false);
+    return navigator.permissions.query({ name: 'clipboard-write' }).then(function (w) {
+      if (w.state !== 'granted') return false;
+      return navigator.permissions.query({ name: 'clipboard-read' }).then(function (r) { return r.state === 'granted'; }, function () { return true; });
+    }, function () { return false; });
+  }
+  function clipPaint() {
+    clipGranted().then(function (ok) {
+      $('clipOn').classList.toggle('hide', ok);
+      $('clipState').textContent = ok ? '✅ 켜져 있어요 (알림 누르면 자동 복사)' : '';
+    });
+  }
+  // 켜기: 버튼을 누른 순간에 권한을 물어봄 → '허용'을 누르면 그 뒤로는 자동 복사
+  $('clipOn').onclick = function () {
+    if (!navigator.clipboard || !navigator.clipboard.readText) { $('clipState').textContent = '이 브라우저는 지원하지 않아요.'; return; }
+    $('clipState').textContent = '“허용”을 눌러 주세요 (다른 앱 화면이 위에 떠 있으면 먼저 닫아 주세요)';
+    navigator.clipboard.readText().then(function () { clipPaint(); }, function () {
+      clipGranted().then(function (ok) {
+        if (ok) return clipPaint();
+        $('clipState').textContent = '⚠ 허용이 안 됐어요. 카카오내비 같은 떠 있는 화면을 닫고 다시 눌러 주세요. 차단했으면 주소창 왼쪽 아이콘 → 권한 → 클립보드 → 허용.';
+      });
+    });
+  };
+  clipPaint();
   $('copyClose').onclick = function () { $('copyBox').classList.add('hide'); };
   $('copyBox').onclick = function (e) { if (e.target === $('copyBox')) $('copyBox').classList.add('hide'); };
   (function () {
