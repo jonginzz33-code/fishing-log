@@ -92,6 +92,8 @@ td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .cp{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #1E3446;font-size:15px}
 .cp:first-child{border-top:0}
 .cp span{flex:1;min-width:0;word-break:break-all;user-select:all;-webkit-user-select:all}
+.noTest{display:flex;align-items:center;gap:5px;font-size:13px;color:#DDEAF2;cursor:pointer;white-space:nowrap;margin-left:auto}
+.noTest input{width:18px;height:18px;accent-color:var(--ok)}
 .modal{position:fixed;inset:0;z-index:50;background:rgba(4,10,16,.72);display:flex;align-items:center;justify-content:center;padding:16px}
 .log{background:#12283A;border:1.5px solid var(--ok);border-radius:18px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;font-size:13.5px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .log .lhead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #1E3446}
@@ -175,7 +177,9 @@ body.noscroll{overflow:hidden}
     </div>
     <div class="modal hide" id="logBox" role="dialog" aria-modal="true" aria-label="알람 기록">
       <div class="log">
-        <div class="lhead"><b>📜 알람 기록 <small style="color:var(--sub);font-weight:400">(최근 20개 · 최신 순)</small></b><button class="btn ghost sm" id="logClose">닫기 ✕</button></div>
+        <div class="lhead"><b>📜 알람 기록 <small style="color:var(--sub);font-weight:400">(최근 20개 · 최신 순)</small></b>
+          <label class="noTest"><input type="checkbox" id="logNoTest" checked> 테스트 제거</label>
+          <button class="btn ghost sm" id="logClose">닫기 ✕</button></div>
         <div id="logList" class="lbody"></div>
       </div>
     </div>
@@ -1114,9 +1118,11 @@ body.noscroll{overflow:hidden}
 
   // ───── 알람 기록 (알람전송완료 칸을 누르면 펼침) ─────
   function renderLog() {
-    var log = (data.notifyLog || []).filter(function (r) { return !/테스트/.test(r.title); }); // 테스트 알림은 빼고
+    var noTest = $('logNoTest').checked; // ☑ 테스트 제거 (기본) → 테스트 알림 숨김
+    var log = (data.notifyLog || []).filter(function (r) { return !noTest || !(r.test || /테스트/.test(r.title)); });
     $('logList').innerHTML = log.map(function (r) {
       var tag = r.ok ? '<span class="b g">✅ 보냄</span>' : '<span class="b f">⚠ 실패</span>';
+      if (r.test || /테스트/.test(r.title)) tag += ' <span class="b u">테스트</span>';
       return '<div class="li"><div class="lt">' + tag + ' <span class="sv sm">🔔 ' + whenDate(r.t) + '</span> ' + esc(r.title) + '</div>' +
         '<div class="lb">' + esc(r.body || '') + '</div>' +
         '<div class="lm">' + (r.ok ? (r.via ? esc(r.via) + '로 보냄' : '') : '이유: ' + esc(r.why || '')) + '</div></div>';
@@ -1126,6 +1132,12 @@ body.noscroll{overflow:hidden}
   function logOpen() { renderLog(); $('logBox').classList.remove('hide'); document.body.classList.add('noscroll'); $('logList').scrollTop = 0; }
   function logShut() { $('logBox').classList.add('hide'); document.body.classList.remove('noscroll'); }
   $('logTile').onclick = logOpen;
+  // 테스트 제거 체크 상태는 이 기기에 기억 (기본: 체크)
+  try { if (localStorage.getItem('logNoTest') === '0') $('logNoTest').checked = false; } catch (e) {}
+  $('logNoTest').onchange = function () {
+    try { localStorage.setItem('logNoTest', $('logNoTest').checked ? '1' : '0'); } catch (e) {}
+    renderLog();
+  };
   $('logClose').onclick = logShut;
   $('logBox').onclick = function (e) { if (e.target === $('logBox')) logShut(); };
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') logShut(); });
