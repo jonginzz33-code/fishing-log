@@ -237,6 +237,20 @@ function fixData() {
     (a.rules || []).concat(a.verbal || []).forEach(function (r) { fix75(r); fixU14(r); });
     a.fixV = 5;
   });
+  // 6: 아이폰17(NP) 정책은 17 기본(256)만 (17 프로 256 에 붙던 것) · 무너폰 = 키즈폰 결합 · 구두 이름 끝 숫자를 저장된 금액에 맞춤
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 6) return;
+    (a.rules || []).forEach(function (r) {
+      if (/NP|17NP|아이폰17 NP/.test(r.name || '')) r.models = (r.models || []).map(function (m) { return m === 'UIP17:256' ? 'UIP17$:256' : m; });
+      if (/무너폰/.test(r.name || '') && (r.cond || []).indexOf('combo') >= 0) r.cond = r.cond.map(function (c) { return c === 'combo' ? 'kids' : c; });
+    });
+    (a.verbal || []).forEach(function (r) {
+      var m = String(r.name || '').match(/([+\-−]?)(\d+(?:\.\d+)?)\s*$/); if (!m) return;
+      var n = +m[2] * (m[1] === '-' || m[1] === '−' ? -1 : 1);
+      if (n !== +r.amt) r.name = String(r.name).slice(0, m.index).replace(/\s+$/, '') + ' ' + (r.amt > 0 && m[1] ? '+' : '') + r.amt;
+    });
+    a.fixV = 6;
+  });
   return msgs;
 }
 // 모델 이름(코드)이 하나도 없는 빈 표('새 모델' 줄만) → 그 업체 양식으로 바꿈
