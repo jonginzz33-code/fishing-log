@@ -7,13 +7,13 @@ const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: '지오팜 알림', body: e.data ? e.data.text() : '' }; }
-  // rings = 띠링 몇 번 (홈페이지에서 제품마다 1~5번). 1.5초 간격으로 다시 띄워서 그때마다 소리 · 진동
+  // rings = 띠링 몇 번 (홈페이지 '이 기기' 칸에서 1~5번). 2.5초 간격으로 다시 띄워서 그때마다 소리 · 진동
   const rings = Math.min(10, Math.max(1, d.rings | 0 || 1));
   const tag = 'geo-' + (d.t || Date.now()); // 알림마다 따로 (앞 알림을 덮어쓰지 않게)
   e.waitUntil((async () => {
     for (let i = 0; i < rings; i++) {
       if (i) {
-        await sleep(1500);
+        await sleep(2500); // 띠링 간격 2.5초
         // 같은 알림을 지우고 다시 띄우면 또 울림 (알림창엔 하나만 남음)
         (await self.registration.getNotifications({ tag })).forEach((n) => n.close());
       }
