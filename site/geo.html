@@ -173,6 +173,11 @@ body.noscroll{overflow:hidden}
     <div class="push" id="pushBox">
       <div><b>📲 이 기기로 알림 받기</b> <span id="pushState" class="sub"></span></div>
       <div class="row" style="margin-top:6px"><button class="btn ok sm" id="pushOn">🔔 이 폰으로 알림 받기</button><button class="btn ghost sm hide" id="pushOff">🔕 이 기기 알림 끄기</button></div>
+      <div class="rings hide" id="ringBox" style="margin:8px 0 0">
+        <span>🔔 알람 몇 번 울릴까요?</span>
+        <div class="seg" id="nR"><button data-r="1" class="on">1번</button><button data-r="2">2번</button><button data-r="3">3번</button><button data-r="4">4번</button><button data-r="5">5번</button></div>
+        <button class="btn ghost sm" id="nRTest" title="정한 횟수만큼 테스트 알림">🔔 들어보기</button>
+      </div>
     </div>
     <div class="row">
       <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
@@ -194,11 +199,6 @@ body.noscroll{overflow:hidden}
         <label>확인 간격 (분)<input id="nE" type="number" min="1" max="1440" value="10" inputmode="numeric"></label>
       </div>
       <label>📝 알림 메모 <small style="color:var(--sub)">(재고 들어오면 알림에 같이 와요 · 안 써도 돼요)</small><input id="nM" maxlength="100" placeholder="예: 김약사님께 전화 · 2박스 바로 주문"></label>
-      <div class="rings">
-        <span>🔔 알람 몇 번 울릴까요?</span>
-        <div class="seg" id="nR"><button data-r="1" class="on">1번</button><button data-r="2">2번</button><button data-r="3">3번</button><button data-r="4">4번</button><button data-r="5">5번</button></div>
-        <button class="btn ghost sm" id="nRTest" title="고른 횟수만큼 테스트 알림">🔔 들어보기</button>
-      </div>
       <div class="hint" id="nHint"></div>
       <div class="row"><button class="btn ok" id="nAdd">➕ 추가하고 바로 확인</button><button class="btn ghost hide" id="qbtn">🔍 지오팜에서 찾기</button></div>
       <div class="sr" id="sr"></div>
@@ -635,18 +635,6 @@ body.noscroll{overflow:hidden}
     $('nHint').className = 'hint' + (pr ? ' ok' : '');
     $('qbtn').classList.toggle('hide', !!pr || $('nN').value.trim().length < 2);
   }
-  // 🔔 알람 몇 번 울릴까요? (추가할 때) · 들어보기 = 그 횟수로 테스트 알림
-  var nRings = 1;
-  $('nR').onclick = function (e) {
-    var r = e.target.getAttribute('data-r'); if (!r) return;
-    nRings = +r;
-    [].forEach.call($('nR').children, function (b) { b.classList.toggle('on', b === e.target); });
-  };
-  $('nRTest').onclick = function () {
-    var b = $('nRTest'); b.disabled = true;
-    call('test', { method: 'POST', body: { rings: nRings } }).then(function (j) { b.disabled = false; $('nHint').textContent = j.msg || j.error || ''; load(); });
-  };
-
   // 거래처 자동완성 (제품칸과 같은 방식: 띄어쓴 단어가 모두 들어간 거래처 · 거래처코드로도)
   var acP = [], acPOn = -1;
   function acPShow() {
@@ -764,7 +752,7 @@ body.noscroll{overflow:hidden}
     var qty = Math.max(1, Math.round(+$('nQ').value) || 1);
     if (!pTxt) { $('nHint').textContent = '거래처를 적어 주세요.'; $('nP').focus(); return; }
     if (!pr) { $('nHint').textContent = '제품을 목록에서 고르거나 “지오팜에서 찾기”로 골라 주세요.'; $('nN').focus(); return; }
-    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: Math.min(1440, Math.max(1, Math.round(+$('nE').value) || 10)), memo: $('nM').value.trim(), added: Date.now(), repeat: nRings };
+    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: Math.min(1440, Math.max(1, Math.round(+$('nE').value) || 10)), memo: $('nM').value.trim(), added: Date.now() };
     var btn = $('nAdd'); btn.disabled = true;
     saveNeeds((data.needs || []).concat([n])).then(function (j) {
       btn.disabled = false;
@@ -825,9 +813,7 @@ body.noscroll{overflow:hidden}
         sub.push('<b style="color:var(--text)">필요 ' + n.qty + '개</b> · 지금 재고 ' + (s && typeof s.n === 'number' ? s.n + '개' : '?'));
         // 다음 자동 확인까지 남은 시간 (1초마다 줄어듦) + 지금 새로고침
         var due = s && s.t ? s.t + n.every * 60000 : 0;
-        sub.push(sent ? '자동 확인 쉼' : '<button class="rf" data-every="' + esc(n.id) + '" title="눌러서 분 바꾸기">⏲ ' + n.every + '분마다</button> · ⏱ <span class="cd" data-due="' + due + '"></span>');
-        sub.push('<button class="rf" data-rings="' + esc(n.id) + '" title="눌러서 알람 횟수 바꾸기">🔔×' + (n.repeat || 1) + '번</button>');
-        sub.push('<button class="rf" data-chk="' + esc(n.id) + '">🔄 지금 새로고침</button>');
+        sub.push(sent ? '자동 확인 쉼' : '<button class="rf" data-every="' + esc(n.id) + '" title="눌러서 분 바꾸기">⏲ ' + n.every + '분마다</button> · ⏱ <span class="cd" data-due="' + due + '"></span>');        sub.push('<button class="rf" data-chk="' + esc(n.id) + '">🔄 지금 새로고침</button>');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
         var added = addedOf(n);
@@ -920,17 +906,6 @@ body.noscroll{overflow:hidden}
   $('nList').onclick = function (e) {
     var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo'), al = e.target.getAttribute('data-alarm');
     if (c) return checkNow([c], e.target);
-    var rg = e.target.getAttribute('data-rings');
-    if (rg) {
-      var it2 = (data.needs || []).filter(function (x) { return x.id === rg; })[0];
-      if (!it2) return;
-      var v2 = prompt('알람 몇 번 울릴까요? (1 ~ 5)\n[' + it2.pn + '] ' + it2.name, it2.repeat || 1);
-      if (v2 == null) return;
-      var r2 = Math.min(5, Math.max(1, Math.round(+v2) || 1));
-      saveNeeds(data.needs.map(function (x) { return x.id === rg ? Object.assign({}, x, { repeat: r2 }) : x; }))
-        .then(function (j) { $('nMsg').textContent = j.error || '알람을 ' + r2 + '번 울리도록 바꿨어요.'; renderNeeds(); });
-      return;
-    }
     var ev = e.target.getAttribute('data-every');
     if (ev) {
       var cur = (data.needs || []).filter(function (x) { return x.id === ev; })[0];
@@ -1073,6 +1048,23 @@ body.noscroll{overflow:hidden}
     });
   }
   function u8(b64) { b64 = b64.replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '='; var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  // 이 기기 알람 횟수 (서버의 이 기기 구독에 저장)
+  var myEndpoint = null;
+  function ringPaint(r) { [].forEach.call($('nR').children, function (b) { b.classList.toggle('on', +b.getAttribute('data-r') === r); }); }
+  function ringLoad(sub) {
+    myEndpoint = sub ? sub.endpoint : null;
+    $('ringBox').classList.toggle('hide', !sub);
+    if (sub) call('pushRings', { method: 'POST', body: { endpoint: sub.endpoint } }).then(function (j) { if (j.rings) ringPaint(j.rings); });
+  }
+  $('nR').onclick = function (e) {
+    var r = +e.target.getAttribute('data-r'); if (!r || !myEndpoint) return;
+    ringPaint(r);
+    call('pushRings', { method: 'POST', body: { endpoint: myEndpoint, rings: r } }).then(function (j) { $('pushState').textContent = j.error ? '⚠ ' + j.error : '✅ ' + j.msg; });
+  };
+  $('nRTest').onclick = function () {
+    var b = $('nRTest'); b.disabled = true;
+    call('test', { method: 'POST' }).then(function (j) { b.disabled = false; $('pushState').textContent = j.msg || j.error || ''; load(); });
+  };
   function pushShow(on, text) {
     $('pushBox').classList.toggle('on', !!on);
     $('pushOn').classList.toggle('hide', !!on);
@@ -1088,6 +1080,7 @@ body.noscroll{overflow:hidden}
       return reg ? reg.pushManager.getSubscription() : null;
     }).then(function (sub) {
       pushShow(!!sub, sub ? '✅ 이 기기는 알림을 받고 있어요' : '이 기기는 아직 알림을 안 받아요');
+      ringLoad(sub);
     }).catch(function () { pushShow(false, ''); });
   }
   $('pushOn').onclick = function () {
@@ -1102,11 +1095,13 @@ body.noscroll{overflow:hidden}
       });
     }).then(function (sub) {
       var label = (/Android/.test(navigator.userAgent) ? '안드로이드' : /iPhone|iPad/.test(navigator.userAgent) ? '아이폰' : 'PC') + ' · ' + new Date().toLocaleDateString('ko-KR');
+      myEndpoint = sub.endpoint;
       return call('pushSub', { method: 'POST', body: { sub: sub.toJSON(), label: label } });
     }).then(function (j) {
       btn.disabled = false;
       if (j.error) throw new Error(j.error);
-      pushShow(true, '✅ ' + j.msg + ' 🔔 테스트 알림으로 확인해 보세요.');
+      pushShow(true, '✅ ' + j.msg + ' 🔔 들어보기로 확인해 보세요.');
+      ringLoad({ endpoint: myEndpoint });
     }).catch(function (e) { btn.disabled = false; pushShow(false, '⚠ ' + (e.message || e)); });
   };
   $('pushOff').onclick = function () {
@@ -1116,7 +1111,7 @@ body.noscroll{overflow:hidden}
       if (!sub) return { msg: '' };
       var ep = sub.endpoint;
       return sub.unsubscribe().then(function () { return call('pushUnsub', { method: 'POST', body: { endpoint: ep } }); });
-    }).then(function (j) { pushShow(false, j.msg || '이 기기 알림을 껐어요.'); });
+    }).then(function (j) { pushShow(false, j.msg || '이 기기 알림을 껐어요.'); ringLoad(null); });
   };
   pushCheck();
 
