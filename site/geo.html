@@ -199,7 +199,7 @@ body.noscroll{overflow:hidden}
   <div class="card">
     <h2>📋 필요재고목록 <span id="nCnt" style="color:var(--sub);font-size:14px"></span></h2>
     <p class="lead" style="margin:0 0 8px">거래처가 주문한 제품마다 <b>필요 수량</b>과 지오팜 <b>지금 재고</b>를 보여줘요.</p>
-    <input id="nF" placeholder="거래처 · 제품 · 제품코드로 찾기" style="margin-bottom:8px">
+    <div class="ac" style="margin-bottom:8px"><input id="nF" placeholder="거래처 · 제품 · 제품코드로 찾기 (예: 리바로)" autocomplete="off"><div class="acl hide" id="fAcl"></div></div>
     <div class="msg" id="nMsg" style="margin:0 0 6px"></div>
     <div id="nList"></div>
   </div>
@@ -814,7 +814,53 @@ body.noscroll{overflow:hidden}
       }).join('');
     }).join('') || '<div style="color:var(--sub);font-size:13.5px">' + (ns.length ? '찾는 항목이 없어요' : '아직 필요 제품이 없어요. 위에서 추가해 주세요.') + '</div>';
   }
-  $('nF').oninput = renderNeeds;
+  // 필요재고목록 찾기칸 자동완성: 내 목록에 있는 제품(📋) 먼저, 그다음 지오팜 전체 3만여 제품(➕)
+  var fRows = [], fOn = -1;
+  function fShow() {
+    var words = $('nF').value.toLowerCase().split(/\s+/).filter(Boolean), box = $('fAcl');
+    fRows = []; fOn = -1;
+    if (!words.length) { box.classList.add('hide'); return; }
+    var has = function (s) { s = s.toLowerCase(); return words.every(function (w) { return s.indexOf(w) >= 0; }); };
+    var seen = {};
+    (data.needs || []).forEach(function (n) {
+      if (fRows.length < 15 && has(n.pn + ' ' + n.name + ' ' + n.code) && !seen[n.code + n.pn]) { seen[n.code + n.pn] = 1; fRows.push({ mine: true, name: n.name, code: n.code, pn: n.pn }); }
+    });
+    for (var i = 0; i < prodsLow.length && fRows.length < 40; i++) {
+      var s = prodsLow[i], ok = true;
+      for (var k = 0; k < words.length; k++) if (s.indexOf(words[k]) < 0) { ok = false; break; }
+      if (ok && !(data.needs || []).some(function (n) { return n.code === prods[i][1]; })) fRows.push({ mine: false, name: prods[i][0], code: prods[i][1] });
+    }
+    box.innerHTML = fRows.map(function (r, i) {
+      return '<div data-i="' + i + '">' + (r.mine ? '📋 ' : '➕ ') + esc(r.name) + '<small>' + (r.mine ? esc(r.pn) + ' · 목록에 있음' : esc(r.code) + ' · 눌러서 추가') + '</small></div>';
+    }).join('') || '<div class="have">찾는 제품이 없어요</div>';
+    box.classList.remove('hide');
+  }
+  function fPick(i) {
+    var r = fRows[i]; if (!r) return;
+    $('fAcl').classList.add('hide');
+    if (r.mine) { $('nF').value = r.name; renderNeeds(); return; } // 내 목록에서 그 제품만 보기
+    // 목록에 없는 제품 → 위 추가 칸에 채우고 그리로 이동
+    $('foldAdd').open = true;
+    picked = [r.name, r.code]; $('nN').value = r.name; $('nF').value = ''; renderNeeds(); hint();
+    $('nMsg').textContent = '“' + r.name + '” 를 위 추가 칸에 넣었어요. 거래처 · 수량을 정하고 ➕ 추가하세요.';
+    $('foldAdd').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(function () { $(($('nP').value.trim() ? 'nQ' : 'nP')).focus(); }, 400);
+  }
+  $('nF').oninput = function () { renderNeeds(); fShow(); };
+  $('nF').onfocus = fShow;
+  $('nF').onblur = function () { setTimeout(function () { $('fAcl').classList.add('hide'); }, 150); };
+  $('fAcl').onmousedown = function (e) { var d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); fPick(+d.getAttribute('data-i')); } };
+  $('nF').onkeydown = function (e) {
+    var open = !$('fAcl').classList.contains('hide');
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      fOn = Math.max(0, Math.min(fRows.length - 1, fOn + (e.key === 'ArrowDown' ? 1 : -1)));
+      [].forEach.call($('fAcl').children, function (d, i) { d.classList.toggle('on', i === fOn); if (i === fOn) d.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    if (e.key === 'Enter' && open && fRows.length) { e.preventDefault(); fPick(fOn >= 0 ? fOn : 0); }
+    if (e.key === 'Escape') $('fAcl').classList.add('hide');
+  };
   // 남은 시간 1초마다 다시 그리기
   var autoAt = 0;
   function tick() {
