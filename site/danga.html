@@ -271,11 +271,21 @@ function cmpHtml() {
   h += '</div>';
   h += scHtml();
   h += '<div class="row" style="margin:4px 0 0">' + ags.map(function (a) { return '<span class="sub"><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + (a.date ? ' (' + esc(a.date) + ')' : '') + (a.verbal.length ? ' · 구두 ' + a.verbal.filter(function (r) { return !r.off; }).length : '') + '</span>'; }).join(' ') + '</div>';
+  h += emptyNote(ags);
   h += S.mode === 'list' ? listHtml(ags) : mxHtml(ags);
   h += '<p class="sub">단위: 만원 · 최종 = 단가표 + 정책(추가 · 차감) + 🗣 구두. 줄을 누르면 계산 내역이 보여요. 숫자 · 정책은 [📋 단가표 입력] 탭에서 고쳐요.</p>';
   return h;
 }
 
+function numCount(a) { var n = 0; a.sections.forEach(function (sc) { sc.rows.forEach(function (r) { (r.v || []).forEach(function (c) { (c || []).forEach(function (x) { if (x != null) n++; }); }); }); }); return n; }
+function emptyNote(ags) {
+  var empty = ags.filter(function (a) { return !numCount(a); });
+  if (!empty.length) return '';
+  return '<div class="note">⚠ 숫자가 아직 없는 업체: ' + empty.map(function (a) {
+    var ai = S.ags.indexOf(a), hasPic = IMGS[a.id] || a.imgN;
+    return '<b>' + esc(a.name) + '</b> ' + (hasPic ? '<button class="btn sm pri" data-ocrgo="' + ai + '">🔢 사진에서 숫자 읽기</button>' : '<button class="btn sm" data-go="sheet">📷 사진 올리기</button>');
+  }).join(' · ') + '<br><span class="sub">숫자가 있어야 비교돼요. 읽은 뒤 빨간 칸만 사진과 맞춰 보고 💾 저장.</span></div>';
+}
 function filterQ(list) {
   var sel = selModels();
   if (!sel.length) return list;
@@ -717,6 +727,8 @@ view.addEventListener('click', function (e) {
   if (d.addrow) { var pa = d.addrow.split(',').map(Number), sec = S.ags[pa[0]].sections[pa[1]]; sec.rows.push(blankRow(sec.cols.length)); save(); render(); rowEditor(pa[0], pa[1], sec.rows.length - 1); return; }
   if (d.addcol) { var pq = d.addcol.split(',').map(Number), sc2 = S.ags[pq[0]].sections[pq[1]]; sc2.cols.push({ label: '새 열', bands: {} }); sc2.rows.forEach(function (r) { r.v = r.v || []; r.v.push([null, null, null]); }); save(); render(); colEditor(pq[0], pq[1], sc2.cols.length - 1); return; }
   if (d.ocr) { runOcr(+d.ocr); return; }
+  if (d.ocrgo) { var og = S.ags[+d.ocrgo]; S.tab = 'sheet'; S.open = S.open || {}; S.open[og.id] = true; save(); render();
+    var waitImg = function (n) { if (IMGS[og.id] || n > 40) runOcr(+d.ocrgo); else setTimeout(function () { waitImg(n + 1); }, 250); }; waitImg(0); return; }
   if (d.ocrreg) { setRegions(+d.ocrreg, 0, true); return; }
   if (d.newday) { var an = S.ags[+d.newday], dt = prompt('새 단가표 날짜 (예: 11/28)', (new Date().getMonth() + 1) + '/' + new Date().getDate()); if (dt) { an.prev = JSON.parse(JSON.stringify(an.sections)); an.prevDate = an.date; an.date = dt; save(); render(); } return; }
   if (t.hasAttribute('data-logout')) { firebase.auth().signOut().then(function () { location.reload(); }); return; }
@@ -841,7 +853,9 @@ function runOcr(ai) {
     if (hadNums) { a.prev = prevSnap; a.prevDate = a.date || '직전'; } else { delete a.prev; }
     if (!a.date || hadNums) a.date = (new Date().getMonth() + 1) + '/' + new Date().getDate();
     a.unsure = unsure;
+    var got = numCount(a);
     delete OCRBUSY[a.id]; save(); render();
+    if (got < total * 0.3) { alert('숫자를 거의 못 찾았어요 (' + got + ' / ' + total + '칸).\n사진의 숫자 칸 위치가 달라서예요. 📐 영역 맞추기 화면에서 숫자 칸 왼쪽 위 → 오른쪽 아래를 눌러 주세요.'); setRegions(ai, 0, true); return; }
     toast('✅ ' + total + '칸 읽었어요' + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인해 주세요' : '') + ' · 💾 저장');
   }).catch(function (e) { delete OCRBUSY[a.id]; render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
 }
