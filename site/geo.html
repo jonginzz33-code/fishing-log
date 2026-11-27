@@ -69,6 +69,11 @@ details summary{cursor:pointer;font-weight:800}
 .fold>summary::after{content:'접기 ▲';font-size:12.5px;font-weight:800;color:var(--sky);border:1.5px solid #3A6A88;border-radius:12px;padding:3px 10px;white-space:nowrap}
 .fold:not([open])>summary::after{content:'펼치기 ▼'}
 .fold[open]>summary{margin-bottom:10px}
+.rings{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px;font-size:14px;color:var(--sub)}
+.seg{display:inline-flex;border:1.5px solid #3A6A88;border-radius:12px;overflow:hidden}
+.seg button{background:transparent;color:#DDEAF2;border:0;border-left:1.5px solid #3A6A88;padding:7px 12px;font:800 14px inherit;font-family:inherit;cursor:pointer}
+.seg button:first-child{border-left:0}
+.seg button.on{background:var(--ok);color:#04222A}
 .nextq{display:inline-block;margin:0 0 10px;padding:4px 12px;border-radius:10px;background:#0F2231;border:1.5px solid var(--line);font:800 15px ui-monospace,Consolas,monospace;color:var(--sky)}
 .selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub)}
 .selbar #selN{flex:1;min-width:120px}
@@ -189,6 +194,11 @@ body.noscroll{overflow:hidden}
         <label>확인 간격 (분)<input id="nE" type="number" min="1" max="1440" value="10" inputmode="numeric"></label>
       </div>
       <label>📝 알림 메모 <small style="color:var(--sub)">(재고 들어오면 알림에 같이 와요 · 안 써도 돼요)</small><input id="nM" maxlength="100" placeholder="예: 김약사님께 전화 · 2박스 바로 주문"></label>
+      <div class="rings">
+        <span>🔔 알람 몇 번 울릴까요?</span>
+        <div class="seg" id="nR"><button data-r="1" class="on">1번</button><button data-r="2">2번</button><button data-r="3">3번</button><button data-r="4">4번</button><button data-r="5">5번</button></div>
+        <button class="btn ghost sm" id="nRTest" title="고른 횟수만큼 테스트 알림">🔔 들어보기</button>
+      </div>
       <div class="hint" id="nHint"></div>
       <div class="row"><button class="btn ok" id="nAdd">➕ 추가하고 바로 확인</button><button class="btn ghost hide" id="qbtn">🔍 지오팜에서 찾기</button></div>
       <div class="sr" id="sr"></div>
@@ -625,6 +635,18 @@ body.noscroll{overflow:hidden}
     $('nHint').className = 'hint' + (pr ? ' ok' : '');
     $('qbtn').classList.toggle('hide', !!pr || $('nN').value.trim().length < 2);
   }
+  // 🔔 알람 몇 번 울릴까요? (추가할 때) · 들어보기 = 그 횟수로 테스트 알림
+  var nRings = 1;
+  $('nR').onclick = function (e) {
+    var r = e.target.getAttribute('data-r'); if (!r) return;
+    nRings = +r;
+    [].forEach.call($('nR').children, function (b) { b.classList.toggle('on', b === e.target); });
+  };
+  $('nRTest').onclick = function () {
+    var b = $('nRTest'); b.disabled = true;
+    call('test', { method: 'POST', body: { rings: nRings } }).then(function (j) { b.disabled = false; $('nHint').textContent = j.msg || j.error || ''; load(); });
+  };
+
   // 거래처 자동완성 (제품칸과 같은 방식: 띄어쓴 단어가 모두 들어간 거래처 · 거래처코드로도)
   var acP = [], acPOn = -1;
   function acPShow() {
@@ -742,7 +764,7 @@ body.noscroll{overflow:hidden}
     var qty = Math.max(1, Math.round(+$('nQ').value) || 1);
     if (!pTxt) { $('nHint').textContent = '거래처를 적어 주세요.'; $('nP').focus(); return; }
     if (!pr) { $('nHint').textContent = '제품을 목록에서 고르거나 “지오팜에서 찾기”로 골라 주세요.'; $('nN').focus(); return; }
-    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: Math.min(1440, Math.max(1, Math.round(+$('nE').value) || 10)), memo: $('nM').value.trim(), added: Date.now() };
+    var n = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), p: ph ? ph.code : '', pn: ph ? ph.name : pTxt, code: pr[1], name: pr[0], qty: qty, every: Math.min(1440, Math.max(1, Math.round(+$('nE').value) || 10)), memo: $('nM').value.trim(), added: Date.now(), repeat: nRings };
     var btn = $('nAdd'); btn.disabled = true;
     saveNeeds((data.needs || []).concat([n])).then(function (j) {
       btn.disabled = false;
@@ -804,6 +826,7 @@ body.noscroll{overflow:hidden}
         // 다음 자동 확인까지 남은 시간 (1초마다 줄어듦) + 지금 새로고침
         var due = s && s.t ? s.t + n.every * 60000 : 0;
         sub.push(sent ? '자동 확인 쉼' : '<button class="rf" data-every="' + esc(n.id) + '" title="눌러서 분 바꾸기">⏲ ' + n.every + '분마다</button> · ⏱ <span class="cd" data-due="' + due + '"></span>');
+        sub.push('<button class="rf" data-rings="' + esc(n.id) + '" title="눌러서 알람 횟수 바꾸기">🔔×' + (n.repeat || 1) + '번</button>');
         sub.push('<button class="rf" data-chk="' + esc(n.id) + '">🔄 지금 새로고침</button>');
         if (s && s.t) sub.push('마지막 확인 ' + when(s.t));
         if (n.memo) sub.push('📝 ' + esc(n.memo));
@@ -897,6 +920,17 @@ body.noscroll{overflow:hidden}
   $('nList').onclick = function (e) {
     var c = e.target.getAttribute('data-chk'), d = e.target.getAttribute('data-ndel'), mo = e.target.getAttribute('data-memo'), al = e.target.getAttribute('data-alarm');
     if (c) return checkNow([c], e.target);
+    var rg = e.target.getAttribute('data-rings');
+    if (rg) {
+      var it2 = (data.needs || []).filter(function (x) { return x.id === rg; })[0];
+      if (!it2) return;
+      var v2 = prompt('알람 몇 번 울릴까요? (1 ~ 5)\n[' + it2.pn + '] ' + it2.name, it2.repeat || 1);
+      if (v2 == null) return;
+      var r2 = Math.min(5, Math.max(1, Math.round(+v2) || 1));
+      saveNeeds(data.needs.map(function (x) { return x.id === rg ? Object.assign({}, x, { repeat: r2 }) : x; }))
+        .then(function (j) { $('nMsg').textContent = j.error || '알람을 ' + r2 + '번 울리도록 바꿨어요.'; renderNeeds(); });
+      return;
+    }
     var ev = e.target.getAttribute('data-every');
     if (ev) {
       var cur = (data.needs || []).filter(function (x) { return x.id === ev; })[0];
