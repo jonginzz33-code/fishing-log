@@ -193,6 +193,7 @@ body.noscroll{overflow:hidden}
         <div class="seg" id="nR"><button data-r="1" class="on">1번</button><button data-r="2">2번</button><button data-r="3">3번</button><button data-r="4">4번</button><button data-r="5">5번</button></div>
         <button class="btn ghost sm" id="nRTest" title="정한 횟수만큼 테스트 알림">🔔 들어보기</button>
       </div>
+      <div id="swVer" style="color:var(--sub);font-size:11.5px;margin-top:6px"></div>
     </div>
     <div class="row">
       <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
@@ -1098,6 +1099,15 @@ body.noscroll{overflow:hidden}
     });
   }
   function u8(b64) { b64 = b64.replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '='; var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  // 이 기기가 쓰는 알림 파일 버전 표시 (새 버전을 받았는지 확인용)
+  function swVer(reg) {
+    var w = reg && (reg.active || reg.waiting || reg.installing);
+    if (w) w.postMessage({ type: 'ver' });
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'geo-ver') $('swVer').textContent = '알림 파일 v' + e.data.v;
+  });
+
   // 이 기기 알람 횟수 (서버의 이 기기 구독에 저장)
   var myEndpoint = null;
   function ringPaint(r) { [].forEach.call($('nR').children, function (b) { b.classList.toggle('on', +b.getAttribute('data-r') === r); }); }
@@ -1125,8 +1135,8 @@ body.noscroll{overflow:hidden}
     if (!pushOk) { pushShow(false, '이 브라우저는 웹 알림을 못 받아요. (아이폰은 홈 화면에 추가한 뒤 열어야 해요)'); $('pushOn').disabled = true; return; }
     if (Notification.permission === 'denied') { pushShow(false, '알림이 차단돼 있어요. 크롬 주소창 왼쪽 자물쇠 → 알림 → 허용으로 바꿔 주세요.'); return; }
     navigator.serviceWorker.getRegistration(SW_SCOPE).then(function (reg) {
-      // 알림 파일(geo-sw.js)이 바뀌었으면 새 버전으로 (아이콘 · 진동 같은 변경이 바로 반영되게)
-      if (reg) reg.update().catch(function () {});
+      // 알림 파일(geo-sw.js)이 바뀌었으면 새 버전으로 (아이콘 · 진동 · 버튼 같은 변경이 바로 반영되게)
+      if (reg) reg.update().catch(function () {}).then(function () { setTimeout(function () { swVer(reg); }, 1500); });
       return reg ? reg.pushManager.getSubscription() : null;
     }).then(function (sub) {
       pushShow(!!sub, sub ? '✅ 이 기기는 알림을 받고 있어요' : '이 기기는 아직 알림을 안 받아요');
