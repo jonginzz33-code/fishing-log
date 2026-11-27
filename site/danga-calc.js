@@ -114,7 +114,7 @@
   function price(ag, key, st, band, type, sc) {
     var b = base(ag, key, st, band, type, sc);
     if (!b || b.none) return null;
-    var parts = [{ name: '기본 (' + b.col.label + ')', amt: b.raw }];
+    var parts = [{ name: '액면 (' + b.col.label + ')', amt: b.raw }];
     if (b.adj) parts.push({ name: b.col.label + ' → ' + bandLabel(band) + ' 조정', amt: b.adj });
     var tot = b.v, setTo = null;
     (ag.rules || []).forEach(function (r) {
@@ -124,7 +124,7 @@
       tot += +r.amt || 0; parts.push({ name: r.name, amt: +r.amt || 0 });
     });
     (ag.verbal || []).forEach(function (r) {
-      if (ruleHits(r, key, st, band, type, sc)) { tot += +r.amt || 0; parts.push({ name: '🗣 ' + r.name, amt: +r.amt || 0, verbal: true }); }
+      if (ruleHits(r, key, st, band, type, sc)) { tot += +r.amt || 0; parts.push({ name: '🗣 구두 · ' + r.name, amt: +r.amt || 0, verbal: true }); }
     });
     if (setTo) { parts.push({ name: setTo.name + ' (이 금액만)', amt: setTo.v - tot, set: setTo.v }); tot = setTo.v; }
     return { v: Math.round(tot * 10) / 10, parts: parts, name: b.row.name, price: b.row.price };
