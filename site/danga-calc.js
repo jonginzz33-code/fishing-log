@@ -34,9 +34,11 @@
     combo: { label: '당월 유무선 결합', f: function (s) { return !!s.combo; } },
     kids: { label: '키즈폰 결합', f: function (s) { return !!s.kids; } },
     d30: { label: '30일 이내 기변', f: function (s) { return !!s.d30; } },
-    dongpan: { label: '유선 동시판매 (인터넷+TV)', f: function (s) { return !!s.dongpan; } }
+    dongpan: { label: '유선 동시판매 (인터넷+TV)', f: function (s) { return !!s.dongpan; } },
+    sel12: { label: '선택약정 12개월', f: function (s) { return s.yak === 'sel' && !!s.sel12; } },
+    d180: { label: '180일 이하 재가입', f: function (s) { return !!s.d180 || !!s.d30; } }
   };
-  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false, dongpan: false };
+  var DEFAULT_SC = { yak: 'sel', sup: 'mid', vas1: false, vas2: false, ins: 'none', disney: false, uoneNo: false, cgrade: false, edocNo: false, junior: false, senior: false, combo: false, kids: false, d30: false, dongpan: false, sel12: false, d180: false };
 
   function norm(s) { return String(s || '').toUpperCase().replace(/\s+/g, ''); }
   function normSt(s) {
@@ -74,7 +76,8 @@
   }
 
   // 단가표 기본값 찾기
-  function base(ag, key, st, band, type) {
+  // 칸에 조건(col.cond · 예: 시니어 전용 칸)이 있으면 그 조건일 때 그 칸을 먼저 씀
+  function base(ag, key, st, band, type, sc) {
     var ti = type === 'new' ? 0 : type === 'mnp' ? 1 : 2;
     var secs = ag.sections || [];
     for (var s = 0; s < secs.length; s++) {
@@ -84,15 +87,22 @@
         if (norm(row.key) !== key) continue;
         var sts = (row.st || []).map(normSt);
         if (st && sts.length && sts.indexOf(st) < 0) continue;
+        var plain = [], special = [];
         for (var c = 0; c < sec.cols.length; c++) {
           var col = sec.cols[c];
           if (!col.bands || !(band in col.bands)) continue;
-          var cell = row.v && row.v[c];
-          var x = cell ? cell[ti] : null;
-          if (x === null || x === undefined || x === '' || isNaN(+x)) return { none: true, row: row, col: col };
-          var adj = +col.bands[band] || 0;
-          return { v: +x + adj, raw: +x, adj: adj, row: row, col: col };
+          if (col.cond && col.cond.length) { if (sc && condOk(col.cond, sc)) special.push(c); }
+          else plain.push(c);
         }
+        var order = special.concat(plain), firstNone = null;
+        for (var q = 0; q < order.length; q++) {
+          var cc = order[q], col2 = sec.cols[cc], cell = row.v && row.v[cc];
+          var x = cell ? cell[ti] : null;
+          if (x === null || x === undefined || x === '' || isNaN(+x)) { if (!firstNone) firstNone = { none: true, row: row, col: col2 }; continue; }
+          var adj = +col2.bands[band] || 0;
+          return { v: +x + adj, raw: +x, adj: adj, row: row, col: col2 };
+        }
+        if (firstNone) return firstNone;
       }
     }
     return null;
@@ -100,17 +110,21 @@
 
   // 최종 단가 = 기본 + 정책 + 구두
   function price(ag, key, st, band, type, sc) {
-    var b = base(ag, key, st, band, type);
+    var b = base(ag, key, st, band, type, sc);
     if (!b || b.none) return null;
     var parts = [{ name: '기본 (' + b.col.label + ')', amt: b.raw }];
     if (b.adj) parts.push({ name: b.col.label + ' → ' + bandLabel(band) + ' 조정', amt: b.adj });
-    var tot = b.v;
+    var tot = b.v, setTo = null;
     (ag.rules || []).forEach(function (r) {
-      if (ruleHits(r, key, st, band, type, sc)) { tot += +r.amt || 0; parts.push({ name: r.name, amt: +r.amt || 0 }); }
+      if (!ruleHits(r, key, st, band, type, sc)) return;
+      // set: 금액 고정 (예: 30일 이내 기변 = 수수료 2만원만 · 180일 이하 재가입 = 미지급 0)
+      if (r.set !== undefined && r.set !== null && r.set !== '') { setTo = { name: r.name, v: +r.set }; return; }
+      tot += +r.amt || 0; parts.push({ name: r.name, amt: +r.amt || 0 });
     });
     (ag.verbal || []).forEach(function (r) {
       if (ruleHits(r, key, st, band, type, sc)) { tot += +r.amt || 0; parts.push({ name: '🗣 ' + r.name, amt: +r.amt || 0, verbal: true }); }
     });
+    if (setTo) { parts.push({ name: setTo.name + ' (이 금액만)', amt: setTo.v - tot, set: setTo.v }); tot = setTo.v; }
     return { v: Math.round(tot * 10) / 10, parts: parts, name: b.row.name, price: b.row.price };
   }
 
