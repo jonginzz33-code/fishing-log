@@ -169,7 +169,7 @@ body.noscroll{overflow:hidden}
     <div id="problem" class="warn hide" style="margin-top:10px"></div>
     <div class="tiles">
       <div class="tile">필요 제품<b id="sAll">-</b></div>
-      <div class="tile g click" id="logTile" title="눌러서 알람 기록 보기">알람전송완료<b id="sOk">-</b><small>📜 기록 보기</small></div>
+      <div class="tile g click" id="logTile" title="눌러서 알람 기록 보기">오늘 알람전송완료<b id="sOk">-</b><small>📜 기록 보기</small></div>
       <div class="tile f">알람전송대기중<b id="sShort">-</b></div>
       <div class="tile">확인 전 · 실패<b id="sNew">-</b></div>
     </div>
@@ -878,7 +878,8 @@ body.noscroll{overflow:hidden}
       var due = s && s.t ? s.t + n.every * 60000 : Date.now();
       if (!next || due < next) next = due;
     });
-    $('sAll').textContent = ns.length; $('sOk').textContent = cnt.ok; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
+    // 오늘 실제로 휴대폰에 간 알람 수 (필요 제품 + 전체 부족 재고 감시 · 테스트 제외)
+    $('sAll').textContent = ns.length; $('sOk').textContent = data.todayAlarms || 0; $('sShort').textContent = cnt.short; $('sNew').textContent = cnt.none;
     $('sLine').textContent = ns.length
       ? '거래처 ' + Object.keys(ph).length + '곳 · 필요 제품 ' + ns.length + '개 · ' +
         (data.quietNow ? '🌙 지금은 쉬는 시간이라 자동 조회 안 해요' : !next ? '모든 제품 알람 전송 완료' : '다음 확인 ' + (next <= Date.now() + 60000 ? '곧' : when(next)))
