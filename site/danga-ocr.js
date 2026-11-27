@@ -151,13 +151,14 @@
             for (var y = ya + 2; y < yb - 2; y++) for (var x = Math.round(xa) + 2; x < xb - 2; x++) { tot++; if (G.L[y * G.w + x] < DARK) dk++; }
             colDark.push(tot ? dk / tot : 0);
           }
-          function col(x) { for (var q = 0; q < nCols3; q++) if (x >= gd.cols[q] && x < gd.cols[q + 1]) return q; return -1; }
-          // 깨끗한 그림에서 이 줄만 3배로 부드럽게 · 검은 칸은 흰색으로
-          var c = document.createElement('canvas'); c.width = gd.w * scale + 40; c.height = hh * scale + 40;
+          // 칸마다 떼어서 사이를 넓게 벌려 한 줄로 (숫자가 옆 칸과 붙어 읽히지 않게) · 검은 칸은 비움
+          var GAP = 18, offs = [], xw = 20;
+          for (var q0 = 0; q0 < nCols3; q0++) { var cw = Math.max(1, Math.round(gd.cols[q0 + 1]) - Math.round(gd.cols[q0]) - 2); offs.push([xw, xw + cw * scale, Math.round(gd.cols[q0]) + 1, cw]); xw += cw * scale + GAP * scale; }
+          function col(x) { x = x * scale + 20; for (var q = 0; q < nCols3; q++) if (x >= offs[q][0] - GAP * scale / 2 && x < offs[q][1] + GAP * scale / 2) return q; return -1; }
+          var c = document.createElement('canvas'); c.width = xw + 20; c.height = hh * scale + 40;
           var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
           g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-          g.drawImage(CLEAN, 0, ya, gd.w, hh, 20, 20, gd.w * scale, hh * scale);
-          for (var kb = 0; kb < nCols3; kb++) if (colDark[kb] > 0.55) g.fillRect(20 + gd.cols[kb] * scale, 0, (gd.cols[kb + 1] - gd.cols[kb]) * scale, c.height);
+          for (var kb = 0; kb < nCols3; kb++) if (colDark[kb] <= 0.55) g.drawImage(CLEAN, offs[kb][2], ya, offs[kb][3], hh, offs[kb][0], 20, offs[kb][3] * scale, hh * scale);
           var pc = c; 
           return worker.setParameters({ tessedit_pageseg_mode: '7' }).then(function () { return worker.recognize(pc); }).then(function (res) {
             var cells = [], confs = []; for (var k3 = 0; k3 < nCols3; k3++) { cells.push(colDark[k3] > 0.55 ? 'X' : ''); confs.push(100); }
@@ -166,7 +167,13 @@
               if (ci < 0) return;
               // 한 낱말이 여러 칸에 걸치면(붙어 읽힘) 칸마다 나누지 않고 표시만
               var span = col((wd.bbox.x1 - 20) / scale - 1) - col((wd.bbox.x0 - 20) / scale + 1);
-              if (span > 0) { miss.push([r, ci]); return; }
+              if (span > 0) {
+                // 붙어 읽힌 낱말 → 글자마다 제자리 칸으로 나눔 (글자 정보 없으면 칸 하나씩 다시)
+                var sy = wd.symbols || [];
+                if (!sy.length) { miss.push([r, ci]); if (root.DANGA_DEBUG) root.DANGA_SPAN = (root.DANGA_SPAN || 0) + 1; return; }
+                sy.forEach(function (c) { var ck = col(((c.bbox.x0 + c.bbox.x1) / 2 - 20) / scale); if (ck < 0 || cells[ck] === 'X') return; cells[ck] += c.text; confs[ck] = Math.min(confs[ck], c.confidence); });
+                return;
+              }
               if (cells[ci] !== 'X') { cells[ci] += wd.text; confs[ci] = Math.min(confs[ci], wd.confidence); }
             });
             var row = [];
@@ -175,9 +182,13 @@
               if (tx === 'X') { row.push(null); continue; }
               var n = num(tx);
               var mi = minusOf(cellBlobs(G, gd, r, k4, lineR));
-              if (n === null && colDark[k4] > 0.015) miss.push([r, k4]);
-              else if (mi && !(n < 0)) miss.push([r, k4]);
-              else if (n !== null && (confs[k4] < 80 || Math.abs(n) > 150 || blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-.]/g, '').length)) miss.push([r, k4]);
+              var why = '';
+              if (n === null && colDark[k4] > 0.015) why = 'null';
+              else if (mi && !(n < 0)) why = 'minus';
+              else if (n !== null && confs[k4] < 80) why = 'conf';
+              else if (n !== null && Math.abs(n) > 150) why = 'big';
+              else if (n !== null && blobs(G, gd, r, k4, lineR) !== String(tx).replace(/[^\d\-.]/g, '').length) why = 'blob' + blobs(G, gd, r, k4, lineR) + ':' + tx;
+              if (why) { miss.push([r, k4]); if (root.DANGA_DEBUG) { var W2 = root.DANGA_WHY = root.DANGA_WHY || {}; var kk = why.replace(/:.*/, ''); W2[kk] = (W2[kk] || 0) + 1; if (/^blob/.test(why) && Math.random() < 0.05) console.log('why', why, confs[k4]); } }
               row.push(n);
             }
             out.push(row);
@@ -238,10 +249,11 @@
       // 놓친 칸은 칸 하나씩 다시
       return chain.then(function () {
         var c2 = Promise.resolve();
-        var seen = {};
-        miss.forEach(function (m) {
-          var key = m[0] + '_' + m[1]; if (seen[key]) return; seen[key] = 1;
-          c2 = c2.then(function () { return retryCell(m[0], m[1]); });
+        var seen = {}, todo = [];
+        miss.forEach(function (m) { var key = m[0] + '_' + m[1]; if (seen[key]) return; seen[key] = 1; todo.push(m); });
+        if (root.DANGA_DEBUG) { console.log('miss', todo.length, JSON.stringify(root.DANGA_WHY), 'span-nosym', root.DANGA_SPAN || 0); root.DANGA_SPAN = 0; root.DANGA_WHY = {}; }
+        todo.forEach(function (m, ix) {
+          c2 = c2.then(function () { if (log) log('칸 다시 읽기', ix / todo.length, todo.length); return retryCell(m[0], m[1]); });
         });
         return c2.then(function () {
           // ① 자신 있게 읽은 칸에서 숫자 모양 모으기

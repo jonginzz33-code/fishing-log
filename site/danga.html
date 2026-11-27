@@ -892,7 +892,8 @@ function runOcr(ai, quiet) {
           use = rg.h ? DangaOCR.snap(img, { x0: (cb.x0 + rg.x0 * (cb.x1 - cb.x0)) / W, x1: (cb.x0 + rg.x1 * (cb.x1 - cb.x0)) / W, y0: (cb.y0 + rg.y0 * (cb.y1 - cb.y0)) / H, y1: (cb.y0 + rg.y1 * (cb.y1 - cb.y0)) / H }) : rg;
         }
         return DangaOCR.readSection(img, use, nR, nC, function (st, pr) {
-          var m = (st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…'); if (quiet) { var bb = document.getElementById('allBtn'); if (bb) bb.textContent = '⏳ ' + ALLSTEP + ' ' + m; }
+          var m = st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 줄 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : st === '칸 다시 읽기' ? '표 ' + (si + 1) + ' 헷갈린 칸 다시 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : /recogniz/.test(st) ? null : '글자인식 프로그램 받는 중…';
+          if (!m) return; if (quiet) { var bb = document.getElementById('allBtn'); if (bb) bb.textContent = '⏳ ' + ALLSTEP + ' ' + m; }
           if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; var bm = document.querySelector('.ocrmsg.busy'); if (bm) bm.textContent = '⏳ ' + m + ' · 한 표에 10~40초 걸려요'; }
         });
       }).then(function (res) {
