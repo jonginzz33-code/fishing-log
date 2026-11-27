@@ -138,7 +138,9 @@
       .map(function (it) {
         var nm = String(it.name).replace(/\s*\(.*?\)\s*/g, ' ').trim();
         if (it.st && nm.toUpperCase().indexOf(it.st) < 0) nm += ' ' + (it.st === '1T' ? '1TB' : it.st);
-        it.label = nm; return it;
+        it.label = nm;
+        it.code = it.key + (it.st ? (/^UIP/.test(it.key) ? '-' : '') + it.st : '');   // 모델명 (단가표 '모델명' 칸처럼 SM-S942N256 · UIP16E-128)
+        return it;
       })
       .sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : (a.st < b.st ? -1 : 1); });
   }
