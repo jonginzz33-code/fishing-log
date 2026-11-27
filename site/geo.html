@@ -89,6 +89,9 @@ td.ck input{width:18px;height:18px;accent-color:var(--bad);pointer-events:none}
 .tile.click{cursor:pointer}
 .tile.click:hover,.tile.click.on{border-color:var(--ok)}
 .tile small{display:block;font-size:11.5px;color:var(--sky);margin-top:2px}
+.cp{display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #1E3446;font-size:15px}
+.cp:first-child{border-top:0}
+.cp span{flex:1;min-width:0;word-break:break-all;user-select:all;-webkit-user-select:all}
 .modal{position:fixed;inset:0;z-index:50;background:rgba(4,10,16,.72);display:flex;align-items:center;justify-content:center;padding:16px}
 .log{background:#12283A;border:1.5px solid var(--ok);border-radius:18px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;font-size:13.5px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .log .lhead{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid #1E3446}
@@ -145,6 +148,18 @@ body.noscroll{overflow:hidden}
   <h2>🚫 이 계정은 권한이 없어요</h2>
   <p class="lead">허락된 구글 계정으로 다시 로그인해 주세요.</p>
   <button class="btn ghost" onclick="logout()">로그아웃</button>
+</div>
+
+<!-- 알림을 누르면 뜨는 제품명 복사 창 -->
+<div class="modal hide" id="copyBox" role="dialog" aria-modal="true" aria-label="제품명 복사">
+  <div class="log">
+    <div class="lhead"><b>📋 제품명 복사</b><button class="btn ghost sm" id="copyClose">닫기 ✕</button></div>
+    <div class="lbody">
+      <div class="msg" id="copyMsg" style="margin:8px 0"></div>
+      <div id="copyList"></div>
+      <div class="row" style="margin-top:10px"><button class="btn ok" id="copyAll">📋 모두 복사</button></div>
+    </div>
+  </div>
 </div>
 
 <div id="app" class="hide">
@@ -285,6 +300,41 @@ body.noscroll{overflow:hidden}
   var show = function (id) { ['login', 'deny', 'app'].forEach(function (x) { $(x).classList.toggle('hide', x !== id); }); };
   var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var data = { watch: [], items: {} }, filt = 'in';
+
+  // ───── 알림을 눌러서 열렸을 때: 제품명 복사 (?copy=… 또는 열린 화면으로 온 메시지) ─────
+  function copyText(t) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(function () { return true; }, function () { return oldCopy(t); });
+    return Promise.resolve(oldCopy(t));
+  }
+  function oldCopy(t) {
+    try { var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
+  }
+  function copyOpen(text) {
+    var names = String(text || '').split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!names.length) return;
+    $('copyList').innerHTML = names.map(function (n, i) { return '<div class="cp"><span>' + esc(n) + '</span><button class="btn ok sm" data-ci="' + i + '">📋 복사</button></div>'; }).join('');
+    $('copyAll').classList.toggle('hide', names.length < 2);
+    $('copyAll').onclick = function () { copyText(names.join('\n')).then(function (ok) { $('copyMsg').textContent = ok ? '✅ ' + names.length + '개 모두 복사했어요.' : '⚠ 복사가 막혔어요. 이름을 길게 눌러 복사해 주세요.'; }); };
+    $('copyList').onclick = function (e) {
+      var i = e.target.getAttribute('data-ci'); if (i == null) return;
+      copyText(names[+i]).then(function (ok) { $('copyMsg').textContent = ok ? '✅ 복사했어요: ' + names[+i] : '⚠ 복사가 막혔어요. 이름을 길게 눌러 복사해 주세요.'; });
+    };
+    $('copyBox').classList.remove('hide');
+    // 바로 복사해 보기 (휴대폰에 따라 막히면 📋 복사 버튼을 한 번 누르면 됨)
+    $('copyMsg').textContent = '복사하는 중…';
+    copyText(names.join('\n')).then(function (ok) {
+      $('copyMsg').textContent = ok ? '✅ 제품명을 복사했어요. 붙여넣기 하면 돼요.' : '👇 아래 📋 복사를 한 번 눌러 주세요.';
+    });
+  }
+  $('copyClose').onclick = function () { $('copyBox').classList.add('hide'); };
+  $('copyBox').onclick = function (e) { if (e.target === $('copyBox')) $('copyBox').classList.add('hide'); };
+  (function () {
+    var q = new URLSearchParams(location.search).get('copy');
+    if (q) { copyOpen(q); history.replaceState(null, '', location.pathname); } // 주소창에서 ?copy= 지우기
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'geo-copy') copyOpen(e.data.copy);
+    });
+  })();
 
   if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) {
     $('setup').classList.remove('hide');
