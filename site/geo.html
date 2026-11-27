@@ -404,11 +404,15 @@ body.noscroll{overflow:hidden}
   });
 
   // opt.wait: 이 시간(ms)이 지나도 답이 없으면 기다리기를 멈추고 안내 (기본 90초)
+  // 로그인이 끝날 때까지 기다렸다가 서버에 물어봄 (새로고침 직후엔 아직 로그인 전이라 오류가 났었음)
+  var authReady = new Promise(function (ok) {
+    auth.onAuthStateChanged(function (u) { if (u) ok(u); });
+  });
   function call(path, opt) {
     opt = opt || {};
     var ctl = window.AbortController ? new AbortController() : null, late = false;
     var timer = ctl && setTimeout(function () { late = true; ctl.abort(); }, opt.wait || 90000);
-    return auth.currentUser.getIdToken().then(function (t) {
+    return authReady.then(function () { return auth.currentUser.getIdToken(); }).then(function (t) {
       var h = { Authorization: 'Bearer ' + t };
       if (opt.body) h['Content-Type'] = 'application/json';
       return fetch(API + path, { method: opt.method || 'GET', headers: h, body: opt.body ? JSON.stringify(opt.body) : undefined, signal: ctl ? ctl.signal : undefined });
@@ -1181,8 +1185,8 @@ body.noscroll{overflow:hidden}
       return reg ? reg.pushManager.getSubscription() : null;
     }).then(function (sub) {
       pushShow(!!sub, sub ? '✅ 이 기기는 알림을 받고 있어요' : '이 기기는 아직 알림을 안 받아요');
-      ringLoad(sub);
-    }).catch(function () { pushShow(false, ''); });
+      try { ringLoad(sub); } catch (e) {} // 횟수 불러오기가 실패해도 '알림 받는 중' 표시는 그대로
+    }).catch(function (e) { $('pushState').textContent = '⚠ 알림 상태를 못 읽었어요: ' + (e && e.message || e); });
   }
   $('pushOn').onclick = function () {
     var btn = $('pushOn'); btn.disabled = true; pushShow(false, '설정 중…');
