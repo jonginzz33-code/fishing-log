@@ -383,6 +383,8 @@ function cmpHtml() {
   h += '</div>';
   h += scHtml();
   h += '<div class="row" style="margin:4px 0 0">' + ags.map(function (a) { return '<span class="sub"><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + (a.date ? ' (' + esc(a.date) + ')' : '') + (a.verbal.length ? ' · 구두 ' + a.verbal.filter(function (r) { return !r.off; }).length : '') + '</span>'; }).join(' ') + '</div>';
+  var noPol = ags.filter(function (a) { return !(a.rules || []).some(function (r) { return !r.off; }); });
+  if (noPol.length) h += '<div class="note">⚠ 정책(부가 · 차감)이 하나도 없는 업체: <b>' + noPol.map(function (a) { return esc(a.name); }).join(' · ') + '</b> — 지금은 액면 + 구두만 계산돼요. 채팅으로 받은 <b>정책 링크</b>를 누르거나 ⚙ 설정 → 📥 정책 링크 붙여넣기.</div>';
   h += allBtnHtml() + emptyNote(ags);
   h += S.mode === 'list' ? listHtml(ags) : mxHtml(ags);
   h += '<p class="sub">단위: 만원 · 최종 = 단가표 + 정책(추가 · 차감) + 🗣 구두. 줄을 누르면 계산 내역이 보여요. 숫자 · 정책은 [📋 단가표 입력] 탭에서 고쳐요.</p>';
@@ -769,6 +771,7 @@ function auditHtml() {
 function setHtml() {
   return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
     (window.firebase && firebase.auth && firebase.auth().currentUser ? '<button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button>' : '') + '</div>' +
+    '<div class="card"><h2>📥 정책 링크 · 코드 붙여넣기</h2><p class="sub">채팅으로 받은 정책 링크(https://talla.co.kr/danga#data=…)를 통째로 붙여 넣고 넣기를 누르세요. 단가표 숫자 · 구두는 그대로예요.</p><textarea id="pasteCode" style="width:100%;min-height:70px" placeholder="여기에 링크 붙여넣기"></textarea><div class="row" style="margin-top:6px"><button class="btn pri" data-paste>📥 넣기</button></div></div>' +
     '<div class="card"><h2>💾 파일로 백업</h2><div class="row"><button class="btn" data-export>📤 파일로 내보내기</button><label class="btn" style="display:inline-flex;align-items:center">📥 파일 가져오기<input type="file" accept=".json,application/json" class="hide" id="imp"></label></div></div>' +
     '<div class="card"><h2>🧹 처음부터</h2><button class="btn del" data-reset>전부 지우기</button></div>';
 }
@@ -891,6 +894,7 @@ view.addEventListener('click', function (e) {
   if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 표의 숫자를 모두 비울까요? (모델 · 열 · 정책 · 구두는 남아요)')) { a.sections.forEach(function (s) { s.rows.forEach(function (r) { r.v = s.cols.map(function () { return [null, null, null]; }); }); }); save(); render(); } return; }
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
   if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); na.sections = tplFor(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
+  if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
 });
@@ -955,8 +959,8 @@ view.addEventListener('input', function (e) {
 });
 
 // 링크로 받은 자료 (#data=… · 브라우저 안에서만 풀림 · 서버로 안 감)
-function importHash() {
-  var m = location.hash.match(/data=([A-Za-z0-9_\-]+)/);
+function importHash(src) {
+  var m = String(src || location.hash).match(/data=([A-Za-z0-9_\-]+)/);
   if (!m || !window.DecompressionStream) return Promise.resolve();
   var b = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')), u = new Uint8Array(b.length);
   for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
@@ -1187,6 +1191,9 @@ function start() {
     }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { fillEmpty(); var fx = fixData(); save(); render(); if (fx.length) setTimeout(function () { toast('🔧 계산 바로잡음 ' + fx.length + '건 (⚙ 설정 → 계산 점검)'); }, 600); S.fixMsgs = fx; });
   });
 }
+// 이미 열린 단가 페이지에서 링크를 눌러도(주소 # 만 바뀌어 새로 안 읽힘) 바로 넣기
+function importNow(src) { importHash(src).then(function () { fixData(); save(); render(); paintSave(); }); }
+window.addEventListener('hashchange', function () { if (/data=/.test(location.hash)) importNow(); });
 window.addEventListener('beforeunload', function (e) { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
 start();
 })();
