@@ -26,18 +26,27 @@ self.addEventListener('push', (e) => {
         silent: false,
         requireInteraction: true, // 눌러서 지울 때까지 알림 남겨 두기
         vibrate: [500, 200, 500], // 진동 (안드로이드는 휴대폰 알림 설정의 진동이 켜져 있어야 울림)
-        data: { url: '/geo' },
+        data: { url: '/geo', copy: d.copy || '' },
+        actions: d.copy ? [{ action: 'copy', title: '📋 제품명 복사' }, { action: 'open', title: '열기' }] : [],
       });
     }
   })());
 });
 
-// 알림을 누르면 재고조회 화면 열기 (이미 열려 있으면 그 탭으로)
+// 알림(또는 📋 제품명 복사)을 누르면 재고조회 화면을 열고 제품명을 복사하게 함
+// (서비스워커는 클립보드를 못 써서, 화면이 ?copy= 를 받아 복사함)
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  const copy = (e.notification.data && e.notification.data.copy) || '';
+  const url = '/geo' + (copy && e.action !== 'open' ? '?copy=' + encodeURIComponent(copy) : '');
   e.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const c of all) if (c.url.includes('/geo') && 'focus' in c) return c.focus();
-    return self.clients.openWindow('/geo');
+    for (const c of all) {
+      if (c.url.includes('/geo')) {
+        if (copy && e.action !== 'open') c.postMessage({ type: 'geo-copy', copy }); // 이미 열린 화면이면 거기서 복사
+        if ('focus' in c) return c.focus();
+      }
+    }
+    return self.clients.openWindow(url);
   })());
 });
