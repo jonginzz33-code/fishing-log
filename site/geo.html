@@ -63,6 +63,15 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.tile.click{cursor:pointer}
+.tile.click:hover,.tile.click.on{border-color:var(--ok)}
+.tile small{display:block;font-size:11.5px;color:var(--sky);margin-top:2px}
+.log{background:#0F2231;border:1.5px solid var(--ok);border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:13.5px}
+.log .li{border-top:1px solid #1E3446;padding:8px 0}
+.log .li:first-of-type{border-top:0}
+.log .lt{font-weight:800}
+.log .lb{white-space:pre-line;color:#DDEAF2;margin-top:2px}
+.log .lm{color:var(--sub);font-size:12px;margin-top:2px}
 .push{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 .push .sub{color:var(--sub);font-size:13px}
 .push.on{border-color:var(--ok)}
@@ -118,9 +127,13 @@ details summary{cursor:pointer;font-weight:800}
     <div id="problem" class="warn hide" style="margin-top:10px"></div>
     <div class="tiles">
       <div class="tile">필요 제품<b id="sAll">-</b></div>
-      <div class="tile g">알람전송완료<b id="sOk">-</b></div>
+      <div class="tile g click" id="logTile" title="눌러서 알람 기록 보기">알람전송완료<b id="sOk">-</b><small>📜 기록 보기</small></div>
       <div class="tile f">알람전송대기중<b id="sShort">-</b></div>
       <div class="tile">확인 전 · 실패<b id="sNew">-</b></div>
+    </div>
+    <div class="log hide" id="logBox">
+      <div class="row" style="justify-content:space-between;margin-bottom:4px"><b>📜 알람 기록 <small style="color:var(--sub);font-weight:400">(최근 20개 · 최신 순)</small></b><button class="btn ghost sm" id="logClose">닫기</button></div>
+      <div id="logList"></div>
     </div>
     <div class="row quiet" style="margin-bottom:12px">
       <label><input type="checkbox" id="qOn"> 🌙 조회 안 하는 시간</label>
@@ -299,6 +312,7 @@ details summary{cursor:pointer;font-weight:800}
       $('bulk').value = j.watch.map(function (w) { return w[0] + ' | ' + w[1]; }).join('\n');
       render();
       fillLists(); hint(); renderNeeds(); loadProducts(j.productsV);
+      if (!$('logBox').classList.contains('hide')) renderLog();
     });
   };
 
@@ -391,7 +405,7 @@ details summary{cursor:pointer;font-weight:800}
     btn.disabled = true; $('msg').textContent = a === 'run' ? '지오팜에서 확인 중… (10초쯤)' : '보내는 중…';
     call(a, { method: 'POST' }).then(function (j) {
       btn.disabled = false; $('msg').textContent = j.msg || j.error || '';
-      if (a === 'run') load();
+      load(); // 결과 · 알람 기록 다시 불러오기
     });
   };
 
@@ -742,6 +756,24 @@ details summary{cursor:pointer;font-weight:800}
   }
   $('pQbtn').onclick = pFind;
   $('pQ').onkeydown = function (e) { if (e.key === 'Enter') pFind(); };
+
+  // ───── 알람 기록 (알람전송완료 칸을 누르면 펼침) ─────
+  function renderLog() {
+    var log = data.notifyLog || [];
+    $('logList').innerHTML = log.map(function (r) {
+      var tag = r.ok ? '<span class="b g">✅ 보냄</span>' : '<span class="b f">⚠ 실패</span>';
+      if (/테스트/.test(r.title)) tag += ' <span class="b u">테스트</span>';
+      return '<div class="li"><div class="lt">' + tag + ' <span class="sv sm">🔔 ' + whenDate(r.t) + '</span> ' + esc(r.title) + '</div>' +
+        '<div class="lb">' + esc(r.body || '') + '</div>' +
+        '<div class="lm">' + (r.ok ? (r.via ? esc(r.via) + '로 보냄' : '') : '이유: ' + esc(r.why || '')) + '</div></div>';
+    }).join('') || '<div style="color:var(--sub)">아직 알람 기록이 없어요.</div>';
+  }
+  $('logTile').onclick = function () {
+    var open = $('logBox').classList.toggle('hide') === false;
+    $('logTile').classList.toggle('on', open);
+    if (open) renderLog();
+  };
+  $('logClose').onclick = function () { $('logBox').classList.add('hide'); $('logTile').classList.remove('on'); };
 
   // ───── 웹 알림: 이 기기로 알림 받기 (페이지를 닫아도 알림이 옴) ─────
   var SW = '/geo-sw.js', SW_SCOPE = '/geo-push/';
