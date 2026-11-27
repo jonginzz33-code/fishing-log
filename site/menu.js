@@ -13,21 +13,7 @@
     return p.then(function () { return firebase.auth ? null : load('/__/firebase/10.14.1/firebase-auth-compat.js'); })
       .then(function () { return firebase.apps.length ? null : load('/__/firebase/init.js'); });
   }
-  // 로그인하면 [로그아웃] · 20분 동안 아무것도 안 하면 자동 로그아웃 (탭이 여러 개여도 같이 셈)
-  var IDLE = 20 * 60 * 1000, idleT = null;
-  function touch() { try { localStorage.setItem('talla_act', String(Date.now())); } catch (e) {} }
-  function idleOn() {
-    if (idleT) return;
-    touch();
-    var last = 0;
-    ['click', 'keydown', 'scroll', 'touchstart', 'mousemove'].forEach(function (ev) {
-      window.addEventListener(ev, function () { var n = Date.now(); if (n - last > 15000) { last = n; touch(); } }, { passive: true });
-    });
-    idleT = setInterval(function () {
-      var a = 0; try { a = +localStorage.getItem('talla_act') || 0; } catch (e) {}
-      if (a && Date.now() - a > IDLE) { clearInterval(idleT); idleT = null; firebase.auth().signOut().then(function () { alert('20분 동안 쓰지 않아서 로그아웃했어요'); location.reload(); }); }
-    }, 30000);
-  }
+  // 로그인하면 [로그아웃] · 한 번 로그인하면 계속 로그인 (2026-11-27 사용자: 20분 자동 로그아웃 없앰)
   function outBtn(u) {
     var adm = document.querySelector('nav a.adm');
     if (!adm) return;
@@ -37,16 +23,8 @@
     } else { adm.textContent = '🔐 관리자 로그인'; adm.href = '/admin'; adm.onclick = null; }
   }
   ready().then(function () {
-    var firstCall = true;
     firebase.auth().onAuthStateChanged(function (u) {
-      var first = firstCall; firstCall = false;
-      if (u) {
-        // 페이지를 열었을 때 이미 로그인돼 있었고 마지막으로 쓴 지 20분 넘었으면 로그아웃
-        // (방금 로그인한 경우는 예전 기록을 보지 않고 지금부터 셈)
-        var a = 0; try { a = +localStorage.getItem('talla_act') || 0; } catch (e) {}
-        if (first && a && Date.now() - a > IDLE) { firebase.auth().signOut(); return; }
-        touch(); idleOn();
-      } else { try { localStorage.removeItem('talla_act'); } catch (e) {} }
+      try { localStorage.removeItem('talla_act'); } catch (e) {}
       outBtn(u);
       var ok = !!u && (u.email || '').toLowerCase() === ADMIN;
       window.tallaAdmin = ok;
