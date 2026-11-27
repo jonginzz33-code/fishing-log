@@ -98,6 +98,7 @@ nav{justify-content:flex-start!important}
 .ocrmsg{margin:6px 0;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--grn,#3fb950) 18%,transparent);font-size:13.5px;font-weight:600}.ocrmsg.busy{background:color-mix(in srgb,#e3b341 20%,transparent)}.ocrmsg.flash{animation:ofl 1.2s 2}@keyframes ofl{50%{outline:3px solid #e3b341}}
 .tbl .tsep{border-left:2px solid #5B7C99!important}.tbl td.mxbest{background:rgba(127,214,255,.16);box-shadow:inset 0 0 0 1.5px #7FD6FF}.tbl td.mxbest b{color:#fff}
 .tbl.mx td,.tbl.mx th{padding:7px 3px}
+.cellpop{position:fixed;z-index:9999;min-width:200px;max-width:min(320px,92vw);background:#0E2233;border:2px solid #7FD6FF;border-radius:12px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:13px}.cellpop .cph{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px}.cellpop .cpx{cursor:pointer;color:#9FB4C2;padding:0 4px}.cellpop .cpr{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px dotted rgba(159,180,194,.3)}.cellpop .cpr b.plus{color:#3FCF8E}.cellpop .cpr b.minus{color:#FF6B6B}.cellpop .cpt{border-top:1.5px solid #7FD6FF;margin-top:2px}.cellpop .cpt b{color:#fff;font-size:15px}
 </style>
 </head>
 <body>
@@ -406,7 +407,7 @@ function showItem(id) {
       var vals = ags.map(function (a) { return D.price(a, key, st, b.id, t.id, S.sc); });
       var bv = null; vals.forEach(function (p) { if (p && (bv === null || p.v > bv)) bv = p.v; });
       var n = vals.filter(Boolean).length;
-      return vals.map(function (p, i) { var sep = i === 0 ? ' tsep' : ''; if (!p) return '<td class="sub' + sep + '">·</td>'; var w = n > 1 && p.v === bv; return '<td class="' + (w ? 'mxbest' : '') + sep + '" style="cursor:pointer" data-bd="' + b.id + '|' + t.id + '"><b style="' + (w ? '' : 'color:#9FB4C2;font-weight:600') + '">' + fmt(p.v) + '</b></td>'; }).join('');
+      return vals.map(function (p, i) { var sep = i === 0 ? ' tsep' : ''; if (!p) return '<td class="sub' + sep + '">·</td>'; var w = n > 1 && p.v === bv; return '<td class="' + (w ? 'mxbest' : '') + sep + '" style="cursor:pointer" data-bd="' + b.id + '|' + t.id + '|' + i + '"><b style="' + (w ? '' : 'color:#9FB4C2;font-weight:600') + '">' + fmt(p.v) + '</b></td>'; }).join('');
     }).join('') + '</tr>';
   });
   h += '</table></div><div id="bd"></div>';
@@ -421,7 +422,25 @@ function showItem(id) {
       sh.querySelector('#bd').innerHTML = o;
     }
     bd(S.mode === 'list' ? S.band : 'B115', S.type);
-    sh.addEventListener('click', function (e) { var c = e.target.closest('[data-bd]'); if (c) { var q = c.dataset.bd.split('|'); bd(q[0], q[1]); } });
+    // 숫자 누르면 그 칸 바로 옆에 작은 창: 왜 이 단가인지 (기본 + 정책 + 구두)
+    function pop(cell, band, type, ai) {
+      closePop();
+      var a = ags[ai], p = D.price(a, key, st, band, type, S.sc); if (!p) return;
+      var box = document.createElement('div'); box.id = 'cellPop'; box.className = 'cellpop';
+      box.innerHTML = '<div class="cph"><b>' + esc(agShort(a)) + ' · ' + esc(D.bandLabel(band)) + ' ' + esc(typeLabel(type)) + '</b><span class="cpx">✕</span></div>' +
+        p.parts.map(function (x, k) { return '<div class="cpr"><span>' + (k === 0 ? '📋 ' : x.verbal ? '' : '📜 ') + esc(x.name) + '</span><b class="' + (k === 0 ? '' : x.amt < 0 ? 'minus' : 'plus') + '">' + (k === 0 ? fmt(x.amt) : sgn(x.amt)) + '</b></div>'; }).join('') +
+        '<div class="cpr cpt"><span>최종</span><b>' + fmt(p.v) + '</b></div>';
+      document.body.appendChild(box);
+      var r = cell.getBoundingClientRect(), w = box.offsetWidth, hh = box.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+      var left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), vw - w - 8), top = r.bottom + 6;
+      if (top + hh > vh - 8) top = Math.max(8, r.top - hh - 6);
+      box.style.left = left + 'px'; box.style.top = top + 'px';
+      box.addEventListener('click', function (e) { e.stopPropagation(); if (e.target.closest('.cpx')) closePop(); });
+    }
+    function closePop() { var o = document.getElementById('cellPop'); if (o) o.remove(); }
+    sh.addEventListener('scroll', closePop, true);
+    document.getElementById('modal').addEventListener('click', function (e) { if (!e.target.closest('[data-bd]')) closePop(); });
+    sh.addEventListener('click', function (e) { var c = e.target.closest('[data-bd]'); if (c) { var q = c.dataset.bd.split('|'); bd(q[0], q[1]); if (q[2] != null) pop(c, q[0], q[1], +q[2]); } else closePop(); });
   });
 }
 
