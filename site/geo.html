@@ -63,6 +63,8 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.wadd{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin:0 0 10px;font-size:14px}
+.acl div.have{color:var(--sub)}
 .prog{margin:0 0 6px}
 .prog .bar{height:8px;background:#0F2231;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .prog .bar i{display:block;height:100%;width:3%;background:var(--ok);transition:width .6s}
@@ -211,7 +213,7 @@ body.noscroll{overflow:hidden}
 
   <div class="card">
     <details>
-    <summary>🗂 예전 품절 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></summary>
+    <summary>🗂 전체 부족 재고 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></summary>
     <div class="lead" id="cycle" style="margin:8px 0 0"></div>
     <div class="row" style="margin:10px 0">
       <span style="font-size:14px">⏱ 확인 간격</span>
@@ -225,6 +227,10 @@ body.noscroll{overflow:hidden}
     <div class="prog hide" id="wProg"><div class="bar"><i id="wBar"></i></div></div>
     <div class="msg" id="wMsg" style="margin:-2px 0 4px"></div>
     <div class="lead" style="margin:0 0 10px;font-size:13px">⏱ <span id="wNext"></span></div>
+    <div class="wadd">
+      <b>➕ 제품 추가</b> <span style="color:var(--sub);font-size:12.5px">지오팜 전체 제품 <span class="pN"></span> 중에서 골라 감시 목록에 넣어요</span>
+      <div class="ac" style="margin-top:6px"><input id="wQ" placeholder="제품 이름 또는 제품코드 (예: 타이레놀 500 · 021753)" autocomplete="off"><div class="acl hide" id="wAcl"></div></div>
+    </div>
     <div class="filter" id="filter">
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
@@ -395,6 +401,50 @@ body.noscroll{overflow:hidden}
       });
     })();
   };
+  // ➕ 제품 추가: 3만여 제품 목록에서 골라 감시 목록(watch)에 넣기
+  var wRows = [], wOn = -1;
+  function wHave(code) { return data.watch.some(function (w) { return w[1].split(',').some(function (c) { return code.split(',').indexOf(c) >= 0; }); }); }
+  function wShow() {
+    var words = $('wQ').value.toLowerCase().split(/\s+/).filter(Boolean), box = $('wAcl');
+    wRows = []; wOn = -1;
+    if (!words.length) { box.classList.add('hide'); return; }
+    for (var i = 0; i < prodsLow.length && wRows.length < 40; i++) {
+      var s = prodsLow[i], ok = true;
+      for (var k = 0; k < words.length; k++) if (s.indexOf(words[k]) < 0) { ok = false; break; }
+      if (ok) wRows.push(prods[i]);
+    }
+    box.innerHTML = wRows.map(function (p, i) {
+      var have = wHave(p[1]);
+      return '<div data-i="' + i + '"' + (have ? ' class="have"' : '') + '>' + (have ? '✔ ' : '➕ ') + esc(p[0]) + '<small>' + esc(p[1]) + (have ? ' · 이미 감시 중' : '') + '</small></div>';
+    }).join('') || '<div class="have">찾는 제품이 없어요</div>';
+    box.classList.remove('hide');
+  }
+  function wPick(i) {
+    var p = wRows[i]; if (!p) return;
+    $('wAcl').classList.add('hide');
+    if (wHave(p[1])) { $('wMsg').textContent = '이미 감시 중이에요: ' + p[0]; return; }
+    $('wMsg').textContent = '추가하는 중…';
+    save(data.watch.concat([[p[0], p[1]]])).then(function (j) {
+      $('wMsg').textContent = j.error ? '⚠ ' + j.error : '✅ 감시 목록에 넣었어요: ' + p[0] + ' (다음 자동 확인 때 재고를 봐요)';
+      if (!j.error) { $('wQ').value = ''; filt = 'all'; [].forEach.call($('filter').children, function (b) { b.classList.toggle('on', b.getAttribute('data-f') === 'all'); }); }
+    });
+  }
+  $('wQ').oninput = wShow;
+  $('wQ').onfocus = wShow;
+  $('wQ').onblur = function () { setTimeout(function () { $('wAcl').classList.add('hide'); }, 150); };
+  $('wAcl').onmousedown = function (e) { var d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); wPick(+d.getAttribute('data-i')); } };
+  $('wQ').onkeydown = function (e) {
+    var open = !$('wAcl').classList.contains('hide');
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      wOn = Math.max(0, Math.min(wRows.length - 1, wOn + (e.key === 'ArrowDown' ? 1 : -1)));
+      [].forEach.call($('wAcl').children, function (d, i) { d.classList.toggle('on', i === wOn); if (i === wOn) d.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    if (e.key === 'Enter' && open && wRows.length) { e.preventDefault(); wPick(wOn >= 0 ? wOn : 0); }
+    if (e.key === 'Escape') $('wAcl').classList.add('hide');
+  };
+
   $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }, 'wMsg'); };
   $('lq').oninput = render;
   $('filter').onclick = function (e) {
@@ -713,7 +763,7 @@ body.noscroll{overflow:hidden}
   var autoAt = 0;
   function tick() {
     var now = Date.now();
-    // 예전 품절 감시: 다음 자동 확인 (서버는 every 분의 배수가 되는 분에 한 묶음 확인)
+    // 전체 부족 재고 감시: 다음 자동 확인 (서버는 every 분의 배수가 되는 분에 한 묶음 확인)
     var st0 = data.settings;
     if (st0) {
       if (st0.paused) $('wNext').textContent = '자동 확인 멈춤';
