@@ -19,8 +19,8 @@
   var CONDS = {
     sel: { label: '선택약정', f: function (s) { return s.yak === 'sel'; } },
     gong: { label: '공시지원금(이동사지원금약정)', f: function (s) { return s.yak === 'gong'; } },
-    sup20: { label: '유통망지원금 20만↑', f: function (s) { return s.sup === 'hi'; } },
-    supLow: { label: '유통망지원금 10만↓', f: function (s) { return s.sup === 'low'; } },
+    sup20: { label: '유통망지원금 20만 이상', f: function (s) { return s.sup === 'hi'; } },
+    supLow: { label: '유통망지원금 0 (10만 미만)', f: function (s) { return s.sup === 'low'; } },
     vas1: { label: '교보SAM+구글원 유치', f: function (s) { return !!s.vas1; } },
     vas2: { label: 'V컬러링+벨링 유치', f: function (s) { return !!s.vas2; } },
     insSwap: { label: '폰교체패스 유치', f: function (s) { return s.ins === 'swap'; } },
