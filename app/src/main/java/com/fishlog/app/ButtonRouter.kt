@@ -130,9 +130,19 @@ object ButtonRouter {
         val slot = if (Store.pinchMode == 1) 1 else Store.pinchSlot.coerceIn(1, maxOf(2, cur.slots().size))
         val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
+        feedback(ctx, slot, n)
+        onMessage?.invoke("워치 꼬집기 → ${cur.name(slot)} ${n}마리")
+    }
+
+    /** v7.16 (444): 어떤 방법으로 세든 +1 하면 🔊 소리 · ⌚ 워치 진동 (각각 켰을 때만) */
+    fun feedback(ctx: Context, slot: Int, n: Int) {
         try { WearBuzz.count(ctx, slot, n) } catch (_: Exception) {}
         try { CountSound.count(ctx, slot) } catch (_: Exception) {}
-        onMessage?.invoke("워치 꼬집기 → ${cur.name(slot)} ${n}마리")
+    }
+    /** 취소(−1) = 낮은 '뚱' · 워치 진동 */
+    fun undoFeedback(ctx: Context, slot: Int) {
+        try { if (slot != 0) WearBuzz.undo(ctx, slot) } catch (_: Exception) {}
+        try { CountSound.undo(ctx) } catch (_: Exception) {}
     }
 
     fun watch(ctx: Context, slot: Int) {
@@ -154,6 +164,7 @@ object ButtonRouter {
         watchAt = now
         val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
+        feedback(ctx, slot, n)   // v7.16 (444): 워치 ⏮⏭ 도 소리 · 워치 진동
         onMessage?.invoke("워치 ${if (slot == 1) "⏮" else "⏭"} → ${Store.current?.name(slot) ?: "${slot}번"} ${n}마리")
     }
 
@@ -193,8 +204,7 @@ object ButtonRouter {
             val undone = Store.undoLast()
             if (undone != 0) {
                 Haptics.undo(ctx)
-                WearBuzz.undo(ctx, undone)   // v6.56 (332)
-                CountSound.undo(ctx)   // v6.61 (340)
+                undoFeedback(ctx, undone)
                 onMessage?.invoke("마지막 기록을 취소했어요")
             } else {
                 Haptics.error(ctx)
@@ -204,7 +214,6 @@ object ButtonRouter {
 
         val n = Store.addCatch(slot)
         Haptics.slot(ctx, slot)
-        WearBuzz.count(ctx, slot, n)   // v6.56 (332): ⌚ 워치 진동 (켰을 때만)
-        CountSound.count(ctx, slot)   // v6.61 (340): 🔊 폰 소리 (켰을 때만)
+        feedback(ctx, slot, n)   // v6.56 (332) ⌚ 워치 진동 · v6.61 (340) 🔊 폰 소리 (켰을 때만)
     }
 }

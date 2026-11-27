@@ -740,7 +740,8 @@ class MainActivity : Activity() {
         // v4.7 (217): "✎를 누르면 어종 변경 · 리모컨 길게 = 취소" 안내는 사용 설명서로 옮김
 
         undoBtn = Ui.button(this, "마지막 기록 취소") {
-            if (Store.undoLast() != 0) { Haptics.undo(this); showMessage("마지막 기록을 취소했어요") }
+            val u = Store.undoLast()
+            if (u != 0) { Haptics.undo(this); ButtonRouter.undoFeedback(this, u); showMessage("마지막 기록을 취소했어요") }
         }
         col.addView(undoBtn, Ui.lp(this, MATCH, WRAP, top = 12))
 
@@ -1178,8 +1179,9 @@ class MainActivity : Activity() {
             setOnClickListener {
                 if (!Store.touchMode) { showMessage("터치 기록이 꺼져 있어요 (기록 방식에서 '터치' 켜기)"); return@setOnClickListener }
                 if (Store.current == null) { showMessage("먼저 '출조 시작'을 눌러주세요"); return@setOnClickListener }
-                Store.addCatch(slot)
+                val n = Store.addCatch(slot)
                 Haptics.slot(this@MainActivity, slot)
+                ButtonRouter.feedback(this@MainActivity, slot, n)   // v7.16 (444)
             }
         }
         // 오른쪽 아래 구석: 작고 연한 어종 그림

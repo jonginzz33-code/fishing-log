@@ -138,7 +138,7 @@ object CountSound {
                 }, LinearLayout.LayoutParams(dp(56), dp(30)))
                 setOnClickListener { click() }
             }
-            box.addView(sw("리모컨으로 셀 때 소리", "리모컨 · 워치로 센 것만 울려요 (터치는 안 울림)", on(a)) { setOn(a, !on(a)); paint(); changed() })
+            box.addView(sw("셀 때 소리", "리모컨 · 워치 · 화면 터치 · 알림 +1 어떤 방법으로 세도 울려요 (취소는 낮은 소리)", on(a)) { setOn(a, !on(a)); paint(); changed() })
             box.addView(Ui.text(a, 14f, Ui.TEXT, true, "소리 고르기  ").apply {
                 append(android.text.SpannableStringBuilder("누르면 미리 들어요").apply {
                     setSpan(android.text.style.AbsoluteSizeSpan(11, true), 0, length, 0)

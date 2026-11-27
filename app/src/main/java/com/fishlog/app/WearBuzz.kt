@@ -66,7 +66,7 @@ object WearBuzz {
             val b = Notification.Builder(c, ch)
                 .setSmallIcon(R.drawable.ic_stat_octo)
                 .setContentTitle(text)
-                .setContentText("조과일지 · 리모컨 기록")
+                .setContentText("조과일지")
                 .setCategory(Notification.CATEGORY_STATUS)
                 .setAutoCancel(true)
                 .setTimeoutAfter(5_000L)

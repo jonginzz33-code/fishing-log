@@ -191,8 +191,8 @@ class RemoteService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACT_ADD1 -> if (Store.current != null) { Store.addCatch(1); Haptics.slot(this, 1) }
-            ACT_ADD2 -> if (Store.current != null) { Store.addCatch(2); Haptics.slot(this, 2) }
+            ACT_ADD1 -> if (Store.current != null) { val n = Store.addCatch(1); Haptics.slot(this, 1); ButtonRouter.feedback(this, 1, n) }
+            ACT_ADD2 -> if (Store.current != null) { val n = Store.addCatch(2); Haptics.slot(this, 2); ButtonRouter.feedback(this, 2, n) }
             ACT_END -> { endFromNotification(); return START_NOT_STICKY }
             ACT_REPOST -> {}
         }

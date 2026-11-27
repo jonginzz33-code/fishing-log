@@ -116,7 +116,7 @@ class QuickButtons(
             val on = !CountSound.on(a)
             CountSound.setOn(a, on); paintSound()
             if (on) CountSound.preview(CountSound.kind(a))
-            message(if (on) "조과 소리 켬 · 리모컨으로 셀 때 '${CountSound.kindName(a)}' (꾹 누르면 소리 고르기)" else "조과 소리 끔")
+            message(if (on) "조과 소리 켬 · 셀 때마다 '${CountSound.kindName(a)}' (꾹 누르면 소리 고르기)" else "조과 소리 끔")
         }
         setOnLongClickListener { CountSound.openSheet(a) { paintSound() }; true }
     }
@@ -130,12 +130,13 @@ class QuickButtons(
             setOnClickListener {
                 if (!Store.touchMode) { message("터치 기록이 꺼져 있어요 (기록 방식에서 '터치' 켜기)"); return@setOnClickListener }
                 if (Store.current == null) { message("먼저 '출조 시작'을 눌러주세요"); return@setOnClickListener }
-                Store.addCatch(q.slot)
+                val n = Store.addCatch(q.slot)
                 Haptics.slot(a, 1)
+                ButtonRouter.feedback(a, q.slot, n)   // v7.16 (444)
             }
             setOnLongClickListener {
                 if (Store.current == null) return@setOnLongClickListener true
-                if (Store.removeLastOf(q.slot)) message("${Store.current?.name(q.slot) ?: q.name} 마지막 기록을 지웠어요 (−1)")
+                if (Store.removeLastOf(q.slot).also { if (it) ButtonRouter.undoFeedback(a, q.slot) }) message("${Store.current?.name(q.slot) ?: q.name} 마지막 기록을 지웠어요 (−1)")
                 true
             }
         }
