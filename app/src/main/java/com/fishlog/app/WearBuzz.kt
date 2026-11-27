@@ -15,9 +15,9 @@ import android.os.Build
  */
 object WearBuzz {
     private const val ID = 7301
-    private const val CH1 = "wear_count1"
-    private const val CH2 = "wear_count2"
-    private const val CHU = "wear_undo"
+    private const val CH1 = "wear_count1_v2"
+    private const val CH2 = "wear_count2_v2"
+    private const val CHU = "wear_undo_v2"   // v7.17 (445): 진동 길게 → 새 채널 (예전 채널은 진동을 못 바꿔서 지움)
 
     private fun prefs(c: Context) = c.getSharedPreferences("fishlog", Context.MODE_PRIVATE)
     fun on(c: Context) = prefs(c).getBoolean("wear_buzz", false)
@@ -28,18 +28,19 @@ object WearBuzz {
 
     private fun channels(nm: NotificationManager) {
         if (Build.VERSION.SDK_INT < 26) return
+        listOf("wear_count1", "wear_count2", "wear_undo").forEach { try { nm.deleteNotificationChannel(it) } catch (_: Exception) {} }
         fun ch(id: String, name: String, pattern: LongArray) {
             if (nm.getNotificationChannel(id) != null) return
             nm.createNotificationChannel(NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "리모컨으로 셀 때 워치를 울려요"
+                description = "조과를 셀 때 워치를 울려요"
                 setSound(null, null)
                 enableVibration(true); vibrationPattern = pattern
                 setShowBadge(false)
             })
         }
-        ch(CH1, "⌚ 워치 진동 · 1번", longArrayOf(0, 250))
-        ch(CH2, "⌚ 워치 진동 · 2번 이상", longArrayOf(0, 200, 150, 200))
-        ch(CHU, "⌚ 워치 진동 · 취소", longArrayOf(0, 700))
+        ch(CH1, "⌚ 워치 진동 · 1번", longArrayOf(0, 1000))
+        ch(CH2, "⌚ 워치 진동 · 2번 이상", longArrayOf(0, 500, 200, 500))
+        ch(CHU, "⌚ 워치 진동 · 취소", longArrayOf(0, 2000))
     }
 
     /** 리모컨으로 한 마리 셈 */
