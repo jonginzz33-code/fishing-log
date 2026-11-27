@@ -74,6 +74,8 @@ details summary{cursor:pointer;font-weight:800}
 .seg button{background:transparent;color:#DDEAF2;border:0;border-left:1.5px solid #3A6A88;padding:7px 12px;font:800 14px inherit;font-family:inherit;cursor:pointer}
 .seg button:first-child{border-left:0}
 .seg button.on{background:var(--ok);color:#04222A}
+.secdiv{display:flex;align-items:center;gap:8px;margin:12px 0 10px;color:var(--sky);font-weight:800;font-size:13.5px;white-space:nowrap}
+.secdiv::before,.secdiv::after{content:'';flex:1;border-top:2px solid #3A6A88}
 .nextq{display:inline-block;margin:0 0 10px;padding:4px 12px;border-radius:10px;background:#0F2231;border:1.5px solid var(--line);font:800 15px ui-monospace,Consolas,monospace;color:var(--sky)}
 .selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub)}
 .selbar #selN{flex:1;min-width:120px}
@@ -275,8 +277,9 @@ body.noscroll{overflow:hidden}
       <button class="btn ghost sm" id="selClear" disabled>고르기 풀기</button>
       <button class="btn bad sm" id="selDel" disabled>🗑 고른 0개 빼기</button>
     </div>
-    <table class="list" id="list" style="margin-bottom:14px"></table>
-    <div class="lead" id="cycle" style="margin:8px 0 0"></div>
+    <table class="list" id="list"></table>
+    <div class="secdiv">⚙ 감시 설정</div>
+    <div class="lead" id="cycle" style="margin:0"></div>
     <div class="row" style="margin:10px 0">
       <span style="font-size:14px">⏱ 확인 간격</span>
       <select id="every" style="background:#0F2231;color:var(--text);border:1.5px solid #3A6A88;border-radius:12px;padding:8px 10px;font-size:15px;font-family:inherit">
