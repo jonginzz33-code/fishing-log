@@ -63,6 +63,9 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.prog{margin:0 0 6px}
+.prog .bar{height:8px;background:#0F2231;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.prog .bar i{display:block;height:100%;width:3%;background:var(--ok);transition:width .6s}
 .tile.click{cursor:pointer}
 .tile.click:hover,.tile.click.on{border-color:var(--ok)}
 .tile small{display:block;font-size:11.5px;color:var(--sky);margin-top:2px}
@@ -219,6 +222,9 @@ body.noscroll{overflow:hidden}
       <button class="btn ok sm" id="refreshAll">🔄 전체 확인</button>
       <button class="btn ghost sm" id="pause">⏸ 잠시 멈춤</button>
     </div>
+    <div class="prog hide" id="wProg"><div class="bar"><i id="wBar"></i></div></div>
+    <div class="msg" id="wMsg" style="margin:-2px 0 4px"></div>
+    <div class="lead" style="margin:0 0 10px;font-size:13px">⏱ <span id="wNext"></span></div>
     <div class="filter" id="filter">
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
@@ -336,11 +342,12 @@ body.noscroll{overflow:hidden}
         '</td><td class="x"><button class="btn bad sm" data-del="' + r.i + '">삭제</button></td></tr>';
     }).join('') || '<tr><td style="color:var(--sub)">해당하는 제품이 없어요</td></tr>';
   }
-  function setCfg(body) {
-    $('msg').textContent = '저장 중…';
-    call('settings', { method: 'POST', body: body }).then(function (j) { $('msg').textContent = j.msg || j.error || ''; load(); });
+  function setCfg(body, out) {
+    out = out || 'msg';
+    $(out).textContent = '저장 중…';
+    call('settings', { method: 'POST', body: body }).then(function (j) { $(out).textContent = j.msg || j.error || ''; load(); });
   }
-  $('every').onchange = function () { setCfg({ every: +$('every').value }); };
+  $('every').onchange = function () { setCfg({ every: +$('every').value }, 'wMsg'); };
   // 조회 안 하는 시간 (퇴근 뒤 · 주말)
   for (var hh = 0; hh < 24; hh++) { $('qFrom').add(new Option(hh, hh)); $('qTo').add(new Option(hh, hh)); }
   function showQuiet(q) {
@@ -355,26 +362,40 @@ body.noscroll{overflow:hidden}
     };
   });
   // 전체 목록을 지금 바로 한 바퀴 확인 (묶음마다 따로 요청)
+  // 진행 막대 + 글자 (버튼 바로 밑) · 경과 시간은 1초마다
+  var progT = null;
+  function prog(pct, text) {
+    $('wProg').classList.toggle('hide', pct == null);
+    if (pct != null) $('wBar').style.width = Math.max(3, Math.min(100, pct)) + '%';
+    $('wMsg').textContent = text;
+  }
   $('refreshAll').onclick = function () {
-    var btn = $('refreshAll'), n = data.groups || 1, i = 0, ok = 0, fail = 0, re = 0;
+    var btn = $('refreshAll'), n = data.groups || 1, total = data.watch.length, i = 0, ok = 0, fail = 0, re = 0, t0 = Date.now(), step = '';
     btn.disabled = true;
+    var show = function () {
+      var sec = Math.round((Date.now() - t0) / 1000);
+      prog(i / n * 100 + 100 / n * 0.15, '🔄 ' + step + ' · 지금까지 성공 ' + ok + ' · 실패 ' + fail + ' · ' + sec + '초 지남');
+    };
+    clearInterval(progT); progT = setInterval(show, 1000);
     (function next() {
       if (i >= n) {
-        btn.disabled = false;
-        $('msg').textContent = '전체 확인 끝 · 성공 ' + ok + ' · 실패 ' + fail + (re ? ' · 재입고 ' + re + '건 (휴대폰 알림 보냄)' : '');
+        clearInterval(progT); btn.disabled = false;
+        prog(100, '✅ 전체 확인 끝 (' + Math.round((Date.now() - t0) / 1000) + '초) · ' + total + '개 중 성공 ' + ok + ' · 실패 ' + fail + (re ? ' · 재입고 ' + re + '건 (휴대폰 알림 보냄)' : ' · 새로 들어온 것 없음'));
+        setTimeout(function () { $('wProg').classList.add('hide'); }, 4000);
         load();
         return;
       }
-      $('msg').textContent = '전체 확인 중… ' + (i + 1) + '/' + n + '묶음';
+      step = (i + 1) + '/' + n + '묶음 지오팜에서 조회 중 (묶음마다 10초쯤)';
+      show();
       call('run?slot=' + i, { method: 'POST' }).then(function (j) {
         var m = /성공 (\d+) · 실패 (\d+)(?: · 재입고 (\d+))?/.exec(j.msg || '');
         if (m) { ok += +m[1]; fail += +m[2]; re += +(m[3] || 0); }
-        else if (j.msg || j.error) { btn.disabled = false; $('msg').textContent = j.msg || j.error; return; }
+        else if (j.msg || j.error) { clearInterval(progT); btn.disabled = false; prog(null, '⚠ ' + (j.msg || j.error)); return; }
         i++; next();
       });
     })();
   };
-  $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }); };
+  $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }, 'wMsg'); };
   $('lq').oninput = render;
   $('filter').onclick = function (e) {
     var f = e.target.getAttribute('data-f'); if (!f) return;
@@ -692,6 +713,16 @@ body.noscroll{overflow:hidden}
   var autoAt = 0;
   function tick() {
     var now = Date.now();
+    // 예전 품절 감시: 다음 자동 확인 (서버는 every 분의 배수가 되는 분에 한 묶음 확인)
+    var st0 = data.settings;
+    if (st0) {
+      if (st0.paused) $('wNext').textContent = '자동 확인 멈춤';
+      else if (data.quietNow) $('wNext').textContent = '🌙 쉬는 시간이라 자동 확인 안 해요';
+      else {
+        var ms = st0.every * 60000, nx = Math.ceil((now + 1) / ms) * ms, left = Math.round((nx - now) / 1000);
+        $('wNext').textContent = '다음 자동 확인(한 묶음) ' + new Date(nx).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' }) + ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' 남음';
+      }
+    }
     // 확인 시간이 지나고 1분 반쯤 됐으면 서버 결과를 한 번 다시 불러옴 (2분에 한 번까지)
     var late = [].some.call(document.querySelectorAll('.cd'), function (el) { var d = +el.getAttribute('data-due'); return d && now - d > 90000; });
     if (late && !data.quietNow && now - autoAt > 120000 && !document.hidden) { autoAt = now; load(); }
