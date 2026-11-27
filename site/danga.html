@@ -12,7 +12,7 @@
 html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;line-height:1.5;-webkit-text-size-adjust:100%}
 a{color:inherit;text-decoration:none}
 button,input,select,textarea{font:inherit;color:inherit}
-.wrap{max-width:1100px;margin:0 auto;padding:0 14px 80px}
+.wrap{max-width:1100px;margin:0 auto;padding:0 14px 120px}
 nav{display:flex;align-items:center;gap:10px;padding:14px 0;padding-right:52px;border-bottom:1px solid #1E3446}
 .logo{font-size:19px;font-weight:900}.logo span{color:var(--sky)}
 nav h1{font-size:17px;margin:0 0 0 4px}
@@ -71,6 +71,14 @@ nav{justify-content:flex-start!important}
 .parts{font-size:12.5px;margin:6px 0}
 .parts div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dotted #22404F}
 .hide{display:none!important}
+.picbox{max-height:45vh;overflow:auto;margin-top:6px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.picbox img{width:100%;display:block}
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(10,22,32,.94);border-top:1px solid #2C4F66;padding:10px 14px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;justify-content:center}
+.savebar .btn{min-width:150px;min-height:46px;font-size:16px}
+.savebar .btn.need{background:var(--good);border-color:var(--good);color:#04222A}
+.savebar span{font-size:12px;color:var(--sub);max-width:50%}
+#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);background:#16324A;border:1px solid var(--sky);border-radius:12px;padding:9px 14px;font-size:14px;z-index:60;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
 .qbar{display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
 @media (min-width:760px){.qbar{flex-wrap:wrap}}
 .chk{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1.3px solid var(--line);border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:#0D1F2D}
@@ -91,6 +99,8 @@ nav{justify-content:flex-start!important}
 </div>
 
 <div id="modal" class="modal hide"><div class="sheet" id="sheet"></div></div>
+<div class="savebar hide" id="savebar"><button class="btn" id="saveBtn">💾 저장</button><span id="saveMsg"></span></div>
+<div id="toast"></div>
 
 <script src="/__/firebase/10.14.1/firebase-app-compat.js"></script>
 <script src="/__/firebase/10.14.1/firebase-auth-compat.js"></script>
@@ -128,11 +138,12 @@ function save() {
   clearTimeout(cloudT); setCloud('☁ 저장 대기…');
   cloudT = setTimeout(function () {
     if (j.length > 900000) { setCloud('⚠ 자료가 너무 커서 클라우드에 못 올려요'); return; }
-    CLOUD.set({ j: j, t: Date.now() }).then(function () { lastAgs = j; setCloud('☁ 저장됨 ' + new Date().toTimeString().slice(0, 5)); })
+    CLOUD.set({ j: j, t: Date.now() }).then(function () { lastAgs = j; setCloud('☁ 저장됨 ' + new Date().toTimeString().slice(0, 5)); paintSave(); })
       .catch(function (e) { setCloud('⚠ 클라우드 저장 실패 · ' + (e.code || e.message)); });
   }, 1200);
 }
-function setCloud(m) { cloudMsg = m; var el = document.getElementById('cloud'); if (el) el.textContent = m; }
+function setCloud(m) { cloudMsg = m; var el = document.getElementById('cloud'); if (el) el.textContent = m; if (typeof paintSave === 'function') paintSave(); }
+document.getElementById('saveBtn').onclick = function () { var a = document.activeElement; if (a && a.blur) a.blur(); setTimeout(saveNow, 50); };
 var IMGS = {}; // 참고용 사진 (이 기기에서만 · 저장 안 함)
 
 // ── 탭 ──
@@ -146,6 +157,7 @@ document.getElementById('tabs').onclick = function (e) { var t = e.target.closes
 
 function render() {
   renderTabs();
+  document.getElementById('savebar').classList.remove('hide'); setTimeout(paintSave, 0);
   var v = document.getElementById('view');
   if (S.tab === 'cmp') v.innerHTML = cmpHtml();
   else if (S.tab === 'sheet') v.innerHTML = sheetHtml();
@@ -306,7 +318,7 @@ function showItem(id) {
 
 // ── 단가표 입력 탭 ──
 function sheetHtml() {
-  var h = '<p class="sub">업체마다 단가표 사진과 같은 모양의 표예요. 바뀐 숫자만 고치면 돼요. 칸을 누르고 숫자 입력 → 다음 칸은 Enter. 엑셀 등에서 여러 칸 복사해 붙여 넣기도 돼요.</p>';
+  var h = '<p class="sub">업체마다 단가표 사진을 올려 두고(📷) 같은 모양의 표에 바뀐 숫자만 고치면 돼요. 다 하면 아래 💾 저장. 칸을 누르고 숫자 입력 → 다음 칸은 Enter. 엑셀 등에서 여러 칸 복사해 붙여 넣기도 돼요.</p>';
   S.ags.forEach(function (a, ai) {
     var nRows = 0; a.sections.forEach(function (s) { nRows += s.rows.length; });
     var ch = changedCount(a);
@@ -314,8 +326,10 @@ function sheetHtml() {
       '<input type="text" value="' + esc(a.date) + '" data-agdate="' + ai + '" placeholder="날짜 11/27" style="width:96px"></h2>' +
       '<p class="sub">모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' + (a.prev ? ' · 바뀐 칸 <b style="color:var(--yel)" id="chg' + ai + '">' + ch + '</b>개 (노란 칸 · 이전 ' + esc(a.prevDate || '') + ' 대비)' : '') + '</p>' +
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
-      '<label class="btn sm" style="display:inline-flex;align-items:center">📷 사진 띄워 놓기<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
-      (IMGS[a.id] ? '<div class="thumbs">' + IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '<span class="sub">누르면 크게 · 이 기기에서만</span></div>' : '');
+      '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
+      (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
+        IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
+        : a.imgN ? '<p class="sub">⏳ 사진 불러오는 중…</p>' : '');
     if (!a.sections.length) h += '<div class="note">아직 표가 없어요. <button class="btn sm" data-tpl="' + ai + '">＋ 기본 양식 만들기</button> (115 · 95 · 85/75 · 70/61 · 55/47/44 · 37/33군 열)</div>';
     a.sections.forEach(function (s, si) { h += secHtml(ai, si, s); });
     if (a.notes.length) h += '<details style="margin-top:8px"><summary class="sub" style="cursor:pointer">📝 메모 ' + a.notes.length + '개</summary><ul class="sub">' + a.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></details>';
@@ -533,8 +547,58 @@ function cleanRule(r) {
 }
 function arr(x) { return Array.isArray(x) ? x.map(String).filter(Boolean) : []; }
 function shrink(file) {
-  return new Promise(function (res) { var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.readAsDataURL(file); });
+  return new Promise(function (res, rej) {
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var max = 2000, d, q, k;
+      for (;;) {
+        k = Math.min(1, max / Math.max(img.width, img.height));
+        var c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        for (q = 0.85; q >= 0.5; q -= 0.07) { d = c.toDataURL('image/jpeg', q); if (d.length < 880000) break; }
+        if (d.length < 880000 || max < 900) break;
+        max = Math.round(max * 0.8);
+      }
+      URL.revokeObjectURL(url); res(d);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('사진을 못 열었어요')); };
+    img.src = url;
+  });
 }
+// 사진 클라우드 저장: adminNotes/danga_img_{업체id}_{번호} {d, t} · 업체에 imgN · imgAt
+var IMG_DIRTY = {};
+function imgDoc(aid, k) { return firebase.firestore().collection('adminNotes').doc('danga_img_' + aid + '_' + k); }
+function saveImgs(a) {
+  if (!CLOUD) return Promise.reject(new Error('로그인해야 사진이 저장돼요'));
+  var list = IMGS[a.id] || [], old = a.imgN || 0, t = Date.now();
+  var jobs = list.map(function (d, k) { return imgDoc(a.id, k).set({ d: d, t: t }); });
+  for (var k = list.length; k < old; k++) jobs.push(imgDoc(a.id, k).delete());
+  return Promise.all(jobs).then(function () { a.imgN = list.length; a.imgAt = t; delete IMG_DIRTY[a.id]; });
+}
+function loadImgs() {
+  S.ags.forEach(function (a) {
+    if (!a.imgN || IMGS[a.id]) return;
+    var got = [];
+    for (var k = 0; k < a.imgN; k++) got.push(imgDoc(a.id, k).get().then(function (x) { return (x.data() || {}).d; }));
+    Promise.all(got).then(function (u) { u = u.filter(Boolean); if (u.length) { IMGS[a.id] = u; if (S.tab === 'sheet') render(); } }).catch(function () {});
+  });
+}
+// 💾 저장 버튼: 표 · 정책 · 구두 + 새 사진 바로 저장
+function saveNow() {
+  var btn = document.getElementById('saveBtn');
+  if (!CLOUD) { try { ls(LS, JSON.stringify(S)); } catch (e) {} toast('이 기기에 저장했어요 (로그인하면 클라우드에도)'); return; }
+  btn.disabled = true; btn.textContent = '⏳ 저장 중…';
+  var jobs = S.ags.filter(function (a) { return IMG_DIRTY[a.id]; }).map(saveImgs);
+  Promise.all(jobs).then(function () {
+    clearTimeout(cloudT); var j = JSON.stringify(S.ags); ls(LS, JSON.stringify(S));
+    return CLOUD.set({ j: j, t: Date.now() }).then(function () { lastAgs = j; });
+  }).then(function () { setCloud('☁ 저장됨 ' + new Date().toTimeString().slice(0, 5)); toast('✅ 저장했어요'); render(); })
+    .catch(function (e) { toast('❌ 저장 실패 · ' + (e.code || e.message)); })
+    .then(function () { btn.disabled = false; btn.textContent = '💾 저장'; paintSave(); });
+}
+function dirty() { return Object.keys(IMG_DIRTY).length > 0 || (CLOUD && JSON.stringify(S.ags) !== lastAgs); }
+function paintSave() { var b = document.getElementById('saveBtn'); if (b && !b.disabled) b.classList.toggle('need', !!dirty()); var m = document.getElementById('saveMsg'); if (m) m.textContent = dirty() ? '저장 안 된 변경 있음' : cloudMsg; }
+function toast(m) { var t = document.getElementById('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(t._t); t._t = setTimeout(function () { t.classList.remove('on'); }, 2200); }
 
 // ── 시트 ──
 function openSheet(html, after) {
@@ -585,7 +649,8 @@ view.addEventListener('click', function (e) {
 });
 view.addEventListener('change', function (e) {
   var t = e.target, d = t.dataset;
-  if (d.pic) { var ap = S.ags[+d.pic]; Promise.all([].map.call(t.files, shrink)).then(function (u) { IMGS[ap.id] = u; render(); }); return; }
+  if (d.pic) { var ap = S.ags[+d.pic]; if (!t.files.length) return; toast('⏳ 사진 줄이는 중…');
+    Promise.all([].map.call(t.files, shrink)).then(function (u) { IMGS[ap.id] = u; IMG_DIRTY[ap.id] = 1; render(); paintSave(); toast('사진을 넣었어요 · 아래 💾 저장을 눌러 주세요'); }).catch(function (er) { toast('❌ ' + er.message); }); return; }
   if (d.agdate) { S.ags[+d.agdate].date = t.value.trim(); save(); return; }
   if (d.vas) { var k = d.vas, on = t.checked; if (k === 'insSwap') S.sc.ins = on ? 'swap' : 'none'; else if (k === 'insSafe') S.sc.ins = on ? 'safe' : 'none'; else S.sc[k] = on; save(); render(); return; }
   if (t.id === 'imp') { var f = t.files[0]; if (!f) return; f.text().then(function (s) { var j = JSON.parse(s); if (!j.ags) throw 0; S.ags = j.ags; load2(); save(); render(); alert('가져왔어요'); }).catch(function () { alert('파일을 못 읽었어요'); }); return; }
@@ -673,11 +738,12 @@ function start() {
       var x = d.data();
       if (x && x.j) { try { S.ags = JSON.parse(x.j); load2(); lastAgs = x.j; ls(LS, JSON.stringify(S)); setCloud('☁ 불러옴 ' + new Date(x.t).toLocaleString('ko-KR')); } catch (e) {} }
       else setCloud('☁ 아직 클라우드에 자료가 없어요');
-      CLOUD = ref;
+      CLOUD = ref; loadImgs();
       return importHash();
     }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { save(); render(); });
   });
 }
+window.addEventListener('beforeunload', function (e) { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
 start();
 })();
 </script>
