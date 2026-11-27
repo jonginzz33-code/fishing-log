@@ -1,0 +1,58 @@
+name: Danga dump (encrypted)
+# 단가 자료(adminNotes/danga*)를 꺼내 공개키로 암호화한 파일로만 내보냄 · 로그에 내용 안 찍음 · 하루 뒤 자동 삭제
+on:
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read and encrypt
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -e
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          pip install -q google-auth requests
+          cat > "$RUNNER_TEMP/pub.pem" <<'KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAvjkbxRGev5d44jti0sEQ
+          cD2zmhkh6qiFnEoOoXAMd3yrem89VTf1FiysAGb0p5pSce/oEYDO4r3dR3Qjf+vr
+          SZAC7jtES1Dp5s+EXMxM9/NpceAQTNrrKsFWYxMopCJiZZv3qjmUsYnEOheE+HbS
+          F/OGc78nyIK0O3zDigNpeNFUhtoe86IYrz23fI+75zUdxLkZpi3DU39nxrlwqjdx
+          pcKmSw0nuZXwHNAiemDSuTq9qrcgA0ecs3f6sTFMTp22VLgjYKyLU7Tym7MghGJ/
+          3cE4cIvBh4uQ2TfGES414iIdooW8HYfYheZp09e/gs9PeoJP+yLwrhtyl1XKKXle
+          NjFYzg+WMVxE0jkrZLLLPzkyPNxofqHp46/dzG2ebLz06664/uctbjl10uiWDbWh
+          1RTON4suzjarSvGx7MHvp46BeU4Yjxf3FXvd1x0YwDV8XJ5gMDQBFfO0CS5KB0w3
+          l7cr52G/JWqU8Ll8jJixnPEc00HOGbpLzoyAYBUH3A6RAgMBAAE=
+          -----END PUBLIC KEY-----
+          KEY
+          sed -i 's/^ *//' "$RUNNER_TEMP/pub.pem"
+          cat > "$RUNNER_TEMP/d.py" <<'PY'
+          import json, os, requests
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          cr = service_account.Credentials.from_service_account_file(os.environ['RUNNER_TEMP'] + '/sa.json', scopes=['https://www.googleapis.com/auth/datastore'])
+          cr.refresh(Request())
+          base = 'https://firestore.googleapis.com/v1/projects/fishing-log-9109d/databases/(default)/documents/adminNotes'
+          out, tok = [], None
+          while True:
+              r = requests.get(base, params={'pageSize': 100, **({'pageToken': tok} if tok else {})}, headers={'Authorization': 'Bearer ' + cr.token}, timeout=60)
+              r.raise_for_status(); j = r.json()
+              out += [d for d in j.get('documents', []) if d['name'].split('/')[-1].startswith('danga')]
+              tok = j.get('nextPageToken')
+              if not tok: break
+          open(os.environ['RUNNER_TEMP'] + '/dump.json', 'w').write(json.dumps(out))
+          print('docs', len(out))
+          PY
+          sed -i 's/^          //' "$RUNNER_TEMP/d.py"
+          python "$RUNNER_TEMP/d.py"
+          cd "$RUNNER_TEMP"
+          openssl rand -out k.bin 32
+          openssl enc -aes-256-cbc -pbkdf2 -pass file:k.bin -in dump.json -out dump.enc
+          openssl pkeyutl -encrypt -pubin -inkey pub.pem -in k.bin -out k.enc
+          mkdir -p out && mv dump.enc k.enc out/ && rm -f dump.json k.bin sa.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: danga-enc
+          path: ${{ runner.temp }}/out
+          retention-days: 1
