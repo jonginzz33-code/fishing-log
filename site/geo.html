@@ -281,6 +281,10 @@ body.noscroll{overflow:hidden}
       <b>➕ 제품 추가</b> <span style="color:var(--sub);font-size:12.5px">지오팜 전체 제품 <span class="pN"></span> 중에서 골라 감시 목록에 넣어요</span>
       <div class="ac" style="margin-top:6px"><input id="wQ" placeholder="제품 이름 또는 제품코드 (예: 타이레놀 500 · 021753)" autocomplete="off"><div class="acl hide" id="wAcl"></div></div>
     </div>
+    <div class="wadd">
+      <b>➖ 제품 빼기</b> <span style="color:var(--sub);font-size:12.5px">감시 목록 <span id="wDN"></span> 중에서 골라 빼요</span>
+      <div class="ac" style="margin-top:6px"><input id="wD" placeholder="감시 중인 제품 이름 또는 제품코드" autocomplete="off"><div class="acl hide" id="wDAcl"></div></div>
+    </div>
     <div class="filter" id="filter">
       <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
     </div>
@@ -473,6 +477,7 @@ body.noscroll{overflow:hidden}
     var c = { in: 0, sold: 0, fail: 0, new: 0 };
     data.watch.forEach(function (w) { c[state(w[0])]++; });
     $('cnt').textContent = '(' + data.watch.length + '개 · 재고 있음 ' + c.in + ' · 품절 ' + c.sold + ')';
+    $('wDN').textContent = '(' + data.watch.length + '개)';
     // 고른 것 중 목록에서 사라진 건 정리
     var codes = {}; data.watch.forEach(function (w) { codes[w[1]] = 1; });
     Object.keys(wSel).forEach(function (k) { if (!codes[k]) delete wSel[k]; });
@@ -599,6 +604,47 @@ body.noscroll{overflow:hidden}
     }
     if (e.key === 'Enter' && open && wRows.length) { e.preventDefault(); wPick(wOn >= 0 ? wOn : 0); }
     if (e.key === 'Escape') $('wAcl').classList.add('hide');
+  };
+
+  // ➖ 제품 빼기: 감시 목록(watch) 안에서 자동완성으로 찾아서 빼기
+  var dRows = [], dOn = -1;
+  function dShow() {
+    var words = $('wD').value.toLowerCase().split(/\s+/).filter(Boolean), box = $('wDAcl');
+    dOn = -1;
+    dRows = data.watch.filter(function (w) {
+      var s = (w[0] + ' ' + w[1]).toLowerCase().replace(/\s+/g, '') + ' ' + w[1];
+      return words.every(function (x) { return s.indexOf(x) >= 0; });
+    }).slice(0, 60);
+    box.innerHTML = dRows.map(function (w, i) {
+      var st = state(w[0]), tag = st === 'in' ? '재고 있음' : st === 'sold' ? '품절' : st === 'fail' ? '실패' : '확인 전';
+      return '<div data-i="' + i + '">➖ ' + esc(w[0]) + '<small>' + esc(w[1]) + ' · ' + tag + '</small></div>';
+    }).join('') || '<div class="have">감시 목록에 그런 제품이 없어요</div>';
+    box.classList.remove('hide');
+  }
+  function dPick(i) {
+    var w = dRows[i]; if (!w) return;
+    $('wDAcl').classList.add('hide');
+    if (!confirm('감시 목록에서 뺄까요?\n' + w[0])) return;
+    $('wMsg').textContent = '빼는 중…';
+    save(data.watch.filter(function (x) { return x[1] !== w[1]; })).then(function (j) {
+      $('wMsg').textContent = j.error ? '⚠ ' + j.error : '🗑 감시 목록에서 뺐어요: ' + w[0] + ' (남은 ' + j.count + '개)';
+      if (!j.error) { $('wD').value = ''; load(); }
+    });
+  }
+  $('wD').oninput = dShow;
+  $('wD').onfocus = dShow; // 비어 있어도 누르면 감시 목록 전체
+  $('wD').onblur = function () { setTimeout(function () { $('wDAcl').classList.add('hide'); }, 150); };
+  $('wDAcl').onmousedown = function (e) { var d = e.target.closest('[data-i]'); if (d) { e.preventDefault(); dPick(+d.getAttribute('data-i')); } };
+  $('wD').onkeydown = function (e) {
+    var open = !$('wDAcl').classList.contains('hide');
+    if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      dOn = Math.max(0, Math.min(dRows.length - 1, dOn + (e.key === 'ArrowDown' ? 1 : -1)));
+      [].forEach.call($('wDAcl').children, function (d, i) { d.classList.toggle('on', i === dOn); if (i === dOn) d.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    if (e.key === 'Enter' && open && dRows.length) { e.preventDefault(); dPick(dOn >= 0 ? dOn : 0); }
+    if (e.key === 'Escape') $('wDAcl').classList.add('hide');
   };
 
   $('pause').onclick = function () { setCfg({ paused: !(data.settings && data.settings.paused) }, 'wMsg'); };
