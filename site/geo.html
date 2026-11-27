@@ -117,6 +117,9 @@ body.noscroll{overflow:hidden}
 .log .lt{font-weight:800}
 .log .lb{white-space:pre-line;color:#DDEAF2;margin-top:2px}
 .log .lm{color:var(--sub);font-size:12px;margin-top:2px}
+.log .gone{text-decoration:line-through;text-decoration-thickness:2px;color:#8FA3B3}
+.log .fate{font-size:12.5px;margin:1px 0 4px 10px;color:#9FB4C4}
+.log .fate.out{color:#FF9B8A}.log .fate.dn{color:#FFD27A}.log .fate.re{color:#7EE2B8}
 .push{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 .push .sub{color:var(--sub);font-size:13px}
 .push.on{border-color:var(--ok)}
@@ -1191,6 +1194,51 @@ body.noscroll{overflow:hidden}
   });
 
   // ───── 알람 기록 (알람전송완료 칸을 누르면 펼침) ─────
+  // 알림 뒤에 그 제품이 어떻게 됐는지 (입고 기록 + 지금 재고로): 품절됐으면 줄 긋고 '몇 시쯤 품절 · N개 소진'
+  var logHist = [];
+  function hm(t) { return new Date(t).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' }); }
+  function dur(ms) { var m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? m + '분' : Math.floor(m / 60) + '시간' + (m % 60 ? ' ' + m % 60 + '분' : ''); }
+  function nowStock(name, pn) { // 지금 재고 (마지막 확인 기준) · 모르면 null
+    if (pn != null) {
+      var nd = (data.needs || []).find(function (x) { return x.name === name && (x.pn || '') === pn; });
+      var s = nd && (data.needState || {})[nd.id];
+      return s && typeof s.n === 'number' ? s.n : null;
+    }
+    var it = (data.items || {})[name];
+    return it && it.lv >= 0 && typeof it.n === 'number' ? it.n : null;
+  }
+  function fate(name, pn, t0, n0) {
+    var ev = logHist.filter(function (e) { return e.name === name && e.t > t0 + 1000 && (pn == null ? e.src !== 'need' : e.src === 'need' && (e.pn || '') === pn); }).sort(function (a, b) { return a.t - b.t; });
+    var last = n0, sold = 0, lastT = 0;
+    for (var i = 0; i < ev.length; i++) {
+      var e = ev[i];
+      if (e.ev === 'chg') { if (e.was != null) last = e.was; if (e.n < last) sold += last - e.n; last = e.n; lastT = e.t; }
+      else if (e.ev === 'out') {
+        sold += last;
+        var re = ev.slice(i + 1).find(function (x) { return x.ev === 'in'; });
+        return { cls: 'out', gone: true, txt: '→ ' + hm(e.t) + '쯤 품절 · ' + sold + '개 소진 (알림 ' + dur(e.t - t0) + ' 만)' + (re ? ' · ' + hm(re.t) + ' 다시 입고 ' + re.n + '개' : '') };
+      }
+    }
+    var cur = nowStock(name, pn);
+    if (cur != null && cur !== last) { if (cur < last) sold += last - cur; last = cur; }
+    if (cur === 0) return { cls: 'out', gone: true, txt: '→ 품절 · ' + (sold || n0) + '개 소진' };
+    if (sold > 0) return { cls: 'dn', txt: '→ ' + sold + '개 소진 · 지금 ' + last + '개' + (lastT ? ' (' + hm(lastT) + '쯤 바뀜)' : '') };
+    if (cur != null && cur > n0) return { cls: 're', txt: '→ 더 들어옴 · 지금 ' + cur + '개' };
+    if (cur != null) return { cls: '', txt: '→ 그대로 ' + cur + '개' };
+    return null;
+  }
+  function logBody(r) {
+    var isWatch = /^재입고/.test(r.title), isNeed = /^재고 들어옴/.test(r.title);
+    if (!r.ok || !(isWatch || isNeed) || r.test || /테스트/.test(r.title)) return esc(r.body || '');
+    return String(r.body || '').split('\n').map(function (line) {
+      var name, pn = null, n0, m;
+      if (isWatch && (m = /^(.*) \(재고 (\d+)\)$/.exec(line.trim()))) { name = m[1]; n0 = +m[2]; }
+      else if (isNeed) { var p = line.split(' · '); m = /지금 재고 (\d+)/.exec(line); if (p.length >= 2 && m) { pn = p[0]; name = p[1]; n0 = +m[1]; } }
+      var f = name ? fate(name, pn, r.t, n0) : null;
+      if (!f) return '<div>' + esc(line) + '</div>';
+      return '<div' + (f.gone ? ' class="gone"' : '') + '>' + esc(line) + '</div><div class="fate ' + f.cls + '">' + esc(f.txt) + '</div>';
+    }).join('');
+  }
   function renderLog() {
     var noTest = $('logNoTest').checked; // ☑ 테스트 제거 (기본) → 테스트 알림 숨김
     var log = (data.notifyLog || []).filter(function (r) { return !noTest || !(r.test || /테스트/.test(r.title)); });
@@ -1198,12 +1246,15 @@ body.noscroll{overflow:hidden}
       var tag = r.ok ? '<span class="b g">✅ 보냄</span>' : '<span class="b f">⚠ 실패</span>';
       if (r.test || /테스트/.test(r.title)) tag += ' <span class="b u">테스트</span>';
       return '<div class="li"><div class="lt">' + tag + ' <span class="sv sm">🔔 ' + whenDate(r.t) + '</span> ' + esc(r.title) + '</div>' +
-        '<div class="lb">' + esc(r.body || '') + '</div>' +
+        '<div class="lb">' + logBody(r) + '</div>' +
         '<div class="lm">' + (r.ok ? (r.via ? esc(r.via) + '로 보냄' : '') : '이유: ' + esc(r.why || '')) + '</div></div>';
     }).join('') || '<div style="color:var(--sub)">아직 알람 기록이 없어요.</div>';
   }
   // 팝업 열기 / 닫기 (바깥 어두운 곳 · 닫기 · 뒤로가기 키 · Esc)
-  function logOpen() { renderLog(); $('logBox').classList.remove('hide'); document.body.classList.add('noscroll'); $('logList').scrollTop = 0; }
+  function logOpen() {
+    renderLog();
+    call('history?days=3').then(function (j) { if (j && j.events) { logHist = j.events; renderLog(); } }); // 알림 뒤 품절 · 소진 표시용
+    $('logBox').classList.remove('hide'); document.body.classList.add('noscroll'); $('logList').scrollTop = 0; }
   function logShut() { $('logBox').classList.add('hide'); document.body.classList.remove('noscroll'); }
   $('logTile').onclick = logOpen;
   // ───── 📊 입고 기록 전체보기 (서버에 날짜별로 쌓인 입고 · 품절 기록) ─────
@@ -1237,7 +1288,7 @@ body.noscroll{overflow:hidden}
       '<div class="hh">📅 요일별 입고</div>' + bars('월화수목금토일'.split('').reduce(function (o, d) { if (byDay[d + '요일']) o[d + '요일'] = byDay[d + '요일']; return o; }, {}), 7, true) +
       '<div class="hh">📜 전체 기록 (최신 순 · ' + list.length + '건)</div>' +
       '<table class="hl">' + list.map(function (e) {
-        return '<tr><td style="white-space:nowrap">' + whenDate(e.t) + '</td><td>' + (e.ev === 'in' ? '<span class="b g">입고</span>' : '<span class="b s">품절</span>') + '</td><td>' + esc(e.name) + (e.pn ? '<br><small style="color:var(--sub)">' + esc(e.pn) + '</small>' : '') + '</td><td style="text-align:right">' + (e.ev === 'in' ? e.n + '개' : '') + '</td></tr>';
+        return '<tr><td style="white-space:nowrap">' + whenDate(e.t) + '</td><td>' + (e.ev === 'in' ? '<span class="b g">입고</span>' : e.ev === 'chg' ? '<span class="b u">' + (e.n < e.was ? '소진' : '추가') + '</span>' : '<span class="b s">품절</span>') + '</td><td>' + esc(e.name) + (e.pn ? '<br><small style="color:var(--sub)">' + esc(e.pn) + '</small>' : '') + '</td><td style="text-align:right;white-space:nowrap">' + (e.ev === 'in' ? e.n + '개' : e.ev === 'chg' ? e.was + '→' + e.n : '') + '</td></tr>';
       }).join('') + '</table>' +
       '<p style="color:var(--sub);font-size:12px;margin-top:10px">※ 전체 감시는 몇 분마다 한 묶음씩 확인해서, 실제 입고 시각과 최대 한 바퀴(지금 약 ' + ((data.groups || 1) * ((data.settings && data.settings.every) || 10)) + '분)만큼 차이 날 수 있어요. 기록은 지우지 않고 계속 쌓여요.</p>';
   }
@@ -1254,9 +1305,9 @@ body.noscroll{overflow:hidden}
   $('histDays').onchange = histLoad;
   $('histCsv').onclick = function () { // 엑셀에서 열 수 있는 파일로 저장
     var q = function (s) { return '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"'; };
-    var rows = [['날짜', '시각', '요일', '구분', '제품명', '제약회사', '제품코드', '재고', '거래처', '출처']].concat(hist.slice().sort(function (a, b) { return a.t - b.t; }).map(function (e) {
+    var rows = [['날짜', '시각', '요일', '구분', '제품명', '제약회사', '제품코드', '재고', '직전 재고', '거래처', '출처']].concat(hist.slice().sort(function (a, b) { return a.t - b.t; }).map(function (e) {
       var d = new Date(e.t);
-      return [d.toLocaleDateString('ko-KR'), d.toLocaleTimeString('ko-KR'), '일월화수목금토'[d.getDay()], e.ev === 'in' ? '입고' : '품절', e.name, makerOf(e.name), e.code, e.n, e.pn || '', e.src === 'need' ? '거래처 필요 제품' : '전체 감시'];
+      return [d.toLocaleDateString('ko-KR'), d.toLocaleTimeString('ko-KR'), '일월화수목금토'[d.getDay()], e.ev === 'in' ? '입고' : e.ev === 'chg' ? (e.n < e.was ? '소진' : '추가') : '품절', e.name, makerOf(e.name), e.code, e.n, e.was == null ? '' : e.was, e.pn || '', e.src === 'need' ? '거래처 필요 제품' : '전체 감시'];
     }));
     var blob = new Blob(['﻿' + rows.map(function (r) { return r.map(q).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '지오팜_입고기록_' + new Date().toISOString().slice(0, 10) + '.csv';
