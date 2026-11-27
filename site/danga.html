@@ -44,6 +44,9 @@ textarea{min-height:90px;resize:vertical}
 .tbl td.m{white-space:normal;min-width:110px}
 .tbl tr.click{cursor:pointer}.tbl tr.click:hover td{background:#122C40}
 .win{font-weight:900;border-radius:6px}
+.tbl td.best{background:color-mix(in srgb,var(--c) 26%,transparent);box-shadow:inset 0 0 0 2px var(--c);border-radius:8px;position:relative}
+.tbl td.best .win{font-size:16px;color:#fff}
+.tbl td .crown{display:block;font-size:10px;font-weight:900;color:var(--c);line-height:1}
 .mx td{text-align:center;padding:6px 3px;font-size:12.5px}
 .mx td .d{display:block;font-size:10.5px;color:var(--sub);font-weight:600}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -63,6 +66,7 @@ nav{justify-content:flex-start!important}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .thumbs img{height:84px;border-radius:8px;border:1px solid var(--line)}
 .ed{width:46px;text-align:right;padding:3px 4px;border-radius:6px;font-size:12.5px}
+.ed.uns{outline:2px solid var(--bad);outline-offset:-1px}
 .ed.chg{background:#4A3A10;border-color:var(--yel);color:#FFE3A0}
 .ed{background:#0D1F2D;border:1px solid #2C4F66;color:var(--text)}
 .secTbl td,.secTbl th{padding:3px 3px;font-size:12px}
@@ -109,6 +113,7 @@ nav{justify-content:flex-start!important}
 <script src="/__/firebase/10.14.1/firebase-firestore-compat.js"></script>
 <script src="/__/firebase/init.js"></script>
 <script src="/danga-calc.js"></script>
+<script src="/danga-ocr.js"></script>
 <script src="/menu.js"></script>
 <script>
 (function () {
@@ -123,7 +128,7 @@ function sgn(v) { v = Math.round(v * 10) / 10; return (v > 0 ? '+' : '') + v; }
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 // 기본 양식 (모델 · 요금제 열만 · 숫자 없음) — 업체 이름이 같으면 그 단가표 모양 그대로, 아니면 기본 모델 목록
-var TEMPLATES = {"경기모바일":[{"cols":[{"label":"115군","bands":{"B115":0,"B105":-6}},{"label":"95군","bands":{"B95":0}},{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47,44군","bands":{"B55":0,"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-F776N",["256"],"플립8 256"],["SM-F776N",["512"],"플립8 512"],["SM-F971N",["256"],"폴드8 256"],["SM-F976N",["256"],"폴드8울트라 256"],["SM-F976N",["512"],"폴드8울트라 512"],["SM-S942N",[],"갤S26"],["SM-S948N",[],"갤S26 울트라"],["SM-S93",[],"갤S25류"],["SM-S937N",[],"갤S25엣지"],["SM-S741N",[],"갤26 FE"],["UIP18PR",["256","512","1T"],"아이폰18 프로"],["UIP18PM",["256","512","1T"],"아이폰18 프로맥스"],["UIPD",["256","512","1T"],"아이폰듀오"],["UIP17",["256","512"],"아이폰17"],["UIP17PR",["256","512","1T"],"아이폰17프로"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"]]},{"cols":[{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47군","bands":{"B55":0}},{"label":"44군","bands":{"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-A176L",[],"버디5"],["SM-A175N",[],"키즈폰 무너2"],["AT-M140L",[],"스타일폴더2"]]}],"드림4":[{"cols":[{"label":"1그룹 115/130","bands":{"B115":0}},{"label":"2그룹 105/95","bands":{"B105":0,"B95":-3}},{"label":"3그룹 75/85","bands":{"B85":0}},{"label":"4그룹 70/61","bands":{"B61":0}},{"label":"5그룹 44/47/55","bands":{"B55":0,"B44":0}},{"label":"6그룹 33/37","bands":{"B37":0}}],"rows":[["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"]]}]};
+var TEMPLATES = {"경기모바일":[{"cols":[{"label":"115군","bands":{"B115":0,"B105":-6}},{"label":"95군","bands":{"B95":0}},{"label":"85,75군","bands":{"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47,44군","bands":{"B55":0,"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-F776N",["256"],"플립8 256"],["SM-F776N",["512"],"플립8 512"],["SM-F971N",["256"],"폴드8 256"],["SM-F976N",["256"],"폴드8울트라 256"],["SM-F976N",["512"],"폴드8울트라 512"],["SM-S942N",[],"갤S26"],["SM-S948N",[],"갤S26 울트라"],["SM-S93",[],"갤S25류"],["SM-S937N",[],"갤S25엣지"],["SM-S741N",[],"갤26 FE"],["UIP18PR",["256","512","1T"],"아이폰18 프로"],["UIP18PM",["256","512","1T"],"아이폰18 프로맥스"],["UIPD",["256","512","1T"],"아이폰듀오"],["UIP17",["256","512"],"아이폰17"],["UIP17PR",["256","512","1T"],"아이폰17프로"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"]]},{"cols":[{"label":"85,75군","bands":{"B115":0,"B105":0,"B95":0,"B85":0}},{"label":"70,61군","bands":{"B61":0}},{"label":"55,47군","bands":{"B55":0}},{"label":"44군","bands":{"B44":0}},{"label":"37,33군","bands":{"B37":0}}],"rows":[["SM-A176L",[],"버디5"],["SM-A175N",[],"키즈폰 무너2"],["AT-M140L",[],"스타일폴더2"]]}],"드림4":[{"cols":[{"label":"1그룹 115/130","bands":{"B115":0}},{"label":"2그룹 105/95","bands":{"B105":0,"B95":-3}},{"label":"3그룹 75/85","bands":{"B85":0}},{"label":"4그룹 70/61","bands":{"B61":0}},{"label":"5그룹 44/47/55","bands":{"B55":0,"B44":0}},{"label":"6그룹 33/37","bands":{"B37":0}}],"rows":[["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"]]}]};
 var BASE_MODELS = [["UIP16E",["128"],"아이폰16E 128G"],["UIP17",["256"],"아이폰 17 256G"],["UIP17",["512"],"아이폰 17 512G"],["UIP17PR",["256"],"아이폰 17 PRO 256G"],["UIP17PM",["256"],"아이폰 17 PRO MAX 256G"],["UIPD",["256"],"아이폰 듀오 256G"],["UIPD",["512"],"아이폰 듀오 512G"],["UIPD",["1T"],"아이폰 듀오 1T"],["UIP18PR",["256"],"아이폰 18 PRO 256G"],["UIP18PR",["512"],"아이폰 18 PRO 512G"],["UIP18PR",["1T"],"아이폰 18 PRO 1T"],["UIP18PM",["256"],"아이폰 18 PRO MAX 256G"],["UIP18PM",["512"],"아이폰 18 PRO MAX 512G"],["UIP18PM",["1T"],"아이폰 18 PRO MAX 1T"],["SM-S942N",["256"],"S26"],["SM-S947N",["512"],"S26+ 512G"],["SM-S948N",["256"],"S26 Ultra"],["SM-S948N",["1T"],"S26 Ultra 1TB"],["SM-F776N",["256"],"Z Flip 8 256"],["SM-F776N",["512"],"Z Flip 8 512"],["SM-F971N",["256"],"Z Fold 8 256"],["SM-F971N",["512"],"Z Fold 8 512"],["SM-F976N",["256"],"Z Fold 8 U 256"],["SM-F976N",["512"],"Z Fold 8 U 512"],["SM-F976N",["1T"],"Z Fold 8 U 1TB"],["SM-S741N",[],"S26 FE"],["SM-S937N",["256"],"S25 Edge 256G"],["SM-A185N",[],"갤럭시 A18"],["SM-A176L",[],"갤럭시 버디5"],["AT-M140L",[],"스타일폴더2"],["SM-S93",[],"갤S25류"],["UIP17E",[],"아이폰17E"],["UIP16",[],"아이폰16류(PR,PM)"],["SM-A175N",[],"키즈폰 무너2"]];
 function tplFor(name) {
   var src = TEMPLATES[name] || [{ cols: stdCols(), rows: BASE_MODELS }];
@@ -149,6 +154,16 @@ function fixData() {
       if (done) { r.off = true; r.name += ' (→ 33·37군 열 ' + sgn(r.amt) + ' 로 반영)'; msgs.push(a.name + ' · 28군 이하 = 33·37군 단가 ' + sgn(r.amt)); }
     });
     a.fixV = 1;
+  });
+  // 2: 경기모바일 저가폰 표(85·75군부터 시작) → 85·75군 단가를 95 · 105 · 115군에도 (사용자 확인 2026-11-27)
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 2) return;
+    if (a.name === '경기모바일') a.sections.forEach(function (sec) {
+      var has = sec.cols.some(function (c) { return c.bands && ('B115' in c.bands); });
+      var c0 = sec.cols[0];
+      if (!has && c0 && c0.bands && 'B85' in c0.bands) { c0.bands.B115 = 0; c0.bands.B105 = 0; c0.bands.B95 = 0; msgs.push(a.name + ' · 저가폰 85·75군 단가를 95·105·115군에도'); }
+    });
+    a.fixV = 2;
   });
   return msgs;
 }
@@ -268,32 +283,26 @@ function filterQ(list) {
 }
 
 function listHtml(ags) {
-  var rows = filterQ(D.compare(ags, S.band, S.type, S.sc)).filter(function (r) { return r.cnt; });
-  var wins = ags.map(function () { return 0; }), tie = 0, one = 0, sumD = 0, nD = 0;
-  rows.forEach(function (r) {
-    if (r.cnt < 2) { one++; return; }
-    if (r.tie) tie++; else wins[r.best]++;
-    if (ags.length === 2 && r.vals[0] && r.vals[1]) { sumD += r.vals[0].v - r.vals[1].v; nD++; }
-  });
+  var sel = selModels();
+  var rows = filterQ(D.compare(ags, S.band, S.type, S.sc)).filter(function (r) { return r.cnt || sel.length; });
+  function top(r) { var vs = r.vals.filter(Boolean).map(function (p) { return p.v; }); return vs.length ? Math.max.apply(0, vs) : null; }
   function diff(r) { var vs = r.vals.filter(Boolean).map(function (p) { return p.v; }); return vs.length > 1 ? Math.max.apply(0, vs) - Math.min.apply(0, vs) : -1; }
   if (S.sort === 'diff') rows.sort(function (a, b) { return diff(b) - diff(a); });
-  else if (S.sort === 'best') rows.sort(function (a, b) { return (b.best >= 0 ? b.vals[b.best].v : -99) - (a.best >= 0 ? a.vals[a.best].v : -99); });
-  var h = '<div class="sum">' + ags.map(function (a, i) { return '<div class="stat" style="border-left-color:' + agColor(a) + '"><b>' + wins[i] + '</b><span>' + esc(a.name) + ' 우세</span></div>'; }).join('') +
-    '<div class="stat"><b>' + tie + '</b><span>같음</span></div>' +
-    (nD ? '<div class="stat"><b>' + sgn(sumD / nD) + '</b><span>평균 (' + esc(ags[0].name) + ' − ' + esc(ags[1].name) + ')</span></div>' : '') + '</div>';
-  h += '<div class="card scroll" style="padding:6px"><table class="tbl"><tr><th>모델 · ' + esc(D.bandLabel(S.band)) + ' ' + esc(typeLabel(S.type)) + '</th>' +
-    ags.map(function (a) { return '<th><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + '</th>'; }).join('') + '<th>차이</th></tr>';
+  else if (S.sort === 'best') rows.sort(function (a, b) { var x = top(a), y = top(b); return (y == null ? -999 : y) - (x == null ? -999 : x); });
+  var h = '<div class="card scroll" style="padding:6px"><table class="tbl"><tr><th>모델 · ' + esc(D.bandLabel(S.band)) + ' ' + esc(typeLabel(S.type)) + '</th>' +
+    ags.map(function (a) { return '<th><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + '</th>'; }).join('') + '<th>최고 − 최저</th></tr>';
   rows.forEach(function (r) {
-    var d = diff(r);
+    var d = diff(r), mx = top(r);
     h += '<tr class="click" data-it="' + esc(r.it.key + '|' + r.it.st) + '"><td class="m">' + esc(r.it.label) + '</td>' +
       r.vals.map(function (p, i) {
         if (!p) return '<td class="sub">-</td>';
-        var w = r.cnt > 1 && !r.tie && r.best === i;
+        var w = r.cnt > 1 && p.v === mx;
         var vb = p.parts.some(function (x) { return x.verbal; });
-        return '<td><span class="' + (w ? 'win' : '') + '" style="' + (w ? 'color:' + agColor(ags[i]) : '') + '">' + fmt(p.v) + (vb ? '<sup>🗣</sup>' : '') + '</span></td>';
-      }).join('') + '<td>' + (d >= 0 ? (d ? '<b>' + fmt(d) + '</b>' : '<span class="sub">0</span>') : '<span class="sub">한쪽만</span>') + '</td></tr>';
+        var col = agColor(ags[i]);
+        return '<td' + (w ? ' class="best" style="--c:' + col + '"' : '') + '>' + (w ? '<span class="crown">최고</span>' : '') + '<span class="' + (w ? 'win' : '') + '">' + fmt(p.v) + (vb ? '<sup>🗣</sup>' : '') + '</span></td>';
+      }).join('') + '<td>' + (d >= 0 ? (d ? '<b>' + fmt(d) + '</b>' : '<span class="sub">0</span>') : '<span class="sub">-</span>') + '</td></tr>';
   });
-  if (!rows.length) h += '<tr><td colspan="9" class="sub" style="text-align:center;padding:20px">이 요금제 · 유형에 단가가 있는 모델이 없어요</td></tr>';
+  if (!rows.length) h += '<tr><td colspan="9" class="sub" style="text-align:center;padding:20px">이 요금제 · 유형에 단가가 있는 모델이 없어요 · [📋 단가표 입력]에서 숫자를 넣어 주세요</td></tr>';
   return h + '</table></div>';
 }
 
@@ -364,6 +373,7 @@ function sheetHtml() {
       '<input type="text" value="' + esc(a.date) + '" data-agdate="' + ai + '" placeholder="날짜 11/27" style="width:96px"></div>' +
       '<p class="sub">모델 ' + nRows + '줄 · 정책 ' + a.rules.length + '개 · 구두 ' + a.verbal.length + '개' + (a.prev ? ' · 바뀐 칸 <b style="color:var(--yel)" id="chg' + ai + '">' + ch + '</b>개 (노란 칸 · 이전 ' + esc(a.prevDate || '') + ' 대비)' : '') + '</p>' +
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
+      (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 사진에서 숫자 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
       '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
       (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
         IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
@@ -401,7 +411,8 @@ function secHtml(ai, si, s) {
       var cell = (r.v && r.v[ci]) || [null, null, null];
       return [0, 1, 2].map(function (ti) {
         var pv = prevCell(a, si, ri, ci, ti), cv = cell[ti], chg = pv !== undefined && pv !== cv;
-        return '<td><input class="ed' + (chg ? ' chg' : '') + '" inputmode="decimal" enterkeyhint="next" value="' + (cv == null ? '' : cv) + '" data-cell="' + [ai, si, ri, ci, ti].join(',') + '"' + (chg ? ' title="이전 ' + (pv == null ? '빈칸' : pv) + '"' : '') + '></td>';
+        var uns = a.unsure && a.unsure.indexOf([si, ri, ci, ti].join(',')) >= 0;
+        return '<td><input class="ed' + (chg ? ' chg' : '') + (uns ? ' uns' : '') + '" inputmode="decimal" enterkeyhint="next" value="' + (cv == null ? '' : cv) + '" data-cell="' + [ai, si, ri, ci, ti].join(',') + '"' + (chg ? ' title="이전 ' + (pv == null ? '빈칸' : pv) + '"' : '') + '></td>';
       }).join('');
     }).join('') + '</tr>';
   });
@@ -705,6 +716,8 @@ view.addEventListener('click', function (e) {
   if (d.delsec) { var ps = d.delsec.split(',').map(Number); if (confirm('이 표를 통째로 지울까요?')) { S.ags[ps[0]].sections.splice(ps[1], 1); save(); render(); } return; }
   if (d.addrow) { var pa = d.addrow.split(',').map(Number), sec = S.ags[pa[0]].sections[pa[1]]; sec.rows.push(blankRow(sec.cols.length)); save(); render(); rowEditor(pa[0], pa[1], sec.rows.length - 1); return; }
   if (d.addcol) { var pq = d.addcol.split(',').map(Number), sc2 = S.ags[pq[0]].sections[pq[1]]; sc2.cols.push({ label: '새 열', bands: {} }); sc2.rows.forEach(function (r) { r.v = r.v || []; r.v.push([null, null, null]); }); save(); render(); colEditor(pq[0], pq[1], sc2.cols.length - 1); return; }
+  if (d.ocr) { runOcr(+d.ocr); return; }
+  if (d.ocrreg) { setRegions(+d.ocrreg, 0, true); return; }
   if (d.newday) { var an = S.ags[+d.newday], dt = prompt('새 단가표 날짜 (예: 11/28)', (new Date().getMonth() + 1) + '/' + new Date().getDate()); if (dt) { an.prev = JSON.parse(JSON.stringify(an.sections)); an.prevDate = an.date; an.date = dt; save(); render(); } return; }
   if (t.hasAttribute('data-logout')) { firebase.auth().signOut().then(function () { location.reload(); }); return; }
   if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 표의 숫자를 모두 비울까요? (모델 · 열 · 정책 · 구두는 남아요)')) { a.sections.forEach(function (s) { s.rows.forEach(function (r) { r.v = s.cols.map(function () { return [null, null, null]; }); }); }); save(); render(); } return; }
@@ -722,7 +735,7 @@ view.addEventListener('change', function (e) {
   if (t.id === 'imp') { var f = t.files[0]; if (!f) return; f.text().then(function (s) { var j = JSON.parse(s); if (!j.ags) throw 0; S.ags = j.ags; load2(); save(); render(); alert('가져왔어요'); }).catch(function () { alert('파일을 못 읽었어요'); }); return; }
   if (t.id === 'sort') { S.sort = t.value; save(); render(); return; }
   if (d.agname) { S.ags[+d.agname].name = t.value.trim() || '업체'; save(); return; }
-  if (d.cell) { var p = d.cell.split(',').map(Number), row = S.ags[p[0]].sections[p[1]].rows[p[2]]; row.v[p[3]] = row.v[p[3]] || [null, null, null]; var nv = t.value.trim().replace(/[^\d.\-]/g, ''); row.v[p[3]][p[4]] = nv === '' || isNaN(+nv) ? null : +nv; save(); markChg(t, p); return; }
+  if (d.cell) { var p = d.cell.split(',').map(Number), row = S.ags[p[0]].sections[p[1]].rows[p[2]]; row.v[p[3]] = row.v[p[3]] || [null, null, null]; var nv = t.value.trim().replace(/[^\d.\-]/g, ''); row.v[p[3]][p[4]] = nv === '' || isNaN(+nv) ? null : +nv; save(); markChg(t, p); var ua = S.ags[p[0]].unsure; if (ua) { var uk = ua.indexOf([p[1], p[2], p[3], p[4]].join(',')); if (uk >= 0) { ua.splice(uk, 1); t.classList.remove('uns'); } } return; }
   if (d.rv) { var q = ruleRef(d.rv), f2 = q.rest[0]; if (f2 === 'amt') q.r.amt = +t.value || 0; else if (f2 === 'name') q.r.name = t.value; else q.r[f2] = t.value.split(/[,\n]/).map(function (s) { return s.trim(); }).filter(Boolean); save(); render(); return; }
 });
 function markChg(el, p) {
@@ -784,6 +797,106 @@ function importHash() {
     }
     history.replaceState(null, '', location.pathname);
   }).catch(function () {});
+}
+
+// ── 사진에서 숫자 읽기 (무료 글자인식) ──
+var OCRBUSY = {};
+// 받은 단가표 모양 기준 숫자 칸 영역 (사진 크기 비율) · 실제 표 선에 자동으로 맞춤
+var DEFAULT_REG = {
+  '경기모바일': [{ img: 0, x0: 0.282, y0: 0.1265, x1: 0.999, y1: 0.4155 }, { img: 0, x0: 0.282, y0: 0.465, x1: 0.8806, y1: 0.515 }],
+  '드림4': [{ img: 0, x0: 0.3495, y0: 0.1975, x1: 0.999, y1: 0.5925 }]
+};
+function imgEl(url) { return new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = url; }); }
+function regsOf(a) {
+  a.ocr = a.ocr || {};
+  if (!a.ocr.regs) a.ocr.regs = JSON.parse(JSON.stringify(DEFAULT_REG[a.name] || []));
+  return a.ocr.regs;
+}
+function runOcr(ai) {
+  var a = S.ags[ai], regs = regsOf(a);
+  for (var si = 0; si < a.sections.length; si++) if (!regs[si]) { setRegions(ai, si, false); return; }
+  OCRBUSY[a.id] = '글자인식 준비 중…'; render();
+  var prevSnap = JSON.parse(JSON.stringify(a.sections)), unsure = [], total = 0, chain = Promise.resolve();
+  a.sections.forEach(function (sec, si) {
+    chain = chain.then(function () {
+      var rg = regs[si], url = (IMGS[a.id] || [])[rg.img || 0];
+      if (!url) throw new Error('사진 ' + ((rg.img || 0) + 1) + '번이 없어요');
+      return imgEl(url).then(function (img) {
+        return DangaOCR.readSection(img, rg, sec.rows.length, sec.cols.length * 3, function (st, pr) {
+          var m = st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…';
+          if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; }
+        });
+      }).then(function (res) {
+        sec.rows.forEach(function (row, ri) {
+          var vals = res.v[ri] || [];
+          row.v = sec.cols.map(function (c, ci) { return [vals[ci * 3], vals[ci * 3 + 1], vals[ci * 3 + 2]].map(function (x) { return x === undefined ? null : x; }); });
+        });
+        res.unsure.forEach(function (u) { unsure.push([si, u[0], Math.floor(u[1] / 3), u[1] % 3].join(',')); });
+        total += sec.rows.length * sec.cols.length * 3;
+      });
+    });
+  });
+  chain.then(function () {
+    var hadNums = prevSnap.some(function (sc) { return sc.rows.some(function (r) { return (r.v || []).some(function (c) { return c && c.some(function (x) { return x != null; }); }); }); });
+    if (hadNums) { a.prev = prevSnap; a.prevDate = a.date || '직전'; } else { delete a.prev; }
+    if (!a.date || hadNums) a.date = (new Date().getMonth() + 1) + '/' + new Date().getDate();
+    a.unsure = unsure;
+    delete OCRBUSY[a.id]; save(); render();
+    toast('✅ ' + total + '칸 읽었어요' + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인해 주세요' : '') + ' · 💾 저장');
+  }).catch(function (e) { delete OCRBUSY[a.id]; render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
+}
+// 영역 맞추기: 숫자 칸 전체의 왼쪽 위 → 오른쪽 아래 두 번 누르기 (표마다)
+function setRegions(ai, si, all) {
+  var a = S.ags[ai], regs = regsOf(a), urls = IMGS[a.id] || [];
+  if (!urls.length) return alert('먼저 단가표 사진을 올려 주세요');
+  var sec = a.sections[si], cur = regs[si] ? JSON.parse(JSON.stringify(regs[si])) : { img: 0 }, taps = [], zoom = 100;
+  function head() {
+    return '<h3><span>📐 표 ' + (si + 1) + '/' + a.sections.length + ' 숫자 칸 영역</span><button class="btn sm" data-close>닫기</button></h3>' +
+      '<p class="sub">숫자 칸 전체(모델 · 금액 칸 빼고)의 <b>첫 줄 첫 칸 왼쪽 위</b> → <b>마지막 줄 마지막 칸 오른쪽 아래</b>를 차례로 누르세요. 대충 눌러도 표 선에 맞춰져요. 초록 격자가 칸과 맞으면 저장.<br>이 표: 모델 ' + sec.rows.length + '줄 · 요금제 ' + sec.cols.length + '열(칸 ' + sec.cols.length * 3 + '개) · ' + esc(sec.rows[0] ? sec.rows[0].name : '') + ' ~ ' + esc(sec.rows.length ? sec.rows[sec.rows.length - 1].name : '') + '</p>' +
+      (urls.length > 1 ? '<div class="row">' + urls.map(function (u, k) { return '<button class="chip' + ((cur.img || 0) === k ? ' on' : '') + '" data-rimg="' + k + '">사진 ' + (k + 1) + '</button>'; }).join('') + '</div>' : '') +
+      '<div class="row" style="margin:6px 0"><button class="btn sm" data-rz="-1">－</button><span class="sub">' + zoom + '%</span><button class="btn sm" data-rz="1">＋</button><span id="rmsg" class="sub"></span></div>' +
+      '<div id="rbox" style="position:relative;overflow:auto;max-height:62vh;border:1px solid var(--line);border-radius:10px;background:#fff"><div style="position:relative;width:' + zoom + '%"><img id="rimg" src="' + urls[cur.img || 0] + '" style="width:100%;display:block"><canvas id="rcv" style="position:absolute;left:0;top:0;width:100%;height:100%"></canvas></div></div>' +
+      '<div class="row" style="margin-top:10px"><button class="btn pri" id="rsave">이대로 저장' + (all && si < a.sections.length - 1 ? ' → 다음 표' : '') + '</button><button class="btn sm" id="rreset">다시 찍기</button></div>';
+  }
+  openSheet(head(), function wire(sh) {
+    var img = sh.querySelector('#rimg'), cv = sh.querySelector('#rcv');
+    function draw() {
+      if (!img.naturalWidth) return;
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      var g = cv.getContext('2d'), W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
+      g.lineWidth = Math.max(2, W / 500);
+      taps.forEach(function (t) { g.fillStyle = '#E8892A'; g.beginPath(); g.arc(t[0] * W, t[1] * H, g.lineWidth * 4, 0, 7); g.fill(); });
+      if (cur.x1 == null) { sh.querySelector('#rmsg').textContent = taps.length ? ' ② 오른쪽 아래를 눌러 주세요' : ' ① 왼쪽 위를 눌러 주세요'; return; }
+      var gd = DangaOCR.grid(img, cur, sec.rows.length, sec.cols.length * 3);
+      g.strokeStyle = 'rgba(47,191,143,.9)';
+      gd.rows.forEach(function (y) { g.beginPath(); g.moveTo(gd.X0, gd.Y0 + y); g.lineTo(gd.X0 + gd.w, gd.Y0 + y); g.stroke(); });
+      gd.cols.forEach(function (x, k) { g.lineWidth = k % 3 === 0 ? Math.max(3, W / 350) : Math.max(1.5, W / 700); g.beginPath(); g.moveTo(gd.X0 + x, gd.Y0); g.lineTo(gd.X0 + x, gd.Y0 + gd.h); g.stroke(); });
+      sh.querySelector('#rmsg').textContent = gd.exact ? ' ✅ 표 선과 딱 맞아요' : ' 격자가 칸과 맞는지 확인해 주세요';
+    }
+    if (img.complete) draw(); else img.onload = draw;
+    cv.addEventListener('click', function (e) {
+      var r = cv.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+      if (taps.length >= 2) taps = [];
+      taps.push([x, y]);
+      if (taps.length === 2) {
+        var rg = { img: cur.img || 0, x0: Math.min(taps[0][0], taps[1][0]), y0: Math.min(taps[0][1], taps[1][1]), x1: Math.max(taps[0][0], taps[1][0]), y1: Math.max(taps[0][1], taps[1][1]) };
+        var sn = DangaOCR.snap(img, rg); cur = { img: rg.img, x0: sn.x0, y0: sn.y0, x1: sn.x1, y1: sn.y1 };
+      } else cur = { img: cur.img || 0 };
+      draw();
+    });
+    sh.onclick = function (e) {
+      var t = e.target;
+      if (t.dataset.rimg) { cur = { img: +t.dataset.rimg }; taps = []; sh.innerHTML = head(); wire(sh); }
+      if (t.dataset.rz) { zoom = Math.max(100, Math.min(400, zoom + 100 * t.dataset.rz)); sh.innerHTML = head(); wire(sh); }
+      if (t.id === 'rreset') { taps = []; cur = { img: cur.img || 0 }; draw(); }
+      if (t.id === 'rsave') {
+        if (cur.x1 == null) return alert('두 군데를 눌러 영역을 정해 주세요');
+        regs[si] = cur; save(); document.getElementById('modal').classList.add('hide');
+        if (si + 1 < a.sections.length && (all || !regs[si + 1])) setRegions(ai, si + 1, all);
+        else if (!all) runOcr(ai); else toast('영역 저장했어요 · 🔢 사진에서 숫자 읽기');
+      }
+    };
+  });
 }
 
 // 관리자 로그인 → 클라우드 자료 불러오기
