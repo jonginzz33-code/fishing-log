@@ -42,7 +42,8 @@
     { t: '📱 앱', items: [
       ['🎣', '조과일지', 'https://play.google.com/store/apps/details?id=kr.jogwailji.app', ''],
       ['🌐', '조과일지 웹 (로그인)', '/app', ''],
-      ['<img src="/img/geuphal2.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '급할 때', 'https://play.google.com/store/apps/details?id=kr.mytoilet.app', '']] },
+      ['<img src="/img/geuphal2.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '급할 때', 'https://play.google.com/store/apps/details?id=kr.mytoilet.app', ''],
+      ['<img src="/img/adblock.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '광고알림 차단', 'https://play.google.com/store/apps/details?id=com.jonginzz.adblock', '']] },
     { t: '🧪 테스터', items: [
       ['🧪', '비공개 테스트 참여하기', '/#tester', ''],
       ['👥', '테스터 그룹 가입', 'https://groups.google.com/g/mytoilet-testers', '']] },
@@ -56,7 +57,8 @@
       ['🎣', '조과일지 개인정보처리방침', '/jogwa/privacy.html', ''],
       ['🎣', '조과일지 계정 삭제', '/jogwa/delete-account.html', ''],
       ['<img src="/img/geuphal2.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '급할 때 개인정보처리방침', '/geuphal/privacy.html', ''],
-      ['<img src="/img/geuphal2.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '급할 때 계정 삭제', '/geuphal/delete-account.html', '']] }
+      ['<img src="/img/geuphal2.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '급할 때 계정 삭제', '/geuphal/delete-account.html', ''],
+      ['<img src="/img/adblock.png" alt="" style="width:22px;height:22px;border-radius:5px;vertical-align:middle">', '광고알림 차단 개인정보처리방침', '/adblock/privacy.html', '']] }
   ];
   var css = '.tm-btn{position:relative;flex:0 0 auto;margin-right:12px;width:42px;height:42px;border-radius:14px;border:1.5px solid #3A6A88;background:#12283A;color:#EAF2F6;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.35)}' +
     '.tm-dim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70;opacity:0;pointer-events:none;transition:opacity .2s}' +
