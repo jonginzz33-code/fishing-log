@@ -1114,10 +1114,9 @@ body.noscroll{overflow:hidden}
 
   // ───── 알람 기록 (알람전송완료 칸을 누르면 펼침) ─────
   function renderLog() {
-    var log = data.notifyLog || [];
+    var log = (data.notifyLog || []).filter(function (r) { return !/테스트/.test(r.title); }); // 테스트 알림은 빼고
     $('logList').innerHTML = log.map(function (r) {
       var tag = r.ok ? '<span class="b g">✅ 보냄</span>' : '<span class="b f">⚠ 실패</span>';
-      if (/테스트/.test(r.title)) tag += ' <span class="b u">테스트</span>';
       return '<div class="li"><div class="lt">' + tag + ' <span class="sv sm">🔔 ' + whenDate(r.t) + '</span> ' + esc(r.title) + '</div>' +
         '<div class="lb">' + esc(r.body || '') + '</div>' +
         '<div class="lm">' + (r.ok ? (r.via ? esc(r.via) + '로 보냄' : '') : '이유: ' + esc(r.why || '')) + '</div></div>';
