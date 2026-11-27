@@ -132,6 +132,26 @@ function tplFor(name) {
     return { cols: cols, rows: sec.rows.map(function (r) { return { key: r[0], st: r[1].slice(), name: r[2], price: null, v: cols.map(function () { return [null, null, null]; }) }; }) };
   });
 }
+// 저장된 자료 바로잡기 (한 번만 · 2026-11-27 점검)
+function fixData() {
+  var msgs = [];
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 1) return;
+    a.rules.concat(a.verbal).forEach(function (r) {
+      // '아이폰16류'(UIP16) 규칙이 아이폰16E 까지 잡던 것 → 16E 빼기
+      if ((r.models || []).indexOf('UIP16') >= 0 && (r.ex || []).indexOf('UIP16E') < 0) { r.ex = (r.ex || []).concat('UIP16E'); msgs.push(a.name + ' · ' + r.name + ' → 아이폰16E 제외'); }
+    });
+    // 28군 차감 규칙은 28군 단가 열이 없어 계산에 안 들어가던 것 → 33·37군 열에서 빼는 값으로
+    a.rules.forEach(function (r) {
+      if (r.off || !(r.bands || []).length || r.bands.join() !== 'B28' || (r.models || []).length || (r.cond || []).length) return;
+      var done = false;
+      a.sections.forEach(function (sec) { sec.cols.forEach(function (c) { if (c.bands && 'B37' in c.bands && !('B28' in c.bands)) { c.bands.B28 = (+c.bands.B37 || 0) + (+r.amt || 0); done = true; } }); });
+      if (done) { r.off = true; r.name += ' (→ 33·37군 열 ' + sgn(r.amt) + ' 로 반영)'; msgs.push(a.name + ' · 28군 이하 = 33·37군 단가 ' + sgn(r.amt)); }
+    });
+    a.fixV = 1;
+  });
+  return msgs;
+}
 function fillEmpty() { var n = 0; S.ags.forEach(function (a) { if (!a.sections.length) { a.sections = tplFor(a.name); n++; } }); return n; }
 var S;
 function blankAg(name) { return { id: uid(), name: name, date: '', sections: [], rules: [], verbal: [], notes: [] }; }
@@ -553,8 +573,35 @@ function verbalParse(ai) {
 }
 
 // ── 설정 탭 ──
+function auditHtml() {
+  var ags = agsWithData(); if (!ags.length) return '';
+  var h = '<div class="card"><h2>🔍 계산 점검</h2>';
+  if (S.fixMsgs && S.fixMsgs.length) h += '<div class="note">🔧 이번에 바로잡은 것<br>' + S.fixMsgs.map(esc).join('<br>') + '</div>';
+  var all = D.items(ags);
+  ags.forEach(function (a) {
+    var its = D.items([a]), empty = 0, cells = 0, warn = [];
+    a.sections.forEach(function (sec) { sec.rows.forEach(function (r) { sec.cols.forEach(function (c, ci) { [0, 1, 2].forEach(function (ti) { cells++; var v = r.v && r.v[ci] ? r.v[ci][ti] : null; if (v == null) empty++; }); }); }); });
+    a.rules.concat(a.verbal).forEach(function (r) {
+      if (r.off) return;
+      var rr = Object.assign({}, r, { cond: [] }), n = 0;
+      its.forEach(function (it) { D.BANDS.forEach(function (b) { D.TYPES.forEach(function (t) { var bs = D.base(a, it.key, it.st, b.id, t.id); if (bs && !bs.none && D.ruleHits(rr, it.key, it.st, b.id, t.id, D.DEFAULT_SC)) n++; }); }); });
+      if (!n) warn.push('⚠ "' + r.name + '" 이 맞는 모델 · 요금제가 없어 계산에 안 들어가요');
+    });
+    var bandsHave = {}; a.sections.forEach(function (sec) { sec.cols.forEach(function (c) { Object.keys(c.bands || {}).forEach(function (b) { bandsHave[b] = 1; }); }); });
+    var noBand = D.BANDS.filter(function (b) { return !bandsHave[b.id]; }).map(function (b) { return b.label; });
+    h += '<div class="lbl"><span class="dot" style="background:' + agColor(a) + '"></span>' + esc(a.name) + ' (' + esc(a.date || '날짜 없음') + ')</div><div class="sub">' +
+      '모델 ' + its.length + '개 · 빈 칸 ' + empty + ' / ' + cells + (empty === cells ? ' <b style="color:var(--bad)">· 숫자가 하나도 없어요</b>' : '') +
+      (noBand.length ? '<br>단가 열이 없는 요금제: ' + esc(noBand.join(', ')) + '군 (이 요금제는 비교 안 됨)' : '') +
+      (warn.length ? '<br>' + warn.map(esc).join('<br>') : '') + '</div>';
+  });
+  if (ags.length > 1) {
+    var only = all.filter(function (it) { return ags.filter(function (a) { return D.items([a]).some(function (x) { return x.key === it.key && (x.st === it.st || !x.st || !it.st); }); }).length < 2; });
+    if (only.length) h += '<div class="lbl">한 업체에만 있는 모델 (비교 안 됨 · 코드가 달라서일 수도)</div><div class="sub">' + only.map(function (it) { return esc(it.label) + ' <span style="opacity:.6">' + esc(it.key) + '</span>'; }).join(' · ') + '</div>';
+  }
+  return h + '</div>';
+}
 function setHtml() {
-  return '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
+  return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
     (window.firebase && firebase.auth && firebase.auth().currentUser ? '<button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button>' : '') + '</div>' +
     '<div class="card"><h2>💾 파일로 백업</h2><div class="row"><button class="btn" data-export>📤 파일로 내보내기</button><label class="btn" style="display:inline-flex;align-items:center">📥 파일 가져오기<input type="file" accept=".json,application/json" class="hide" id="imp"></label></div></div>' +
     '<div class="card"><h2>🧹 처음부터</h2><button class="btn del" data-reset>전부 지우기</button></div>';
@@ -732,6 +779,7 @@ function importHash() {
         if (old) { old.sections = na.sections; old.rules = na.rules; old.notes = na.notes || []; old.date = na.date; if (!old.verbal.length && na.verbal) old.verbal = na.verbal; }
         else S.ags.push(na);
       });
+      S.ags.forEach(function (a) { delete a.fixV; });
       load2(); save();
     }
     history.replaceState(null, '', location.pathname);
@@ -742,7 +790,7 @@ function importHash() {
 function gate(html) { document.getElementById('tabs').innerHTML = ''; document.getElementById('view').innerHTML = '<div class="card" style="text-align:center;padding:28px">' + html + '</div>'; }
 function start() {
   load();
-  if (!window.firebase || !firebase.apps || !firebase.apps.length) { setCloud('⚠ 로그인 없이 이 브라우저에만 저장 중'); importHash().then(function () { fillEmpty(); render(); }); return; }
+  if (!window.firebase || !firebase.apps || !firebase.apps.length) { setCloud('⚠ 로그인 없이 이 브라우저에만 저장 중'); importHash().then(function () { fillEmpty(); S.fixMsgs = fixData(); render(); }); return; }
   var auth = firebase.auth();
   gate('⏳ 확인 중…');
   auth.onAuthStateChanged(function (u) {
@@ -759,7 +807,7 @@ function start() {
       else setCloud('☁ 아직 클라우드에 자료가 없어요');
       CLOUD = ref; loadImgs();
       return importHash();
-    }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { fillEmpty(); save(); render(); });
+    }).catch(function (e) { setCloud('⚠ 클라우드 읽기 실패 · ' + (e.code || e.message) + ' · 이 브라우저 자료로 보여 줘요'); }).then(function () { fillEmpty(); var fx = fixData(); save(); render(); if (fx.length) setTimeout(function () { toast('🔧 계산 바로잡음 ' + fx.length + '건 (⚙ 설정 → 계산 점검)'); }, 600); S.fixMsgs = fx; });
   });
 }
 window.addEventListener('beforeunload', function (e) { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
