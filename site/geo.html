@@ -767,6 +767,8 @@ details summary{cursor:pointer;font-weight:800}
     if (!pushOk) { pushShow(false, '이 브라우저는 웹 알림을 못 받아요. (아이폰은 홈 화면에 추가한 뒤 열어야 해요)'); $('pushOn').disabled = true; return; }
     if (Notification.permission === 'denied') { pushShow(false, '알림이 차단돼 있어요. 크롬 주소창 왼쪽 자물쇠 → 알림 → 허용으로 바꿔 주세요.'); return; }
     navigator.serviceWorker.getRegistration(SW_SCOPE).then(function (reg) {
+      // 알림 파일(geo-sw.js)이 바뀌었으면 새 버전으로 (아이콘 · 진동 같은 변경이 바로 반영되게)
+      if (reg) reg.update().catch(function () {});
       return reg ? reg.pushManager.getSubscription() : null;
     }).then(function (sub) {
       pushShow(!!sub, sub ? '✅ 이 기기는 알림을 받고 있어요' : '이 기기는 아직 알림을 안 받아요');
