@@ -12,7 +12,9 @@ self.addEventListener('push', (e) => {
     badge: '/img/jogwa.png',
     tag: 'geo-' + (d.t || Date.now()), // 알림마다 따로 (앞 알림을 덮어쓰지 않게)
     renotify: true,
-    vibrate: [200, 100, 200],
+    silent: false,
+    requireInteraction: true, // 눌러서 지울 때까지 알림 남겨 두기
+    vibrate: [500, 200, 500, 200, 500], // 진동 (안드로이드는 휴대폰 알림 설정의 진동이 켜져 있어야 울림)
     data: { url: '/geo' },
   }));
 });
