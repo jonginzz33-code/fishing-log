@@ -94,6 +94,7 @@ nav{justify-content:flex-start!important}
 .sheet{background:var(--card);border-radius:18px 18px 0 0;width:100%;max-width:760px;max-height:88vh;overflow:auto;padding:16px;border-top:2px solid var(--sky)}
 .sheet h3{margin:0 0 6px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
 @media (min-width:760px){.modal{align-items:center}.sheet{border-radius:18px;border:2px solid var(--sky)}}
+.ocrmsg{margin:6px 0;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--grn,#3fb950) 18%,transparent);font-size:13.5px;font-weight:600}.ocrmsg.busy{background:color-mix(in srgb,#e3b341 20%,transparent)}.ocrmsg.flash{animation:ofl 1.2s 2}@keyframes ofl{50%{outline:3px solid #e3b341}}
 </style>
 </head>
 <body>
@@ -397,6 +398,7 @@ function sheetHtml() {
       '<div class="row"><button class="btn sm" data-newday="' + ai + '">📅 새 날짜로 시작</button>' +
       (IMGS[a.id] && a.sections.length ? '<button class="btn sm pri" data-ocr="' + ai + '"' + (OCRBUSY[a.id] ? ' disabled' : '') + '>' + (OCRBUSY[a.id] ? '⏳ ' + esc(OCRBUSY[a.id]) : '🔢 다시 읽기') + '</button><button class="btn sm" data-ocrreg="' + ai + '">📐 영역 맞추기</button>' : '') +
       '<label class="btn sm" style="display:inline-flex;align-items:center">📷 ' + (IMGS[a.id] || a.imgN ? '사진 바꾸기' : '단가표 사진 올리기') + '<input type="file" accept="image/*" multiple class="hide" data-pic="' + ai + '"></label></div>' +
+      (OCRBUSY[a.id] ? '<div class="ocrmsg busy">⏳ ' + esc(OCRBUSY[a.id]) + ' · 한 표에 10~40초 걸려요</div>' : OCRMSG[a.id] ? '<div class="ocrmsg" id="ocrmsg' + ai + '">' + esc(OCRMSG[a.id]) + '</div>' : '') +
       (IMGS[a.id] ? '<details class="pics" open><summary class="sub" style="cursor:pointer">📷 단가표 사진 ' + IMGS[a.id].length + '장 ' + (IMG_DIRTY[a.id] ? '<b style="color:var(--yel)">· 저장 안 됨</b>' : '· ☁ 저장됨') + ' (누르면 크게)</summary><div class="picbox">' +
         IMGS[a.id].map(function (u, k) { return '<img src="' + u + '" data-zoom="' + a.id + ',' + k + '">'; }).join('') + '</div></details>'
         : a.imgN ? '<p class="sub">⏳ 사진 불러오는 중…</p>' : '');
@@ -828,7 +830,7 @@ function importHash() {
 }
 
 // ── 사진에서 숫자 읽기 (무료 글자인식) ──
-var OCRBUSY = {};
+var OCRBUSY = {}, OCRMSG = {};
 // 받은 단가표 모양 기준 숫자 칸 영역 (사진 크기 비율) · 실제 표 선에 자동으로 맞춤
 var DEFAULT_REG = {
   '경기모바일': [{ img: 0, h: 1, x0: 0.282, y0: 0.1265, x1: 0.999, y1: 0.4155 }, { img: 0, h: 1, x0: 0.282, y0: 0.465, x1: 0.8806, y1: 0.515 }],
@@ -865,7 +867,7 @@ function runOcr(ai) {
         }
         return DangaOCR.readSection(img, use, nR, nC, function (st, pr) {
           var m = st === '줄 읽는 중' ? '표 ' + (si + 1) + ' 읽는 중 ' + Math.round((pr || 0) * 100) + '%' : '글자인식 받는 중…';
-          if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; }
+          if (OCRBUSY[a.id] !== m) { OCRBUSY[a.id] = m; var b = document.querySelector('[data-ocr="' + ai + '"]'); if (b) b.textContent = '⏳ ' + m; var bm = document.querySelector('.ocrmsg.busy'); if (bm) bm.textContent = '⏳ ' + m + ' · 한 표에 10~40초 걸려요'; }
         });
       }).then(function (res) {
         sec.rows.forEach(function (row, ri) {
@@ -879,15 +881,21 @@ function runOcr(ai) {
   });
   chain.then(function () {
     var hadNums = prevSnap.some(function (sc) { return sc.rows.some(function (r) { return (r.v || []).some(function (c) { return c && c.some(function (x) { return x != null; }); }); }); });
-    if (hadNums) { a.prev = prevSnap; a.prevDate = a.date || '직전'; } else { delete a.prev; }
-    if (!a.date || hadNums) a.date = (new Date().getMonth() + 1) + '/' + new Date().getDate();
+    var today = (new Date().getMonth() + 1) + '/' + new Date().getDate();
+    // 같은 날 다시 읽기면 '이전 날짜 대비' 비교는 그대로 둠 (지난번엔 다시 읽을 때마다 비교 기준이 지워졌음)
+    if (hadNums && a.date !== today) { a.prev = prevSnap; a.prevDate = a.date || '직전'; } else if (!hadNums) { delete a.prev; }
+    a.date = today;
+    var diff = 0; a.sections.forEach(function (sc, si2) { sc.rows.forEach(function (r, ri) { (r.v || []).forEach(function (c, ci) { (c || []).forEach(function (x, ti) { var o = ((((prevSnap[si2] || {}).rows || [])[ri] || {}).v || [])[ci]; if (hadNums && (o ? o[ti] : null) !== x) diff++; }); }); }); });
     a.unsure = unsure;
     var got = numCount(a);
+    var hm = new Date().toTimeString().slice(0, 5);
+    OCRMSG[a.id] = '✅ ' + hm + ' 읽기 끝 · ' + got + '/' + total + '칸' + (hadNums ? (diff ? ' · 방금 바뀐 칸 ' + diff + '개' : ' · 지난번과 똑같아요 (바뀐 칸 없음)') : '') + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인' : '');
     delete OCRBUSY[a.id]; save(); render();
+    var mEl = document.getElementById('ocrmsg' + ai); if (mEl) { mEl.scrollIntoView({ block: 'center', behavior: 'smooth' }); mEl.classList.remove('flash'); void mEl.offsetWidth; mEl.classList.add('flash'); }
     if (warns.length) alert('⚠ 확인해 주세요\n' + warns.join('\n'));
     if (got < total * 0.3) { alert('숫자를 거의 못 찾았어요 (' + got + ' / ' + total + '칸).\n사진의 숫자 칸 위치가 달라서예요. 📐 영역 맞추기 화면에서 숫자 칸 왼쪽 위 → 오른쪽 아래를 눌러 주세요.'); setRegions(ai, 0, true); return; }
     toast('✅ ' + total + '칸 읽었어요' + (unsure.length ? ' · 빨간 칸 ' + unsure.length + '개 확인해 주세요' : '') + ' · 💾 저장');
-  }).catch(function (e) { delete OCRBUSY[a.id]; render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
+  }).catch(function (e) { delete OCRBUSY[a.id]; OCRMSG[a.id] = '❌ 읽기 실패 · ' + (e.message || e); render(); alert('❌ 숫자 읽기 실패 · ' + (e.message || e)); });
 }
 // 영역 맞추기: 숫자 칸 전체의 왼쪽 위 → 오른쪽 아래 두 번 누르기 (표마다)
 function setRegions(ai, si, all) {
