@@ -251,6 +251,21 @@ function fixData() {
     });
     a.fixV = 6;
   });
+  // 7: 드림 유통망 활성화 III — 사진(2026-11-27)에 유치 +N / 미유치 −N 같은 크기 → 미입력 규칙에서 금액을 가져와 '입력(10만 이상)' 규칙을 만듦
+  S.ags.forEach(function (a) {
+    if (a.fixV >= 7) return;
+    if (tplName(a.name) === '드림4') {
+      var R = a.rules = a.rules || [];
+      var neg = R.filter(function (r) { return /^\[부가\] 유통망 활성화 III 미입력/.test(r.name || ''); })[0];
+      var has = R.some(function (r) { return /^\[부가\] 유통망 활성화 III 입력/.test(r.name || ''); });
+      if (neg && !has && +neg.amt < 0) {
+        var ex = (neg.ex || []).slice(); if (ex.indexOf('SM-A166') < 0) ex.push('SM-A166'); neg.ex = ex.slice();
+        R.push({ id: uid(), name: '[부가] 유통망 활성화 III 입력 (지원금 10만 이상)', amt: Math.abs(+neg.amt), types: [], bands: [], models: [], ex: ex, cond: ['!supLow', '!junior', '!senior'] });
+        msgs.push('드림4 · 유통망 활성화 III: 지원금 10만 이상이면 + 도 붙게 했어요');
+      }
+    }
+    a.fixV = 7;
+  });
   return msgs;
 }
 // 모델 이름(코드)이 하나도 없는 빈 표('새 모델' 줄만) → 그 업체 양식으로 바꿈
