@@ -264,6 +264,18 @@ body.noscroll{overflow:hidden}
   <div class="card">
     <details>
     <summary>🗂 전체 부족 재고 감시 목록 <span id="cnt" style="color:var(--sub);font-size:14px"></span></summary>
+    <!-- 목록을 맨 위에 -->
+    <div class="filter" id="filter" style="margin-top:10px">
+      <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
+    </div>
+    <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
+    <div class="selbar">
+      <span id="selN">줄을 눌러서 고르세요</span>
+      <button class="btn ghost sm" id="selAll">보이는 것 모두 고르기</button>
+      <button class="btn ghost sm" id="selClear" disabled>고르기 풀기</button>
+      <button class="btn bad sm" id="selDel" disabled>🗑 고른 0개 빼기</button>
+    </div>
+    <table class="list" id="list" style="margin-bottom:14px"></table>
     <div class="lead" id="cycle" style="margin:8px 0 0"></div>
     <div class="row" style="margin:10px 0">
       <span style="font-size:14px">⏱ 확인 간격</span>
@@ -285,17 +297,6 @@ body.noscroll{overflow:hidden}
       <b>➖ 제품 빼기</b> <span style="color:var(--sub);font-size:12.5px">감시 목록 <span id="wDN"></span> 중에서 골라 빼요</span>
       <div class="ac" style="margin-top:6px"><input id="wD" placeholder="감시 중인 제품 이름 또는 제품코드" autocomplete="off"><div class="acl hide" id="wDAcl"></div></div>
     </div>
-    <div class="filter" id="filter">
-      <button data-f="all">전체</button><button data-f="in" class="on">재고 있음</button><button data-f="sold">품절</button><button data-f="fail">실패</button>
-    </div>
-    <input id="lq" placeholder="목록에서 찾기" style="margin-bottom:8px">
-    <div class="selbar">
-      <span id="selN">줄을 눌러서 고르세요</span>
-      <button class="btn ghost sm" id="selAll">보이는 것 모두 고르기</button>
-      <button class="btn ghost sm" id="selClear" disabled>고르기 풀기</button>
-      <button class="btn bad sm" id="selDel" disabled>🗑 고른 0개 빼기</button>
-    </div>
-    <table class="list" id="list"></table>
     <p class="lead" style="margin:14px 0 6px">✏️ 통째로 고치기 — 한 줄에 하나: <b>제품명 | 제품코드:공급처코드</b></p>
     <textarea id="bulk"></textarea>
     <div class="row" style="margin-top:8px"><button class="btn ok sm" onclick="saveBulk(this)">이대로 저장</button></div>
