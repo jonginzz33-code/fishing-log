@@ -63,6 +63,7 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.nextq{display:inline-block;margin:0 0 10px;padding:4px 12px;border-radius:10px;background:#0F2231;border:1.5px solid var(--line);font:800 15px ui-monospace,Consolas,monospace;color:var(--sky)}
 .selbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;font-size:13px;color:var(--sub)}
 .selbar #selN{flex:1;min-width:120px}
 tr.pick{cursor:pointer}
@@ -232,7 +233,7 @@ body.noscroll{overflow:hidden}
     </div>
     <div class="prog hide" id="wProg"><div class="bar"><i id="wBar"></i></div></div>
     <div class="msg" id="wMsg" style="margin:-2px 0 4px"></div>
-    <div class="lead" style="margin:0 0 10px;font-size:13px">⏱ <span id="wNext"></span></div>
+    <div class="nextq">⏱ <span id="wNext"></span></div>
     <div class="wadd">
       <b>➕ 제품 추가</b> <span style="color:var(--sub);font-size:12.5px">지오팜 전체 제품 <span class="pN"></span> 중에서 골라 감시 목록에 넣어요</span>
       <div class="ac" style="margin-top:6px"><input id="wQ" placeholder="제품 이름 또는 제품코드 (예: 타이레놀 500 · 021753)" autocomplete="off"><div class="acl hide" id="wAcl"></div></div>
@@ -816,8 +817,10 @@ body.noscroll{overflow:hidden}
       if (st0.paused) $('wNext').textContent = '자동 확인 멈춤';
       else if (data.quietNow) $('wNext').textContent = '🌙 쉬는 시간이라 자동 확인 안 해요';
       else {
-        var ms = st0.every * 60000, nx = Math.ceil((now + 1) / ms) * ms, left = Math.round((nx - now) / 1000);
-        $('wNext').textContent = '다음 자동 확인(한 묶음) ' + new Date(nx).toLocaleTimeString('ko-KR', { hour: 'numeric', minute: '2-digit' }) + ' · ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' 남음';
+        // 마지막 조회부터 every 분 (서버는 1분마다 깨어나서 보므로 최대 1분 늦을 수 있음)
+        var lt = data.watchLast && data.watchLast.t, left = lt ? Math.round((lt + st0.every * 60000 - now) / 1000) : 0;
+        $('wNext').textContent = left > 0 ? '다음 조회까지 ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') : '곧 조회해요 (1분 안)';
+        if (lt && left < -90 && now - autoAt > 120000 && !document.hidden) { autoAt = now; load(); } // 조회 끝났을 즈음 새 결과 불러오기
       }
     }
     // 확인 시간이 지나고 1분 반쯤 됐으면 서버 결과를 한 번 다시 불러옴 (2분에 한 번까지)
