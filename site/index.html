@@ -79,7 +79,7 @@ footer a{text-decoration:underline;margin-right:12px}
 <details class="tester" id="tester">
   <summary><span>🧪 비공개 테스트 참여하기</span><small>눌러서 펼치기 ▾</small></summary>
   <div class="tbody">
-  <p class="lead">조과일지 · 급할 때 · 광고알림 차단 모두 같은 테스터 그룹이에요. 그룹 가입(①)은 한 번만 하면 돼요. 아래 ①②③ 순서대로 한 번만 하면 돼요.</p>
+  <p class="lead">조과일지 · 급할 때 · 광고알림 차단 · 어플출석체크 모두 같은 테스터 그룹이에요. 그룹 가입(①)은 한 번만 하면 돼요. 아래 ①②③ 순서대로 한 번만 하면 돼요.</p>
   <div class="warn">⚠ <b>카톡 · 밴드 안에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.</b><br>
   👉 이 페이지를 <b>크롬</b>에서 열어 주세요 (카톡이면 오른쪽 위 ⋮ → '다른 브라우저로 열기')<br>
   또는 링크를 꾹 눌러 '복사' → 크롬 주소창에 붙여 넣기 → 이동</div>
@@ -94,6 +94,7 @@ footer a{text-decoration:underline;margin-right:12px}
       <a class="big b" href="https://play.google.com/apps/testing/kr.jogwailji.app">🎣 조과일지 테스트 참여</a>
       <a class="big b" href="https://play.google.com/apps/testing/kr.mytoilet.app">🚻 급할 때 테스트 참여</a>
       <a class="big b" href="https://play.google.com/apps/testing/com.jonginzz.adblock">🔕 광고알림 차단 테스트 참여</a>
+      <a class="big b" href="https://play.google.com/apps/testing/kr.dailycheck.app">✅ 어플출석체크 테스트 참여</a>
     </div>
   </div></div>
   <div class="step"><div class="n">3</div><div style="flex:1">
@@ -102,6 +103,7 @@ footer a{text-decoration:underline;margin-right:12px}
       <a class="big g" href="https://play.google.com/store/apps/details?id=kr.jogwailji.app">▶ 조과일지 설치</a>
       <a class="big g" href="https://play.google.com/store/apps/details?id=kr.mytoilet.app">▶ 급할 때 설치</a>
       <a class="big g" href="https://play.google.com/store/apps/details?id=com.jonginzz.adblock">▶ 광고알림 차단 설치</a>
+      <a class="big g" href="https://play.google.com/store/apps/details?id=kr.dailycheck.app">▶ 어플출석체크 설치</a>
     </div>
     <div class="t" style="margin-top:10px">※ '항목을 찾을 수 없습니다'가 나오면: ①②를 <b>폰 플레이 스토어와 같은 계정</b>으로 했는지 확인 → 10분~1시간쯤 뒤 다시 열기 (가입이 반영되는 데 시간이 걸려요) · 그래도 안 되면 그룹 가입 메일 주소를 관리자에게 알려 주세요</div>
   </div></div>
@@ -156,16 +158,18 @@ footer a{text-decoration:underline;margin-right:12px}
     <div class="small"><a href="adblock/privacy.html">개인정보처리방침</a> · 로그인 · 계정 없음</div>
   </div>
 
-  <div class="app" id="app-attend" hidden>
-    <img src="img/attend.png" alt="출석체크 아이콘">
-    <h2>출석체크</h2>
-    <div class="sub">(한 줄 설명)</div>
-    <p>(설명)</p>
-    <div class="tags"><span>📅 출석체크</span></div>
+  <div class="app" id="app-attend">
+    <img src="img/attend.png" alt="어플출석체크 아이콘">
+    <h2>어플출석체크</h2>
+    <div class="sub">매일 열 앱 · 정한 시각에 알람</div>
+    <p>매일 열어야 하는 앱을 정한 시각에 알람으로 알려주는 체크리스트예요. 알림에서 바로 그 앱을 열고 체크해요. 인터넷 권한 없음 · 기록은 전부 폰 안에만.</p>
+    <div class="tags"><span>⏰ 시각 알람</span><span>✅ 체크리스트</span><span>📱 앱 바로 열기</span><span>🔒 인터넷 권한 없음</span></div>
     <div class="row">
-      <a class="btn play" href="https://play.google.com/store/apps/details?id=PKG_ATTEND">▶ 플레이 스토어</a>
-      <a class="btn ghost" href="https://play.google.com/apps/testing/PKG_ATTEND">🧪 테스터 참여</a>
+      <a class="btn play" href="https://play.google.com/store/apps/details?id=kr.dailycheck.app">▶ 플레이 스토어</a>
+      <a class="btn ghost" href="https://play.google.com/apps/testing/kr.dailycheck.app">🧪 테스터 참여</a>
     </div>
+    <div class="small"><a href="attend/privacy.html">개인정보처리방침</a> · 로그인 · 계정 없음</div>
+  </div>
     <div class="small"><a href="attend/privacy.html">개인정보처리방침</a> <a href="attend/delete-account.html">계정 삭제</a></div>
   </div>
 </section>
@@ -177,12 +181,13 @@ footer a{text-decoration:underline;margin-right:12px}
   © 2026 talla.co.kr<br>
   조과일지: <a href="jogwa/privacy.html">개인정보처리방침</a><a href="jogwa/delete-account.html">계정 삭제</a><br>
   급할 때: <a href="geuphal/privacy.html">개인정보처리방침</a><a href="geuphal/delete-account.html">계정 삭제</a><br>
-  광고알림 차단: <a href="adblock/privacy.html">개인정보처리방침</a>
+  광고알림 차단: <a href="adblock/privacy.html">개인정보처리방침</a><br>
+  어플출석체크: <a href="attend/privacy.html">개인정보처리방침</a>
 </footer>
 </div>
 <script>
 function copyGuide(b){
- var t="🎣 조과일지 · 🚻 급할 때 · 🔕 광고알림 차단 비공개 테스트 참여 부탁드려요!\n\n⚠ 카톡에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.\n👉 링크를 꾹 눌러 '복사' → 크롬을 열고 → 맨 위 주소창에 붙여 넣기 → 이동\n(아래 ①②③ 모두 이렇게 크롬에서 열어 주세요)\n\n① 구글 그룹 가입\nhttps://groups.google.com/g/mytoilet-testers\n→ 앱을 설치할 구글 계정으로 로그인한 뒤 [그룹 가입] 누르기\n(크롬 오른쪽 위 동그라미 사진에서 계정 확인 · 폰 플레이 스토어와 같은 계정이어야 해요)\n\n② 테스트 참여\n조과일지: https://play.google.com/apps/testing/kr.jogwailji.app\n급할 때: https://play.google.com/apps/testing/kr.mytoilet.app\n광고알림 차단: https://play.google.com/apps/testing/com.jonginzz.adblock\n→ [테스터 되기] 누르기 → '테스터가 되었습니다'가 나오면 성공!\n\n③ 앱 설치\n조과일지: https://play.google.com/store/apps/details?id=kr.jogwailji.app\n급할 때: https://play.google.com/store/apps/details?id=kr.mytoilet.app\n광고알림 차단: https://play.google.com/store/apps/details?id=com.jonginzz.adblock\n→ [설치] (이미 있으면 [업데이트])\n※ '항목을 찾을 수 없습니다'가 나오면 ①②를 같은 계정으로 했는지 확인하고 10분~1시간 뒤 다시 열어 주세요.\n\n한 번에 보기: https://talla.co.kr";
+ var t="🎣 조과일지 · 🚻 급할 때 · 🔕 광고알림 차단 · ✅ 어플출석체크 비공개 테스트 참여 부탁드려요!\n\n⚠ 카톡에서 링크를 바로 누르면 로그인이 안 되거나 오류가 나요.\n👉 링크를 꾹 눌러 '복사' → 크롬을 열고 → 맨 위 주소창에 붙여 넣기 → 이동\n(아래 ①②③ 모두 이렇게 크롬에서 열어 주세요)\n\n① 구글 그룹 가입\nhttps://groups.google.com/g/mytoilet-testers\n→ 앱을 설치할 구글 계정으로 로그인한 뒤 [그룹 가입] 누르기\n(크롬 오른쪽 위 동그라미 사진에서 계정 확인 · 폰 플레이 스토어와 같은 계정이어야 해요)\n\n② 테스트 참여\n조과일지: https://play.google.com/apps/testing/kr.jogwailji.app\n급할 때: https://play.google.com/apps/testing/kr.mytoilet.app\n광고알림 차단: https://play.google.com/apps/testing/com.jonginzz.adblock\n어플출석체크: https://play.google.com/apps/testing/kr.dailycheck.app\n→ [테스터 되기] 누르기 → '테스터가 되었습니다'가 나오면 성공!\n\n③ 앱 설치\n조과일지: https://play.google.com/store/apps/details?id=kr.jogwailji.app\n급할 때: https://play.google.com/store/apps/details?id=kr.mytoilet.app\n광고알림 차단: https://play.google.com/store/apps/details?id=com.jonginzz.adblock\n어플출석체크: https://play.google.com/store/apps/details?id=kr.dailycheck.app\n→ [설치] (이미 있으면 [업데이트])\n※ '항목을 찾을 수 없습니다'가 나오면 ①②를 같은 계정으로 했는지 확인하고 10분~1시간 뒤 다시 열어 주세요.\n\n한 번에 보기: https://talla.co.kr";
  var done=function(){b.textContent="✅ 복사했어요 · 카톡에 붙여 넣기";setTimeout(function(){b.textContent="📋 이 안내를 카톡으로 보낼 글 복사하기"},3000)};
  if(navigator.clipboard){navigator.clipboard.writeText(t).then(done,function(){prompt("복사해 주세요",t)})}else{prompt("복사해 주세요",t)}
 }
