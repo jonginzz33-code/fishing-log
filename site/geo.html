@@ -1330,7 +1330,7 @@ body.noscroll{overflow:hidden}
       hist = j.events || []; histRender();
     });
   }
-  $('histOpen').onclick = function () { $('histBox').classList.remove('hide'); document.body.classList.add('noscroll'); histLoad(); };
+  $('histOpen').onclick = function () { logShut(); $('histBox').classList.remove('hide'); document.body.classList.add('noscroll'); histLoad(); };
   $('histClose').onclick = function () { $('histBox').classList.add('hide'); if ($('logBox').classList.contains('hide')) document.body.classList.remove('noscroll'); };
   $('histBox').onclick = function (e) { if (e.target === $('histBox')) $('histClose').onclick(); };
   $('histDays').onchange = histLoad;
