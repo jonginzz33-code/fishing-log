@@ -63,6 +63,9 @@ details summary{cursor:pointer;font-weight:800}
 .ni small{display:block;color:var(--sub);font-size:12px}
 .ni.came{background:rgba(47,191,143,.08)}
 .cN,.pN{color:var(--sky);font-weight:700}
+.push{background:#0F2231;border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:14px}
+.push .sub{color:var(--sub);font-size:13px}
+.push.on{border-color:var(--ok)}
 .alarm{border:0;border-radius:10px;padding:3px 10px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit}
 .alarm.done{background:#1E4F3E;color:#9FF0CF}
 .sv{display:inline-block;background:#F2C14E;color:#2A1E00;border-radius:8px;padding:2px 9px;font-size:13px;font-weight:800;vertical-align:middle;margin-left:4px}
@@ -124,6 +127,10 @@ details summary{cursor:pointer;font-weight:800}
       <select id="qFrom"></select><span>시 ~</span><select id="qTo"></select><span>시</span>
       <label style="margin-left:8px"><input type="checkbox" id="qSat"> 토요일 쉬기</label>
       <label><input type="checkbox" id="qSun"> 일요일 쉬기</label>
+    </div>
+    <div class="push" id="pushBox">
+      <div><b>📲 이 기기로 알림 받기</b> <span id="pushState" class="sub"></span></div>
+      <div class="row" style="margin-top:6px"><button class="btn ok sm" id="pushOn">🔔 이 폰으로 알림 받기</button><button class="btn ghost sm hide" id="pushOff">🔕 이 기기 알림 끄기</button></div>
     </div>
     <div class="row">
       <button class="btn ok" id="nNow">🔄 전부 지금 확인</button>
@@ -735,6 +742,65 @@ details summary{cursor:pointer;font-weight:800}
   }
   $('pQbtn').onclick = pFind;
   $('pQ').onkeydown = function (e) { if (e.key === 'Enter') pFind(); };
+
+  // ───── 웹 알림: 이 기기로 알림 받기 (페이지를 닫아도 알림이 옴) ─────
+  var SW = '/geo-sw.js', SW_SCOPE = '/geo-push/';
+  var pushOk = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  function swReg() {
+    return navigator.serviceWorker.register(SW, { scope: SW_SCOPE }).then(function (reg) {
+      if (reg.active) return reg;
+      return new Promise(function (ok) {
+        var w = reg.installing || reg.waiting;
+        if (!w) return ok(reg);
+        w.addEventListener('statechange', function () { if (w.state === 'activated') ok(reg); });
+      });
+    });
+  }
+  function u8(b64) { b64 = b64.replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '='; var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  function pushShow(on, text) {
+    $('pushBox').classList.toggle('on', !!on);
+    $('pushOn').classList.toggle('hide', !!on);
+    $('pushOff').classList.toggle('hide', !on);
+    $('pushState').textContent = text || '';
+  }
+  function pushCheck() {
+    if (!pushOk) { pushShow(false, '이 브라우저는 웹 알림을 못 받아요. (아이폰은 홈 화면에 추가한 뒤 열어야 해요)'); $('pushOn').disabled = true; return; }
+    if (Notification.permission === 'denied') { pushShow(false, '알림이 차단돼 있어요. 크롬 주소창 왼쪽 자물쇠 → 알림 → 허용으로 바꿔 주세요.'); return; }
+    navigator.serviceWorker.getRegistration(SW_SCOPE).then(function (reg) {
+      return reg ? reg.pushManager.getSubscription() : null;
+    }).then(function (sub) {
+      pushShow(!!sub, sub ? '✅ 이 기기는 알림을 받고 있어요' : '이 기기는 아직 알림을 안 받아요');
+    }).catch(function () { pushShow(false, ''); });
+  }
+  $('pushOn').onclick = function () {
+    var btn = $('pushOn'); btn.disabled = true; pushShow(false, '설정 중…');
+    Notification.requestPermission().then(function (p) {
+      if (p !== 'granted') throw new Error('알림을 허용해야 받을 수 있어요.');
+      return Promise.all([swReg(), call('pushKey')]);
+    }).then(function (r) {
+      var reg = r[0], key = r[1].key;
+      return reg.pushManager.getSubscription().then(function (old) {
+        return old || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8(key) });
+      });
+    }).then(function (sub) {
+      var label = (/Android/.test(navigator.userAgent) ? '안드로이드' : /iPhone|iPad/.test(navigator.userAgent) ? '아이폰' : 'PC') + ' · ' + new Date().toLocaleDateString('ko-KR');
+      return call('pushSub', { method: 'POST', body: { sub: sub.toJSON(), label: label } });
+    }).then(function (j) {
+      btn.disabled = false;
+      if (j.error) throw new Error(j.error);
+      pushShow(true, '✅ ' + j.msg + ' 🔔 테스트 알림으로 확인해 보세요.');
+    }).catch(function (e) { btn.disabled = false; pushShow(false, '⚠ ' + (e.message || e)); });
+  };
+  $('pushOff').onclick = function () {
+    navigator.serviceWorker.getRegistration(SW_SCOPE).then(function (reg) {
+      return reg && reg.pushManager.getSubscription();
+    }).then(function (sub) {
+      if (!sub) return { msg: '' };
+      var ep = sub.endpoint;
+      return sub.unsubscribe().then(function () { return call('pushUnsub', { method: 'POST', body: { endpoint: ep } }); });
+    }).then(function (j) { pushShow(false, j.msg || '이 기기 알림을 껐어요.'); });
+  };
+  pushCheck();
 
   // 지오팜에서 거래처 목록 다시 받기 (거래처가 늘었을 때)
   $('cRefresh').onclick = function (e) {
