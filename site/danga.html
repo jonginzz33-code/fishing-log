@@ -17,6 +17,8 @@ nav{display:flex;align-items:center;gap:10px;padding:14px 0;padding-right:52px;b
 .logo{font-size:19px;font-weight:900}.logo span{color:var(--sky)}
 nav h1{font-size:17px;margin:0 0 0 4px}
 .tabs{display:flex;gap:6px;margin:14px 0 10px;overflow-x:auto}
+.uovIn,.ovIn{background:#fff !important;color:#0b1220 !important;-webkit-text-fill-color:#0b1220;font-weight:800 !important;font-size:18px !important;caret-color:#0b1220;border:2px solid #7dd3fc !important;border-radius:8px;padding:6px 4px}
+.uovIn::placeholder,.ovIn::placeholder{color:#94a3b8;-webkit-text-fill-color:#94a3b8;font-weight:500;font-size:14px}
 .tab{flex:0 0 auto;min-height:40px;padding:0 13px;border-radius:20px;border:1.5px solid var(--line);background:transparent;font-weight:800;font-size:14px;cursor:pointer}
 .tab.on{background:var(--card2);border-color:var(--sky);color:var(--sky)}
 .card{background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
@@ -1173,13 +1175,15 @@ function lblLoad() {
     var L = {};
     tbs.forEach(function (tb) { if (tb) (tb.rows || []).forEach(function (r) { Object.keys(r.cells || {}).forEach(function (co) { var c = r.cells[co]; if (!c) return;
       c.brk.forEach(function (x, i) { if (i === 0 && /단가표/.test(x[0])) return; L[co] = L[co] || {}; var v = L[co][x[0]] = L[co][x[0]] || []; if (v.indexOf(x[1]) < 0) v.push(x[1]); }); }); }); });
+    var t0 = tbs.filter(Boolean)[0]; if (t0) SITE.cos = (t0.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; });
     LBL = L; LBL_BUSY = false; if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml();
   });
 }
 function lblList(co) { var o = (LBL || {})[co] || {}; return Object.keys(o).sort(function (a, b) { var p = function (s) { return /^부가 미유치/.test(s) ? 2 : /차감|미충족/.test(s) ? 1 : 0; }; return p(a) - p(b); }); }
 function userEdHtml(u) {
   if (!LBL) return '<p class="sub">⏳ 사이트에서 줄 목록 불러오는 중…</p>';
-  var cos = SITE.cos.filter(function (co) { return lblList(co).length; });
+  var cos = SITE.cos.filter(function (co) { return lblList(co).length && (!u.cos || u.cos.indexOf(co) >= 0); });   // 이 계정 거래처만
+  if (!cos.length) return '<p class="sub">위 🏢 거래처에서 이 계정에 들어가는 거래처를 먼저 골라 주세요.</p>';
   return cos.map(function (co) {
     var ov = (u.ovr || {})[co] || {};
     // 한 줄에 원래 금액이 여러 개면 (예: +10 · +5) 금액마다 따로 → 키 = '줄 이름 @원래금액'
@@ -1205,6 +1209,10 @@ function usersHtml() {
     var lines = []; Object.keys(u.ovr || {}).forEach(function (co) { Object.keys(u.ovr[co]).forEach(function (lab) { lines.push([co, lab, u.ovr[co][lab]]); }); });
     return '<div class="card"><h2 style="margin-top:0">👤 ' + esc(u.id) + (u.memo ? ' <span class="sub">' + esc(u.memo) + '</span>' : '') + '</h2>' +
       (lines.length ? '<div class="parts">' + lines.map(function (l) { return '<div><span><b>' + esc(A2O_CO[l[0]] || l[0]) + '</b> · ' + esc(String(l[1]).replace(/ @(\S+)$/, ' (원래 $1)')) + '</span><span style="display:flex;gap:6px;align-items:center"><b>' + (l[2] > 0 ? '+' : '') + esc(String(l[2])) + '</b><button class="btn sm" data-uovdel="' + esc(u.id) + '|' + esc(l[0]) + '|' + esc(l[1]) + '">원래대로</button></span></div>'; }).join('') + '</div>' : '<p class="sub">바꾼 줄 없음 (a2o 값 그대로)</p>') +
+      '<div class="row" style="margin-top:8px;align-items:center"><span class="lbl" style="margin:0 4px 0 0">🏢 거래처</span>' + SITE.cos.map(function (co) {
+        var on = !u.cos || u.cos.indexOf(co) >= 0;
+        return '<button class="chip' + (on ? ' on' : '') + '" data-ucos="' + esc(u.id + '|' + co) + '">' + (on ? '☑ ' : '☐ ') + esc(A2O_CO[co] || co) + '</button>';
+      }).join('') + (!u.cos ? '<span class="sub">(아직 안 골라서 전부)</span>' : !u.cos.length ? '<span class="sub" style="color:var(--yel)">← 골라 주세요 (지금은 아무것도 안 보여요)</span>' : '') + '</div>' +
       '<details data-ued="' + esc(u.id) + '"' + (USERS.open[u.id] ? ' open' : '') + ' style="margin-top:8px;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px"><summary style="cursor:pointer;font-weight:700">✏ 이 계정 구두 단가 설정</summary>' + userEdHtml(u) + '</details>' +
       '<div class="row" style="margin-top:8px"><button class="btn" data-uas="' + esc(u.id) + '">👁 이 계정 화면으로 보기</button><button class="btn sm" data-upw="' + esc(u.id) + '">🔑 비밀번호 바꾸기</button><button class="btn sm del" data-udel="' + esc(u.id) + '">지우기</button></div></div>';
   }).join('');
@@ -1359,9 +1367,14 @@ view.addEventListener('click', function (e) {
   if (d.uas) { S.asUser = d.uas; S.tab = 'site'; save(); render(); window.scrollTo(0, 0); return; }
   if (t.hasAttribute('data-nuadd')) { var nid = document.getElementById('nuId').value.trim(), npw = document.getElementById('nuPw').value, nm = document.getElementById('nuMemo').value.trim();
     if (USERS.list && USERS.list.some(function (u) { return u.id === nid; })) return alert('이미 있는 아이디예요');
-    api('/admin/user', { id: nid, pw: npw, memo: nm }).then(function () { USERS.list = (USERS.list || []).concat([{ id: nid, memo: nm, ovr: {} }]); document.getElementById('view').innerHTML = usersHtml(); setTimeout(usersLoad, 1500); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+    api('/admin/user', { id: nid, pw: npw, memo: nm, cos: [] }).then(function () { USERS.list = (USERS.list || []).concat([{ id: nid, memo: nm, ovr: {}, cos: [] }]); document.getElementById('view').innerHTML = usersHtml(); setTimeout(usersLoad, 1500); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.upw) { var pw2 = prompt(d.upw + ' 새 비밀번호 (4자 이상)'); if (pw2) api('/admin/user', { id: d.upw, pw: pw2 }).then(function () { alert('바꿨어요'); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.udel) { if (confirm(d.udel + ' 계정을 지울까요? (바꿔 둔 금액도 같이 지워져요)')) api('/admin/del', { id: d.udel }).then(function () { if (S.asUser === d.udel) S.asUser = null; USERS.list = (USERS.list || []).filter(function (u) { return u.id !== d.udel; }); document.getElementById('view').innerHTML = usersHtml(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.ucos) { var uc = d.ucos.split('|'), uu = (USERS.list || []).filter(function (u) { return u.id === uc[0]; })[0]; if (!uu) return;
+    var lst = (uu.cos ? uu.cos : SITE.cos).slice(), ix4 = lst.indexOf(uc[1]); if (ix4 >= 0) lst.splice(ix4, 1); else lst.push(uc[1]);
+    t.disabled = true;
+    api('/admin/user', { id: uu.id, cos: lst }).then(function () { uu.cos = lst; USERS.open[uu.id] = true; SITE.tb = {}; A2O.mem = {}; var sy4 = window.scrollY; document.getElementById('view').innerHTML = usersHtml(); window.scrollTo(0, sy4); })
+      .catch(function (er) { alert('⚠ ' + (er.message || er)); t.disabled = false; }); return; }
   if (d.uovset) { var k3 = d.uovset.split('|'), uid3 = k3[0], co3 = k3[1], lab3 = k3.slice(2).join('|');
     var in3 = [].filter.call(document.querySelectorAll('.uovIn'), function (n) { return n.dataset.k === d.uovset; })[0], raw3 = (in3 && in3.value || '').trim();
     var amt3 = raw3 === '' ? null : Number(raw3.replace(/^\+/, '')); if (amt3 !== null && !isFinite(amt3)) return alert('숫자를 넣어 주세요');
