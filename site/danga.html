@@ -1260,8 +1260,17 @@ function userEdHtml(u) {
   }).join('') + '<p class="sub">칸을 비우고 [저장]을 누르면 원래 값으로 돌아가요.</p>';
 }
 function usersLoad() { lblLoad(); api('/admin/users').then(function (l) { USERS.list = l; USERS.err = ''; if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml(); }).catch(function (e) { USERS.err = e.message || String(e); if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml(); }); }
+var SHARE_URL = 'https://talla-danga.web.app';   // 거래처에 주는 주소
+function copyText(s) {
+  var done = function () { toast('📋 복사했어요'); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(s).then(done, fb); else fb();
+  function fb() { var t = document.createElement('textarea'); t.value = s; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); done(); } catch (e) { prompt('길게 눌러 복사하세요', s); } t.remove(); }
+}
 function usersHtml() {
-  var h = '<div class="card"><h2 style="margin-top:0">➕ 계정 만들기</h2><p class="sub">계정마다 단가를 다르게 보여 줄 수 있어요. 만든 뒤 [이 계정 화면으로]를 눌러 숫자를 누르면 줄마다 금액을 바꿀 수 있어요.</p>' +
+  var h = '<div class="card" style="border:2px solid #7dd3fc"><h2 style="margin-top:0">🔗 거래처에 줄 사이트</h2>' +
+    '<div class="row" style="align-items:center"><input readonly value="' + SHARE_URL + '" style="flex:1;min-width:160px;font-weight:800;font-size:16px;background:#fff;color:#0b1220;-webkit-text-fill-color:#0b1220;border:2px solid #7dd3fc;border-radius:8px;padding:8px" onclick="this.select()"><button class="btn pri" data-copy="' + SHARE_URL + '" style="font-size:16px">📋 복사</button></div>' +
+    '<p class="sub" style="margin:6px 0 0">계정마다 [📋 안내 복사]를 누르면 주소 + 아이디가 같이 복사돼요 (비밀번호는 따로 알려 주세요).</p></div>' +
+    '<div class="card"><h2 style="margin-top:0">➕ 계정 만들기</h2><p class="sub">계정마다 단가를 다르게 보여 줄 수 있어요. 만든 뒤 [이 계정 화면으로]를 눌러 숫자를 누르면 줄마다 금액을 바꿀 수 있어요.</p>' +
     '<div class="row"><input id="nuId" type="text" placeholder="아이디 (영어 · 숫자)" style="flex:1;min-width:120px"><input id="nuPw" type="text" placeholder="비밀번호 (4자 이상)" style="flex:1;min-width:120px"></div>' +
     '<div class="row" style="margin-top:6px"><input id="nuMemo" type="text" placeholder="메모 (예: 강남점)" style="flex:1"><button class="btn pri" data-nuadd>➕ 만들기</button></div></div>';
   if (USERS.err) return h + '<div class="card"><p class="sub">⚠ ' + esc(USERS.err) + '</p></div>';
@@ -1284,7 +1293,7 @@ function usersHtml() {
         }).join('') + (!(CO_BY[car] || []).some(function (co) { return !u.cos || u.cos.indexOf(co) >= 0; }) ? '<span class="sub" style="color:var(--yel)">← 골라 주세요</span>' : '') + '</div>';
       }).join('') + (!LBL ? '<p class="sub">⏳ 통신사별 거래처 불러오는 중…</p>' : '') +
       '<details data-ued="' + esc(u.id) + '"' + (USERS.open[u.id] ? ' open' : '') + ' style="margin-top:8px;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px"><summary style="cursor:pointer;font-weight:700">✏ 이 계정 구두 단가 설정</summary>' + userEdHtml(u) + '</details>' +
-      '<div class="row" style="margin-top:8px"><button class="btn" data-uas="' + esc(u.id) + '">👁 이 계정 화면으로 보기</button><button class="btn sm" data-upw="' + esc(u.id) + '">🔑 비밀번호 바꾸기</button><button class="btn sm del" data-udel="' + esc(u.id) + '">지우기</button></div></div>';
+      '<div class="row" style="margin-top:8px"><button class="btn pri" data-copy="' + esc('💰 단가 비교\n' + SHARE_URL + '\n아이디: ' + u.id) + '">📋 안내 복사</button><button class="btn" data-uas="' + esc(u.id) + '">👁 이 계정 화면으로 보기</button><button class="btn sm" data-upw="' + esc(u.id) + '">🔑 비밀번호 바꾸기</button><button class="btn sm del" data-udel="' + esc(u.id) + '">지우기</button></div></div>';
   }).join('');
 }
 // 설정 = 사이트 연결에 필요한 것만 (열쇠 · 로그아웃) — 예전 단가표 · 정책 · 백업 칸은 뺌 (setHtmlOld 로 남김)
@@ -1431,6 +1440,7 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
   if (t.hasAttribute('data-a2oq')) { a2oSearch(); return; }
   if (d.a2om) { showSite(d.a2om); return; }
+  if (d.copy) { copyText(d.copy); return; }
   if (t.hasAttribute('data-login')) { doLogin(); return; }
   if (t.hasAttribute('data-ulogout')) { uTok(''); A2O.raw = null; A2O.mem = {}; SITE.tb = {}; render(); return; }
   if (t.hasAttribute('data-asoff')) { S.asUser = null; save(); render(); return; }
