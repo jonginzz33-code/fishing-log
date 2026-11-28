@@ -1,0 +1,11 @@
+name: Relay ping
+on:
+  workflow_dispatch:
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "== ping"; curl -s -m 20 https://talla-relay.jonginzz33.workers.dev/ping; echo
+          echo "== preflight"; curl -s -m 20 -i -X OPTIONS -H 'Origin: https://talla.co.kr' -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: x-key' https://talla-relay.jonginzz33.workers.dev/a2o | grep -i -E '^HTTP|access-control'
+          echo "== no key"; curl -s -m 20 -i https://talla-relay.jonginzz33.workers.dev/a2o | grep -i -E '^HTTP|error'
