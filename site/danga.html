@@ -327,7 +327,9 @@ var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기�
 // 2026-11-28 사용자 요청: 📊 비교 · 📋 단가표 입력 탭은 홈피에서 뺌 (코드 · 저장 자료는 남겨 둠 · 다시 넣으려면 아래 줄에 되살리기)
 var TABS_OLD = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력']];
 var TABS = [['site', '🌐 사이트 비교'], ['set', '⚙ 설정']];   // 🗣 구두도 뺌 (사이트 값에 안 쓰임 · 구두는 a2o 사이트에 넣음)
+function curTabs() { return isAdmin() ? [['site', '🌐 사이트 비교'], ['users', '👥 계정'], ['set', '⚙ 설정']] : isUser() ? [['site', '🌐 사이트 비교'], ['set', '⚙ 내 정보']] : []; }
 function renderTabs() {
+  TABS = curTabs();
   document.getElementById('tabs').innerHTML = TABS.map(function (t) {
     return '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>';
   }).join('');
@@ -335,10 +337,14 @@ function renderTabs() {
 document.getElementById('tabs').onclick = function (e) { var t = e.target.closest('[data-t]'); if (!t) return; S.tab = t.dataset.t; save(); render(); };
 
 function render() {
+  TABS = curTabs();
   if (!TABS.some(function (t) { return t[0] === S.tab; })) S.tab = 'site';   // 뺀 탭(비교 · 단가표 입력)에 있었으면 사이트 비교로
   renderTabs();
-  document.getElementById('savebar').classList.remove('hide'); setTimeout(paintSave, 0);
   var v = document.getElementById('view');
+  if (!isAdmin()) S.asUser = null;
+  if (!TABS.length) { document.getElementById('savebar').classList.add('hide'); v.innerHTML = loginHtml(); return; }   // 로그인 전
+  document.getElementById('savebar').classList.toggle('hide', !isAdmin()); if (isAdmin()) setTimeout(paintSave, 0);
+  if (S.tab === 'users') { v.innerHTML = usersHtml(); usersLoad(); return; }
   if (S.tab === 'cmp') v.innerHTML = cmpHtml();
   else if (S.tab === 'site') { v.innerHTML = siteHtml(); siteLoad(); }
   else if (S.tab === 'sheet') v.innerHTML = sheetHtml();
@@ -850,10 +856,21 @@ function a2oParams(band, type) {
   (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); });
   return q;
 }
+// ── 누가 쓰나: 관리자(열쇠 있음) · 계정(아이디로 로그인 → 토큰) ──
+function uTok(v, id) { if (v !== undefined) { ls('danga_tok', v || ''); ls('danga_uid', id || ''); } return ls('danga_tok') || ''; }
+function isAdmin() { return !!a2oKey(); }
+function isUser() { return !isAdmin() && !!uTok(); }
+function authH() { return isAdmin() ? { 'X-Key': a2oKey() } : { 'X-Tok': uTok() }; }
+function authK() { return isAdmin() ? a2oKey() : uTok(); }
+var RELAY = A2O_RELAY.replace(/\/a2o$/, '');
+function api(path, body) {
+  return fetch(RELAY + path, body ? { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authH()), body: JSON.stringify(body) } : { headers: authH() })
+    .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error((j && j.error) || ('오류 ' + r.status)); return j; }); });
+}
 function a2oGet(q) {
   var hit = A2O.mem[q]; if (hit && Date.now() - hit.t < 5 * 60000) return Promise.resolve(hit.v);
-  return fetch(A2O_RELAY + '?' + q, { headers: { 'X-Key': a2oKey() } })
-    .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(r.status === 403 ? '열쇠가 틀려요 (⚙ 설정)' : (j && j.error) || ('오류 ' + r.status)); return j; }); })
+  return fetch(A2O_RELAY + '?' + q, { headers: authH() })
+    .then(function (r) { return r.json().then(function (j) { if (r.status === 403 && isUser()) { uTok(''); render(); } if (r.status !== 200) throw new Error(r.status === 403 ? (isUser() ? '다시 로그인해 주세요' : '열쇠가 틀려요 (⚙ 설정)') : (j && j.error) || ('오류 ' + r.status)); return j; }); })
     .then(function (j) { A2O.mem[q] = { t: Date.now(), v: j }; return j; });
 }
 // 우리 모델(키 · 용량) → a2o 줄 (SM-S942N256 처럼 붙어 있음)
@@ -1018,14 +1035,14 @@ function siteBar() {
 }
 var SITE_PLANS = ['130', '115', '105', '95', '85', '75', '70', '61', '55', '47', '44', '37', '33'];
 function siteS() { S.site = S.site || { kind: 'mnp', plan: '115', contract: 'pub', support: '0', q: '' }; return S.site; }
-function siteQuery() { var o = siteS(), q = 'c=lg&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); }); return q; }
+function siteQuery() { var o = siteS(), q = 'c=lg&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); }); if (isAdmin() && S.asUser) q += '&as=' + encodeURIComponent(S.asUser); return q; }
 function siteBtns(k, list) {
   var o = siteS();
   return '<div class="row">' + list.map(function (x) { return '<button class="' + (k === 'plan' ? 'chip' : 'tab') + (String(o[k]) === x[0] ? ' on' : '') + '" data-sk="' + k + '" data-v="' + x[0] + '"' + (k === 'plan' ? '' : ' style="flex:1"') + '>' + x[1] + '</button>'; }).join('') + '</div>';
 }
 function siteHtml() {
-  if (!a2oKey()) return '<div class="card"><h2>🌐 사이트 비교</h2><p class="sub">⚙ 설정 탭의 \'비교 사이트 값\' 칸에 열쇠를 한 번 넣어 주세요.</p><button class="btn pri" data-go="set">⚙ 설정으로</button></div>';
   var o = siteS(), ads = '';
+  var banner = isAdmin() && S.asUser ? '<div class="card" style="border-color:var(--yel)"><b>👤 ' + esc(S.asUser) + ' 계정 화면으로 보는 중</b><p class="sub">숫자를 누르면 줄마다 금액을 이 계정용으로 바꿀 수 있어요. 바꾼 줄은 노란 글씨예요.</p><button class="btn sm" data-asoff>↩ 관리자 화면으로 (원래 값)</button></div>' : '';
   if (A2O.raw && A2O.raw.addons) {
     var on = {}; (S.a2oAd || []).forEach(function (x) { on[x] = 1; });
     ads = Object.keys(A2O_CO).filter(function (co) { return (A2O.raw.addons[co] || []).length; }).map(function (co) {
@@ -1034,7 +1051,7 @@ function siteHtml() {
       }).join('') + '</div>';
     }).join('');
   }
-  return '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">jjj.a2o.co.kr 값 그대로</span></h2>' +
+  return banner + '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : 'jjj.a2o.co.kr 값 그대로') + '</span></h2>' +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div>' +
     '<div id="siteVBar" style="margin-bottom:8px">' + siteVBar() + '</div>' +
@@ -1081,36 +1098,88 @@ function siteTable() {
     });
     h += '</table></div>';
   }
-  el.innerHTML = h + '<p class="sub">숫자를 누르면 사이트 계산 내역이 나와요 · 우리 쪽에서 따로 계산하지 않아요.</p></div>';
+  el.innerHTML = h + '<p class="sub">숫자를 누르면 계산 내역이 나와요.</p></div>';
 }
 function siteCell(v) {
   var p = v.split('|'), tb = SITE.tb[siteQuery()]; if (!tb) return;
   var r = (tb.rows || []).filter(function (x) { return x.id === p[0]; })[0]; if (!r) return;
   var c = r.cells[p[1]]; if (!c) return;
-  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>' + esc((tb.dates || {})[p[1]] || '') + '</p>' +
+  var edit = isAdmin() && S.asUser;   // 관리자가 계정 화면으로 볼 때만: 줄마다 금액 바꾸기
+  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>' + esc((tb.dates || {})[p[1]] || '') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
     '<div class="parts">' + (c.brk || []).map(function (x, i) {
-      var face = i === 0 && /단가표/.test(x[0]), lab = face ? '📋 액면 (단가표) 🖼 그림 보기 ›' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]);
+      var face = i === 0 && /단가표/.test(x[0]), lab = face ? '📋 액면 (단가표) 🖼 그림 보기 ›' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]), chg = x.length > 2;
+      if (edit && !face) {
+        var num = String(x[1]).replace(/[^\d.+-]/g, '').replace(/^\+/, '');
+        return '<div style="flex-wrap:wrap;gap:4px"><span style="' + (chg ? 'color:var(--yel)' : '') + '">' + esc(lab) + (chg ? ' <span class="sub">(원래 ' + esc(x[2]) + ')</span>' : '') + '</span>' +
+          '<span style="display:flex;gap:4px;align-items:center"><input class="ovIn" data-lab="' + esc(x[0]) + '" value="' + esc(num) + '" inputmode="decimal" style="width:64px;text-align:center">' +
+          '<button class="btn sm" data-ovsave="' + esc(x[0]) + '">저장</button>' + (chg ? '<button class="btn sm" data-ovdel="' + esc(x[0]) + '">원래대로</button>' : '') + '</span></div>';
+      }
       return '<div' + (face ? ' data-simg="' + esc(p[1]) + '" style="cursor:pointer;text-decoration:underline;color:#7dd3fc"' : '') + '><span>' + esc(lab) + '</span><b class="' + (neg ? 'minus' : pos ? 'plus' : '') + '">' + esc(x[1]) + '</b></div>';
-    }).join('') + '<div style="border-top:1px solid #33475b;margin-top:6px;padding-top:6px"><span><b>최종 (사이트 계산)</b></span><b>' + esc(String(+c.tot)) + '</b></div></div>',
-    function (sh) { sh.addEventListener('click', function (e) { var f = e.target.closest('[data-simg]'); if (f) siteImgs(f.dataset.simg); }); });
+    }).join('') + '<div style="border-top:1px solid #33475b;margin-top:6px;padding-top:6px"><span><b>최종</b></span><b>' + esc(String(+c.tot)) + '</b></div></div>',
+    function (sh) { sh.addEventListener('click', function (e) {
+      var f = e.target.closest('[data-simg]'); if (f) { siteImgs(f.dataset.simg); return; }
+      var sv = e.target.closest('[data-ovsave],[data-ovdel]'); if (!sv) return;
+      var lab = sv.dataset.ovsave || sv.dataset.ovdel, amt = null;
+      if (sv.dataset.ovsave != null) { var inp = [].filter.call(sh.querySelectorAll('.ovIn'), function (n) { return n.dataset.lab === lab; })[0]; amt = Number(inp && inp.value); if (!isFinite(amt) || inp.value === '') return alert('숫자를 넣어 주세요'); }
+      sv.disabled = true; sv.textContent = '⏳';
+      api('/admin/ovr', { id: S.asUser, co: p[1], label: lab, amt: amt }).then(function () {
+        SITE.tb = {}; A2O.mem = {}; document.getElementById('modal').classList.add('hide');
+        siteLoad(); var wait = function (n) { if (SITE.tb[siteQuery()] || n > 120) siteCell(v); else setTimeout(function () { wait(n + 1); }, 250); }; wait(0);
+      }).catch(function (er) { alert('저장 못 했어요 · ' + (er.message || er)); sv.disabled = false; sv.textContent = '저장'; });
+    }); });
 }
 // 액면 누르면 → 그 대리점 단가표 그림 (a2o 단가표 창과 같은 그림 · 중계기 통해서)
 function siteImgs(co) {
   var base = A2O_RELAY.replace(/\/a2o$/, '');
   openSheet('<h3><span>📋 ' + esc(A2O_CO[co] || co) + ' 단가표</span><button class="btn sm" data-close>닫기</button></h3><div id="simgs"><p class="sub">⏳ 단가표 그림 가져오는 중…</p></div>');
-  fetch(base + '/a2o/sheet?s=' + encodeURIComponent(co), { headers: { 'X-Key': a2oKey() } })
+  fetch(base + '/a2o/sheet?s=' + encodeURIComponent(co), { headers: authH() })
     .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(j.error || r.status); return j; }); })
     .then(function (j) {
       var el = document.getElementById('simgs'); if (!el) return;
       if (!j.images || !j.images.length) { el.innerHTML = '<p class="sub">이 대리점은 단가표 그림이 없어요.</p>'; return; }
       el.innerHTML = '<p class="sub">' + esc(j.date || '') + (j.at ? ' · 올라온 시각 ' + esc(j.at) : '') + ' · 그림을 누르면 크게 열려요</p>' + j.images.map(function (p) {
-        var u = base + '/a2o/img?p=' + encodeURIComponent(p) + '&k=' + encodeURIComponent(a2oKey());
+        var u = base + '/a2o/img?p=' + encodeURIComponent(p) + '&k=' + encodeURIComponent(authK());
         return '<a href="' + esc(u) + '" target="_blank" rel="noopener"><img src="' + esc(u) + '" loading="lazy" style="width:100%;margin:6px 0;border-radius:8px;background:#fff"></a>';
       }).join('');
     }).catch(function (e) { var el = document.getElementById('simgs'); if (el) el.innerHTML = '<p class="sub">⚠ 그림을 못 가져왔어요 · ' + esc(e.message || e) + '</p>'; });
 }
+// ── 로그인 화면 (계정 아이디 · 비밀번호) · 관리자는 아래 '관리자 열쇠'로 ──
+function loginHtml() {
+  return '<div class="card" style="max-width:420px;margin:20px auto"><h2 style="margin-top:0">🔐 단가 비교 로그인</h2>' +
+    '<input id="lgId" type="text" autocomplete="username" placeholder="아이디" style="width:100%;margin-bottom:8px">' +
+    '<input id="lgPw" type="password" autocomplete="current-password" placeholder="비밀번호" style="width:100%">' +
+    '<div class="row" style="margin-top:10px"><button class="btn pri" data-login style="flex:1">로그인</button></div><p class="sub" id="lgMsg"></p>' +
+    '<details style="margin-top:14px"><summary class="sub" style="cursor:pointer">관리자 열쇠로 들어가기</summary><input id="a2oKey" type="password" style="width:100%;margin-top:6px" placeholder="관리자 열쇠"><div class="row" style="margin-top:6px"><button class="btn" data-a2o>🔑 열쇠로 들어가기</button></div><p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p></details></div>';
+}
+function doLogin() {
+  var id = (document.getElementById('lgId') || {}).value || '', pw = (document.getElementById('lgPw') || {}).value || '', m = document.getElementById('lgMsg');
+  if (!id || !pw) { m.textContent = '아이디와 비밀번호를 넣어 주세요'; return; }
+  m.textContent = '⏳ 확인 중…';
+  fetch(RELAY + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id.trim(), pw: pw }) })
+    .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(j.error || r.status); return j; }); })
+    .then(function (j) { uTok(j.tok, j.id); A2O.raw = null; A2O.mem = {}; SITE.tb = {}; S.tab = 'site'; render(); })
+    .catch(function (e) { m.textContent = '⚠ ' + (e.message || e); });
+}
+// ── 👥 계정 (관리자) — 만들기 · 비밀번호 · 지우기 · 바꾼 줄 보기 · 이 계정 화면으로 보기 ──
+var USERS = { list: null, err: '' };
+function usersLoad() { api('/admin/users').then(function (l) { USERS.list = l; USERS.err = ''; if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml(); }).catch(function (e) { USERS.err = e.message || String(e); if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml(); }); }
+function usersHtml() {
+  var h = '<div class="card"><h2 style="margin-top:0">➕ 계정 만들기</h2><p class="sub">계정마다 단가를 다르게 보여 줄 수 있어요. 만든 뒤 [이 계정 화면으로]를 눌러 숫자를 누르면 줄마다 금액을 바꿀 수 있어요.</p>' +
+    '<div class="row"><input id="nuId" type="text" placeholder="아이디 (영어 · 숫자)" style="flex:1;min-width:120px"><input id="nuPw" type="text" placeholder="비밀번호 (4자 이상)" style="flex:1;min-width:120px"></div>' +
+    '<div class="row" style="margin-top:6px"><input id="nuMemo" type="text" placeholder="메모 (예: 강남점)" style="flex:1"><button class="btn pri" data-nuadd>➕ 만들기</button></div></div>';
+  if (USERS.err) return h + '<div class="card"><p class="sub">⚠ ' + esc(USERS.err) + '</p></div>';
+  if (!USERS.list) return h + '<div class="card"><p class="sub">⏳ 계정 불러오는 중…</p></div>';
+  if (!USERS.list.length) return h + '<div class="card"><p class="sub">아직 계정이 없어요.</p></div>';
+  return h + USERS.list.map(function (u) {
+    var lines = []; Object.keys(u.ovr || {}).forEach(function (co) { Object.keys(u.ovr[co]).forEach(function (lab) { lines.push([co, lab, u.ovr[co][lab]]); }); });
+    return '<div class="card"><h2 style="margin-top:0">👤 ' + esc(u.id) + (u.memo ? ' <span class="sub">' + esc(u.memo) + '</span>' : '') + '</h2>' +
+      (lines.length ? '<div class="parts">' + lines.map(function (l) { return '<div><span><b>' + esc(A2O_CO[l[0]] || l[0]) + '</b> · ' + esc(l[1]) + '</span><span style="display:flex;gap:6px;align-items:center"><b>' + (l[2] > 0 ? '+' : '') + esc(String(l[2])) + '</b><button class="btn sm" data-uovdel="' + esc(u.id) + '|' + esc(l[0]) + '|' + esc(l[1]) + '">원래대로</button></span></div>'; }).join('') + '</div>' : '<p class="sub">바꾼 줄 없음 (a2o 값 그대로)</p>') +
+      '<div class="row" style="margin-top:8px"><button class="btn pri" data-uas="' + esc(u.id) + '">👁 이 계정 화면으로 · 금액 바꾸기</button><button class="btn sm" data-upw="' + esc(u.id) + '">🔑 비밀번호 바꾸기</button><button class="btn sm del" data-udel="' + esc(u.id) + '">지우기</button></div></div>';
+  }).join('');
+}
 // 설정 = 사이트 연결에 필요한 것만 (열쇠 · 로그아웃) — 예전 단가표 · 정책 · 백업 칸은 뺌 (setHtmlOld 로 남김)
 function setHtml() {
+  if (isUser()) return '<div class="card"><h2>👤 ' + esc(ls('danga_uid') || '') + '</h2><button class="btn" data-ulogout>로그아웃</button></div>';
   return '<div class="card"><h2>🔑 사이트 연결 열쇠</h2><p class="sub">jjj.a2o.co.kr 값을 중계기(talla-danga)로 가져와요. 열쇠는 이 기기 브라우저에만 저장돼요.</p>' +
     '<input id="a2oKey" type="password" style="width:100%" placeholder="열쇠 (DANGA_KEY)" value="' + esc(a2oKey()) + '">' +
     '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>💾 열쇠 저장 · 연결 확인</button></div><p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p></div>' +
@@ -1196,7 +1265,7 @@ document.getElementById('modal').addEventListener('click', function (e) { if (e.
 function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
 var view = document.getElementById('view');
 view.addEventListener('input', function (e) { if (e.target.id === 'siteQ') { siteS().q = e.target.value; if ((S.siteM || []).length) { S.siteM = []; var mb = document.getElementById('siteMBar'); if (mb) mb.innerHTML = siteMBar(); } siteTable(); } });
-view.addEventListener('keydown', function (e) { if (e.target.id === 'siteQ' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); save(); return; } if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
+view.addEventListener('keydown', function (e) { if ((e.target.id === 'lgPw' || e.target.id === 'lgId') && e.key === 'Enter') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'siteQ' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); save(); return; } if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
 view.addEventListener('click', function (e) {
   var t = e.target.closest('button,[data-scell],[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
@@ -1252,6 +1321,16 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
   if (t.hasAttribute('data-a2oq')) { a2oSearch(); return; }
   if (d.a2om) { showSite(d.a2om); return; }
+  if (t.hasAttribute('data-login')) { doLogin(); return; }
+  if (t.hasAttribute('data-ulogout')) { uTok(''); A2O.raw = null; A2O.mem = {}; SITE.tb = {}; render(); return; }
+  if (t.hasAttribute('data-asoff')) { S.asUser = null; save(); render(); return; }
+  if (d.uas) { S.asUser = d.uas; S.tab = 'site'; save(); render(); window.scrollTo(0, 0); return; }
+  if (t.hasAttribute('data-nuadd')) { var nid = document.getElementById('nuId').value.trim(), npw = document.getElementById('nuPw').value, nm = document.getElementById('nuMemo').value.trim();
+    if (USERS.list && USERS.list.some(function (u) { return u.id === nid; })) return alert('이미 있는 아이디예요');
+    api('/admin/user', { id: nid, pw: npw, memo: nm }).then(function () { USERS.list = (USERS.list || []).concat([{ id: nid, memo: nm, ovr: {} }]); document.getElementById('view').innerHTML = usersHtml(); setTimeout(usersLoad, 1500); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.upw) { var pw2 = prompt(d.upw + ' 새 비밀번호 (4자 이상)'); if (pw2) api('/admin/user', { id: d.upw, pw: pw2 }).then(function () { alert('바꿨어요'); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.udel) { if (confirm(d.udel + ' 계정을 지울까요? (바꿔 둔 금액도 같이 지워져요)')) api('/admin/del', { id: d.udel }).then(function () { if (S.asUser === d.udel) S.asUser = null; USERS.list = (USERS.list || []).filter(function (u) { return u.id !== d.udel; }); document.getElementById('view').innerHTML = usersHtml(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.uovdel) { var uo = d.uovdel.split('|'); api('/admin/ovr', { id: uo[0], co: uo[1], label: uo.slice(2).join('|'), amt: null }).then(function () { SITE.tb = {}; A2O.mem = {}; usersLoad(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.sk) { var SS = siteS(); SS[d.sk] = d.v; save(); render(); return; }
   if (d.scell) { siteCell(d.scell); return; }
   if (d.smo || d.smg) {
