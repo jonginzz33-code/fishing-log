@@ -1,0 +1,38 @@
+name: Danga domain
+# danga.talla.co.kr — 단가 비교만 있는 따로 사이트 (Firebase 두 번째 사이트 talla-danga + 연결 주소)
+# 돌리면: 사이트 만들기 → 주소 연결 → 가비아에 넣을 DNS 값을 출력
+on:
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Site + custom domain
+        env:
+          SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          echo "$SA" > "$RUNNER_TEMP/sa.json"
+          pip install -q google-auth requests
+          python3 - <<'PY'
+          import json, os, google.auth.transport.requests as tr
+          from google.oauth2 import service_account
+          P = 'fishing-log-9109d'; SITE = 'talla-danga'; DOM = 'danga.talla.co.kr'
+          cr = service_account.Credentials.from_service_account_file(os.environ['RUNNER_TEMP'] + '/sa.json', scopes=['https://www.googleapis.com/auth/cloud-platform', 'https://www.googleapis.com/auth/firebase'])
+          s = tr.AuthorizedSession(cr); H = {'x-goog-user-project': P}
+          B = 'https://firebasehosting.googleapis.com/v1beta1/projects/' + P
+          r = s.get(B + '/sites', headers=H); print('SITES', r.status_code, [x.get('name') for x in r.json().get('sites', [])] if r.ok else r.text[:300])
+          have = r.ok and any(x['name'].endswith('/sites/' + SITE) for x in r.json().get('sites', []))
+          if not have:
+              r = s.post(B + '/sites?siteId=' + SITE, json={}, headers=H); print('CREATE SITE', r.status_code, r.text[:300])
+          r = s.get(B + '/sites/' + SITE + '/customDomains/' + DOM, headers=H)
+          if r.status_code == 404:
+              r = s.post(B + '/sites/' + SITE + '/customDomains?customDomainId=' + DOM, json={}, headers=H); print('CREATE DOMAIN', r.status_code, r.text[:500])
+              import time; time.sleep(20)
+              r = s.get(B + '/sites/' + SITE + '/customDomains/' + DOM, headers=H)
+          print('DOMAIN', r.status_code)
+          d = r.json() if r.ok else {}
+          print('hostState', d.get('hostState'), 'ownershipState', d.get('ownershipState'), 'certState', (d.get('cert') or {}).get('state'))
+          print('=== DNS 넣을 값 (requiredDnsUpdates) ===')
+          print(json.dumps(d.get('requiredDnsUpdates', {}), ensure_ascii=False, indent=1))
+          print(json.dumps((d.get('cert') or {}).get('verification', {}), ensure_ascii=False, indent=1))
+          PY
