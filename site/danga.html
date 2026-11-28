@@ -324,7 +324,7 @@ var IMGS = {}; // 참고용 사진 (줄여서 클라우드에 저장)
 var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기는 원본으로
 
 // ── 탭 ──
-var TABS = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
+var TABS = [['cmp', '📊 비교'], ['site', '🌐 사이트 비교'], ['sheet', '📋 단가표 입력'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
 function renderTabs() {
   document.getElementById('tabs').innerHTML = TABS.map(function (t) {
     return '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>';
@@ -337,6 +337,7 @@ function render() {
   document.getElementById('savebar').classList.remove('hide'); setTimeout(paintSave, 0);
   var v = document.getElementById('view');
   if (S.tab === 'cmp') v.innerHTML = cmpHtml();
+  else if (S.tab === 'site') { v.innerHTML = siteHtml(); siteLoad(); }
   else if (S.tab === 'sheet') v.innerHTML = sheetHtml();
   else if (S.tab === 'verbal') v.innerHTML = verbalHtml();
   else v.innerHTML = setHtml();
@@ -402,7 +403,7 @@ function scSummary(noVas) {
 
 function cmpHtml() {
   var ags = agsWithData();
-  var h = a2oSearchHtml();
+  var h = '';
   if (!ags.length) return h + '<div class="card"><h2>📷 먼저 단가표를 올려 주세요</h2><p class="sub">[📋 단가표 입력] 탭에서 업체마다 단가 숫자를 넣으면 여기서 업체끼리 비교해요.</p><button class="btn pri" data-go="sheet">📋 단가표 입력하러 가기</button></div>';
   var sel = selModels();
   h += '<div class="card">';
@@ -487,7 +488,7 @@ function showItem(id) {
   var ags = agsWithData(), p = id.split('|'), key = p[0], st = p[1] || '';
   var it = D.items(ags).filter(function (x) { return x.key === key && x.st === st; })[0];
   var h = '<h3><span>' + esc(it ? it.code + ' · ' + it.label : key) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(key) + (st ? ' · ' + esc(st) : '') + (it && it.price ? ' · 출고가 ' + Number(it.price).toLocaleString() + '원' : '') + ' · ' + esc(scSummary()) + '</p>';
-  h += '<div id="a2obox"></div><div class="lbl">📊 우리 계산 (단가표 입력 기준)</div>';
+  h += '<div class="lbl">📊 우리 계산 (단가표 입력 기준)</div>';
   h += '<div class="scroll"><table class="tbl mx"><tr><th>요금제</th>' + D.TYPES.map(function (t) { return '<th class="tsep" style="text-align:center" colspan="' + ags.length + '">' + t.label + '</th>'; }).join('') + '</tr><tr><th></th>' +
     D.TYPES.map(function () { return ags.map(function (a, i) { return '<th class="' + (i === 0 ? 'tsep' : '') + '" style="text-align:center;font-size:12px;padding:6px 4px;white-space:nowrap">' + esc(agShort(a)) + '</th>'; }).join(''); }).join('') + '</tr>';
   D.BANDS.forEach(function (b) {
@@ -508,7 +509,7 @@ function showItem(id) {
           (p ? '<div class="parts">' + p.parts.map(function (x) { return '<div><span>' + esc(x.name) + '</span><b class="' + (x.amt < 0 ? 'minus' : x.amt > 0 && x !== p.parts[0] ? 'plus' : '') + '">' + (x === p.parts[0] ? fmt(x.amt) : sgn(x.amt)) + '</b></div>'; }).join('') + '</div>' : '') + '</div>';
       });
       sh.querySelector('#bd').innerHTML = o;
-      cur = [band, type]; a2oBox(sh.querySelector('#a2obox'), key, st, band, type);
+      cur = [band, type];
     }
     var cur = null;
     bd(S.mode === 'list' ? S.band : 'B115', S.type);
@@ -940,6 +941,77 @@ function showSite(id) {
     });
   });
 }
+// ── 🌐 사이트 비교 탭: a2o 조건 그대로 넘기고 a2o 가 계산한 값만 보여 줌 (우리 계산 없음) ──
+var SITE = { tb: {}, busy: '', err: '' };
+var SITE_PLANS = ['130', '115', '105', '95', '85', '75', '70', '61', '55', '47', '44', '37', '33'];
+function siteS() { S.site = S.site || { kind: 'mnp', plan: '115', contract: 'pub', support: '0', q: '' }; return S.site; }
+function siteQuery() { var o = siteS(), q = 'c=lg&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); }); return q; }
+function siteBtns(k, list) {
+  var o = siteS();
+  return '<div class="row">' + list.map(function (x) { return '<button class="' + (k === 'plan' ? 'chip' : 'tab') + (String(o[k]) === x[0] ? ' on' : '') + '" data-sk="' + k + '" data-v="' + x[0] + '"' + (k === 'plan' ? '' : ' style="flex:1"') + '>' + x[1] + '</button>'; }).join('') + '</div>';
+}
+function siteHtml() {
+  if (!a2oKey()) return '<div class="card"><h2>🌐 사이트 비교</h2><p class="sub">⚙ 설정 탭의 \'비교 사이트 값\' 칸에 열쇠를 한 번 넣어 주세요.</p><button class="btn pri" data-go="set">⚙ 설정으로</button></div>';
+  var o = siteS(), ads = '';
+  if (A2O.raw && A2O.raw.addons) {
+    var on = {}; (S.a2oAd || []).forEach(function (x) { on[x] = 1; });
+    ads = Object.keys(A2O_CO).filter(function (co) { return (A2O.raw.addons[co] || []).length; }).map(function (co) {
+      return '<div class="sub" style="margin:6px 0 2px">' + esc(A2O_CO[co]) + '</div><div class="row">' + A2O.raw.addons[co].map(function (x) {
+        return '<button class="chip' + (on[x.id] ? ' on' : '') + '" data-a2oad="' + esc(x.id) + '">' + esc(x.name) + (x.add != null ? ' +' + esc(String(x.add)) : '') + '</button>';
+      }).join('') + '</div>';
+    }).join('');
+  }
+  return '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">jjj.a2o.co.kr 값 그대로</span></h2>' +
+    '<div class="row"><input id="siteQ" type="text" enterkeyhint="search" placeholder="모델 번호 · 이름 (예: 942 · 아이폰)" value="' + esc(o.q || '') + '" style="flex:1;min-width:150px"><button class="btn sm" data-sre>🔄 새로고침</button></div>' +
+    '<div class="lbl">① 가입 유형</div>' + siteBtns('kind', [['new', '신규'], ['mnp', 'MNP'], ['re', '기변']]) +
+    '<div class="lbl">② 요금제</div>' + siteBtns('plan', SITE_PLANS.map(function (p) { return [p, p]; })) +
+    '<div class="lbl">③ 약정</div>' + siteBtns('contract', [['pub', '공시지원금'], ['sel', '선택약정']]) +
+    '<div class="lbl">④ 유통망 지원금</div>' + siteBtns('support', [['0', '0'], ['10', '10만 이상'], ['20', '20만 이상']]) +
+    '<details' + (S.siteAdOpen ? ' open' : '') + ' id="siteAd"><summary class="lbl" style="cursor:pointer">⑤ 부가서비스 유치 ' + ((S.a2oAd || []).length ? '· ' + S.a2oAd.length + '개 선택' : '· 없음 (미유치 차감)') + '</summary>' + (ads || '<p class="sub">⏳ 부가 목록 불러오는 중…</p>') + '</details>' +
+    '</div><div id="siteOut"></div>';
+}
+function siteLoad() {
+  var q = siteQuery();
+  if (!A2O.raw) a2oGet('c=lg&raw=1').then(function (j) { A2O.raw = j; if (S.tab === 'site') render(); }).catch(function () {});
+  if (SITE.tb[q]) { siteTable(); return; }
+  if (SITE.busy === q) { siteTable(); return; }
+  SITE.busy = q; SITE.err = ''; siteTable();
+  a2oGet(q).then(function (tb) { SITE.tb[q] = tb; if (SITE.busy === q) SITE.busy = ''; siteTable(); })
+    .catch(function (e) { SITE.busy = ''; SITE.err = e.message || String(e); siteTable(); });
+}
+function siteTable() {
+  var el = document.getElementById('siteOut'); if (!el) return;
+  var q = siteQuery(), tb = SITE.tb[q];
+  if (!tb) { el.innerHTML = '<div class="card"><p class="sub">' + (SITE.err ? '⚠ 사이트 값을 못 가져왔어요 · ' + esc(SITE.err) + ' <button class="btn sm" data-sre>다시</button>' : '⏳ 사이트에서 값 가져오는 중…') + '</p></div>'; return; }
+  var cos = (tb.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; });
+  var w = String(siteS().q || '').trim().toLowerCase();
+  var rows = (tb.rows || []).filter(function (r) { return !w || (r.id + ' ' + r.name).toLowerCase().indexOf(w) >= 0; });
+  var h = '<div class="card"><p class="sub" style="margin-top:0">' + cos.map(function (k) { return '<b>' + esc(A2O_CO[k] || k) + '</b> ' + esc((tb.dates || {})[k] || ''); }).join(' · ') + '</p>';
+  if (!rows.length) h += '<p class="sub">맞는 모델이 없어요.</p>';
+  else {
+    h += '<div class="scroll"><table class="tbl mx"><tr><th>모델</th>' + cos.map(function (k) { return '<th style="text-align:center">' + esc(A2O_CO[k] || k) + '</th>'; }).join('') + '</tr>';
+    rows.forEach(function (r) {
+      var best = null; cos.forEach(function (k) { var c = r.cells[k]; if (c && c.tot !== '' && (best === null || +c.tot > best)) best = +c.tot; });
+      h += '<tr><td><b>' + esc(r.name || r.id) + '</b><div class="sub" style="font-size:11px">' + esc(r.id) + '</div></td>' + cos.map(function (k) {
+        var c = r.cells[k]; if (!c || c.tot === '') return '<td class="sub" style="text-align:center">—</td>';
+        var bst = +c.tot === best;
+        return '<td class="' + (bst ? 'mxbest' : '') + '" style="text-align:center;cursor:pointer" data-scell="' + esc(r.id) + '|' + k + '"><b style="' + (bst ? '' : 'color:#9FB4C2;font-weight:600') + '">' + esc(String(+c.tot)) + '</b></td>';
+      }).join('') + '</tr>';
+    });
+    h += '</table></div>';
+  }
+  el.innerHTML = h + '<p class="sub">숫자를 누르면 사이트 계산 내역이 나와요 · 우리 쪽에서 따로 계산하지 않아요.</p></div>';
+}
+function siteCell(v) {
+  var p = v.split('|'), tb = SITE.tb[siteQuery()]; if (!tb) return;
+  var r = (tb.rows || []).filter(function (x) { return x.id === p[0]; })[0]; if (!r) return;
+  var c = r.cells[p[1]]; if (!c) return;
+  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>' + esc((tb.dates || {})[p[1]] || '') + '</p>' +
+    '<div class="parts">' + (c.brk || []).map(function (x, i) {
+      var lab = i === 0 && /단가표/.test(x[0]) ? '📋 액면 (단가표)' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]);
+      return '<div><span>' + esc(lab) + '</span><b class="' + (neg ? 'minus' : pos ? 'plus' : '') + '">' + esc(x[1]) + '</b></div>';
+    }).join('') + '<div style="border-top:1px solid #33475b;margin-top:6px;padding-top:6px"><span><b>최종 (사이트 계산)</b></span><b>' + esc(String(+c.tot)) + '</b></div></div>');
+}
 function setHtml() {
   return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
     (window.firebase && firebase.auth && firebase.auth().currentUser ? '<button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button>' : '') + '</div>' +
@@ -1019,10 +1091,12 @@ document.getElementById('modal').addEventListener('click', function (e) { if (e.
 // ── 이벤트 ──
 function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
 var view = document.getElementById('view');
-view.addEventListener('keydown', function (e) { if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
+view.addEventListener('input', function (e) { if (e.target.id === 'siteQ') { siteS().q = e.target.value; siteTable(); } });
+view.addEventListener('keydown', function (e) { if (e.target.id === 'siteQ' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); save(); return; } if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
 view.addEventListener('click', function (e) {
-  var t = e.target.closest('button,[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
+  var t = e.target.closest('button,[data-scell],[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
+  if (t.tagName === 'SUMMARY' && t.parentNode.id === 'siteAd') { setTimeout(function () { S.siteAdOpen = t.parentNode.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
   if (d.go) { S.tab = d.go; save(); render(); return; }
   if (d.sc) { var k = d.sc; S.sc[k] = d.v === '!' ? !S.sc[k] : d.v; if (k === 'sup') S.sc.supAmt = null; S.scOpen = true; save(); render(); return; }
@@ -1071,6 +1145,9 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
   if (t.hasAttribute('data-a2oq')) { a2oSearch(); return; }
   if (d.a2om) { showSite(d.a2om); return; }
+  if (d.sk) { var SS = siteS(); SS[d.sk] = d.v; save(); render(); return; }
+  if (d.scell) { siteCell(d.scell); return; }
+  if (t.hasAttribute('data-sre')) { SITE.tb = {}; A2O.mem = {}; render(); return; }
   if (d.a2oad) { var aa = S.a2oAd = S.a2oAd || [], ix = aa.indexOf(d.a2oad); if (ix >= 0) aa.splice(ix, 1); else aa.push(d.a2oad); A2O.mem = {}; save(); render(); return; }
   if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
