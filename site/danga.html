@@ -842,7 +842,7 @@ function a2oHtml() {
   }
   return '<div class="card"><h2>🔄 비교 사이트에서 가져오기</h2><p class="sub">jjj.a2o.co.kr 값을 중계기가 대신 로그인해서 가져와요. 열쇠는 이 브라우저에만 저장돼요.</p>' +
     '<input id="a2oKey" type="password" style="width:100%" placeholder="열쇠 (DANGA_KEY)" value="' + esc(a2oKey()) + '">' +
-    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>🔄 새로 가져오기</button></div>' +
+    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>🔄 새로 가져오기</button>' + (A2O.raw ? '<button class="btn" data-a2odl>📤 받은 자료 파일로 저장</button>' : '') + '</div>' +
     '<p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p>' + info + '</div>';
 }
 function a2oFetch() {
@@ -989,6 +989,7 @@ view.addEventListener('click', function (e) {
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
   if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); na.sections = tplFor(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
   if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
+  if (t.hasAttribute('data-a2odl')) { var bl = new Blob([JSON.stringify(A2O.raw)], { type: 'application/json' }), au = document.createElement('a'); au.href = URL.createObjectURL(bl); au.download = 'a2o-' + new Date().toISOString().slice(0, 10) + '.json'; au.click(); return; }
   if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
