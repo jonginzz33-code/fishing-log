@@ -1142,7 +1142,7 @@ function siteTable() {
   var rows = (tb.rows || []).filter(function (r) { return (!msel.length || msel.indexOf(r.id) >= 0) && (!w || (r.id + ' ' + r.name).toLowerCase().indexOf(w) >= 0); });
   // 거래처마다 단가표 그림이 올라온 시각 (a2o '올라온 시각')
   atsLoad(cos);
-  var h = '<div class="card">' + bar + '<p class="sub" style="margin-top:0" id="siteAts">' + atsLine(cos) + '</p>';
+  var h = '<div class="card">' + bar + '<div id="siteAts" style="margin-bottom:10px">' + atsLine(cos) + '</div>';
   if (!rows.length) h += '<p class="sub">맞는 모델이 없어요.</p>';
   else {
     h += '<div class="scroll"><table class="tbl mx"><tr><th>모델</th>' + cos.map(function (k) { return '<th style="text-align:center">' + esc(A2O_CO[k] || k) + '</th>'; }).join('') + '</tr>';
@@ -1160,7 +1160,17 @@ function siteTable() {
 }
 var ATS = { v: {}, t: {}, busy: {} };
 function atStr(s) { var m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''); return m ? (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
-function atsLine(cos) { return '📷 단가표 올라온 시각 · ' + cos.map(function (k) { return '<b>' + esc(A2O_CO[k] || k) + '</b> ' + (k in ATS.v ? esc(atStr(ATS.v[k]) || '-') : '…'); }).join(' · '); }
+// 강조: 거래처 색 상자 + 큰 시각 · 오늘이 아니면 빨간 '며칠 전'
+var CO_COL = { dream: '#f59e0b', dmb: '#38bdf8', gg: '#34d399', yuan: '#f472b6', sk_uni: '#f87171', sk_gs: '#a78bfa', kt_mns: '#facc15', kt_bc: '#fb923c' };
+function atsLine(cos) {
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  return '<div style="font-weight:800;font-size:15px;color:#e2e8f0;margin-bottom:6px">📷 단가표 올라온 시각</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + cos.map(function (k) {
+    var s = ATS.v[k], m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''), col = CO_COL[k] || '#94a3b8', old = '';
+    if (m) { var days = Math.round((today - new Date(+m[1], +m[2] - 1, +m[3])) / 86400000); if (days > 0) old = '<div style="color:#f87171;font-weight:900;font-size:13px">⚠ ' + (days === 1 ? '어제' : days + '일 전') + '</div>'; }
+    return '<div style="border:2px solid ' + col + ';border-radius:10px;padding:5px 10px;min-width:86px;text-align:center;background:rgba(255,255,255,.03)"><div style="color:' + col + ';font-weight:900;font-size:14px">' + esc(A2O_CO[k] || k) + '</div>' +
+      '<div style="color:#fff;font-weight:900;font-size:18px;line-height:1.2">' + (k in ATS.v ? esc(m ? m[4] + ':' + m[5] : '-') : '…') + '</div><div style="color:#cbd5e1;font-size:12px">' + (m ? (+m[2]) + '/' + (+m[3]) : '') + '</div>' + old + '</div>';
+  }).join('') + '</div>';
+}
 function atsLoad(cos) {
   var need = cos.filter(function (k) { return !ATS.busy[k] && (!(k in ATS.v) || Date.now() - (ATS.t[k] || 0) > 5 * 60000); }); if (!need.length) return;
   need.forEach(function (k) { ATS.busy[k] = 1; });
