@@ -132,7 +132,14 @@ async function a2o(req, url, env, w) {
   if (!/^(lg|sk|kt)$/.test(c)) return J({ error: 'bad c' }, 400);
   // 계정마다 받는 통신사가 다름 (u.cars = ['lg','sk'] …) — 없는 통신사는 막음 (403 은 로그아웃이라 404)
   if (w.user && !w.admin && Array.isArray(w.user.cars) && !w.user.cars.includes(c)) return J({ error: '이 계정은 ' + c.toUpperCase() + ' 단가가 없어요', cars: w.user.cars }, 404);
-  const want = (url.searchParams.get('m') || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
+  let want = (url.searchParams.get('m') || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
+  // 계정(거래처)은 모델 하나 · 가입유형 · 요금제를 꼭 골라야 — 전체 표는 관리자만
+  const userOnly = w.user && !w.admin && url.searchParams.get('raw') !== '1';
+  if (userOnly) {
+    if (!/^(new|mnp|re)$/.test(url.searchParams.get('kind') || '')) return J({ error: '가입 유형을 골라 주세요' }, 400);
+    if (!/^\d{2,3}$/.test(url.searchParams.get('plan') || '')) return J({ error: '요금제를 골라 주세요' }, 400);
+    if (want.length !== 1) return J({ error: '모델을 하나 골라 주세요' }, 400);
+  }
   try {
     for (let i = 0; i < 2; i++) {          // 가끔 첫 로그인이 실패해요 → 한 번 더
       const ck = await a2oLogin(env);
@@ -141,6 +148,7 @@ async function a2o(req, url, env, w) {
       if (!pg) continue;
       if (url.searchParams.get('raw') === '1') return J(w.admin && !w.user ? pg.data : JSON.stringify(safeRaw(pg.data, w.user)));   // 업체 · 부가 목록 등
       const tb = applyOvr(a2oTable(pg.html, pg.data, want), w.user && w.user.ovr, w.admin);
+      if (userOnly) tb.rows = (tb.rows || []).filter((r) => r.id === want[0]);   // 딱 그 모델 하나만
       if (w.user) { tb.as = w.user.id; tb.cars = Array.isArray(w.user.cars) ? w.user.cars : ['lg', 'sk', 'kt']; onlyCos(tb, w.user.cos); }
       return J(tb);
     }
