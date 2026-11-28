@@ -77,6 +77,7 @@ function applyOvr(tb, ovr, showOrig) {
       tot += nv - old;
       return showOrig ? [x[0], fmtAmt(nv), x[1]] : [x[0], fmtAmt(nv)];
     });
+    if (o.__add != null && +o.__add) { tot += +o.__add; c.brk.push(['구두 추가', fmtAmt(+o.__add)]); }   // 이 계정만 더 주는 구두 (모든 모델 · 요금제)
     c.tot = String(Math.round(tot * 100) / 100);
   }
   return tb;
@@ -120,8 +121,8 @@ const coOk = (u, co) => !u || !Array.isArray(u.cos) || u.cos.includes(co);
 function safeRaw(data, u) {
   let d = {}; try { d = JSON.parse(data); } catch (e) {}
   const pick = (o) => { const r = {}; Object.keys(o || {}).forEach((k) => { if (coOk(u, k)) r[k] = o[k]; }); return r; };
-  const o = { models: d.models, addons: pick(d.addons), groups: pick(d.groups), vas: pick(d.vas), vasnames: pick(d.vasnames) };
-  ['dream', 'dmb', 'dmb2', 'gg', 'yuan', 'jm', 'ms'].forEach((k) => { if (d[k] && d[k].date && coOk(u, k)) o[k] = { date: d[k].date }; });
+  const o = { models: d.models, plans: d.plans, addons: pick(d.addons), groups: pick(d.groups), vas: pick(d.vas), vasnames: pick(d.vasnames), cars: u && Array.isArray(u.cars) ? u.cars : ['lg', 'sk', 'kt'] };
+  Object.keys(d).forEach((k) => { if (d[k] && d[k].date && coOk(u, k)) o[k] = { date: d[k].date }; });
   return o;
 }
 async function a2o(req, url, env, w) {
@@ -129,6 +130,8 @@ async function a2o(req, url, env, w) {
   if (!env.A2O_ID || !env.A2O_PW) return J({ error: 'no login secrets' }, 500);
   const c = url.searchParams.get('c') || 'lg';
   if (!/^(lg|sk|kt)$/.test(c)) return J({ error: 'bad c' }, 400);
+  // 계정마다 받는 통신사가 다름 (u.cars = ['lg','sk'] …) — 없는 통신사는 막음 (403 은 로그아웃이라 404)
+  if (w.user && !w.admin && Array.isArray(w.user.cars) && !w.user.cars.includes(c)) return J({ error: '이 계정은 ' + c.toUpperCase() + ' 단가가 없어요', cars: w.user.cars }, 404);
   const want = (url.searchParams.get('m') || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
   try {
     for (let i = 0; i < 2; i++) {          // 가끔 첫 로그인이 실패해요 → 한 번 더
@@ -138,7 +141,7 @@ async function a2o(req, url, env, w) {
       if (!pg) continue;
       if (url.searchParams.get('raw') === '1') return J(w.admin && !w.user ? pg.data : JSON.stringify(safeRaw(pg.data, w.user)));   // 업체 · 부가 목록 등
       const tb = applyOvr(a2oTable(pg.html, pg.data, want), w.user && w.user.ovr, w.admin);
-      if (w.user) { tb.as = w.user.id; onlyCos(tb, w.user.cos); }
+      if (w.user) { tb.as = w.user.id; tb.cars = Array.isArray(w.user.cars) ? w.user.cars : ['lg', 'sk', 'kt']; onlyCos(tb, w.user.cos); }
       return J(tb);
     }
     return J({ error: 'login or page failed' }, 502);
@@ -195,7 +198,7 @@ async function admin(req, url, env) {
   const setIdx = (a) => env.KV.put('index', JSON.stringify([...new Set(a)].sort()));
   if (p === '/admin/users') {
     const out = [];
-    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {}, cos: Array.isArray(u.cos) ? u.cos : null }); }
+    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {}, cos: Array.isArray(u.cos) ? u.cos : null, cars: Array.isArray(u.cars) ? u.cars : null }); }
     return J(out);
   }
   if (req.method !== 'POST') return J({ error: 'POST' }, 405);
@@ -208,6 +211,7 @@ async function admin(req, url, env) {
     if (b.pw) { if (String(b.pw).length < 4) return J({ error: '비밀번호는 4자 이상' }, 400); u.salt = crypto.randomUUID(); u.hash = await pwHash(String(b.pw), u.salt); }
     if (b.memo != null) u.memo = String(b.memo).slice(0, 60);
     if (Array.isArray(b.cos)) u.cos = [...new Set(b.cos.map(String).filter((k) => /^[a-z0-9_]{1,20}$/.test(k)))];   // 이 계정 거래처
+    if (Array.isArray(b.cars)) u.cars = ['lg', 'sk', 'kt'].filter((k) => b.cars.includes(k));                     // 이 계정 통신사
     await env.KV.put('user:' + id, JSON.stringify(u)); const ix = await idx(); if (!ix.includes(id)) await setIdx(ix.concat(id)); return J({ ok: true });
   }
   if (!u) return J({ error: '없는 계정' }, 404);
@@ -228,7 +232,7 @@ async function login(req, env) {
   let b = {}; try { b = await req.json(); } catch (e) { return J({ error: 'json' }, 400); }
   const u = await getUser(env, String(b.id || '').trim());
   if (!u || !u.hash || await pwHash(String(b.pw || ''), u.salt) !== u.hash) { await new Promise((r) => setTimeout(r, 600)); return J({ error: '아이디 또는 비밀번호가 맞지 않아요' }, 401); }
-  return J({ tok: await makeTok(env, u.id), id: u.id });
+  return J({ tok: await makeTok(env, u.id), id: u.id, cars: Array.isArray(u.cars) ? u.cars : ['lg', 'sk', 'kt'] });
 }
 
 export default {
