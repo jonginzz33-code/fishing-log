@@ -1348,6 +1348,8 @@ function devHtml(u) {
   h += s ? '<div>🕒 계정 마지막 접속 <b>' + whenStr(s.t) + '</b></div><div>📱 ' + esc(uaName(s)) + (s.scr ? ' <span class="sub">화면 ' + esc(s.scr) + '</span>' : '') + '</div><div class="sub">📍 ' + esc(placeStr(s) || '알 수 없음') + '</div>' : '<div class="sub">🕒 아직 로그인한 적 없어요</div>';
   // 🔒 연결된 기기 (최대 2대) — 기기마다 마지막 접속 · [풀기]
   var ds = u.devs || [], mx = u.devMax || 2;
+  // 접속 기기 몇 대까지 — 계정마다 1~5대 (누르면 바로 저장)
+  h += '<div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b>📱 접속 기기 수</b>' + [1, 2, 3, 4, 5].map(function (n) { return '<button class="chip' + (n === mx ? ' on' : '') + '" data-udmax="' + esc(u.id + '|' + n) + '" style="min-width:44px;font-weight:800">' + n + '대</button>'; }).join('') + '</div>';
   h += '<div style="margin-top:8px;font-weight:800">🔒 연결된 기기 ' + ds.length + ' / ' + mx + '대' + (ds.length < mx ? ' <span class="sub" style="font-weight:500">(빈자리 ' + (mx - ds.length) + ' · 새 기기가 로그인하면 연결돼요)</span>' : ' <span class="sub" style="font-weight:500;color:#fca5a5">(꽉 참 · 새 기기는 막혀요)</span>') + '</div>';
   h += ds.map(function (x, i) {
     var lt = x.last || x.info;
@@ -1540,6 +1542,10 @@ view.addEventListener('click', function (e) {
   if (t.hasAttribute('data-a2oq')) { a2oSearch(); return; }
   if (d.a2om) { showSite(d.a2om); return; }
   if (d.copy) { copyText(d.copy); return; }
+  if (d.udmax) { var um = d.udmax.split('|'), n7 = +um[1]; t.disabled = true;
+    api('/admin/user', { id: um[0], devMax: n7 }).then(function () { (USERS.list || []).forEach(function (u) { if (u.id === um[0]) u.devMax = n7; }); var sy7 = window.scrollY; document.getElementById('view').innerHTML = usersHtml(); window.scrollTo(0, sy7);
+      var uu7 = (USERS.list || []).filter(function (u) { return u.id === um[0]; })[0]; toast(um[0] + ' 접속 기기 ' + n7 + '대로 바꿨어요' + (uu7 && (uu7.devs || []).length > n7 ? ' · 이미 연결된 기기가 더 많으면 [풀기]로 정리해 주세요' : '')); })
+      .catch(function (er) { alert('⚠ ' + (er.message || er)); t.disabled = false; }); return; }
   if (d.udevdel) { var dv = d.udevdel.split('|'); if (!confirm(dv[0] + ' 계정에서 이 기기를 풀까요?\n그 기기는 로그아웃되고, 빈자리에 다른 기기가 로그인할 수 있어요.')) return;
     api('/admin/user', { id: dv[0], devDel: dv[1] }).then(function () { (USERS.list || []).forEach(function (u) { if (u.id === dv[0]) { u.devs = (u.devs || []).filter(function (x) { return x.id !== dv[1]; }); u.blocked = []; } }); var sy6 = window.scrollY; document.getElementById('view').innerHTML = usersHtml(); window.scrollTo(0, sy6); toast('기기를 풀었어요 (1분 안에 적용)'); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (t.hasAttribute('data-login')) { doLogin(); return; }
