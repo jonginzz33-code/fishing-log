@@ -848,7 +848,11 @@ function auditHtml() {
 // ── a2o 비교 사이트 값 그대로 (중계기 /a2o · 우리가 계산 안 함 · 열쇠는 이 브라우저에만) ──
 var A2O_RELAY = 'https://talla-danga.jonginzz33.workers.dev/a2o';
 var A2O = { msg: '', raw: null, mem: {} };
-var A2O_CO = { dream: '드림', dmb: 'dmb', dmb2: 'dmb2', gg: '경기', yuan: '유안' };
+var A2O_CO = { dream: '드림', dmb: 'dmb', dmb2: 'dmb2', gg: '경기', yuan: '유안', jm: 'JM', ms: '명성', sk_uni: 'UNI', sk_gs: '강남스타', sk_a1: 'A1', sk_gr: '강남소매', sk_tvibe: '티바이브', kt_mns: 'KT주안', kt_bc: 'KT반추', kt_mil: 'KT군공', ss: '수석', sy: '성연' };
+var CARS = [['lg', 'LG U+'], ['sk', 'SK'], ['kt', 'KT']];
+function curCar() { var c = siteS().car || 'lg'; var ok = myCars(); return ok.indexOf(c) >= 0 ? c : ok[0] || 'lg'; }
+function myCars() { if (isAdmin()) return ['lg', 'sk', 'kt']; try { var c = JSON.parse(ls('danga_cars') || 'null'); if (Array.isArray(c) && c.length) return c; } catch (e) {} return ['lg', 'sk', 'kt']; }
+A2O.rawC = {};   // 통신사마다 모델 · 부가 · 요금제 목록이 다름
 var A2O_PLAN = { B115: '115', B105: '105', B95: '95', B85: '85', B75: '75', B61: '61', B55: '55', B44: '44', B37: '37' };
 function a2oSum() { return (S.sc.yak === 'sel' ? '선택약정' : '공시') + ' · ' + ({ hi: '지원금 20만 이상', mid: '지원금 10만 이상', low: '지원금 0' }[S.sc.sup] || '') + ' · 사이트 부가 ' + ((S.a2oAd || []).length ? (S.a2oAd || []).length + '개' : '없음'); }
 function a2oKey(v) { if (v != null) ls('danga_a2o_key', v); return ls('danga_a2o_key') || ''; }
@@ -1038,7 +1042,8 @@ function siteBar() {
 }
 var SITE_PLANS = ['130', '115', '105', '95', '85', '75', '70', '61', '55', '47', '44', '37', '33'];
 function siteS() { S.site = S.site || { kind: 'mnp', plan: '115', contract: 'pub', support: '0', q: '' }; return S.site; }
-function siteQuery() { var o = siteS(), q = 'c=lg&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); }); if (isAdmin() && S.asUser) q += '&as=' + encodeURIComponent(S.asUser); return q; }
+function sitePlans() { var r = A2O.rawC[curCar()]; return (r && r.plans && r.plans.length ? r.plans : (curCar() === 'lg' ? SITE_PLANS : [])).map(String); }
+function siteQuery() { var o = siteS(), q = 'c=' + curCar() + '&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { if (!A2O.raw || siteCoOf(a)) q += '&ad=' + encodeURIComponent(a); }); if (isAdmin() && S.asUser) q += '&as=' + encodeURIComponent(S.asUser); return q; }
 function siteBtns(k, list) {
   var o = siteS();
   return '<div class="row">' + list.map(function (x) { return '<button class="' + (k === 'plan' ? 'chip' : 'tab') + (String(o[k]) === x[0] ? ' on' : '') + '" data-sk="' + k + '" data-v="' + x[0] + '"' + (k === 'plan' ? '' : ' style="flex:1"') + '>' + x[1] + '</button>'; }).join('') + '</div>';
@@ -1055,19 +1060,29 @@ function siteHtml() {
     }).join('');
   }
   return banner + '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : 'jjj.a2o.co.kr 값 그대로') + '</span></h2>' +
+    (myCars().length > 1 ? '<div class="row" style="margin-bottom:8px">' + CARS.filter(function (c) { return myCars().indexOf(c[0]) >= 0; }).map(function (c) { return '<button class="tab' + (curCar() === c[0] ? ' on' : '') + '" data-scar="' + c[0] + '" style="flex:1;font-weight:800">' + c[1] + '</button>'; }).join('') + '</div>' : '') +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div>' +
     '<div id="siteVBar" style="margin-bottom:8px">' + siteVBar() + '</div>' +
     '<div class="row"><input id="siteQ" type="text" enterkeyhint="search" placeholder="모델 번호 · 이름 (예: 942 · 아이폰)" value="' + esc(o.q || '') + '" style="flex:1;min-width:150px"><button class="btn sm" data-sre>🔄 새로고침</button></div>' +
     '<div class="lbl">① 가입 유형</div>' + siteBtns('kind', [['new', '신규'], ['mnp', 'MNP'], ['re', '기변']]) +
-    '<div class="lbl">② 요금제</div>' + siteBtns('plan', SITE_PLANS.map(function (p) { return [p, p]; })) +
+    '<div class="lbl">② 요금제</div>' + (sitePlans().length ? siteBtns('plan', sitePlans().map(function (p) { return [p, p]; })) : '<p class="sub">⏳ 요금제 불러오는 중…</p>') +
     '<div class="lbl">③ 약정</div>' + siteBtns('contract', [['pub', '공시지원금'], ['sel', '선택약정']]) +
     '<div class="lbl">④ 유통망 지원금</div>' + siteBtns('support', [['0', '0'], ['10', '10만 이상'], ['20', '20만 이상']]) +
     '</div><div id="siteOut"></div>';
 }
 function siteLoad() {
+  var car = curCar();
+  A2O.raw = A2O.rawC[car] || null;
+  if (!A2O.raw) {   // 그 통신사 목록 먼저 (요금제가 통신사마다 달라서 맞춰 줌)
+    a2oGet('c=' + car + '&raw=1').then(function (j) {
+      A2O.rawC[car] = j; if (j.cars && isUser()) ls('danga_cars', JSON.stringify(j.cars));
+      var pl = (j.plans || []).map(String); if (pl.length && pl.indexOf(String(siteS().plan)) < 0) { siteS().plan = pl[Math.min(1, pl.length - 1)]; save(); }
+      if (S.tab === 'site') render();
+    }).catch(function () {});
+    if (sitePlans().indexOf(String(siteS().plan)) < 0) { siteTable(); return; }   // 요금제 맞추기 전엔 표를 안 부름
+  }
   var q = siteQuery();
-  if (!A2O.raw) a2oGet('c=lg&raw=1').then(function (j) { A2O.raw = j; if (S.tab === 'site') render(); }).catch(function () {});
   if (SITE.tb[q]) { siteTable(); return; }
   if (SITE.busy === q) { siteTable(); return; }
   SITE.busy = q; SITE.err = ''; siteTable();
@@ -1111,7 +1126,7 @@ function siteCell(v) {
   openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>' + esc((tb.dates || {})[p[1]] || '') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
     '<div class="parts">' + (c.brk || []).map(function (x, i) {
       var face = i === 0 && /단가표/.test(x[0]), lab = face ? '📋 액면 (단가표) 🖼 그림 보기 ›' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]), chg = x.length > 2;
-      if (edit && !face) {
+      if (edit && !face && x[0] !== '구두 추가') {
         var num = String(x[1]).replace(/[^\d.+-]/g, '').replace(/^\+/, '');
         var okey = x[0] + ' @' + (chg ? x[2] : x[1]);   // 줄 이름 + 원래 금액
         return '<div style="flex-wrap:wrap;gap:4px"><span style="' + (chg ? 'color:var(--yel)' : '') + '">' + esc(lab) + (chg ? ' <span class="sub">(원래 ' + esc(x[2]) + ')</span>' : '') + '</span>' +
@@ -1161,33 +1176,47 @@ function doLogin() {
   m.textContent = '⏳ 확인 중…';
   fetch(RELAY + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id.trim(), pw: pw }) })
     .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(j.error || r.status); return j; }); })
-    .then(function (j) { uTok(j.tok, j.id); A2O.raw = null; A2O.mem = {}; SITE.tb = {}; S.tab = 'site'; render(); })
+    .then(function (j) { uTok(j.tok, j.id); ls('danga_cars', JSON.stringify(j.cars || [])); A2O.rawC = {}; A2O.raw = null; A2O.mem = {}; SITE.tb = {}; S.tab = 'site'; render(); })
     .catch(function (e) { m.textContent = '⚠ ' + (e.message || e); });
 }
 // ── 👥 계정 (관리자) — 만들기 · 비밀번호 · 지우기 · 바꾼 줄 보기 · 이 계정 화면으로 보기 ──
 var USERS = { list: null, err: '', open: {} };
 // 바꿀 수 있는 줄 목록: 사이트 표 몇 가지 조건에서 나오는 줄 이름을 모음 (원래 값 = 관리자 화면 값)
-var LBL = null, LBL_BUSY = false;
+var LBL = null, LBL_BUSY = false, CO_BY = {};   // CO_BY = 통신사마다 거래처 { lg:[dream,…], sk:[sk_uni,…], kt:[…] }
 function lblLoad() {
   if (LBL || LBL_BUSY) return; LBL_BUSY = true;
-  var qs = [['mnp', 115, 0], ['re', 115, 0], ['new', 115, 0], ['mnp', 115, 20], ['re', 115, 10], ['mnp', 61, 0], ['mnp', 44, 0]].map(function (x) { return 'c=lg&kind=' + x[0] + '&plan=' + x[1] + '&contract=pub&support=' + x[2]; });
-  Promise.all(qs.map(function (q) { return a2oGet(q).catch(function () { return null; }); })).then(function (tbs) {
-    var L = {};
-    tbs.forEach(function (tb) { if (tb) (tb.rows || []).forEach(function (r) { Object.keys(r.cells || {}).forEach(function (co) { var c = r.cells[co]; if (!c) return;
-      c.brk.forEach(function (x, i) { if (i === 0 && /단가표/.test(x[0])) return; L[co] = L[co] || {}; var v = L[co][x[0]] = L[co][x[0]] || []; if (v.indexOf(x[1]) < 0) v.push(x[1]); }); }); }); });
-    var t0 = tbs.filter(Boolean)[0]; if (t0) SITE.cos = (t0.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; });
-    LBL = L; LBL_BUSY = false; if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml();
-  });
+  var L = {};
+  Promise.all(CARS.map(function (cc) {
+    var car = cc[0];
+    return a2oGet('c=' + car + '&raw=1').catch(function () { return {}; }).then(function (raw) {
+      A2O.rawC[car] = A2O.rawC[car] || raw;
+      var pl = ((raw && raw.plans) || []).map(Number); if (!pl.length) pl = [115, 61, 44];
+      var hi = pl[Math.min(1, pl.length - 1)], mid = pl[Math.floor(pl.length / 2)], lo = pl[pl.length - 2] || pl[pl.length - 1];
+      var top = pl[0], qs = [['mnp', top, 0], ['mnp', top, 20], ['re', top, 0], ['mnp', hi, 0], ['re', hi, 0], ['new', hi, 0], ['mnp', hi, 20], ['re', hi, 10], ['mnp', mid, 0], ['mnp', lo, 0]].map(function (x) { return 'c=' + car + '&kind=' + x[0] + '&plan=' + x[1] + '&contract=pub&support=' + x[2]; });
+      return Promise.all(qs.map(function (q) { return a2oGet(q).catch(function () { return null; }); })).then(function (tbs) {
+        tbs.forEach(function (tb) { if (tb) (tb.rows || []).forEach(function (r) { Object.keys(r.cells || {}).forEach(function (co) { var c = r.cells[co]; if (!c) return;
+          c.brk.forEach(function (x, i) { if (i === 0 && /단가표/.test(x[0])) return; L[co] = L[co] || {}; var v = L[co][x[0]] = L[co][x[0]] || []; if (v.indexOf(x[1]) < 0) v.push(x[1]); }); }); }); });
+        var t0 = tbs.filter(Boolean)[0]; CO_BY[car] = t0 ? (t0.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; }) : [];
+      });
+    });
+  })).then(function () { LBL = L; LBL_BUSY = false; if (S.tab === 'users') document.getElementById('view').innerHTML = usersHtml(); });
 }
+function carOf(co) { for (var k in CO_BY) if (CO_BY[k].indexOf(co) >= 0) return k; return /^sk_/.test(co) ? 'sk' : /^kt_/.test(co) ? 'kt' : 'lg'; }
+function carName(k) { return (CARS.filter(function (c) { return c[0] === k; })[0] || [0, k])[1]; }
 function lblList(co) { var o = (LBL || {})[co] || {}; return Object.keys(o).sort(function (a, b) { var p = function (s) { return /^부가 미유치/.test(s) ? 2 : /차감|미충족/.test(s) ? 1 : 0; }; return p(a) - p(b); }); }
 function userEdHtml(u) {
   if (!LBL) return '<p class="sub">⏳ 사이트에서 줄 목록 불러오는 중…</p>';
-  var cos = SITE.cos.filter(function (co) { return lblList(co).length && (!u.cos || u.cos.indexOf(co) >= 0); });   // 이 계정 거래처만
-  if (!cos.length) return '<p class="sub">위 🏢 거래처에서 이 계정에 들어가는 거래처를 먼저 골라 주세요.</p>';
+  var cars = u.cars || ['lg', 'sk', 'kt'], cos = [];
+  cars.forEach(function (car) { (CO_BY[car] || []).forEach(function (co) { if (lblList(co).length && (!u.cos || u.cos.indexOf(co) >= 0)) cos.push(co); }); });   // 이 계정 통신사 · 거래처만
+  if (!cos.length) return '<p class="sub">위에서 📶 통신사와 🏢 거래처를 먼저 골라 주세요.</p>';
   return cos.map(function (co) {
     var ov = (u.ovr || {})[co] || {};
     // 한 줄에 원래 금액이 여러 개면 (예: +10 · +5) 금액마다 따로 → 키 = '줄 이름 @원래금액'
-    return '<div class="lbl">' + esc(A2O_CO[co] || co) + '</div><div class="parts">' + lblList(co).map(function (lab) {
+    var addK = u.id + '|' + co + '|__add', hasAdd = '__add' in ov;
+    return '<div class="lbl">' + esc(carName(carOf(co))) + ' · ' + esc(A2O_CO[co] || co) + '</div><div class="parts">' +
+      '<div style="flex-wrap:wrap;gap:4px"><span style="' + (hasAdd ? 'color:var(--yel)' : '') + '"><b>➕ 이 계정 추가 구두</b> <span class="sub">모든 모델 · 요금제에 더하기 (사이트에 없는 구두)</span></span>' +
+      '<span style="display:flex;gap:4px;align-items:center"><input class="uovIn" data-k="' + esc(addK) + '" value="' + (hasAdd ? esc(String(ov.__add)) : '') + '" placeholder="없음" inputmode="decimal" style="width:64px;text-align:center"><button class="btn sm" data-uovset="' + esc(addK) + '">저장</button></span></div>' +
+      lblList(co).map(function (lab) {
       return LBL[co][lab].map(function (orig) {
         var key = lab + ' @' + orig, has = key in ov, old = lab in ov;   // old = 예전 방식(금액 상관없이) 으로 저장된 것
         return '<div style="flex-wrap:wrap;gap:4px"><span style="' + (has || old ? 'color:var(--yel)' : '') + '">' + esc(lab) + ' <span class="sub">원래 <b>' + esc(orig) + '</b>' + (old && !has ? ' · 지금 ' + esc(String(ov[lab])) : '') + '</span></span>' +
@@ -1208,11 +1237,19 @@ function usersHtml() {
   return h + USERS.list.map(function (u) {
     var lines = []; Object.keys(u.ovr || {}).forEach(function (co) { Object.keys(u.ovr[co]).forEach(function (lab) { lines.push([co, lab, u.ovr[co][lab]]); }); });
     return '<div class="card"><h2 style="margin-top:0">👤 ' + esc(u.id) + (u.memo ? ' <span class="sub">' + esc(u.memo) + '</span>' : '') + '</h2>' +
-      (lines.length ? '<div class="parts">' + lines.map(function (l) { return '<div><span><b>' + esc(A2O_CO[l[0]] || l[0]) + '</b> · ' + esc(String(l[1]).replace(/ @(\S+)$/, ' (원래 $1)')) + '</span><span style="display:flex;gap:6px;align-items:center"><b>' + (l[2] > 0 ? '+' : '') + esc(String(l[2])) + '</b><button class="btn sm" data-uovdel="' + esc(u.id) + '|' + esc(l[0]) + '|' + esc(l[1]) + '">원래대로</button></span></div>'; }).join('') + '</div>' : '<p class="sub">바꾼 줄 없음 (a2o 값 그대로)</p>') +
-      '<div class="row" style="margin-top:8px;align-items:center"><span class="lbl" style="margin:0 4px 0 0">🏢 거래처</span>' + SITE.cos.map(function (co) {
-        var on = !u.cos || u.cos.indexOf(co) >= 0;
-        return '<button class="chip' + (on ? ' on' : '') + '" data-ucos="' + esc(u.id + '|' + co) + '">' + (on ? '☑ ' : '☐ ') + esc(A2O_CO[co] || co) + '</button>';
-      }).join('') + (!u.cos ? '<span class="sub">(아직 안 골라서 전부)</span>' : !u.cos.length ? '<span class="sub" style="color:var(--yel)">← 골라 주세요 (지금은 아무것도 안 보여요)</span>' : '') + '</div>' +
+      (lines.length ? '<div class="parts">' + lines.map(function (l) { return '<div><span><b>' + esc(A2O_CO[l[0]] || l[0]) + '</b> · ' + esc(l[1] === '__add' ? '➕ 이 계정 추가 구두' : String(l[1]).replace(/ @(\S+)$/, ' (원래 $1)')) + '</span><span style="display:flex;gap:6px;align-items:center"><b>' + (l[2] > 0 ? '+' : '') + esc(String(l[2])) + '</b><button class="btn sm" data-uovdel="' + esc(u.id) + '|' + esc(l[0]) + '|' + esc(l[1]) + '">원래대로</button></span></div>'; }).join('') + '</div>' : '<p class="sub">바꾼 줄 없음 (a2o 값 그대로)</p>') +
+      // 📶 통신사 (LG · SK · KT) → 고른 통신사마다 🏢 거래처
+      '<div class="row" style="margin-top:8px;align-items:center"><span class="lbl" style="margin:0 4px 0 0">📶 통신사</span>' + CARS.map(function (c) {
+        var on = !u.cars || u.cars.indexOf(c[0]) >= 0;
+        return '<button class="chip' + (on ? ' on' : '') + '" data-ucar="' + esc(u.id + '|' + c[0]) + '">' + (on ? '☑ ' : '☐ ') + c[1] + '</button>';
+      }).join('') + (u.cars && !u.cars.length ? '<span class="sub" style="color:var(--yel)">← 골라 주세요</span>' : '') + '</div>' +
+      (u.cars || ['lg', 'sk', 'kt']).map(function (car) {
+        if (!LBL) return '';
+        return '<div class="row" style="margin-top:4px;align-items:center"><span class="lbl" style="margin:0 4px 0 0">🏢 ' + esc(carName(car)) + ' 거래처</span>' + (CO_BY[car] || []).map(function (co) {
+          var on = !u.cos || u.cos.indexOf(co) >= 0;
+          return '<button class="chip' + (on ? ' on' : '') + '" data-ucos="' + esc(u.id + '|' + co) + '">' + (on ? '☑ ' : '☐ ') + esc(A2O_CO[co] || co) + '</button>';
+        }).join('') + (!(CO_BY[car] || []).some(function (co) { return !u.cos || u.cos.indexOf(co) >= 0; }) ? '<span class="sub" style="color:var(--yel)">← 골라 주세요</span>' : '') + '</div>';
+      }).join('') + (!LBL ? '<p class="sub">⏳ 통신사별 거래처 불러오는 중…</p>' : '') +
       '<details data-ued="' + esc(u.id) + '"' + (USERS.open[u.id] ? ' open' : '') + ' style="margin-top:8px;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px"><summary style="cursor:pointer;font-weight:700">✏ 이 계정 구두 단가 설정</summary>' + userEdHtml(u) + '</details>' +
       '<div class="row" style="margin-top:8px"><button class="btn" data-uas="' + esc(u.id) + '">👁 이 계정 화면으로 보기</button><button class="btn sm" data-upw="' + esc(u.id) + '">🔑 비밀번호 바꾸기</button><button class="btn sm del" data-udel="' + esc(u.id) + '">지우기</button></div></div>';
   }).join('');
@@ -1367,13 +1404,19 @@ view.addEventListener('click', function (e) {
   if (d.uas) { S.asUser = d.uas; S.tab = 'site'; save(); render(); window.scrollTo(0, 0); return; }
   if (t.hasAttribute('data-nuadd')) { var nid = document.getElementById('nuId').value.trim(), npw = document.getElementById('nuPw').value, nm = document.getElementById('nuMemo').value.trim();
     if (USERS.list && USERS.list.some(function (u) { return u.id === nid; })) return alert('이미 있는 아이디예요');
-    api('/admin/user', { id: nid, pw: npw, memo: nm, cos: [] }).then(function () { USERS.list = (USERS.list || []).concat([{ id: nid, memo: nm, ovr: {}, cos: [] }]); document.getElementById('view').innerHTML = usersHtml(); setTimeout(usersLoad, 1500); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+    api('/admin/user', { id: nid, pw: npw, memo: nm, cos: [], cars: [] }).then(function () { USERS.list = (USERS.list || []).concat([{ id: nid, memo: nm, ovr: {}, cos: [], cars: [] }]); document.getElementById('view').innerHTML = usersHtml(); setTimeout(usersLoad, 1500); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.upw) { var pw2 = prompt(d.upw + ' 새 비밀번호 (4자 이상)'); if (pw2) api('/admin/user', { id: d.upw, pw: pw2 }).then(function () { alert('바꿨어요'); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.udel) { if (confirm(d.udel + ' 계정을 지울까요? (바꿔 둔 금액도 같이 지워져요)')) api('/admin/del', { id: d.udel }).then(function () { if (S.asUser === d.udel) S.asUser = null; USERS.list = (USERS.list || []).filter(function (u) { return u.id !== d.udel; }); document.getElementById('view').innerHTML = usersHtml(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
   if (d.ucos) { var uc = d.ucos.split('|'), uu = (USERS.list || []).filter(function (u) { return u.id === uc[0]; })[0]; if (!uu) return;
-    var lst = (uu.cos ? uu.cos : SITE.cos).slice(), ix4 = lst.indexOf(uc[1]); if (ix4 >= 0) lst.splice(ix4, 1); else lst.push(uc[1]);
+    var allCo = []; Object.keys(CO_BY).forEach(function (k) { allCo = allCo.concat(CO_BY[k]); });
+    var lst = (uu.cos ? uu.cos : allCo).slice(), ix4 = lst.indexOf(uc[1]); if (ix4 >= 0) lst.splice(ix4, 1); else lst.push(uc[1]);
     t.disabled = true;
     api('/admin/user', { id: uu.id, cos: lst }).then(function () { uu.cos = lst; USERS.open[uu.id] = true; SITE.tb = {}; A2O.mem = {}; var sy4 = window.scrollY; document.getElementById('view').innerHTML = usersHtml(); window.scrollTo(0, sy4); })
+      .catch(function (er) { alert('⚠ ' + (er.message || er)); t.disabled = false; }); return; }
+  if (d.ucar) { var ur = d.ucar.split('|'), u5 = (USERS.list || []).filter(function (u) { return u.id === ur[0]; })[0]; if (!u5) return;
+    var cl = (u5.cars ? u5.cars : ['lg', 'sk', 'kt']).slice(), ix5 = cl.indexOf(ur[1]); if (ix5 >= 0) cl.splice(ix5, 1); else cl.push(ur[1]);
+    t.disabled = true;
+    api('/admin/user', { id: u5.id, cars: cl }).then(function () { u5.cars = ['lg', 'sk', 'kt'].filter(function (k) { return cl.indexOf(k) >= 0; }); SITE.tb = {}; A2O.mem = {}; var sy5 = window.scrollY; document.getElementById('view').innerHTML = usersHtml(); window.scrollTo(0, sy5); })
       .catch(function (er) { alert('⚠ ' + (er.message || er)); t.disabled = false; }); return; }
   if (d.uovset) { var k3 = d.uovset.split('|'), uid3 = k3[0], co3 = k3[1], lab3 = k3.slice(2).join('|');
     var in3 = [].filter.call(document.querySelectorAll('.uovIn'), function (n) { return n.dataset.k === d.uovset; })[0], raw3 = (in3 && in3.value || '').trim();
@@ -1385,6 +1428,7 @@ view.addEventListener('click', function (e) {
     }).catch(function (er) { alert('저장 못 했어요 · ' + (er.message || er)); t.disabled = false; t.textContent = '저장'; }); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.dataset.ued) { var ue = t.parentNode; setTimeout(function () { USERS.open[ue.dataset.ued] = ue.open; }, 0); return; }
   if (d.uovdel) { var uo = d.uovdel.split('|'); api('/admin/ovr', { id: uo[0], co: uo[1], label: uo.slice(2).join('|'), amt: null }).then(function () { SITE.tb = {}; A2O.mem = {}; usersLoad(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.scar) { siteS().car = d.scar; S.siteM = []; SITE.cos = []; save(); render(); return; }
   if (d.sk) { var SS = siteS(); SS[d.sk] = d.v; save(); render(); return; }
   if (d.scell) { siteCell(d.scell); return; }
   if (d.smo || d.smg) {
