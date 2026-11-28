@@ -1141,7 +1141,7 @@ function siteTable() {
   var msel = S.siteM || [];
   var rows = (tb.rows || []).filter(function (r) { return (!msel.length || msel.indexOf(r.id) >= 0) && (!w || (r.id + ' ' + r.name).toLowerCase().indexOf(w) >= 0); });
   // 거래처마다 단가표 그림이 올라온 시각 (a2o '올라온 시각')
-  atsLoad(cos);
+  SITE.dates = tb.dates || {}; atsLoad(cos);
   var h = '<div class="card">' + bar + '<div id="siteAts" style="margin-bottom:10px">' + atsLine(cos) + '</div>';
   if (!rows.length) h += '<p class="sub">맞는 모델이 없어요.</p>';
   else {
@@ -1162,13 +1162,21 @@ var ATS = { v: {}, t: {}, busy: {} };
 function atStr(s) { var m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''); return m ? (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
 // 강조: 거래처 색 상자 + 큰 시각 · 오늘이 아니면 빨간 '며칠 전'
 var CO_COL = { dream: '#f59e0b', dmb: '#38bdf8', gg: '#34d399', yuan: '#f472b6', sk_uni: '#f87171', sk_gs: '#a78bfa', kt_mns: '#facc15', kt_bc: '#fb923c' };
-function atsLine(cos) {
-  var today = new Date(); today.setHours(0, 0, 0, 0);
-  return '<div style="font-weight:800;font-size:15px;color:#e2e8f0;margin-bottom:6px">📷 단가표 올라온 시각</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + cos.map(function (k) {
-    var s = ATS.v[k], m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''), col = CO_COL[k] || '#94a3b8', old = '';
-    if (m) { var days = Math.round((today - new Date(+m[1], +m[2] - 1, +m[3])) / 86400000); if (days > 0) old = '<div style="color:#f87171;font-weight:900;font-size:13px">⚠ ' + (days === 1 ? '어제' : days + '일 전') + '</div>'; }
-    return '<div style="border:2px solid ' + col + ';border-radius:10px;padding:5px 10px;min-width:86px;text-align:center;background:rgba(255,255,255,.03)"><div style="color:' + col + ';font-weight:900;font-size:14px">' + esc(A2O_CO[k] || k) + '</div>' +
-      '<div style="color:#fff;font-weight:900;font-size:18px;line-height:1.2">' + (k in ATS.v ? esc(m ? m[4] + ':' + m[5] : '-') : '…') + '</div><div style="color:#cbd5e1;font-size:12px">' + (m ? (+m[2]) + '/' + (+m[3]) : '') + '</div>' + old + '</div>';
+// 거래처마다: ① 계산에 쓰는 단가표 (a2o 거래처 카드의 '단가표 11월 28일 0시 기준 · 11-36호') 크게
+//            ② 📷 이미지 올라온 시각 작게 · 둘 날짜가 어긋나면 / 오늘이 아니면 빨간 경고
+function shortDate(s) { return String(s || '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim(); }
+function atsLine(cos, dates) {
+  dates = dates || SITE.dates || {};
+  var today = new Date(); today.setHours(0, 0, 0, 0); var y = today.getFullYear();
+  return '<div style="font-weight:800;font-size:15px;color:#e2e8f0;margin-bottom:6px">📋 거래처 단가표 (계산 기준)</div><div style="display:flex;gap:6px;flex-wrap:wrap">' + cos.map(function (k) {
+    var s = ATS.v[k], m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''), col = CO_COL[k] || '#94a3b8', warn = '';
+    var dd = /(\d{1,2})월\s*(\d{1,2})일/.exec(dates[k] || ''), dDay = dd ? new Date(y, +dd[1] - 1, +dd[2]) : null, iDay = m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+    if (dDay && iDay && dDay < iDay) warn = '⚠ 이미지가 더 새것 — 사이트 값이 옛 단가표예요';
+    else if (dDay && Math.round((today - dDay) / 86400000) > 0) { var n = Math.round((today - dDay) / 86400000); warn = '⚠ 단가표 ' + (n === 1 ? '어제' : n + '일 전') + ' 것'; }
+    return '<div style="border:2px solid ' + (warn ? '#ef4444' : col) + ';border-radius:10px;padding:6px 10px;flex:1;min-width:140px;background:rgba(255,255,255,.03)"><div style="color:' + col + ';font-weight:900;font-size:14px">' + esc(A2O_CO[k] || k) + '</div>' +
+      '<div style="color:#fff;font-weight:900;font-size:16px;line-height:1.3">' + esc(shortDate(dates[k]) || '-') + '</div>' +
+      '<div style="color:#cbd5e1;font-size:12px">📷 이미지 ' + (k in ATS.v ? esc(m ? (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : '-') : '…') + '</div>' +
+      (warn ? '<div style="color:#f87171;font-weight:900;font-size:13px">' + esc(warn) + '</div>' : '') + '</div>';
   }).join('') + '</div>';
 }
 function atsLoad(cos) {
@@ -1184,7 +1192,7 @@ function siteCell(v) {
   var r = (tb.rows || []).filter(function (x) { return x.id === p[0]; })[0]; if (!r) return;
   var c = r.cells[p[1]]; if (!c) return;
   var edit = isAdmin() && S.asUser;   // 관리자가 계정 화면으로 볼 때만: 줄마다 금액 바꾸기
-  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>📷 단가표 올라온 시각 ' + esc(atStr(ATS.v[p[1]]) || '-') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
+  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>📋 단가표 <b>' + esc(shortDate((tb.dates || {})[p[1]]) || '-') + '</b> · 📷 이미지 ' + esc(atStr(ATS.v[p[1]]) || '-') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
     '<div class="parts">' + (c.brk || []).map(function (x, i) {
       var face = i === 0 && /단가표/.test(x[0]), lab = face ? '📋 액면 (단가표) 🖼 그림 보기 ›' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]), chg = x.length > 2;
       if (edit && !face && x[0] !== '구두 추가') {
