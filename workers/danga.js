@@ -92,7 +92,9 @@ async function hmac(env, s) {
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode('tok:' + env.DANGA_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return b64u(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(s)));
 }
-async function makeTok(env, id, dev) { const p = b64u(new TextEncoder().encode(JSON.stringify({ u: id, d: dev || '', e: Date.now() + 30 * 86400000 }))); return p + '.' + await hmac(env, p); }
+// 계정 로그인 증표: 마지막 활동 후 30분이면 끝 (화면이 활동할 때마다 /refresh 로 새로 받음)
+const IDLE_MS = 30 * 60000;
+async function makeTok(env, id, dev) { const p = b64u(new TextEncoder().encode(JSON.stringify({ u: id, d: dev || '', e: Date.now() + IDLE_MS }))); return p + '.' + await hmac(env, p); }
 async function readTokFull(env, t) {
   const [p, s] = String(t || '').split('.'); if (!p || !s || s !== await hmac(env, p)) return null;
   try { const o = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))); return o.e > Date.now() ? o : null; } catch (e) { return null; }
@@ -303,6 +305,11 @@ export default {
     if (url.pathname === '/login') return login(req, env);   // req.cf 로 대략 지역
     if (url.pathname.startsWith('/admin/')) return admin(req, url, env);
     const w = await who(req, url, env);
+    if (url.pathname === '/refresh') {   // 계정: 활동 중이면 30분 새로 (끝난 증표는 못 늘림 → 다시 로그인)
+      if (!w || w.admin || !w.user) return J({ error: 'login' }, 401);
+      const tk = await readTokFull(env, req.headers.get('X-Tok'));
+      return J({ tok: await makeTok(env, w.user.id, tk.d) });
+    }
     if (url.pathname === '/a2o') return a2o(req, url, env, w);
     if (url.pathname === '/a2o/ats') return w ? a2oAts(url, env, w) : J({ error: 'key' }, 403);
     if (url.pathname === '/a2o/sheet') return w && (w.admin || coOk(w.user, url.searchParams.get('s'))) ? a2oSheet(url, env) : J({ error: 'key' }, 403);
