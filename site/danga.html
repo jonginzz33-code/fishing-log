@@ -326,7 +326,7 @@ var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기�
 // ── 탭 ──
 // 2026-11-28 사용자 요청: 📊 비교 · 📋 단가표 입력 탭은 홈피에서 뺌 (코드 · 저장 자료는 남겨 둠 · 다시 넣으려면 아래 줄에 되살리기)
 var TABS_OLD = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력']];
-var TABS = [['site', '🌐 사이트 비교'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
+var TABS = [['site', '🌐 사이트 비교'], ['set', '⚙ 설정']];   // 🗣 구두도 뺌 (사이트 값에 안 쓰임 · 구두는 a2o 사이트에 넣음)
 function renderTabs() {
   document.getElementById('tabs').innerHTML = TABS.map(function (t) {
     return '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>';
@@ -1109,7 +1109,14 @@ function siteImgs(co) {
       }).join('');
     }).catch(function (e) { var el = document.getElementById('simgs'); if (el) el.innerHTML = '<p class="sub">⚠ 그림을 못 가져왔어요 · ' + esc(e.message || e) + '</p>'; });
 }
+// 설정 = 사이트 연결에 필요한 것만 (열쇠 · 로그아웃) — 예전 단가표 · 정책 · 백업 칸은 뺌 (setHtmlOld 로 남김)
 function setHtml() {
+  return '<div class="card"><h2>🔑 사이트 연결 열쇠</h2><p class="sub">jjj.a2o.co.kr 값을 중계기(talla-danga)로 가져와요. 열쇠는 이 기기 브라우저에만 저장돼요.</p>' +
+    '<input id="a2oKey" type="password" style="width:100%" placeholder="열쇠 (DANGA_KEY)" value="' + esc(a2oKey()) + '">' +
+    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>💾 열쇠 저장 · 연결 확인</button></div><p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p></div>' +
+    (window.firebase && firebase.auth && firebase.auth().currentUser ? '<div class="card"><button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button></div>' : '');
+}
+function setHtmlOld() {
   return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
     (window.firebase && firebase.auth && firebase.auth().currentUser ? '<button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button>' : '') + '</div>' +
     a2oHtml() +
