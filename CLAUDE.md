@@ -253,3 +253,4 @@
 - ~~195~~ — 삭제함 (2026-11-17 사용자)
 - 아이디어: 보기 전용 웹사이트 (Firebase Hosting · 같은 로그인 · 그룹 출조 기록 · 게시판 · 물때)
 - ~~229 메타버스~~ — 삭제함 (2026-11-11)
+- **447 (만듦 · 2026-11-28 · 사용자 '그냥 942 누르면 저 싸이트 해당 값을 가져오면 되는 거야'):** 🌐 **단가 = a2o 사이트 값 그대로** — 중계기 workers/relay.js /a2o (X-Key = Cloudflare 비밀값 DANGA_KEY · A2O_ID · A2O_PW 로 jjj.a2o.co.kr/jjj/login → /compare?c=lg&kind=new|mnp|re&plan=&contract=sel|pub&support=0|10|20&ad=… 표(tr data-id · td data-s · span.tot · div.brk) → JSON · raw=1 = cmpdata(모델 · 부가 목록)) · danga.html 비교 탭 맨 위 '🌐 사이트 값 바로 보기'(942 → 모델 → 유형 · 요금제 고르기 → 업체별 합계 · 내역) · 모델 줄 상세에도 · ⚙ 설정 = 열쇠(이 브라우저만) · 사이트 부가 고르기(S.a2oAd) · 우리 계산(사진 · 정책)은 그대로 남김. **사용자 손: 중계기 코드 다시 붙여 넣기 + 비밀값 3개.** contract 값 이름(sel/pub)은 실제로 확인 필요.

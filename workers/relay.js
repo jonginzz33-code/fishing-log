@@ -2,7 +2,7 @@
 // 홈피(브라우저) · 앱이 선단 홈페이지를 대신 읽어 오는 곳. 허용한 사이트만 · 5분 기억.
 //   GET /?u=https://sungbin.sunsang24.com/ship/schedule_fleet/2026-12-03/0/simple_day1
 //   GET /ping → ok
-//   GET /a2o?c=lg|sk|kt → 단가 비교 자료 (X-Key 필요 · 비밀값 A2O_ID · A2O_PW · DANGA_KEY)
+//   GET /a2o?c=lg&kind=mnp&plan=115&contract=pub&support=20&ad=d1&m=SM-S942N → a2o 가 계산한 단가 표 (raw=1 이면 원래 자료 · X-Key 필요 · 비밀값 A2O_ID · A2O_PW · DANGA_KEY)
 //   GET /s24?d=2026-12-03&area=보령인근,… → 선상24 목록(지역 · 날짜 배와 남은 자리)을 우리 서버가 받아 둠 (433 · 5분 같이 기억 · 앱은 선상24에 직접 안 감)
 //   GET /day?d=2026-12-03&h=a.sunsang24.com,b.thefishing.kr,… → 여러 선단 그 날 일정을 한 번에 읽어 정리한 JSON (선단 40곳까지 · 5분 기억)
 // 선상24 · 더피싱 원 홈페이지(www · api 등)는 막아요 (410).
@@ -146,14 +146,42 @@ async function a2oLogin(env) {
   if (/아이디 또는 비밀번호/.test(txt)) return null;
   return cookie || null;
 }
-async function a2oPage(c, cookie) {
-  const r = await fetch('https://jjj.a2o.co.kr/compare?c=' + c + '&st=1&pf=0', {
+// 비교 화면 그대로: 조건(kind · plan · contract · support · ad)을 넘기면 a2o 가 계산한 표를 읽어 JSON 으로
+const A2O_ONE = { kind: /^(new|mnp|re)$/, plan: /^\d{2,3}$/, contract: /^[a-z]{2,6}$/, support: /^\d{1,2}$/ };
+async function a2oPage(c, cookie, url) {
+  const q = new URLSearchParams({ c, st: '1', pf: '0' });
+  for (const [k, re] of Object.entries(A2O_ONE)) { const v = url.searchParams.get(k); if (v && re.test(v)) q.set(k, v); }
+  url.searchParams.getAll('ad').filter((v) => /^[a-z]{1,3}\d{1,3}$/.test(v)).slice(0, 40).forEach((v) => q.append('ad', v));
+  const r = await fetch('https://jjj.a2o.co.kr/compare?' + q.toString(), {
     headers: { Cookie: cookie, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0 Safari/537.36' }, redirect: 'manual',
   });
   if (r.status !== 200) return null;
   const html = await r.text();
   const m = html.match(/<script[^>]*id=["']cmpdata["'][^>]*>([\s\S]*?)<\/script>/);
-  return m ? m[1] : null;
+  return m ? { html, data: m[1] } : null;
+}
+function a2oTable(html, data, want) {
+  let d = {}; try { d = JSON.parse(data); } catch (e) {}
+  const cos = []; let m; const rh = /<th[^>]*data-k="(\w+)"/g; while ((m = rh.exec(html))) if (!cos.includes(m[1])) cos.push(m[1]);
+  const dates = {}; cos.forEach((k) => { if (d[k] && d[k].date) dates[k] = d[k].date; });
+  const names = {}; (d.models || []).forEach((x) => { if (Array.isArray(x)) names[x[0]] = x[1]; });
+  const rows = [];
+  for (const b of html.split(/<tr[^>]*data-id="/).slice(1)) {
+    const id = b.slice(0, b.indexOf('"'));
+    if (want.length && !want.some((w) => id === w || id.startsWith(w))) continue;
+    const body = b.slice(0, (b.indexOf('</tr>') + 1 || b.length + 1) - 1);
+    const cells = {}; let i = 0, t; const rt = /<td[^>]*data-s="([^"]*)"[^>]*>([\s\S]*?)<\/td>/g;
+    while ((t = rt.exec(body))) {
+      const k = cos[i++] || ('c' + i), h = t[2];
+      if (/class="na"/.test(h) && !/class="tot"/.test(h)) { cells[k] = null; continue; }
+      const tot = (/class="tot"[^>]*>([^<]*)</.exec(h) || [0, t[1]])[1].trim();
+      const brk = []; let x; const rb = /<div>\s*<span>([\s\S]*?)<\/span>\s*<span[^>]*>([^<]*)<\/span>\s*<\/div>/g;
+      while ((x = rb.exec(h))) brk.push([txt(x[1]), x[2].trim()]);
+      cells[k] = { tot, brk };
+    }
+    rows.push({ id, name: names[id] || '', cells });
+  }
+  return { t: Date.now(), cos, dates, rows };
 }
 async function a2o(req, url, env) {
   const J = (o, st) => new Response(typeof o === 'string' ? o : JSON.stringify(o), { status: st || 200, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -161,12 +189,15 @@ async function a2o(req, url, env) {
   if (!env.A2O_ID || !env.A2O_PW) return J({ error: 'no login secrets' }, 500);
   const c = url.searchParams.get('c') || 'lg';
   if (!/^(lg|sk|kt)$/.test(c)) return J({ error: 'bad c' }, 400);
+  const want = (url.searchParams.get('m') || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 20);
   try {
     for (let i = 0; i < 2; i++) {          // 가끔 첫 로그인이 실패해요 → 한 번 더
       const ck = await a2oLogin(env);
       if (!ck) continue;
-      const data = await a2oPage(c, ck);
-      if (data) return J(data);
+      const pg = await a2oPage(c, ck, url);
+      if (!pg) continue;
+      if (url.searchParams.get('raw') === '1') return J(pg.data);   // 업체 · 부가 목록 등 원래 자료
+      return J(a2oTable(pg.html, pg.data, want));
     }
     return J({ error: 'login or page failed' }, 502);
   } catch (e) { return J({ error: String(e.message || e) }, 502); }

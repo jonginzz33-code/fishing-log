@@ -402,8 +402,8 @@ function scSummary(noVas) {
 
 function cmpHtml() {
   var ags = agsWithData();
-  var h = '';
-  if (!ags.length) return '<div class="card"><h2>📷 먼저 단가표를 올려 주세요</h2><p class="sub">[📋 단가표 입력] 탭에서 업체마다 단가 숫자를 넣으면 여기서 업체끼리 비교해요.</p><button class="btn pri" data-go="sheet">📋 단가표 입력하러 가기</button></div>';
+  var h = a2oSearchHtml();
+  if (!ags.length) return h + '<div class="card"><h2>📷 먼저 단가표를 올려 주세요</h2><p class="sub">[📋 단가표 입력] 탭에서 업체마다 단가 숫자를 넣으면 여기서 업체끼리 비교해요.</p><button class="btn pri" data-go="sheet">📋 단가표 입력하러 가기</button></div>';
   var sel = selModels();
   h += '<div class="card">';
   h += '<div class="lbl" style="margin-top:0">① 가입 유형</div><div class="row">' + D.TYPES.map(function (t) { return '<button class="tab' + (S.type === t.id ? ' on' : '') + '" data-type="' + t.id + '" style="flex:1">' + t.label + '</button>'; }).join('') + '</div>';
@@ -487,6 +487,7 @@ function showItem(id) {
   var ags = agsWithData(), p = id.split('|'), key = p[0], st = p[1] || '';
   var it = D.items(ags).filter(function (x) { return x.key === key && x.st === st; })[0];
   var h = '<h3><span>' + esc(it ? it.code + ' · ' + it.label : key) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(key) + (st ? ' · ' + esc(st) : '') + (it && it.price ? ' · 출고가 ' + Number(it.price).toLocaleString() + '원' : '') + ' · ' + esc(scSummary()) + '</p>';
+  h += '<div id="a2obox"></div><div class="lbl">📊 우리 계산 (단가표 입력 기준)</div>';
   h += '<div class="scroll"><table class="tbl mx"><tr><th>요금제</th>' + D.TYPES.map(function (t) { return '<th class="tsep" style="text-align:center" colspan="' + ags.length + '">' + t.label + '</th>'; }).join('') + '</tr><tr><th></th>' +
     D.TYPES.map(function () { return ags.map(function (a, i) { return '<th class="' + (i === 0 ? 'tsep' : '') + '" style="text-align:center;font-size:12px;padding:6px 4px;white-space:nowrap">' + esc(agShort(a)) + '</th>'; }).join(''); }).join('') + '</tr>';
   D.BANDS.forEach(function (b) {
@@ -507,7 +508,9 @@ function showItem(id) {
           (p ? '<div class="parts">' + p.parts.map(function (x) { return '<div><span>' + esc(x.name) + '</span><b class="' + (x.amt < 0 ? 'minus' : x.amt > 0 && x !== p.parts[0] ? 'plus' : '') + '">' + (x === p.parts[0] ? fmt(x.amt) : sgn(x.amt)) + '</b></div>'; }).join('') + '</div>' : '') + '</div>';
       });
       sh.querySelector('#bd').innerHTML = o;
+      cur = [band, type]; a2oBox(sh.querySelector('#a2obox'), key, st, band, type);
     }
+    var cur = null;
     bd(S.mode === 'list' ? S.band : 'B115', S.type);
     // 숫자 누르면 그 칸 바로 옆에 작은 창: 왜 이 단가인지 (기본 + 정책 + 구두)
     function pop(cell, band, type, ai) {
@@ -537,7 +540,7 @@ function showItem(id) {
     function closePop() { var o = document.getElementById('cellPop'); if (o) o.remove(); }
     sh.addEventListener('scroll', closePop, true);
     document.getElementById('modal').addEventListener('click', function (e) { if (!e.target.closest('[data-bd]')) closePop(); });
-    sh.addEventListener('click', function (e) { var c = e.target.closest('[data-bd]'); if (c) { var q = c.dataset.bd.split('|'); bd(q[0], q[1]); if (q[2] != null) pop(c, q[0], q[1], +q[2]); } else closePop(); });
+    sh.addEventListener('click', function (e) { if (e.target.closest('[data-a2ore]') && cur) { a2oBox(sh.querySelector('#a2obox'), key, st, cur[0], cur[1], true); return; } var c = e.target.closest('[data-bd]'); if (c) { var q = c.dataset.bd.split('|'); bd(q[0], q[1]); if (q[2] != null) pop(c, q[0], q[1], +q[2]); } else closePop(); });
   });
 }
 
@@ -829,37 +832,112 @@ function auditHtml() {
   }
   return h + '</div>';
 }
-// ── a2o 비교 사이트에서 가져오기 (중계기 /a2o · 열쇠는 이 브라우저에만) ──
+// ── a2o 비교 사이트 값 그대로 (중계기 /a2o · 우리가 계산 안 함 · 열쇠는 이 브라우저에만) ──
 var A2O_RELAY = 'https://talla-relay.jonginzz33.workers.dev/a2o';
-var A2O = { msg: '', raw: null };
+var A2O = { msg: '', raw: null, mem: {} };
+var A2O_CO = { dream: '드림', dmb: 'dmb', dmb2: 'dmb2', gg: '경기', yuan: '유안' };
+var A2O_PLAN = { B115: '115', B105: '105', B95: '95', B85: '85', B75: '75', B61: '61', B55: '55', B44: '44', B37: '37' };
+function a2oSum() { return (S.sc.yak === 'sel' ? '선택약정' : '공시') + ' · ' + ({ hi: '지원금 20만 이상', mid: '지원금 10만 이상', low: '지원금 0' }[S.sc.sup] || '') + ' · 사이트 부가 ' + ((S.a2oAd || []).length ? (S.a2oAd || []).length + '개' : '없음'); }
 function a2oKey(v) { if (v != null) ls('danga_a2o_key', v); return ls('danga_a2o_key') || ''; }
+function a2oParams(band, type) {
+  var plan = A2O_PLAN[band]; if (!plan) return null;
+  var q = 'c=lg&kind=' + ({ new: 'new', mnp: 'mnp', chg: 're' }[type] || 'mnp') + '&plan=' + plan +
+    '&contract=' + (S.sc.yak === 'sel' ? 'sel' : 'pub') + '&support=' + ({ hi: 20, mid: 10, low: 0 }[S.sc.sup] || 0);
+  (S.a2oAd || []).forEach(function (a) { q += '&ad=' + encodeURIComponent(a); });
+  return q;
+}
+function a2oGet(q) {
+  var hit = A2O.mem[q]; if (hit && Date.now() - hit.t < 5 * 60000) return Promise.resolve(hit.v);
+  return fetch(A2O_RELAY + '?' + q, { headers: { 'X-Key': a2oKey() } })
+    .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(r.status === 403 ? '열쇠가 틀려요 (⚙ 설정)' : (j && j.error) || ('오류 ' + r.status)); return j; }); })
+    .then(function (j) { A2O.mem[q] = { t: Date.now(), v: j }; return j; });
+}
+// 우리 모델(키 · 용량) → a2o 줄 (SM-S942N256 처럼 붙어 있음)
+function a2oRow(tb, key, st) {
+  var k = String(key).replace(/\$$/, ''), rows = tb.rows || [];
+  return rows.filter(function (r) { return r.id === k + st; })[0] || rows.filter(function (r) { return r.id === k + '-' + st; })[0] ||
+    rows.filter(function (r) { return r.id === k; })[0] || rows.filter(function (r) { return r.id.indexOf(k) === 0 && (!st || r.id.indexOf(st) > 0); })[0] || null;
+}
+function a2oBox(el, key, st, band, type, fresh) {
+  if (!a2oKey()) { el.innerHTML = '<p class="sub">🌐 사이트 값을 보려면 ⚙ 설정에서 열쇠를 넣어 주세요.</p>'; return; }
+  var q = a2oParams(band, type);
+  if (!q) { el.innerHTML = '<p class="sub">🌐 이 요금제는 사이트에 없어요.</p>'; return; }
+  if (fresh) delete A2O.mem[q];
+  el.innerHTML = '<p class="sub">⏳ 사이트 값 가져오는 중…</p>';
+  a2oGet(q + '&m=' + encodeURIComponent(String(key).replace(/\$$/, ''))).then(function (tb) {
+    var r = a2oRow(tb, key, st);
+    var head = '<div class="lbl" style="display:flex;justify-content:space-between;align-items:center"><span>🌐 사이트 값 · ' + esc(D.bandLabel(band)) + ' ' + esc(typeLabel(type)) + (r ? ' · ' + esc(r.id) : '') + '</span><button class="btn sm" data-a2ore>🔄</button></div>';
+    if (!r) { el.innerHTML = head + '<p class="sub">사이트에 이 모델이 없어요.</p>'; return; }
+    var best = null; (tb.cos || []).forEach(function (k) { var c = r.cells[k]; if (c && (best === null || +c.tot > best)) best = +c.tot; });
+    el.innerHTML = head + (tb.cos || []).map(function (k) {
+      var c = r.cells[k], nm = A2O_CO[k] || k, dt = (tb.dates || {})[k];
+      if (!c) return '<div class="card" style="margin:6px 0;padding:10px"><b>' + esc(nm) + '</b> <span class="sub">단가 없음</span></div>';
+      return '<div class="card" style="margin:6px 0;padding:10px' + (+c.tot === best ? ';border-color:var(--yel)' : '') + '"><b>' + esc(nm) + ' · ' + esc(c.tot) + '</b>' + (dt ? ' <span class="sub">' + esc(dt) + '</span>' : '') +
+        '<div class="parts">' + c.brk.map(function (x, i) {
+          var lab = i === 0 && /단가표/.test(x[0]) ? '📋 액면' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]);
+          return '<div><span>' + esc(lab) + '</span><b class="' + (neg ? 'minus' : pos ? 'plus' : '') + '">' + esc(x[1]) + '</b></div>';
+        }).join('') + '</div></div>';
+    }).join('') + '<p class="sub">사이트가 계산한 값 그대로예요 · ' + esc(a2oSum()) + '</p>';
+  }).catch(function (e) { el.innerHTML = '<p class="sub">⚠ 사이트 값을 못 가져왔어요 · ' + esc(e.message || e) + ' <button class="btn sm" data-a2ore>다시</button></p>'; });
+}
 function a2oHtml() {
-  var info = '';
-  if (A2O.raw) {
-    var d = A2O.raw;
-    info = Object.keys(d).filter(function (k) { return d[k] && typeof d[k] === 'object' && d[k].date; })
-      .map(function (k) { return '<div class="sub">· ' + esc(k) + ' — ' + esc(d[k].date) + ' · ' + Object.keys(d[k].rows || {}).length + '줄</div>'; }).join('');
+  var ads = '';
+  if (A2O.raw && A2O.raw.addons) {
+    var on = {}; (S.a2oAd || []).forEach(function (x) { on[x] = 1; });
+    ads = Object.keys(A2O.raw.addons).map(function (co) {
+      return '<div class="lbl">' + esc(A2O_CO[co] || co) + ' 부가</div><div class="row">' + (A2O.raw.addons[co] || []).map(function (x) {
+        return '<button class="chip' + (on[x.id] ? ' on' : '') + '" data-a2oad="' + esc(x.id) + '">' + esc(x.name) + (x.add != null ? ' ' + esc(String(x.add)) : '') + '</button>';
+      }).join('') + '</div>';
+    }).join('');
   }
-  return '<div class="card"><h2>🔄 비교 사이트에서 가져오기</h2><p class="sub">jjj.a2o.co.kr 값을 중계기가 대신 로그인해서 가져와요. 열쇠는 이 브라우저에만 저장돼요.</p>' +
+  return '<div class="card"><h2>🌐 비교 사이트 값 (jjj.a2o.co.kr)</h2><p class="sub">모델을 누르면 그 사이트가 계산한 값을 그대로 보여 줘요. 열쇠는 이 브라우저에만 저장돼요.</p>' +
     '<input id="a2oKey" type="password" style="width:100%" placeholder="열쇠 (DANGA_KEY)" value="' + esc(a2oKey()) + '">' +
-    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>🔄 새로 가져오기</button>' + (A2O.raw ? '<button class="btn" data-a2odl>📤 받은 자료 파일로 저장</button>' : '') + '</div>' +
-    '<p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p>' + info + '</div>';
+    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>💾 열쇠 저장 · 부가 목록 불러오기</button></div>' +
+    '<p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p>' + ads + '</div>';
 }
 function a2oFetch() {
   var k = (document.getElementById('a2oKey') || {}).value; if (k != null) a2oKey(k.trim());
   if (!a2oKey()) return alert('열쇠를 먼저 넣어 주세요');
-  A2O.msg = '⏳ 가져오는 중…'; render();
-  fetch(A2O_RELAY + '?c=lg', { headers: { 'X-Key': a2oKey() } })
-    .then(function (r) { return r.json().then(function (j) { return { st: r.status, j: j }; }); })
-    .then(function (x) {
-      if (x.st !== 200) throw new Error(x.st === 403 ? '열쇠가 틀려요' : (x.j && x.j.error) || ('오류 ' + x.st));
-      A2O.raw = x.j; A2O.msg = '✅ 가져옴 ' + new Date().toTimeString().slice(0, 5);
-      var j = JSON.stringify(x.j);
-      if (window.firebase && firebase.auth().currentUser && j.length < 900000)
-        firebase.firestore().collection('adminNotes').doc('danga_a2o').set({ j: j, t: Date.now() }).catch(function () {});
-      render();
-    })
-    .catch(function (e) { A2O.msg = '⚠ ' + (e.message || e); render(); });
+  A2O.msg = '⏳ 불러오는 중…'; render();
+  a2oGet('c=lg&raw=1').then(function (j) {
+    A2O.raw = j; var n = 0; Object.keys(j.addons || {}).forEach(function (c) { n += (j.addons[c] || []).length; });
+    A2O.msg = '✅ 연결됨 · 부가 ' + n + '개 · ' + Object.keys(A2O_CO).filter(function (c) { return j[c] && j[c].date; }).map(function (c) { return A2O_CO[c] + ' ' + j[c].date; }).join(' · ');
+    render();
+  }).catch(function (e) { A2O.msg = '⚠ ' + (e.message || e); render(); });
+}
+// 비교 탭 맨 위: 모델 번호(942 등) 치면 사이트 모델 목록에서 찾아 → 누르면 사이트 값 그대로
+var A2OQ = '';
+function a2oSearchHtml() {
+  if (!a2oKey()) return '';
+  var q = A2OQ.trim().toLowerCase(), hits = [];
+  if (q && A2O.raw && A2O.raw.models) hits = A2O.raw.models.filter(function (m) { return (m[0] + ' ' + m[1]).toLowerCase().indexOf(q) >= 0; }).slice(0, 30);
+  return '<div class="card"><h2 style="margin-top:0">🌐 사이트 값 바로 보기</h2><div class="row"><input id="a2oQ" type="text" enterkeyhint="search" placeholder="모델 번호 · 이름 (예: 942 · 아이폰)" value="' + esc(A2OQ) + '" style="flex:1;min-width:150px"><button class="btn pri" data-a2oq>🔍 찾기</button></div>' +
+    (q ? (A2O.raw ? (hits.length ? '<div class="row" style="margin-top:8px">' + hits.map(function (m) { return '<button class="chip" data-a2om="' + esc(m[0]) + '">' + esc(m[0]) + ' <span class="sub">' + esc(m[1]) + '</span></button>'; }).join('') + '</div>'
+      : '<p class="sub">사이트에 맞는 모델이 없어요.</p>') : '<p class="sub">⏳ 사이트 모델 목록 불러오는 중…</p>') : '') + '</div>';
+}
+function a2oSearch() {
+  A2OQ = (document.getElementById('a2oQ') || {}).value || '';
+  if (A2O.raw) { render(); return; }
+  render();
+  a2oGet('c=lg&raw=1').then(function (j) { A2O.raw = j; render(); }).catch(function (e) { A2O.raw = null; alert('사이트 연결 실패 · ' + (e.message || e)); });
+}
+function showSite(id) {
+  var nm = ''; ((A2O.raw && A2O.raw.models) || []).forEach(function (m) { if (m[0] === id) nm = m[1]; });
+  var band = A2O_PLAN[S.band] ? S.band : 'B115', type = S.type || 'mnp';
+  function head() {
+    return '<div class="row">' + D.TYPES.map(function (t) { return '<button class="tab' + (type === t.id ? ' on' : '') + '" data-st="' + t.id + '">' + t.label + '</button>'; }).join('') + '</div>' +
+      '<div class="row" style="margin-top:6px">' + D.BANDS.filter(function (b) { return A2O_PLAN[b.id]; }).map(function (b) { return '<button class="chip' + (band === b.id ? ' on' : '') + '" data-sb="' + b.id + '">' + esc(b.label) + '</button>'; }).join('') + '</div>';
+  }
+  var h = '<h3><span>' + esc(id) + (nm ? ' · ' + esc(nm) : '') + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(a2oSum()) + ' (약정 · 지원금은 비교 탭 ⚙ 그 밖 조건 · 사이트 부가는 ⚙ 설정)</p><div id="sitehead"></div><div id="a2obox"></div>';
+  openSheet(h, function (sh) {
+    function paint(fresh) { sh.querySelector('#sitehead').innerHTML = head(); a2oBox(sh.querySelector('#a2obox'), id, '', band, type, fresh); }
+    paint();
+    sh.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-st],[data-sb],[data-a2ore]'); if (!t) return;
+      if (t.dataset.st) type = t.dataset.st; else if (t.dataset.sb) band = t.dataset.sb;
+      paint(t.hasAttribute('data-a2ore'));
+    });
+  });
 }
 function setHtml() {
   return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
@@ -940,6 +1018,7 @@ document.getElementById('modal').addEventListener('click', function (e) { if (e.
 // ── 이벤트 ──
 function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
 var view = document.getElementById('view');
+view.addEventListener('keydown', function (e) { if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
 view.addEventListener('click', function (e) {
   var t = e.target.closest('button,[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
@@ -989,7 +1068,9 @@ view.addEventListener('click', function (e) {
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
   if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); na.sections = tplFor(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
   if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
-  if (t.hasAttribute('data-a2odl')) { var bl = new Blob([JSON.stringify(A2O.raw)], { type: 'application/json' }), au = document.createElement('a'); au.href = URL.createObjectURL(bl); au.download = 'a2o-' + new Date().toISOString().slice(0, 10) + '.json'; au.click(); return; }
+  if (t.hasAttribute('data-a2oq')) { a2oSearch(); return; }
+  if (d.a2om) { showSite(d.a2om); return; }
+  if (d.a2oad) { var aa = S.a2oAd = S.a2oAd || [], ix = aa.indexOf(d.a2oad); if (ix >= 0) aa.splice(ix, 1); else aa.push(d.a2oad); A2O.mem = {}; save(); render(); return; }
   if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
