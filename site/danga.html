@@ -1011,6 +1011,8 @@ function siteMBar() {
   var sel = S.siteM || [], openMk = S.siteMk || {};
   var one = isUser();   // 계정(거래처)은 모델 하나만 · 전체 보기 없음
   var h = '<div class="row" style="align-items:center"><span class="lbl" style="margin:0 4px 0 0">📱 모델 ' + (one ? (sel.length ? '· <b style="color:var(--yel)">' + esc(siteMCode(sel[0], '')) + '</b>' : '· 하나 골라 주세요') : (sel.length ? '· ' + sel.length + '개 고름' : '· 전체')) + '</span>' + (one ? '' : '<button class="chip' + (sel.length ? '' : ' on') + '" data-smo="*">전체 보기</button>') + '</div>';
+  // 🔍 모델 찾기 (계정): 942 치면 942 모델들이 바로 뜸 · 하나뿐이면 바로 골라짐
+  if (one) h += '<div style="position:relative;margin:4px 0 6px"><input id="mSearch" type="search" inputmode="search" autocomplete="off" placeholder="🔍 모델 번호 · 이름 (예: 942 · 17PR · 버디)" style="width:100%;font-size:16px;font-weight:700;padding:10px 12px;border-radius:10px;background:#fff;color:#0b1220;-webkit-text-fill-color:#0b1220;border:2px solid #7dd3fc"><div id="mSug"></div></div>';
   SITE_MK.forEach(function (mk) {
     var list = ms.filter(function (m) { return siteMaker(m[0]) === mk[0]; }); if (!list.length) return;
     if (mk[0] === 'sam') { var ord = function (id) { var c = (/^SM-([A-Z])/.exec(id) || [0, 'Z'])[1]; return 'SFAM'.indexOf(c) < 0 ? 9 : 'SFAM'.indexOf(c); };
@@ -1067,6 +1069,22 @@ function oneHtml() {
     '<p class="sub" style="margin:4px 0 0">미가입이면 거래처 규정대로 미유치 차감이 들어가요.</p></div>';
 }
 function siteSetAd(list) { S.a2oAd = list; save(); var vb = document.getElementById('siteVBar'); if (vb) vb.innerHTML = siteVBar(); siteLoad(); }
+// 모델 찾기 자동완성: 짧은 번호(942) · 모델 코드(SM-S942N) · 이름(갤럭시 S26) 어디에 맞아도
+function mSearch(q) {
+  var box = document.getElementById('mSug'); if (!box) return;
+  q = String(q || '').toLowerCase().replace(/\s+/g, '');
+  if (!q) { box.innerHTML = ''; return; }
+  var ms = ((A2O.raw && A2O.raw.models) || []).filter(function (m) {
+    var s = (siteMCode(m[0], m[1]) + ' ' + m[0] + ' ' + m[1]).toLowerCase().replace(/\s+/g, '');
+    return s.indexOf(q) >= 0;
+  }).slice(0, 24);
+  if (!ms.length) { box.innerHTML = '<p class="sub" style="margin:6px 2px">맞는 모델이 없어요</p>'; return; }
+  if (ms.length === 1) { var only = ms[0][0]; box.innerHTML = ''; var inp = document.getElementById('mSearch'); if (inp) { inp.value = ''; inp.blur(); } pickModel(only); return; }
+  box.innerHTML = '<div class="row" style="margin-top:6px">' + ms.map(function (m) {
+    return '<button class="chip" data-smo="' + esc(m[0]) + '" style="font-weight:800;padding:6px 12px">' + esc(siteMCode(m[0], m[1])) + ' <span class="sub" style="font-weight:500">' + esc(m[1]) + '</span></button>';
+  }).join('') + '</div>';
+}
+function pickModel(id) { S.siteM = [id]; S.siteMk = {}; save(); var mb = document.getElementById('siteMBar'); if (mb) mb.innerHTML = siteMBar(); siteLoad(); }
 function siteBar() {
   var hide = S.siteHide || [], all = SITE.cos;
   return '<div class="row"><span class="lbl" style="margin:0 4px 0 0">🏢 대리점</span><button class="chip' + (all.every(function (k) { return hide.indexOf(k) < 0; }) ? ' on' : '') + '" data-sco="*">전체</button>' +
@@ -1484,8 +1502,8 @@ document.getElementById('modal').addEventListener('click', function (e) { if (e.
 // ── 이벤트 ──
 function ruleRef(id) { var p = id.split(','); return { kind: p[0], ai: +p[1], ri: +p[2], r: S.ags[+p[1]][p[0]][+p[2]], rest: p.slice(3) }; }
 var view = document.getElementById('view');
-view.addEventListener('input', function (e) { if (e.target.id === 'siteQ') { siteS().q = e.target.value; if ((S.siteM || []).length) { S.siteM = []; var mb = document.getElementById('siteMBar'); if (mb) mb.innerHTML = siteMBar(); } siteTable(); } });
-view.addEventListener('keydown', function (e) { if ((e.target.id === 'lgPw' || e.target.id === 'lgId') && e.key === 'Enter') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'siteQ' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); save(); return; } if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
+view.addEventListener('input', function (e) { if (e.target.id === 'mSearch') { mSearch(e.target.value); return; } if (e.target.id === 'siteQ') { siteS().q = e.target.value; if ((S.siteM || []).length) { S.siteM = []; var mb = document.getElementById('siteMBar'); if (mb) mb.innerHTML = siteMBar(); } siteTable(); } });
+view.addEventListener('keydown', function (e) { if (e.target.id === 'mSearch' && e.key === 'Enter') { e.preventDefault(); var f1 = document.querySelector('#mSug [data-smo]'); if (f1) { e.target.value = ''; pickModel(f1.dataset.smo); } return; } if ((e.target.id === 'lgPw' || e.target.id === 'lgId') && e.key === 'Enter') { e.preventDefault(); doLogin(); return; } if (e.target.id === 'siteQ' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); save(); return; } if (e.target.id === 'a2oQ' && e.key === 'Enter') { e.preventDefault(); a2oSearch(); } });
 view.addEventListener('click', function (e) {
   var t = e.target.closest('button,[data-scell],[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
@@ -1585,7 +1603,7 @@ view.addEventListener('click', function (e) {
   if (d.scell) { siteCell(d.scell); return; }
   if (d.smo || d.smg) {
     var ml = S.siteM = S.siteM || [];
-    if (isUser()) { if (!d.smo || d.smo === '*') return; S.siteM = [d.smo]; S.siteMk = {}; /* 고르면 커튼 자동으로 접기 */ save(); var mb1 = document.getElementById('siteMBar'); if (mb1) mb1.innerHTML = siteMBar(); siteLoad(); return; }   // 계정: 모델 하나만 → 그 모델만 서버에 물어봄
+    if (isUser()) { if (!d.smo || d.smo === '*') return; pickModel(d.smo); /* 고르면 커튼 자동으로 접기 · 찾기칸 비움 */ return; }   // 계정: 모델 하나만 → 그 모델만 서버에 물어봄
     if (d.smo === '*') S.siteM = [];
     else if (d.smo) { var mx = ml.indexOf(d.smo); if (mx >= 0) ml.splice(mx, 1); else ml.push(d.smo); }
     else { var gids = d.smg.split(','), gall = gids.every(function (id) { return ml.indexOf(id) >= 0; }); S.siteM = gall ? ml.filter(function (id) { return gids.indexOf(id) < 0; }) : ml.concat(gids.filter(function (id) { return ml.indexOf(id) < 0; })); }
