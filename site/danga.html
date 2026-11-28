@@ -868,6 +868,25 @@ function a2oParams(band, type) {
 // ── 누가 쓰나: 관리자(열쇠 있음) · 계정(아이디로 로그인 → 토큰) ──
 function uTok(v, id) { if (v !== undefined) { ls('danga_tok', v || ''); ls('danga_uid', id || ''); } return ls('danga_tok') || ''; }
 function isAdmin() { return !!a2oKey(); }
+// ── 계정: 마지막 활동 후 30분이면 로그아웃 (서버 증표도 30분 · 활동하면 새로 받음) ──
+var IDLE_MS = 30 * 60000;
+function tokExp() { try { var p = uTok().split('.')[0]; return JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))).e || 0; } catch (e) { return 0; } }
+function idleOut() { uTok(''); ls('danga_idle', '1'); A2O.rawC = {}; A2O.raw = null; A2O.mem = {}; SITE.tb = {}; var md = document.getElementById('modal'); if (md) md.classList.add('hide'); render(); }
+function idleCheck() { if (!isUser()) return; var now = Date.now(), last = +ls('danga_act') || 0; if (now - last > IDLE_MS || tokExp() < now) idleOut(); }
+var REFRESHING = false;
+function activity() {
+  if (!isUser()) return;
+  var now = Date.now(); idleCheck(); if (!isUser()) return;
+  ls('danga_act', String(now));
+  if (!REFRESHING && tokExp() - now < IDLE_MS - 3 * 60000) {   // 3분 넘게 지났으면 증표 새로 (30분 다시)
+    REFRESHING = true;
+    fetch(RELAY + '/refresh', { headers: { 'X-Tok': uTok() } }).then(function (r) { return r.json().then(function (j) { if (r.status === 200 && j.tok) uTok(j.tok, ls('danga_uid')); else if (r.status === 401) idleOut(); }); })
+      .catch(function () {}).then(function () { REFRESHING = false; });
+  }
+}
+['click', 'keydown', 'touchstart', 'scroll'].forEach(function (ev) { document.addEventListener(ev, activity, { passive: true, capture: true }); });
+setInterval(idleCheck, 20000);
+document.addEventListener('visibilitychange', function () { if (!document.hidden) idleCheck(); });
 function isUser() { return !isAdmin() && !!uTok(); }
 function authH() { return isAdmin() ? { 'X-Key': a2oKey() } : { 'X-Tok': uTok() }; }
 function authK() { return isAdmin() ? a2oKey() : uTok(); }
@@ -1234,6 +1253,7 @@ function siteImgs(co) {
 // ── 로그인 화면 (계정 아이디 · 비밀번호) · 관리자는 아래 '관리자 열쇠'로 ──
 function loginHtml() {
   return '<div class="card" style="max-width:420px;margin:20px auto"><h2 style="margin-top:0">🔐 단가 비교 로그인</h2>' +
+    (ls('danga_idle') === '1' ? '<p style="color:#fca5a5;font-weight:800;margin:0 0 10px">⏰ 30분 동안 사용이 없어서 로그아웃됐어요. 다시 로그인해 주세요.</p>' : '') +
     '<input id="lgId" type="text" autocomplete="username" placeholder="아이디" style="width:100%;margin-bottom:8px">' +
     '<input id="lgPw" type="password" autocomplete="current-password" placeholder="비밀번호" style="width:100%">' +
     '<div class="row" style="margin-top:10px"><button class="btn pri" data-login style="flex:1">로그인</button></div><p class="sub" id="lgMsg"></p>' +
@@ -1254,7 +1274,7 @@ function doLogin() {
   m.textContent = '⏳ 확인 중…';
   devInfo().then(function (info) { return fetch(RELAY + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id.trim(), pw: pw, dev: devId(), info: info }) }); })
     .then(function (r) { return r.json().then(function (j) { if (r.status !== 200) throw new Error(j.error || r.status); return j; }); })
-    .then(function (j) { uTok(j.tok, j.id); ls('danga_cars', JSON.stringify(j.cars || [])); siteS().kind = null; siteS().plan = null; siteS().q = ''; S.siteM = []; /* 계정은 처음에 아무것도 안 고른 채로 */ A2O.rawC = {}; A2O.raw = null; A2O.mem = {}; SITE.tb = {}; S.tab = 'site'; render(); })
+    .then(function (j) { uTok(j.tok, j.id); ls('danga_act', String(Date.now())); ls('danga_idle', null); ls('danga_cars', JSON.stringify(j.cars || [])); siteS().kind = null; siteS().plan = null; siteS().q = ''; S.siteM = []; /* 계정은 처음에 아무것도 안 고른 채로 */ A2O.rawC = {}; A2O.raw = null; A2O.mem = {}; SITE.tb = {}; S.tab = 'site'; render(); })
     .catch(function (e) { m.textContent = '⚠ ' + (e.message || e); });
 }
 // ── 👥 계정 (관리자) — 만들기 · 비밀번호 · 지우기 · 바꾼 줄 보기 · 이 계정 화면으로 보기 ──
@@ -1862,7 +1882,7 @@ function gate(html) { document.getElementById('tabs').innerHTML = ''; document.g
 function start() {
   load();
   // 2026-11-28: 사이트 비교는 구글 관리자 로그인 필요 없음 (계정은 아이디 · 비밀번호, 관리자는 열쇠) → 예전 구글 문 건너뜀
-  if (true) { S.fixMsgs = []; render(); return; }
+  if (true) { S.fixMsgs = []; if (isUser() && (Date.now() - (+ls('danga_act') || 0) > IDLE_MS || tokExp() < Date.now())) { uTok(''); ls('danga_idle', '1'); } render(); return; }   // 다시 열었을 때 30분 지났으면 로그아웃
   if (!window.firebase || !firebase.apps || !firebase.apps.length) { setCloud('⚠ 로그인 없이 이 브라우저에만 저장 중'); importHash().then(function () { fillEmpty(); S.fixMsgs = fixData(); render(); }); return; }
   var auth = firebase.auth();
   gate('⏳ 확인 중…');
