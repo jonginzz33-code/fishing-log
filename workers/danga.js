@@ -197,6 +197,23 @@ async function a2oSheet(url, env) {
   }
   return J({ error: 'login or page failed' }, 502);
 }
+// 거래처마다 단가표 그림이 올라온 시각 — GET /a2o/ats?s=dream,gg → { dream: '2026-11-28 10:02:59', … } (5분 기억)
+const ATS = {};
+async function a2oAts(url, env, w) {
+  const want = (url.searchParams.get('s') || '').split(',').filter((s) => /^[a-z0-9_]{1,20}$/.test(s) && (w.admin || coOk(w.user, s))).slice(0, 12);
+  const out = {};
+  await Promise.all(want.map(async (s) => {
+    const hit = ATS[s]; if (hit && Date.now() - hit.t < 5 * 60000) { out[s] = hit.at; return; }
+    for (let i = 0; i < 2; i++) {
+      const ck = await cookie(env, i > 0); if (!ck) break;
+      const r = await fetch('https://jjj.a2o.co.kr/compare/sheet/' + s, { headers: { Cookie: ck, 'User-Agent': UA }, redirect: 'manual' });
+      if (r.status !== 200) continue;
+      try { const d = await r.json(); out[s] = d.ok ? (d.at || '') : ''; ATS[s] = { t: Date.now(), at: out[s] }; } catch (e) { continue; }
+      break;
+    }
+  }));
+  return J(out);
+}
 async function a2oImg(url, env) {
   const p = url.searchParams.get('p') || '';
   if (!/^\/board\/img\/[\w./-]+\.(jpe?g|png|gif|webp)$/i.test(p) || p.includes('..')) return new Response('bad path', { status: 400, headers: CORS });
@@ -287,6 +304,7 @@ export default {
     if (url.pathname.startsWith('/admin/')) return admin(req, url, env);
     const w = await who(req, url, env);
     if (url.pathname === '/a2o') return a2o(req, url, env, w);
+    if (url.pathname === '/a2o/ats') return w ? a2oAts(url, env, w) : J({ error: 'key' }, 403);
     if (url.pathname === '/a2o/sheet') return w && (w.admin || coOk(w.user, url.searchParams.get('s'))) ? a2oSheet(url, env) : J({ error: 'key' }, 403);
     if (url.pathname === '/a2o/img') {   // img 태그: k = 관리자 열쇠 또는 계정 토큰
       const k = url.searchParams.get('k') || '';
