@@ -1486,7 +1486,7 @@ view.addEventListener('click', function (e) {
   if (d.scell) { siteCell(d.scell); return; }
   if (d.smo || d.smg) {
     var ml = S.siteM = S.siteM || [];
-    if (isUser()) { if (!d.smo || d.smo === '*') return; S.siteM = [d.smo]; save(); var mb1 = document.getElementById('siteMBar'); if (mb1) mb1.innerHTML = siteMBar(); siteLoad(); return; }   // 계정: 모델 하나만 → 그 모델만 서버에 물어봄
+    if (isUser()) { if (!d.smo || d.smo === '*') return; S.siteM = [d.smo]; S.siteMk = {}; /* 고르면 커튼 자동으로 접기 */ save(); var mb1 = document.getElementById('siteMBar'); if (mb1) mb1.innerHTML = siteMBar(); siteLoad(); return; }   // 계정: 모델 하나만 → 그 모델만 서버에 물어봄
     if (d.smo === '*') S.siteM = [];
     else if (d.smo) { var mx = ml.indexOf(d.smo); if (mx >= 0) ml.splice(mx, 1); else ml.push(d.smo); }
     else { var gids = d.smg.split(','), gall = gids.every(function (id) { return ml.indexOf(id) >= 0; }); S.siteM = gall ? ml.filter(function (id) { return gids.indexOf(id) < 0; }) : ml.concat(gids.filter(function (id) { return ml.indexOf(id) < 0; })); }
@@ -1505,8 +1505,8 @@ view.addEventListener('click', function (e) {
       var ix2 = cur.indexOf(d.sva);
       if (ix2 >= 0) cur.splice(ix2, 1);
       else { if (one) { var same = (adn[gp[0]] || []).filter(function (x) { return (x.group || '') === gp[1]; }).map(function (x) { return x.id; }); cur = cur.filter(function (id) { return same.indexOf(id) < 0; }); } cur.push(d.sva); }
-    } else if (d.svp) { var pp2 = d.svp.split('|'), mineIds = idsOf(pp2[0]); cur = cur.filter(function (id) { return mineIds.indexOf(id) < 0; }).concat(((raw.vas || {})[pp2[0]] || {})[pp2[1]] || []); }
-    else if (d.svn) { var ni = idsOf(d.svn); cur = cur.filter(function (id) { return ni.indexOf(id) < 0; }); }
+    } else if (d.svp) { S.siteVk = S.siteVk || {}; S.siteVk[d.svp.split('|')[0]] = false; /* 풀부가 고르면 그 거래처 커튼 접기 */ var pp2 = d.svp.split('|'), mineIds = idsOf(pp2[0]); cur = cur.filter(function (id) { return mineIds.indexOf(id) < 0; }).concat(((raw.vas || {})[pp2[0]] || {})[pp2[1]] || []); }
+    else if (d.svn) { S.siteVk = S.siteVk || {}; S.siteVk[d.svn] = false; var ni = idsOf(d.svn); cur = cur.filter(function (id) { return ni.indexOf(id) < 0; }); }
     else if (d.svall === '0') cur = [];
     else { cur = []; SITE.cos.forEach(function (co) { cur = cur.concat(((raw.vas || {})[co] || {})['1'] || []); }); }
     siteSetAd(cur); return; }
