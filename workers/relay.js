@@ -170,9 +170,11 @@ function a2oTable(html, data, want) {
     const id = b.slice(0, b.indexOf('"'));
     if (want.length && !want.some((w) => id === w || id.startsWith(w))) continue;
     const body = b.slice(0, (b.indexOf('</tr>') + 1 || b.length + 1) - 1);
-    const cells = {}; let i = 0, t; const rt = /<td[^>]*data-s="([^"]*)"[^>]*>([\s\S]*?)<\/td>/g;
+    // 머리 칸(model · diff · win)이 섞여 있으면 업체 칸만 순서대로 맞춤
+    const cells = {}; let i = 0, t; const tds = (body.match(/<td[^>]*data-s="/g) || []).length;
+    const keys = tds >= cos.length ? cos : cos.filter((k) => !['model', 'diff', 'win'].includes(k)); const rt = /<td[^>]*data-s="([^"]*)"[^>]*>([\s\S]*?)<\/td>/g;
     while ((t = rt.exec(body))) {
-      const k = cos[i++] || ('c' + i), h = t[2];
+      const k = keys[i++] || ('c' + i), h = t[2];
       if (/class="na"/.test(h) && !/class="tot"/.test(h)) { cells[k] = null; continue; }
       const tot = (/class="tot"[^>]*>([^<]*)</.exec(h) || [0, t[1]])[1].trim();
       const brk = []; let x; const rb = /<div>\s*<span>([\s\S]*?)<\/span>\s*<span[^>]*>([^<]*)<\/span>\s*<\/div>/g;

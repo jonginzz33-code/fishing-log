@@ -868,8 +868,9 @@ function a2oBox(el, key, st, band, type, fresh) {
     var r = a2oRow(tb, key, st);
     var head = '<div class="lbl" style="display:flex;justify-content:space-between;align-items:center"><span>🌐 사이트 값 · ' + esc(D.bandLabel(band)) + ' ' + esc(typeLabel(type)) + (r ? ' · ' + esc(r.id) : '') + '</span><button class="btn sm" data-a2ore>🔄</button></div>';
     if (!r) { el.innerHTML = head + '<p class="sub">사이트에 이 모델이 없어요.</p>'; return; }
-    var best = null; (tb.cos || []).forEach(function (k) { var c = r.cells[k]; if (c && (best === null || +c.tot > best)) best = +c.tot; });
-    el.innerHTML = head + (tb.cos || []).map(function (k) {
+    var cos = (tb.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; });
+    var best = null; cos.forEach(function (k) { var c = r.cells[k]; if (c && (best === null || +c.tot > best)) best = +c.tot; });
+    el.innerHTML = head + cos.map(function (k) {
       var c = r.cells[k], nm = A2O_CO[k] || k, dt = (tb.dates || {})[k];
       if (!c) return '<div class="card" style="margin:6px 0;padding:10px"><b>' + esc(nm) + '</b> <span class="sub">단가 없음</span></div>';
       return '<div class="card" style="margin:6px 0;padding:10px' + (+c.tot === best ? ';border-color:var(--yel)' : '') + '"><b>' + esc(nm) + ' · ' + esc(c.tot) + '</b>' + (dt ? ' <span class="sub">' + esc(dt) + '</span>' : '') +
