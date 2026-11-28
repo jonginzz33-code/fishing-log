@@ -2,6 +2,7 @@
 // 홈피(브라우저) · 앱이 선단 홈페이지를 대신 읽어 오는 곳. 허용한 사이트만 · 5분 기억.
 //   GET /?u=https://sungbin.sunsang24.com/ship/schedule_fleet/2026-12-03/0/simple_day1
 //   GET /ping → ok
+//   GET /a2o?c=lg|sk|kt → 단가 비교 자료 (X-Key 필요 · 비밀값 A2O_ID · A2O_PW · DANGA_KEY)
 //   GET /s24?d=2026-12-03&area=보령인근,… → 선상24 목록(지역 · 날짜 배와 남은 자리)을 우리 서버가 받아 둠 (433 · 5분 같이 기억 · 앱은 선상24에 직접 안 감)
 //   GET /day?d=2026-12-03&h=a.sunsang24.com,b.thefishing.kr,… → 여러 선단 그 날 일정을 한 번에 읽어 정리한 JSON (선단 40곳까지 · 5분 기억)
 // 선상24 · 더피싱 원 홈페이지(www · api 등)는 막아요 (410).
@@ -21,7 +22,7 @@ function allowed(host) {
   return false;
 }
 
-const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'X-Key' };
 
 // ── 선단 페이지 읽기 (앱 Seats.parse · parseTfFleet 와 같은 규칙) ──
 function txt(h) {
@@ -130,13 +131,55 @@ async function s24(url) {
   }
 }
 
+
+// 단가 비교 (talla.co.kr/danga) — jjj.a2o.co.kr 에 대신 로그인해서 비교 자료(cmpdata)를 가져와요.
+//   GET /a2o?c=lg|sk|kt  · 머리 X-Key = DANGA_KEY 일 때만 · 아이디 · 비밀번호는 Cloudflare 비밀값(A2O_ID · A2O_PW)
+async function a2oLogin(env) {
+  const body = new URLSearchParams({ uid: env.A2O_ID, pw: env.A2O_PW });
+  const r = await fetch('https://jjj.a2o.co.kr/jjj/login', {
+    method: 'POST', redirect: 'manual', body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0 Safari/537.36' },
+  });
+  const sc = typeof r.headers.getSetCookie === 'function' ? r.headers.getSetCookie() : [r.headers.get('set-cookie') || ''];
+  const cookie = sc.map((x) => x.split(';')[0]).filter(Boolean).join('; ');
+  const txt = r.status === 200 ? await r.text() : '';
+  if (/아이디 또는 비밀번호/.test(txt)) return null;
+  return cookie || null;
+}
+async function a2oPage(c, cookie) {
+  const r = await fetch('https://jjj.a2o.co.kr/compare?c=' + c + '&st=1&pf=0', {
+    headers: { Cookie: cookie, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0 Safari/537.36' }, redirect: 'manual',
+  });
+  if (r.status !== 200) return null;
+  const html = await r.text();
+  const m = html.match(/<script[^>]*id=["']cmpdata["'][^>]*>([\s\S]*?)<\/script>/);
+  return m ? m[1] : null;
+}
+async function a2o(req, url, env) {
+  const J = (o, st) => new Response(typeof o === 'string' ? o : JSON.stringify(o), { status: st || 200, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+  if (!env.DANGA_KEY || req.headers.get('X-Key') !== env.DANGA_KEY) return J({ error: 'key' }, 403);
+  if (!env.A2O_ID || !env.A2O_PW) return J({ error: 'no login secrets' }, 500);
+  const c = url.searchParams.get('c') || 'lg';
+  if (!/^(lg|sk|kt)$/.test(c)) return J({ error: 'bad c' }, 400);
+  try {
+    for (let i = 0; i < 2; i++) {          // 가끔 첫 로그인이 실패해요 → 한 번 더
+      const ck = await a2oLogin(env);
+      if (!ck) continue;
+      const data = await a2oPage(c, ck);
+      if (data) return J(data);
+    }
+    return J({ error: 'login or page failed' }, 502);
+  } catch (e) { return J({ error: String(e.message || e) }, 502); }
+}
+
 export default {
   async fetch(req, env, ctx) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
-    if (url.pathname === '/ping') return new Response('ok3', { headers: CORS });
+    if (url.pathname === '/ping') return new Response('ok4', { headers: CORS });
     if (url.pathname === '/day') return day(url, ctx);
     if (url.pathname === '/s24') return s24(url);
+    if (url.pathname === '/a2o') return a2o(req, url, env);
     const u = url.searchParams.get('u');
     let target;
     try { target = new URL(u); } catch (e) { return new Response('bad url', { status: 400, headers: CORS }); }

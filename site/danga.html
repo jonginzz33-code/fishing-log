@@ -829,9 +829,42 @@ function auditHtml() {
   }
   return h + '</div>';
 }
+// ── a2o 비교 사이트에서 가져오기 (중계기 /a2o · 열쇠는 이 브라우저에만) ──
+var A2O_RELAY = 'https://talla-relay.jonginzz33.workers.dev/a2o';
+var A2O = { msg: '', raw: null };
+function a2oKey(v) { if (v != null) ls('danga_a2o_key', v); return ls('danga_a2o_key') || ''; }
+function a2oHtml() {
+  var info = '';
+  if (A2O.raw) {
+    var d = A2O.raw;
+    info = Object.keys(d).filter(function (k) { return d[k] && typeof d[k] === 'object' && d[k].date; })
+      .map(function (k) { return '<div class="sub">· ' + esc(k) + ' — ' + esc(d[k].date) + ' · ' + Object.keys(d[k].rows || {}).length + '줄</div>'; }).join('');
+  }
+  return '<div class="card"><h2>🔄 비교 사이트에서 가져오기</h2><p class="sub">jjj.a2o.co.kr 값을 중계기가 대신 로그인해서 가져와요. 열쇠는 이 브라우저에만 저장돼요.</p>' +
+    '<input id="a2oKey" type="password" style="width:100%" placeholder="열쇠 (DANGA_KEY)" value="' + esc(a2oKey()) + '">' +
+    '<div class="row" style="margin-top:6px"><button class="btn pri" data-a2o>🔄 새로 가져오기</button></div>' +
+    '<p class="sub" id="a2oMsg">' + esc(A2O.msg) + '</p>' + info + '</div>';
+}
+function a2oFetch() {
+  var k = (document.getElementById('a2oKey') || {}).value; if (k != null) a2oKey(k.trim());
+  if (!a2oKey()) return alert('열쇠를 먼저 넣어 주세요');
+  A2O.msg = '⏳ 가져오는 중…'; render();
+  fetch(A2O_RELAY + '?c=lg', { headers: { 'X-Key': a2oKey() } })
+    .then(function (r) { return r.json().then(function (j) { return { st: r.status, j: j }; }); })
+    .then(function (x) {
+      if (x.st !== 200) throw new Error(x.st === 403 ? '열쇠가 틀려요' : (x.j && x.j.error) || ('오류 ' + x.st));
+      A2O.raw = x.j; A2O.msg = '✅ 가져옴 ' + new Date().toTimeString().slice(0, 5);
+      var j = JSON.stringify(x.j);
+      if (window.firebase && firebase.auth().currentUser && j.length < 900000)
+        firebase.firestore().collection('adminNotes').doc('danga_a2o').set({ j: j, t: Date.now() }).catch(function () {});
+      render();
+    })
+    .catch(function (e) { A2O.msg = '⚠ ' + (e.message || e); render(); });
+}
 function setHtml() {
   return auditHtml() + '<div class="card"><h2>☁ 저장</h2><p class="sub">단가표 · 정책 · 구두는 관리자 구글 계정 저장소에 자동 저장돼요 (관리자만 읽고 씀 · 폰 · PC 어디서나 같음). 공개 홈페이지 파일에는 안 들어가요.</p><p id="cloud" class="sub">' + esc(cloudMsg) + '</p>' +
     (window.firebase && firebase.auth && firebase.auth().currentUser ? '<button class="btn sm" data-logout>로그아웃 (' + esc(firebase.auth().currentUser.email) + ')</button>' : '') + '</div>' +
+    a2oHtml() +
     '<div class="card"><h2>📥 정책 링크 · 코드 붙여넣기</h2><p class="sub">채팅으로 받은 정책 링크(https://talla.co.kr/danga#data=…)를 통째로 붙여 넣고 넣기를 누르세요. 단가표 숫자 · 구두는 그대로예요.</p><textarea id="pasteCode" style="width:100%;min-height:70px" placeholder="여기에 링크 붙여넣기"></textarea><div class="row" style="margin-top:6px"><button class="btn pri" data-paste>📥 넣기</button></div></div>' +
     '<div class="card"><h2>💾 파일로 백업</h2><div class="row"><button class="btn" data-export>📤 파일로 내보내기</button><label class="btn" style="display:inline-flex;align-items:center">📥 파일 가져오기<input type="file" accept=".json,application/json" class="hide" id="imp"></label></div></div>' +
     '<div class="card"><h2>🧹 처음부터</h2><button class="btn del" data-reset>전부 지우기</button></div>';
@@ -955,6 +988,7 @@ view.addEventListener('click', function (e) {
   if (d.clear) { var a = S.ags[+d.clear]; if (confirm(a.name + ' 표의 숫자를 모두 비울까요? (모델 · 열 · 정책 · 구두는 남아요)')) { a.sections.forEach(function (s) { s.rows.forEach(function (r) { r.v = s.cols.map(function () { return [null, null, null]; }); }); }); save(); render(); } return; }
   if (d.rmag) { var a2 = S.ags[+d.rmag]; if (confirm(a2.name + ' 업체를 통째로 뺄까요?')) { S.ags.splice(+d.rmag, 1); save(); render(); } return; }
   if (t.hasAttribute('data-addag')) { var nm = prompt('업체 이름', '새 업체'); if (nm) { var na = blankAg(nm); na.sections = tplFor(nm); S.ags.push(na); S.open = S.open || {}; S.open[na.id] = true; save(); render(); } return; }
+  if (t.hasAttribute('data-a2o')) { a2oFetch(); return; }
   if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
   if (t.hasAttribute('data-reset')) { if (confirm('단가표 · 정책 · 구두를 전부 지울까요? (클라우드도)')) { S.ags = [blankAg('경기모바일'), blankAg('드림4')]; save(); render(); } return; }
