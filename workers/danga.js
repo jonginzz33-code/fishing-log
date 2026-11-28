@@ -71,7 +71,8 @@ function applyOvr(tb, ovr, showOrig) {
     let tot = +c.tot;
     c.brk = c.brk.map((x, i) => {
       if (i === 0 && /단가표/.test(x[0])) return x;
-      const k = normL(x[0]); if (!(k in o)) return x;
+      // 줄 이름 + 원래 금액 (예: 'LG DMB 추가정책(…) @+10') 이 먼저 — 한 줄이 +10 · +5 처럼 조건마다 다를 때 따로 바꾸려고
+      let k = normL(x[0]) + ' @' + String(x[1]).trim(); if (!(k in o)) { k = normL(x[0]); if (!(k in o)) return x; }
       const old = +String(x[1]).replace(/[^\d.+-]/g, '') || 0, nv = +o[k];
       tot += nv - old;
       return showOrig ? [x[0], fmtAmt(nv), x[1]] : [x[0], fmtAmt(nv)];
