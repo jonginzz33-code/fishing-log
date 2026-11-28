@@ -1011,10 +1011,10 @@ function siteVBar() {
   var cos = SITE.cos.filter(function (co) { return (raw.addons[co] || []).length && (S.siteHide || []).indexOf(co) < 0; });
   // 부가 창 전체도 커튼 (처음엔 접힘 · 마지막 상태 기억) · 접혀 있어도 [전부 풀부가] [부가 없음] 은 바로 누를 수 있게 제목 줄에
   var h = '<details id="siteVD"' + (S.siteVOpen ? ' open' : '') + ' style="border:1px solid #2a3f52;border-radius:10px;padding:6px 8px">' +
-    '<summary style="cursor:pointer;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">🎁 부가 <span class="sub">' + (sel.length ? sel.length + '개 유치' : '없음 (미유치 차감)') + '</span>' +
+    '<summary style="cursor:pointer;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">🎁 그 밖 부가 <span class="sub">' + (sel.length ? sel.length + '개 유치' : '미유치 (차감 적용)') + '</span>' +
     '<span style="margin-left:auto;display:flex;gap:4px"><button class="chip" data-svall="1" style="padding:2px 10px">전부 풀부가</button><button class="chip' + (sel.length ? '' : ' on') + '" data-svall="0" style="padding:2px 10px">부가 없음</button></span></summary>';
   cos.forEach(function (co) {
-    var list = raw.addons[co], mine = list.filter(function (x) { return sel.indexOf(x.id) >= 0; });
+    var list = raw.addons[co].filter(function (x) { return !isOne(x); }), mine = list.filter(function (x) { return sel.indexOf(x.id) >= 0; });   // U+ONE 은 위 칸에서
     var pres = Object.keys(vas[co] || {}).filter(function (k) { return (vas[co][k] || []).length; });
     h += '<details data-vk="' + co + '"' + (openV[co] ? ' open' : '') + ' style="margin:6px 0;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px">' +
       '<summary style="cursor:pointer;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + esc(A2O_CO[co] || co) + ' <span class="sub">' + (mine.length ? mine.length + '개 유치 · +' + mine.reduce(function (s, x) { return s + (+x.add || 0); }, 0) : '미유치') + '</span>' +
@@ -1033,6 +1033,16 @@ function siteVBar() {
     h += '</details>';
   });
   return h + '</details>';
+}
+// U+ONE(유플러스 원 앱) 로그인 — 거래처마다 부가 이름이 달라서 이름으로 찾음 · 가입/미가입 = 사이트 부가 유치/미유치 (계산은 a2o)
+function isOne(x) { return /U\+\s*ONE|ONE\s*로그인|유플러스\s*\(?ONE|원\s*로그인/i.test(x.name || ''); }
+function oneIds() { var r = A2O.raw, out = []; if (!r || !r.addons) return out; SITE.cos.forEach(function (co) { (r.addons[co] || []).forEach(function (x) { if (isOne(x)) out.push({ id: x.id, co: co, add: x.add }); }); }); return out; }
+function oneHtml() {
+  var ids = oneIds(); if (!ids.length) return '';   // SK · KT 처럼 없는 통신사는 안 보임
+  var sel = S.a2oAd || [], on = ids.every(function (x) { return sel.indexOf(x.id) >= 0; });
+  return '<div style="border:2px solid var(--yel);border-radius:10px;padding:8px 10px;margin-bottom:6px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:16px">📱 U+ONE 로그인</b><span class="sub">' + ids.map(function (x) { return esc(A2O_CO[x.co] || x.co); }).join(' · ') + '</span></div>' +
+    '<div class="row" style="margin-top:6px"><button class="tab' + (on ? ' on' : '') + '" data-one="y" style="flex:1;font-weight:800">✅ 가입</button><button class="tab' + (on ? '' : ' on') + '" data-one="n" style="flex:1;font-weight:800">❌ 미가입</button></div>' +
+    '<p class="sub" style="margin:4px 0 0">미가입이면 거래처 규정대로 미유치 차감이 들어가요.</p></div>';
 }
 function siteSetAd(list) { S.a2oAd = list; save(); var vb = document.getElementById('siteVBar'); if (vb) vb.innerHTML = siteVBar(); siteLoad(); }
 function siteBar() {
@@ -1063,12 +1073,15 @@ function siteHtml() {
     (myCars().length > 1 ? '<div class="row" style="margin-bottom:8px">' + CARS.filter(function (c) { return myCars().indexOf(c[0]) >= 0; }).map(function (c) { return '<button class="tab' + (curCar() === c[0] ? ' on' : '') + '" data-scar="' + c[0] + '" style="flex:1;font-weight:800">' + c[1] + '</button>'; }).join('') + '</div>' : '') +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div>' +
-    '<div id="siteVBar" style="margin-bottom:8px">' + siteVBar() + '</div>' +
     '<div class="row"><input id="siteQ" type="text" enterkeyhint="search" placeholder="모델 번호 · 이름 (예: 942 · 아이폰)" value="' + esc(o.q || '') + '" style="flex:1;min-width:150px"><button class="btn sm" data-sre>🔄 새로고침</button></div>' +
     '<div class="lbl">① 가입 유형</div>' + siteBtns('kind', [['new', '신규'], ['mnp', 'MNP'], ['re', '기변']]) +
-    '<div class="lbl">② 요금제</div>' + (sitePlans().length ? siteBtns('plan', sitePlans().map(function (p) { return [p, p]; })) : '<p class="sub">⏳ 요금제 불러오는 중…</p>') +
-    '<div class="lbl">③ 약정</div>' + siteBtns('contract', [['pub', '공시지원금'], ['sel', '선택약정']]) +
-    '<div class="lbl">④ 유통망 지원금</div>' + siteBtns('support', [['0', '0'], ['10', '10만 이상'], ['20', '20만 이상']]) +
+    // 시안: 가입 유형 바로 아래 ② 부가서비스 — 6+1 모바일은 항상 펼쳐 둠 (가입 / 미가입)
+    '<div class="lbl">② 부가서비스 <span class="sub">미유치 시 차감</span></div>' +
+    '<div id="siteOne">' + oneHtml() + '</div>' +
+    '<div id="siteVBar" style="margin-bottom:8px">' + siteVBar() + '</div>' +
+    '<div class="lbl">③ 요금제</div>' + (sitePlans().length ? siteBtns('plan', sitePlans().map(function (p) { return [p, p]; })) : '<p class="sub">⏳ 요금제 불러오는 중…</p>') +
+    '<div class="lbl">④ 약정</div>' + siteBtns('contract', [['pub', '공시지원금'], ['sel', '선택약정']]) +
+    '<div class="lbl">⑤ 유통망 지원금</div>' + siteBtns('support', [['0', '0'], ['10', '10만 이상'], ['20', '20만 이상']]) +
     '</div><div id="siteOut"></div>';
 }
 function siteLoad() {
@@ -1094,7 +1107,7 @@ function siteTable() {
   var q = siteQuery(), tb = SITE.tb[q];
   if (!tb) { el.innerHTML = '<div class="card"><p class="sub">' + (SITE.err ? '⚠ 사이트 값을 못 가져왔어요 · ' + esc(SITE.err) + ' <button class="btn sm" data-sre>다시</button>' : '⏳ 사이트에서 값 가져오는 중…') + '</p></div>'; return; }
   var allCo = (tb.cos || []).filter(function (k) { return ['model', 'diff', 'win'].indexOf(k) < 0; });
-  if (allCo.join() !== SITE.cos.join()) { SITE.cos = allCo; var sb = document.getElementById('siteBar'); if (sb) sb.innerHTML = siteBar(); }
+  if (allCo.join() !== SITE.cos.join()) { SITE.cos = allCo; var sb = document.getElementById('siteBar'); if (sb) sb.innerHTML = siteBar(); var so = document.getElementById('siteOne'); if (so) so.innerHTML = oneHtml(); var sv = document.getElementById('siteVBar'); if (sv) sv.innerHTML = siteVBar(); }
   var hide = S.siteHide || [];
   var cos = allCo.filter(function (k) { return hide.indexOf(k) < 0; });
   var bar = '';
@@ -1428,6 +1441,8 @@ view.addEventListener('click', function (e) {
     }).catch(function (er) { alert('저장 못 했어요 · ' + (er.message || er)); t.disabled = false; t.textContent = '저장'; }); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.dataset.ued) { var ue = t.parentNode; setTimeout(function () { USERS.open[ue.dataset.ued] = ue.open; }, 0); return; }
   if (d.uovdel) { var uo = d.uovdel.split('|'); api('/admin/ovr', { id: uo[0], co: uo[1], label: uo.slice(2).join('|'), amt: null }).then(function () { SITE.tb = {}; A2O.mem = {}; usersLoad(); }).catch(function (er) { alert('⚠ ' + (er.message || er)); }); return; }
+  if (d.one) { var oi = oneIds().map(function (x) { return x.id; }), cur6 = (S.a2oAd || []).filter(function (id) { return oi.indexOf(id) < 0; });
+    S.a2oAd = d.one === 'y' ? cur6.concat(oi) : cur6; save(); render(); return; }
   if (d.scar) { siteS().car = d.scar; S.siteM = []; SITE.cos = []; save(); render(); return; }
   if (d.sk) { var SS = siteS(); SS[d.sk] = d.v; save(); render(); return; }
   if (d.scell) { siteCell(d.scell); return; }
