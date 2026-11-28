@@ -945,21 +945,36 @@ function showSite(id) {
 var SITE = { tb: {}, busy: '', err: '', cos: ['dream', 'dmb', 'gg', 'yuan'] };
 // 맨 위 대리점 퀵바 — 누르면 그 대리점 열만 켜고 끔 (전체 = 다 보기 · 마지막 하나는 못 끔)
 // 모델 퀵바 — 사이트 모델 목록(종류 코드)으로 묶어서 전부 보이게 · 여러 개 고르기 · 묶음 이름 누르면 묶음 통째로
-var SITE_MG = [['📱 갤럭시 S', ['sam', 'fe']], ['📲 폴더블', ['fold', 'fold6', 'fold7']], ['🍎 아이폰', ['ip18', 'ip17', 'ip17e', 'air', 'ip16', 'ip16e', 'ip15', 'other']], ['💰 중저가', ['mid', 'buddy']], ['🧒 키즈 · 폴더', ['kids', 'lte']]];
-function siteMGroup(code) { for (var i = 0; i < SITE_MG.length; i++) if (SITE_MG[i][1].indexOf(code) >= 0) return i; return SITE_MG.length; }
-function siteMName(n) { return String(n).replace(/^갤럭시 /, '').replace(/\(가격변경\)/, '').replace(/ PRO MAX /i, ' PM ').replace(/ PRO /i, ' Pro '); }
+// 제조사별 커튼(눌러서 펼치기) · 버튼은 짧은 모델 번호 (942 · 947 · 17PR …) · 길게 이름은 버튼 아래 작은 글씨
+var SITE_MK = [['sam', '📱 삼성'], ['apple', '🍎 애플'], ['etc', '📦 기타']];
+function siteMaker(id) { return /^SM-/.test(id) ? 'sam' : /^UIP|^A2633/.test(id) ? 'apple' : 'etc'; }
+function siteMCode(id, name) {
+  var m = /^SM-([A-Z])(\d{3})[A-Z]*(\d+(?:TB)?)?(?:-(\w+))?$/.exec(id);   // S 는 숫자만 (942) · 폴더블 F776 · 보급형 A176 (741 이 S26 FE · 플립6 둘 다라서)
+  if (m) return (m[1] === 'S' ? '' : m[1]) + m[2] + (m[4] ? ' ' + m[4] : '') + (m[3] ? ' ' + m[3] : '');
+  m = /^UIP([A-Z0-9]+?)-(\d+T?)(-NP)?$/.exec(id);
+  if (m) { var c = m[1] === 'A' ? 'Air' : m[1] === 'D' ? '듀오' : m[1]; return c + ' ' + m[2] + (/\(구\)/.test(name) ? ' 구' : ''); }
+  if (/^A2633-(\d+)/.test(id)) return '13 ' + id.split('-')[1];
+  return String(name || id).replace(/^갤럭시 /, '');
+}
 function siteMBar() {
   var ms = (A2O.raw && A2O.raw.models) || [], tb = SITE.tb[siteQuery()];
   if (tb && tb.rows) { var have = {}; tb.rows.forEach(function (r) { have[r.id] = 1; }); ms = ms.filter(function (m) { return have[m[0]]; }); }
   if (!ms.length) return '';
-  var sel = S.siteM || [], groups = SITE_MG.map(function (g) { return { name: g[0], list: [] }; }).concat([{ name: '기타', list: [] }]);
-  ms.forEach(function (m) { groups[siteMGroup(m[2])].list.push(m); });
-  return '<details id="siteMD"' + (S.siteMOpen === false ? '' : ' open') + '><summary class="lbl" style="cursor:pointer;margin-top:0">📱 모델 ' + (sel.length ? '· ' + sel.length + '개 고름 ' : '· 전체 ') + '<button class="chip" data-smo="*" style="padding:2px 10px">전체 보기</button></summary>' +
-    groups.filter(function (g) { return g.list.length; }).map(function (g, gi) {
-      var ids = g.list.map(function (m) { return m[0]; }), all = ids.every(function (id) { return sel.indexOf(id) >= 0; });
-      return '<div style="margin:6px 0"><button class="chip' + (all ? ' on' : '') + '" data-smg="' + ids.join(',') + '" style="font-weight:700">' + esc(g.name) + '</button> ' +
-        g.list.map(function (m) { return '<button class="chip' + (sel.indexOf(m[0]) >= 0 ? ' on' : '') + '" data-smo="' + esc(m[0]) + '" style="padding:4px 9px;font-size:13px">' + esc(siteMName(m[1])) + '</button>'; }).join(' ') + '</div>';
-    }).join('') + '</details>';
+  var sel = S.siteM || [], openMk = S.siteMk || {};
+  var h = '<div class="row" style="align-items:center"><span class="lbl" style="margin:0 4px 0 0">📱 모델 ' + (sel.length ? '· ' + sel.length + '개 고름' : '· 전체') + '</span><button class="chip' + (sel.length ? '' : ' on') + '" data-smo="*">전체 보기</button></div>';
+  SITE_MK.forEach(function (mk) {
+    var list = ms.filter(function (m) { return siteMaker(m[0]) === mk[0]; }); if (!list.length) return;
+    if (mk[0] === 'sam') { var ord = function (id) { var c = (/^SM-([A-Z])/.exec(id) || [0, 'Z'])[1]; return 'SFAM'.indexOf(c) < 0 ? 9 : 'SFAM'.indexOf(c); };
+      list = list.map(function (m, i) { return [m, i]; }).sort(function (a, b) { return ord(a[0][0]) - ord(b[0][0]) || a[1] - b[1]; }).map(function (x) { return x[0]; }); }
+    var ids = list.map(function (m) { return m[0]; }), n = ids.filter(function (id) { return sel.indexOf(id) >= 0; }).length;
+    h += '<details data-mk="' + mk[0] + '"' + (openMk[mk[0]] ? ' open' : '') + ' style="margin:6px 0;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px">' +
+      '<summary style="cursor:pointer;font-weight:700;display:flex;align-items:center;gap:8px">' + esc(mk[1]) + ' <span class="sub">' + list.length + '개' + (n ? ' · ' + n + '개 고름' : '') + '</span>' +
+      '<button class="chip' + (n === ids.length ? ' on' : '') + '" data-smg="' + ids.join(',') + '" style="margin-left:auto;padding:2px 10px">' + esc(mk[1].split(' ')[1]) + ' 전체</button></summary>' +
+      '<div class="row" style="margin-top:6px">' + list.map(function (m) {
+        return '<button class="chip' + (sel.indexOf(m[0]) >= 0 ? ' on' : '') + '" data-smo="' + esc(m[0]) + '" title="' + esc(m[1]) + '" style="padding:4px 10px;font-weight:700">' + esc(siteMCode(m[0], m[1])) + '</button>';
+      }).join('') + '</div></details>';
+  });
+  return h;
 }
 function siteBar() {
   var hide = S.siteHide || [], all = SITE.cos;
@@ -1143,7 +1158,7 @@ view.addEventListener('keydown', function (e) { if (e.target.id === 'siteQ' && e
 view.addEventListener('click', function (e) {
   var t = e.target.closest('button,[data-scell],[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
-  if (t.tagName === 'SUMMARY' && t.parentNode.id === 'siteMD') { setTimeout(function () { S.siteMOpen = t.parentNode.open; save(); }, 0); return; }
+  if (t.tagName === 'SUMMARY' && t.parentNode.dataset.mk) { var mkd = t.parentNode; setTimeout(function () { S.siteMk = S.siteMk || {}; S.siteMk[mkd.dataset.mk] = mkd.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'siteAd') { setTimeout(function () { S.siteAdOpen = t.parentNode.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
   if (d.go) { S.tab = d.go; save(); render(); return; }
