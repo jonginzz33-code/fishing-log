@@ -107,11 +107,21 @@ async function who(req, url, env) {
   if (!id) return null;
   const u = await getUser(env, id); return u ? { admin: false, user: u } : null;
 }
-// 계정에게는 원래 정책 글(+12 같은 것)이 든 자료를 안 보냄 — 모델 · 부가 목록만
-function safeRaw(data) {
+// 계정마다 거래처가 다름 (u.cos = ['gg','dream'] …) — 고른 거래처만 남김 · cos 가 없으면(예전 계정) 전부
+function onlyCos(tb, cos) {
+  if (!Array.isArray(cos)) return tb;
+  tb.cos = (tb.cos || []).filter((k) => ['model', 'diff', 'win'].includes(k) || cos.includes(k));
+  for (const r of tb.rows || []) for (const k of Object.keys(r.cells || {})) if (!cos.includes(k)) delete r.cells[k];
+  for (const k of Object.keys(tb.dates || {})) if (!cos.includes(k)) delete tb.dates[k];
+  return tb;
+}
+const coOk = (u, co) => !u || !Array.isArray(u.cos) || u.cos.includes(co);
+// 계정에게는 원래 정책 글(+12 같은 것)이 든 자료를 안 보냄 — 모델 · 부가 목록만 (고른 거래처 것만)
+function safeRaw(data, u) {
   let d = {}; try { d = JSON.parse(data); } catch (e) {}
-  const o = { models: d.models, addons: d.addons, groups: d.groups, vas: d.vas, vasnames: d.vasnames };
-  ['dream', 'dmb', 'dmb2', 'gg', 'yuan', 'jm', 'ms'].forEach((k) => { if (d[k] && d[k].date) o[k] = { date: d[k].date }; });
+  const pick = (o) => { const r = {}; Object.keys(o || {}).forEach((k) => { if (coOk(u, k)) r[k] = o[k]; }); return r; };
+  const o = { models: d.models, addons: pick(d.addons), groups: pick(d.groups), vas: pick(d.vas), vasnames: pick(d.vasnames) };
+  ['dream', 'dmb', 'dmb2', 'gg', 'yuan', 'jm', 'ms'].forEach((k) => { if (d[k] && d[k].date && coOk(u, k)) o[k] = { date: d[k].date }; });
   return o;
 }
 async function a2o(req, url, env, w) {
@@ -126,9 +136,9 @@ async function a2o(req, url, env, w) {
       if (!ck) continue;
       const pg = await a2oPage(c, ck, url);
       if (!pg) continue;
-      if (url.searchParams.get('raw') === '1') return J(w.admin && !w.user ? pg.data : JSON.stringify(safeRaw(pg.data)));   // 업체 · 부가 목록 등
+      if (url.searchParams.get('raw') === '1') return J(w.admin && !w.user ? pg.data : JSON.stringify(safeRaw(pg.data, w.user)));   // 업체 · 부가 목록 등
       const tb = applyOvr(a2oTable(pg.html, pg.data, want), w.user && w.user.ovr, w.admin);
-      if (w.user) tb.as = w.user.id;
+      if (w.user) { tb.as = w.user.id; onlyCos(tb, w.user.cos); }
       return J(tb);
     }
     return J({ error: 'login or page failed' }, 502);
@@ -185,7 +195,7 @@ async function admin(req, url, env) {
   const setIdx = (a) => env.KV.put('index', JSON.stringify([...new Set(a)].sort()));
   if (p === '/admin/users') {
     const out = [];
-    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {} }); }
+    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {}, cos: Array.isArray(u.cos) ? u.cos : null }); }
     return J(out);
   }
   if (req.method !== 'POST') return J({ error: 'POST' }, 405);
@@ -197,6 +207,7 @@ async function admin(req, url, env) {
     if (!u) { if (!b.pw) return J({ error: '비밀번호가 필요해요' }, 400); u = { id, ovr: {}, created: Date.now() }; }
     if (b.pw) { if (String(b.pw).length < 4) return J({ error: '비밀번호는 4자 이상' }, 400); u.salt = crypto.randomUUID(); u.hash = await pwHash(String(b.pw), u.salt); }
     if (b.memo != null) u.memo = String(b.memo).slice(0, 60);
+    if (Array.isArray(b.cos)) u.cos = [...new Set(b.cos.map(String).filter((k) => /^[a-z0-9_]{1,20}$/.test(k)))];   // 이 계정 거래처
     await env.KV.put('user:' + id, JSON.stringify(u)); const ix = await idx(); if (!ix.includes(id)) await setIdx(ix.concat(id)); return J({ ok: true });
   }
   if (!u) return J({ error: '없는 계정' }, 404);
@@ -230,7 +241,7 @@ export default {
     if (url.pathname.startsWith('/admin/')) return admin(req, url, env);
     const w = await who(req, url, env);
     if (url.pathname === '/a2o') return a2o(req, url, env, w);
-    if (url.pathname === '/a2o/sheet') return w ? a2oSheet(url, env) : J({ error: 'key' }, 403);
+    if (url.pathname === '/a2o/sheet') return w && (w.admin || coOk(w.user, url.searchParams.get('s'))) ? a2oSheet(url, env) : J({ error: 'key' }, 403);
     if (url.pathname === '/a2o/img') {   // img 태그: k = 관리자 열쇠 또는 계정 토큰
       const k = url.searchParams.get('k') || '';
       const ok = (env.DANGA_KEY && k === env.DANGA_KEY) || !!(await readTok(env, k));
