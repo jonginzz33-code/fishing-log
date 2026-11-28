@@ -979,6 +979,36 @@ function siteMBar() {
   });
   return h;
 }
+// 부가 퀵바 — 대리점별 커튼 · 누르면 유치로 더해서 사이트가 다시 계산 · 택1 묶음은 하나만 · 풀부가(사이트에 저장한 묶음) 한 번에
+function siteCoOf(id) { var ad = (A2O.raw && A2O.raw.addons) || {}, f = null; Object.keys(A2O_CO).forEach(function (co) { (ad[co] || []).forEach(function (x) { if (x.id === id) f = co; }); }); return f; }
+function siteVBar() {
+  var raw = A2O.raw; if (!raw || !raw.addons) return '';
+  var sel = S.a2oAd || [], openV = S.siteVk || {}, gr = raw.groups || {}, vas = raw.vas || {}, vn = raw.vasnames || {};
+  var cos = SITE.cos.filter(function (co) { return (raw.addons[co] || []).length && (S.siteHide || []).indexOf(co) < 0; });
+  var h = '<div class="row" style="align-items:center"><span class="lbl" style="margin:0 4px 0 0">🎁 부가 ' + (sel.length ? '· ' + sel.length + '개 유치' : '· 없음 (미유치 차감)') + '</span>' +
+    '<button class="chip" data-svall="1">전부 풀부가</button><button class="chip' + (sel.length ? '' : ' on') + '" data-svall="0">부가 없음</button></div>';
+  cos.forEach(function (co) {
+    var list = raw.addons[co], mine = list.filter(function (x) { return sel.indexOf(x.id) >= 0; });
+    var pres = Object.keys(vas[co] || {}).filter(function (k) { return (vas[co][k] || []).length; });
+    h += '<details data-vk="' + co + '"' + (openV[co] ? ' open' : '') + ' style="margin:6px 0;border:1px solid #2a3f52;border-radius:10px;padding:6px 8px">' +
+      '<summary style="cursor:pointer;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + esc(A2O_CO[co] || co) + ' <span class="sub">' + (mine.length ? mine.length + '개 유치 · +' + mine.reduce(function (s, x) { return s + (+x.add || 0); }, 0) : '미유치') + '</span>' +
+      '<span style="margin-left:auto;display:flex;gap:4px">' + pres.map(function (k) {
+        var on = vas[co][k].length === mine.length && vas[co][k].every(function (id) { return sel.indexOf(id) >= 0; });
+        return '<button class="chip' + (on ? ' on' : '') + '" data-svp="' + co + '|' + k + '" style="padding:2px 10px">' + esc((vn[co] || {})[k] || ('VAS-' + k)) + '</button>';
+      }).join('') + '<button class="chip' + (mine.length ? '' : ' on') + '" data-svn="' + co + '" style="padding:2px 10px">없음</button></span></summary>';
+    var gk = []; list.forEach(function (x) { if (gk.indexOf(x.group || '') < 0) gk.push(x.group || ''); });
+    gk.forEach(function (g) {
+      var gi = gr[co] && gr[co][g];
+      h += '<div class="sub" style="margin:6px 0 2px">' + esc(gi ? gi[0] : '묶음 없음') + (gi && +gi[1] ? ' · 미유치 ' + gi[1] : '') + '</div><div class="row">' +
+        list.filter(function (x) { return (x.group || '') === g; }).map(function (x) {
+          return '<button class="chip' + (sel.indexOf(x.id) >= 0 ? ' on' : '') + '" data-sva="' + esc(x.id) + '" data-g="' + esc(co + '|' + g) + '" title="' + esc(x.note || '') + '">' + esc(x.name) + (x.add != null ? ' <b>' + (x.add > 0 ? '+' : '') + esc(String(x.add)) + '</b>' : '') + '</button>';
+        }).join('') + '</div>';
+    });
+    h += '</details>';
+  });
+  return h;
+}
+function siteSetAd(list) { S.a2oAd = list; save(); var vb = document.getElementById('siteVBar'); if (vb) vb.innerHTML = siteVBar(); siteLoad(); }
 function siteBar() {
   var hide = S.siteHide || [], all = SITE.cos;
   return '<div class="row"><span class="lbl" style="margin:0 4px 0 0">🏢 대리점</span><button class="chip' + (all.every(function (k) { return hide.indexOf(k) < 0; }) ? ' on' : '') + '" data-sco="*">전체</button>' +
@@ -1005,12 +1035,12 @@ function siteHtml() {
   return '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">jjj.a2o.co.kr 값 그대로</span></h2>' +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div>' +
+    '<div id="siteVBar" style="margin-bottom:8px">' + siteVBar() + '</div>' +
     '<div class="row"><input id="siteQ" type="text" enterkeyhint="search" placeholder="모델 번호 · 이름 (예: 942 · 아이폰)" value="' + esc(o.q || '') + '" style="flex:1;min-width:150px"><button class="btn sm" data-sre>🔄 새로고침</button></div>' +
     '<div class="lbl">① 가입 유형</div>' + siteBtns('kind', [['new', '신규'], ['mnp', 'MNP'], ['re', '기변']]) +
     '<div class="lbl">② 요금제</div>' + siteBtns('plan', SITE_PLANS.map(function (p) { return [p, p]; })) +
     '<div class="lbl">③ 약정</div>' + siteBtns('contract', [['pub', '공시지원금'], ['sel', '선택약정']]) +
     '<div class="lbl">④ 유통망 지원금</div>' + siteBtns('support', [['0', '0'], ['10', '10만 이상'], ['20', '20만 이상']]) +
-    '<details' + (S.siteAdOpen ? ' open' : '') + ' id="siteAd"><summary class="lbl" style="cursor:pointer">⑤ 부가서비스 유치 ' + ((S.a2oAd || []).length ? '· ' + S.a2oAd.length + '개 선택' : '· 없음 (미유치 차감)') + '</summary>' + (ads || '<p class="sub">⏳ 부가 목록 불러오는 중…</p>') + '</details>' +
     '</div><div id="siteOut"></div>';
 }
 function siteLoad() {
@@ -1161,6 +1191,7 @@ view.addEventListener('keydown', function (e) { if (e.target.id === 'siteQ' && e
 view.addEventListener('click', function (e) {
   var t = e.target.closest('button,[data-scell],[data-rtog],[data-it],[data-rowed],[data-coled],[data-zoom],[data-fold],summary'); if (!t) return;
   var d = t.dataset;
+  if (t.tagName === 'SUMMARY' && t.parentNode.dataset.vk) { var vkd = t.parentNode; setTimeout(function () { S.siteVk = S.siteVk || {}; S.siteVk[vkd.dataset.vk] = vkd.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.dataset.mk) { var mkd = t.parentNode; setTimeout(function () { S.siteMk = S.siteMk || {}; S.siteMk[mkd.dataset.mk] = mkd.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'siteAd') { setTimeout(function () { S.siteAdOpen = t.parentNode.open; save(); }, 0); return; }
   if (t.tagName === 'SUMMARY' && t.parentNode.id === 'scBox') { setTimeout(function () { S.scOpen = t.parentNode.open; save(); }, 0); return; }
@@ -1224,6 +1255,20 @@ view.addEventListener('click', function (e) {
     if (d.sco === '*') S.siteHide = []; else { var hx = hd.indexOf(d.sco); if (hx >= 0) hd.splice(hx, 1); else if (SITE.cos.filter(function (k) { return hd.indexOf(k) < 0; }).length > 1) hd.push(d.sco); }
     save(); var sbb = document.getElementById('siteBar'); if (sbb) sbb.innerHTML = siteBar(); siteTable(); return; }
   if (t.hasAttribute('data-sre')) { SITE.tb = {}; A2O.mem = {}; render(); return; }
+  if (d.sva || d.svp || d.svn || d.svall) {
+    e.preventDefault();
+    var raw = A2O.raw || {}, adn = raw.addons || {}, cur = (S.a2oAd || []).slice();
+    var idsOf = function (co) { return (adn[co] || []).map(function (x) { return x.id; }); };
+    if (d.sva) {
+      var gp = (d.g || '').split('|'), gname = ((raw.groups || {})[gp[0]] || {})[gp[1]], one = gname && /택1/.test(gname[0]);
+      var ix2 = cur.indexOf(d.sva);
+      if (ix2 >= 0) cur.splice(ix2, 1);
+      else { if (one) { var same = (adn[gp[0]] || []).filter(function (x) { return (x.group || '') === gp[1]; }).map(function (x) { return x.id; }); cur = cur.filter(function (id) { return same.indexOf(id) < 0; }); } cur.push(d.sva); }
+    } else if (d.svp) { var pp2 = d.svp.split('|'), mineIds = idsOf(pp2[0]); cur = cur.filter(function (id) { return mineIds.indexOf(id) < 0; }).concat(((raw.vas || {})[pp2[0]] || {})[pp2[1]] || []); }
+    else if (d.svn) { var ni = idsOf(d.svn); cur = cur.filter(function (id) { return ni.indexOf(id) < 0; }); }
+    else if (d.svall === '0') cur = [];
+    else { cur = []; SITE.cos.forEach(function (co) { cur = cur.concat(((raw.vas || {})[co] || {})['1'] || []); }); }
+    siteSetAd(cur); return; }
   if (d.a2oad) { var aa = S.a2oAd = S.a2oAd || [], ix = aa.indexOf(d.a2oad); if (ix >= 0) aa.splice(ix, 1); else aa.push(d.a2oad); A2O.mem = {}; save(); render(); return; }
   if (t.hasAttribute('data-paste')) { var pc = (document.getElementById('pasteCode') || {}).value || ''; if (!/data=/.test(pc)) return alert('링크 안에 data= 가 없어요. 받은 링크를 통째로 붙여 넣어 주세요'); importNow(pc); return; }
   if (t.hasAttribute('data-export')) { var b = new Blob([JSON.stringify({ v: 1, ags: S.ags }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(b), aa = document.createElement('a'); aa.href = u; aa.download = '단가-' + new Date().toISOString().slice(0, 10) + '.json'; aa.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
