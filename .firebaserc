@@ -1,0 +1,1 @@
+{ "projects": { "default": "fishing-log-9109d" }, "targets": { "fishing-log-9109d": { "hosting": { "main": ["fishing-log-9109d"], "danga": ["talla-danga"] } } } }
