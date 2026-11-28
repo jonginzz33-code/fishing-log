@@ -324,7 +324,9 @@ var IMGS = {}; // 참고용 사진 (줄여서 클라우드에 저장)
 var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기는 원본으로
 
 // ── 탭 ──
-var TABS = [['cmp', '📊 비교'], ['site', '🌐 사이트 비교'], ['sheet', '📋 단가표 입력'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
+// 2026-11-28 사용자 요청: 📊 비교 · 📋 단가표 입력 탭은 홈피에서 뺌 (코드 · 저장 자료는 남겨 둠 · 다시 넣으려면 아래 줄에 되살리기)
+var TABS_OLD = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력']];
+var TABS = [['site', '🌐 사이트 비교'], ['verbal', '🗣 구두'], ['set', '⚙ 설정']];
 function renderTabs() {
   document.getElementById('tabs').innerHTML = TABS.map(function (t) {
     return '<button class="tab' + (S.tab === t[0] ? ' on' : '') + '" data-t="' + t[0] + '">' + t[1] + '</button>';
@@ -333,6 +335,7 @@ function renderTabs() {
 document.getElementById('tabs').onclick = function (e) { var t = e.target.closest('[data-t]'); if (!t) return; S.tab = t.dataset.t; save(); render(); };
 
 function render() {
+  if (!TABS.some(function (t) { return t[0] === S.tab; })) S.tab = 'site';   // 뺀 탭(비교 · 단가표 입력)에 있었으면 사이트 비교로
   renderTabs();
   document.getElementById('savebar').classList.remove('hide'); setTimeout(paintSave, 0);
   var v = document.getElementById('view');
