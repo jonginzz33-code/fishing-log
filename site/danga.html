@@ -1082,7 +1082,7 @@ function siteHtml() {
       }).join('') + '</div>';
     }).join('');
   }
-  return banner + '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : 'jjj.a2o.co.kr 값 그대로') + '</span></h2>' +
+  return banner + '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : '') + '</span></h2>' +
     (myCars().length > 1 ? '<div class="row" style="margin-bottom:8px">' + CARS.filter(function (c) { return myCars().indexOf(c[0]) >= 0; }).map(function (c) { return '<button class="tab' + (curCar() === c[0] ? ' on' : '') + '" data-scar="' + c[0] + '" style="flex:1;font-weight:800">' + c[1] + '</button>'; }).join('') + '</div>' : '') +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="secModel"><div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div></div>' +
