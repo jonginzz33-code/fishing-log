@@ -331,8 +331,11 @@ var ORIG = {}; // 올린 원본 (이 기기 · 이번에만) — 숫자 읽기�
 // ── 탭 ──
 // 2026-11-28 사용자 요청: 📊 비교 · 📋 단가표 입력 탭은 홈피에서 뺌 (코드 · 저장 자료는 남겨 둠 · 다시 넣으려면 아래 줄에 되살리기)
 var TABS_OLD = [['cmp', '📊 비교'], ['sheet', '📋 단가표 입력']];
-var TABS = [['site', '🌐 사이트 비교'], ['set', '⚙ 설정']];   // 🗣 구두도 뺌 (사이트 값에 안 쓰임 · 구두는 a2o 사이트에 넣음)
-function curTabs() { return isAdmin() ? [['site', '🌐 사이트 비교'], ['users', '👥 계정'], ['set', '⚙ 설정']] : isUser() ? [['site', '🌐 사이트 비교'], ['set', '⚙ 내 정보']] : []; }
+var TABS = [];   // 🗣 구두도 뺌 (사이트 값에 안 쓰임 · 구두는 a2o 사이트에 넣음)
+// 통신사 표시 (U+ · SK · KT) — 탭 · 제목에 사이트 비교 대신
+function carBadge(c) { var b = { lg: ['U+', '#e6007e'], sk: ['SK', '#ea002c'], kt: ['KT', '#111827'] }[c || 'lg'] || ['U+', '#e6007e']; return '<span style="display:inline-block;background:' + b[1] + ';color:#fff;font-weight:900;border-radius:7px;padding:1px 7px;margin-right:4px;font-size:.9em;line-height:1.3;border:1px solid rgba(255,255,255,.35)">' + b[0] + '</span>'; }
+function carTitle() { var c = (S.site && S.site.car) || 'lg'; try { c = curCar(); } catch (e) {} return carBadge(c) + '비교'; }
+function curTabs() { return isAdmin() ? [['site', carTitle()], ['users', '👥 계정'], ['set', '⚙ 설정']] : isUser() ? [['site', carTitle()], ['set', '⚙ 내 정보']] : []; }
 function renderTabs() {
   TABS = curTabs();
   document.getElementById('tabs').innerHTML = TABS.map(function (t) {
@@ -851,7 +854,7 @@ function auditHtml() {
 var A2O_RELAY = 'https://talla-danga.jonginzz33.workers.dev/a2o';
 var A2O = { msg: '', raw: null, mem: {} };
 var A2O_CO = { dream: '드림', dmb: 'dmb', dmb2: 'dmb2', gg: '경기', yuan: '유안', jm: 'JM', ms: '명성', sk_uni: 'UNI', sk_gs: '강남스타', sk_a1: 'A1', sk_gr: '강남소매', sk_tvibe: '티바이브', kt_mns: 'KT주안', kt_bc: 'KT반추', kt_mil: 'KT군공', ss: '수석', sy: '성연' };
-var CARS = [['lg', 'LG U+'], ['sk', 'SK'], ['kt', 'KT']];
+var CARS = [['lg', 'U+'], ['sk', 'SK'], ['kt', 'KT']];
 function curCar() { var c = siteS().car || 'lg'; var ok = myCars(); return ok.indexOf(c) >= 0 ? c : ok[0] || 'lg'; }
 function myCars() { if (isAdmin()) return ['lg', 'sk', 'kt']; try { var c = JSON.parse(ls('danga_cars') || 'null'); if (Array.isArray(c) && c.length) return c; } catch (e) {} return ['lg', 'sk', 'kt']; }
 A2O.rawC = {};   // 통신사마다 모델 · 부가 · 요금제 목록이 다름
@@ -1127,7 +1130,7 @@ function siteHtml() {
       }).join('') + '</div>';
     }).join('');
   }
-  return banner + '<div class="card"><h2 style="margin-top:0">🌐 사이트 비교 <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : '') + '</span></h2>' +
+  return banner + '<div class="card"><h2 style="margin-top:0">' + carTitle() + ' <span class="sub">' + (isUser() ? '👤 ' + esc(ls('danga_uid') || '') : '') + '</span></h2>' +
     (myCars().length > 1 ? '<div class="row" style="margin-bottom:8px">' + CARS.filter(function (c) { return myCars().indexOf(c[0]) >= 0; }).map(function (c) { return '<button class="tab' + (curCar() === c[0] ? ' on' : '') + '" data-scar="' + c[0] + '" style="flex:1;font-weight:800">' + c[1] + '</button>'; }).join('') + '</div>' : '') +
     '<div id="siteBar" style="margin-bottom:8px">' + siteBar() + '</div>' +
     '<div id="secModel"><div id="siteMBar" style="margin-bottom:8px">' + siteMBar() + '</div></div>' +
