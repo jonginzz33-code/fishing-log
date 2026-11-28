@@ -351,7 +351,7 @@ function render() {
   document.getElementById('savebar').classList.toggle('hide', !isAdmin()); if (isAdmin()) setTimeout(paintSave, 0);
   if (S.tab === 'users') { v.innerHTML = usersHtml(); usersLoad(); return; }
   if (S.tab === 'cmp') v.innerHTML = cmpHtml();
-  else if (S.tab === 'site') { A2O.raw = A2O.rawC[curCar()] || null; v.innerHTML = siteHtml(); siteLoad(); }
+  else if (S.tab === 'site') { A2O.raw = A2O.rawC[curCar()] || null; if (isUser()) SITE.cos = userCos(); v.innerHTML = siteHtml(); siteLoad(); }
   else if (S.tab === 'sheet') v.innerHTML = sheetHtml();
   else if (S.tab === 'verbal') v.innerHTML = verbalHtml();
   else v.innerHTML = setHtml();
@@ -1057,6 +1057,14 @@ var SITE_PLANS = ['130', '115', '105', '95', '85', '75', '70', '61', '55', '47',
 function siteS() { S.site = S.site || { kind: 'mnp', plan: '115', contract: 'pub', support: '0', q: '' }; return S.site; }
 function sitePlans() { var r = A2O.rawC[curCar()]; return (r && r.plans && r.plans.length ? r.plans : (curCar() === 'lg' ? SITE_PLANS : [])).map(String); }
 function siteQuery() { var o = siteS(), q = 'c=' + curCar() + '&kind=' + o.kind + '&plan=' + o.plan + '&contract=' + o.contract + '&support=' + o.support; (S.a2oAd || []).forEach(function (a) { if (!A2O.raw || siteCoOf(a)) q += '&ad=' + encodeURIComponent(a); }); if (isAdmin() && S.asUser) q += '&as=' + encodeURIComponent(S.asUser); if (isUser() && (S.siteM || []).length) q += '&m=' + encodeURIComponent(S.siteM[0]); return q; }
+// 계정: 이 계정에 넣어 준 거래처만 (서버가 그 거래처 것만 보내 줌 · 지금 통신사 것만) — 모델 고르기 전에도 맞게 보이게
+function userCos() {
+  var r = A2O.raw, car = curCar(), order = ['dream', 'dmb', 'gg', 'yuan', 'dmb2', 'jm', 'ms', 'sk_uni', 'sk_gs', 'sk_a1', 'sk_gr', 'sk_tvibe', 'kt_mns', 'kt_bc', 'kt_mil'];
+  if (!r) return [];
+  var c = Object.keys(r).filter(function (k) { return r[k] && r[k].date && (/^sk_/.test(k) ? 'sk' : /^kt_/.test(k) ? 'kt' : 'lg') === car; });
+  var ix = function (k) { var i = order.indexOf(k); return i < 0 ? 99 : i; };
+  return c.sort(function (a, b) { return ix(a) - ix(b); });
+}
 // 계정(거래처): 모델 · 가입 유형 · 요금제를 다 골라야 검색 — 빠진 것 목록
 function siteMissing() {
   if (!isUser()) return [];
