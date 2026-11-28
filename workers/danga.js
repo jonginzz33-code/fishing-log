@@ -92,11 +92,21 @@ async function hmac(env, s) {
   const k = await crypto.subtle.importKey('raw', new TextEncoder().encode('tok:' + env.DANGA_KEY), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return b64u(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(s)));
 }
-async function makeTok(env, id) { const p = b64u(new TextEncoder().encode(JSON.stringify({ u: id, e: Date.now() + 30 * 86400000 }))); return p + '.' + await hmac(env, p); }
-async function readTok(env, t) {
+async function makeTok(env, id, dev) { const p = b64u(new TextEncoder().encode(JSON.stringify({ u: id, d: dev || '', e: Date.now() + 30 * 86400000 }))); return p + '.' + await hmac(env, p); }
+async function readTokFull(env, t) {
   const [p, s] = String(t || '').split('.'); if (!p || !s || s !== await hmac(env, p)) return null;
-  try { const o = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))); return o.e > Date.now() ? o.u : null; } catch (e) { return null; }
+  try { const o = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/'))); return o.e > Date.now() ? o : null; } catch (e) { return null; }
 }
+async function readTok(env, t) { const o = await readTokFull(env, t); return o ? o.u : null; }
+// 접속 기록: 시각 · 기기(브라우저가 알려 준 것) · IP · 대략 지역 — 무료 KV 쓰기 횟수 아끼려고 10분에 한 번만
+function seenInfo(req, info) {
+  const cf = req.cf || {}, i = info || {};
+  return { t: Date.now(), ip: req.headers.get('CF-Connecting-IP') || '', city: cf.city || '', region: cf.region || '', country: cf.country || '',
+    ua: String(i.ua || req.headers.get('User-Agent') || '').slice(0, 300), model: String(i.model || '').slice(0, 40), os: String(i.os || '').slice(0, 40), scr: String(i.scr || '').slice(0, 20) };
+}
+// 기기 목록 (예전 1대 방식 u.dev 도 읽음) · 계정마다 최대 대수 (기본 2)
+const DEV_MAX = 2;
+function devsOf(u) { if (Array.isArray(u.devs)) return u.devs; return u.dev ? [{ id: u.dev, info: u.devInfo || null, first: (u.devInfo && u.devInfo.t) || 0, last: u.seen || null }] : []; }
 const getUser = async (env, id) => { const v = await env.KV.get('user:' + id); return v ? JSON.parse(v) : null; };
 // 누가 부르나: 관리자(열쇠) · 계정(토큰). 관리자가 as=계정 이면 그 계정 화면으로 (원래 값 같이)
 async function who(req, url, env) {
@@ -104,9 +114,15 @@ async function who(req, url, env) {
     const as = url.searchParams.get('as'); const u = as ? await getUser(env, as) : null;
     return { admin: true, user: u };
   }
-  const id = await readTok(env, req.headers.get('X-Tok') || url.searchParams.get('t'));
-  if (!id) return null;
-  const u = await getUser(env, id); return u ? { admin: false, user: u } : null;
+  const tk = await readTokFull(env, req.headers.get('X-Tok') || url.searchParams.get('t'));
+  if (!tk) return null;
+  const u = await getUser(env, tk.u); if (!u) return null;
+  const ds = devsOf(u), me = ds.find((x) => x.id === tk.d);
+  if (!me) return null;   // 기기 고정 — 관리자가 그 기기를 풀면 그 기기 토큰은 못 씀
+  if (!me.last || Date.now() - me.last.t > 10 * 60000) {   // 기기마다 마지막 접속 (10분에 한 번만 기록)
+    me.last = seenInfo(req, me.last && me.last.ua === req.headers.get('User-Agent') ? me.last : me.info); u.devs = ds; u.seen = me.last; await env.KV.put('user:' + u.id, JSON.stringify(u));
+  }
+  return { admin: false, user: u };
 }
 // 계정마다 거래처가 다름 (u.cos = ['gg','dream'] …) — 고른 거래처만 남김 · cos 가 없으면(예전 계정) 전부
 function onlyCos(tb, cos) {
@@ -206,7 +222,8 @@ async function admin(req, url, env) {
   const setIdx = (a) => env.KV.put('index', JSON.stringify([...new Set(a)].sort()));
   if (p === '/admin/users') {
     const out = [];
-    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {}, cos: Array.isArray(u.cos) ? u.cos : null, cars: Array.isArray(u.cars) ? u.cars : null }); }
+    for (const id of await idx()) { const u = await getUser(env, id); if (u) out.push({ id: u.id, memo: u.memo || '', ovr: u.ovr || {}, cos: Array.isArray(u.cos) ? u.cos : null, cars: Array.isArray(u.cars) ? u.cars : null,
+      devs: devsOf(u), devMax: u.devMax || DEV_MAX, last: u.last || null, seen: u.seen || null, hist: u.hist || [], blocked: u.blocked || [] }); }
     return J(out);
   }
   if (req.method !== 'POST') return J({ error: 'POST' }, 405);
@@ -220,6 +237,9 @@ async function admin(req, url, env) {
     if (b.memo != null) u.memo = String(b.memo).slice(0, 60);
     if (Array.isArray(b.cos)) u.cos = [...new Set(b.cos.map(String).filter((k) => /^[a-z0-9_]{1,20}$/.test(k)))];   // 이 계정 거래처
     if (Array.isArray(b.cars)) u.cars = ['lg', 'sk', 'kt'].filter((k) => b.cars.includes(k));                     // 이 계정 통신사
+    if (b.devReset) { delete u.dev; delete u.devInfo; u.devs = []; u.blocked = []; }   // 기기 전부 풀기 → 다음에 로그인하는 기기부터 다시 연결
+    if (b.devDel) { u.devs = devsOf(u).filter((x) => x.id !== String(b.devDel)); delete u.dev; delete u.devInfo; u.blocked = []; }   // 기기 하나 풀기 (그 기기는 로그아웃)
+    if (b.devMax != null) { const n = Math.round(Number(b.devMax)); if (n >= 1 && n <= 5) u.devMax = n; }
     await env.KV.put('user:' + id, JSON.stringify(u)); const ix = await idx(); if (!ix.includes(id)) await setIdx(ix.concat(id)); return J({ ok: true });
   }
   if (!u) return J({ error: '없는 계정' }, 404);
@@ -240,7 +260,21 @@ async function login(req, env) {
   let b = {}; try { b = await req.json(); } catch (e) { return J({ error: 'json' }, 400); }
   const u = await getUser(env, String(b.id || '').trim());
   if (!u || !u.hash || await pwHash(String(b.pw || ''), u.salt) !== u.hash) { await new Promise((r) => setTimeout(r, 600)); return J({ error: '아이디 또는 비밀번호가 맞지 않아요' }, 401); }
-  return J({ tok: await makeTok(env, u.id), id: u.id, cars: Array.isArray(u.cars) ? u.cars : ['lg', 'sk', 'kt'] });
+  const dev = String(b.dev || '').slice(0, 64);
+  if (!/^[\w-]{8,64}$/.test(dev)) return J({ error: '기기 정보가 없어요. 새로고침해 주세요' }, 400);
+  const info = seenInfo(req, b.info), ds = devsOf(u), max = u.devMax || DEV_MAX;
+  let me = ds.find((x) => x.id === dev);
+  if (!me) {
+    if (ds.length >= max) {   // 이미 최대 대수: 새 기기는 막고 기록만
+      u.blocked = (u.blocked || []).concat([info]).slice(-5); await env.KV.put('user:' + u.id, JSON.stringify(u));
+      return J({ error: '이 계정은 기기 ' + max + '대까지만 쓸 수 있어요. 관리자에게 기기를 풀어 달라고 해 주세요' }, 403);
+    }
+    me = { id: dev, info, first: info.t, last: null }; ds.push(me);   // 새 기기 연결
+  }
+  me.last = info; u.devs = ds; delete u.dev; delete u.devInfo;
+  u.last = info; u.seen = info; u.hist = (u.hist || []).concat([info]).slice(-10);
+  await env.KV.put('user:' + u.id, JSON.stringify(u));
+  return J({ tok: await makeTok(env, u.id, dev), id: u.id, cars: Array.isArray(u.cars) ? u.cars : ['lg', 'sk', 'kt'] });
 }
 
 export default {
@@ -249,7 +283,7 @@ export default {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
     if (url.pathname === '/ping') return new Response('ok-danga2', { headers: CORS });
-    if (url.pathname === '/login') return login(req, env);
+    if (url.pathname === '/login') return login(req, env);   // req.cf 로 대략 지역
     if (url.pathname.startsWith('/admin/')) return admin(req, url, env);
     const w = await who(req, url, env);
     if (url.pathname === '/a2o') return a2o(req, url, env, w);
