@@ -1140,7 +1140,9 @@ function siteTable() {
   var mbx = document.getElementById('siteMBar'), mbh = siteMBar(); if (mbx && mbx.innerHTML !== mbh) mbx.innerHTML = mbh;
   var msel = S.siteM || [];
   var rows = (tb.rows || []).filter(function (r) { return (!msel.length || msel.indexOf(r.id) >= 0) && (!w || (r.id + ' ' + r.name).toLowerCase().indexOf(w) >= 0); });
-  var h = '<div class="card">' + bar + '<p class="sub" style="margin-top:0">' + cos.map(function (k) { return '<b>' + esc(A2O_CO[k] || k) + '</b> ' + esc((tb.dates || {})[k] || ''); }).join(' · ') + '</p>';
+  // 거래처마다 단가표 그림이 올라온 시각 (a2o '올라온 시각')
+  atsLoad(cos);
+  var h = '<div class="card">' + bar + '<p class="sub" style="margin-top:0" id="siteAts">' + atsLine(cos) + '</p>';
   if (!rows.length) h += '<p class="sub">맞는 모델이 없어요.</p>';
   else {
     h += '<div class="scroll"><table class="tbl mx"><tr><th>모델</th>' + cos.map(function (k) { return '<th style="text-align:center">' + esc(A2O_CO[k] || k) + '</th>'; }).join('') + '</tr>';
@@ -1156,12 +1158,23 @@ function siteTable() {
   }
   el.innerHTML = h + '<p class="sub">숫자를 누르면 계산 내역이 나와요.</p></div>';
 }
+var ATS = { v: {}, t: {}, busy: {} };
+function atStr(s) { var m = /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(s || ''); return m ? (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
+function atsLine(cos) { return '📷 단가표 올라온 시각 · ' + cos.map(function (k) { return '<b>' + esc(A2O_CO[k] || k) + '</b> ' + (k in ATS.v ? esc(atStr(ATS.v[k]) || '-') : '…'); }).join(' · '); }
+function atsLoad(cos) {
+  var need = cos.filter(function (k) { return !ATS.busy[k] && (!(k in ATS.v) || Date.now() - (ATS.t[k] || 0) > 5 * 60000); }); if (!need.length) return;
+  need.forEach(function (k) { ATS.busy[k] = 1; });
+  fetch(RELAY + '/a2o/ats?s=' + need.join(','), { headers: authH() }).then(function (r) { return r.json(); }).then(function (j) {
+    need.forEach(function (k) { ATS.v[k] = (j || {})[k] || ''; ATS.t[k] = Date.now(); delete ATS.busy[k]; });
+    var el = document.getElementById('siteAts'); if (el) el.innerHTML = atsLine(SITE.cos.filter(function (k) { return (S.siteHide || []).indexOf(k) < 0; }));
+  }).catch(function () { need.forEach(function (k) { delete ATS.busy[k]; }); });
+}
 function siteCell(v) {
   var p = v.split('|'), tb = SITE.tb[siteQuery()]; if (!tb) return;
   var r = (tb.rows || []).filter(function (x) { return x.id === p[0]; })[0]; if (!r) return;
   var c = r.cells[p[1]]; if (!c) return;
   var edit = isAdmin() && S.asUser;   // 관리자가 계정 화면으로 볼 때만: 줄마다 금액 바꾸기
-  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>' + esc((tb.dates || {})[p[1]] || '') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
+  openSheet('<h3><span>' + esc(A2O_CO[p[1]] || p[1]) + ' · ' + esc(String(+c.tot)) + '</span><button class="btn sm" data-close>닫기</button></h3><p class="sub">' + esc(r.name || r.id) + ' · ' + esc(r.id) + '<br>📷 단가표 올라온 시각 ' + esc(atStr(ATS.v[p[1]]) || '-') + (edit ? '<br>👤 <b>' + esc(S.asUser) + '</b> 계정용 금액 바꾸기 — 숫자 고치고 [저장]' : '') + '</p>' +
     '<div class="parts">' + (c.brk || []).map(function (x, i) {
       var face = i === 0 && /단가표/.test(x[0]), lab = face ? '📋 액면 (단가표) 🖼 그림 보기 ›' : x[0], neg = /^-/.test(x[1]), pos = /^\+/.test(x[1]), chg = x.length > 2;
       if (edit && !face && x[0] !== '구두 추가') {
